@@ -129,7 +129,7 @@ Describe 'CI-03 Exact-once Tier 0 selection' {
         @($combined | Select-Object -Unique).Count | Should -Be $combined.Count
         @(Compare-Object $all $combined).Count | Should -Be 0
         @($repository.Shard | Select-Object -Unique | Sort-Object) | Should -Be @('Contracts', 'Coordinator')
-        @(Get-Tier0TestPlan -Mode Installed).Count | Should -Be 20
+        @(Get-Tier0TestPlan -Mode Installed).Count | Should -Be 21
     }
 
     It 'rejects repository-only selection without a source checkout' {

@@ -1236,19 +1236,33 @@ flowchart TD
       <ul>
         <li><code>output=&lt;path&gt;</code> &mdash; where to save the HTML file. Defaults to <code>docs/squad-governance-report-&lt;YYYY-MM-DD&gt;.html</code>.</li>
         <li><code>squad=&lt;name&gt;</code> &mdash; in a federation, scope to a specific sub-squad. When omitted, aggregates across all sub-squads.</li>
-        <li><code>period={all|30d|7d}</code> &mdash; time window to include (defaults to <code>all</code>).</li>
+        <li data-release-change="20261102-governance-report-consumption-roi"><code>period={all|30d|7d}</code> &mdash; time window to include (defaults to <code>all</code>): the 7 or 30 calendar days ending on the as-of date. Dated entries are filtered; the cost ledger is cumulative for the whole run, so its figures are labeled as such instead of being filtered.</li>
       </ul>
       <h3>Dashboard sections</h3>
       <p>The generated report contains seven sections:</p>
       <ol>
         <li><strong>Governance Gates</strong> &mdash; council verdicts, intake checks, human gates, and escalation counts.</li>
         <li><strong>Council Verdicts</strong> &mdash; verdict distribution (Go / Go-With-Conditions / Stop) with findings by role.</li>
-        <li><strong>Cost Breakdown</strong> &mdash; estimated cost by role and model tier.</li>
+        <li data-release-change="20261102-governance-report-consumption-roi"><strong>Cost Breakdown</strong> &mdash; cost by role and model tier with its basis, the complete consumption ledger, observed usage when the ledger records it, the Without HVE Squad comparison, the run's ROI, and evidence-backed reasons HVE Squad paid off.</li>
         <li><strong>Role Dispatch Activity</strong> &mdash; dispatch counts, models used, success rate, and autonomy tier distribution.</li>
         <li><strong>Risk &amp; Compliance</strong> &mdash; artifact evidence, test verification, impactful-action gating, and open escalations.</li>
         <li><strong>Activity Timeline</strong> &mdash; chronological view of dispatches and decisions.</li>
-        <li><strong>Key Outcomes</strong> &mdash; deployments, issues created, tests run, files changed, and delivered capabilities.</li>
+        <li data-release-change="20261102-governance-report-consumption-roi"><strong>Key Outcomes</strong> &mdash; deployments, issues created, tests run, files changed, delivered capabilities, and evidence of what the run produced (independent review, risk surfaced early, human gates).</li>
       </ol>
+      <h3 data-release-change="20261102-governance-report-consumption-roi">Cost, usage, and ROI</h3>
+      <p>
+        The command runs a deterministic script, <code>New-SquadGovernanceReport.ps1</code>, that reads
+        squad state read-only, writes the file, and prints a receipt with the path, a one-line summary, the
+        grounding, and any gaps. The same state and the same <code>-AsOf</code> date always produce a
+        byte-identical file.
+      </p>
+      <ul>
+        <li><strong>The whole ledger, as the ledger prints it.</strong> Every section and table of <code>consumption.md</code> is shown: attribution, usage and cost, derivation, unit economics, the cost comparison, and observed usage when the ledger has it. Because the ledger is mirrored rather than listed field by field, a section or column added to it later appears without changing the report. A figure the report cannot recognize reads &ldquo;not derivable&rdquo;; nothing is guessed.</li>
+        <li><strong>Every figure names its basis.</strong> <code>exact-native</code> (host-reported usage), <code>estimated</code>, <code>modeled</code> (a counterfactual or blended price), and <code>host-billed</code> (a whole-session total) are never added together.</li>
+        <li><strong>ROI of the run.</strong> Avoided cost, cost reduction, the cost multiple, and ROI = (Without HVE Squad &minus; HVE Squad) &divide; HVE Squad, taken from the ledger's own with and without figures. The without figure is a modeled counterfactual, not an observed alternate run, and a run that cost more is shown as negative.</li>
+        <li><strong>Why HVE Squad.</strong> Two evidence panels, what the run spent and what it produced, mark each claim shown, not shown, or unavailable from the run's own records.</li>
+        <li><strong>Reading notes.</strong> Unknown or unresolved models and their fallback prices, stale summaries, mismatched totals, mixed bases, and a host session shared by two sub-squads are reported without repairing the ledger.</li>
+      </ul>
       <p>
         The output is a single <code>.html</code> file with no external dependencies &mdash; all styles
         are inlined, so it renders correctly when opened in any browser or shared as an attachment.

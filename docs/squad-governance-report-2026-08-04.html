@@ -1,925 +1,122 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Squad Governance Report — contoso-platform — 2026-08-04</title>
-  <style>
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-      background: #f8f9fb;
-      color: #1e293b;
-      line-height: 1.6;
-      -webkit-font-smoothing: antialiased;
-    }
-
-    /* ── Header ── */
-    header {
-      background: linear-gradient(135deg, #1e2a4a, #2d3a6a, #3a4a8a);
-      padding: 2.5rem 2rem 2rem;
-    }
-    header .header-inner {
-      max-width: 1200px;
-      margin: 0 auto;
-    }
-    header h1 {
-      font-size: 1.75rem;
-      font-weight: 700;
-      color: #fff;
-      letter-spacing: -0.025em;
-    }
-    header .subtitle {
-      font-size: 0.9rem;
-      color: rgba(255,255,255,0.8);
-      margin-top: 0.35rem;
-    }
-    header .stats-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
-      gap: 0.75rem;
-      margin-top: 1.5rem;
-    }
-    header .stat {
-      text-align: center;
-      padding: 0.75rem 0.5rem;
-      background: rgba(255,255,255,0.06);
-      border-radius: 8px;
-    }
-    header .stat .value {
-      font-size: 1.6rem;
-      font-weight: 700;
-      color: #fff;
-      line-height: 1.2;
-    }
-    header .stat .label {
-      font-size: 0.68rem;
-      font-weight: 500;
-      color: rgba(255,255,255,0.6);
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
-      margin-top: 0.2rem;
-    }
-
-    /* ── Layout ── */
-    .container {
-      max-width: 1200px;
-      margin: 0 auto;
-      padding: 1.5rem 1.25rem 3rem;
-    }
-
-    /* ── Cards ── */
-    .card {
-      background: #fff;
-      border: 1px solid #e9edf3;
-      border-radius: 12px;
-      padding: 1.5rem 1.75rem;
-      margin-bottom: 1.25rem;
-      box-shadow: 0 1px 3px rgba(0,0,0,0.04), 0 1px 2px rgba(0,0,0,0.02);
-    }
-
-    /* ── Section headers ── */
-    .section-header {
-      font-size: 1.1rem;
-      font-weight: 700;
-      color: #1e293b;
-      margin-bottom: 1.25rem;
-      padding-bottom: 0.5rem;
-      border-bottom: 3px solid transparent;
-      border-image: linear-gradient(90deg, #3b82f6, #8b5cf6) 1;
-    }
-
-    .section-label {
-      font-size: 0.7rem;
-      font-weight: 600;
-      letter-spacing: 0.08em;
-      text-transform: uppercase;
-      color: #94a3b8;
-      margin-bottom: 0.75rem;
-      margin-top: 1.25rem;
-    }
-    .section-label:first-child { margin-top: 0; }
-
-    /* ── Grid layouts ── */
-    .grid-2 {
-      display: grid;
-      gap: 1.25rem;
-    }
-    @media (min-width: 768px) {
-      .grid-2 { grid-template-columns: 1fr 1fr; }
-    }
-    .grid-4 {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-      gap: 0.75rem;
-    }
-
-    /* ── Summary cards ── */
-    .summary-card {
-      background: #f8fafc;
-      border: 1px solid #eef1f6;
-      border-radius: 10px;
-      padding: 1rem 1.1rem;
-      text-align: center;
-    }
-    .summary-card .value {
-      font-size: 1.5rem;
-      font-weight: 700;
-      line-height: 1.2;
-    }
-    .summary-card .label {
-      font-size: 0.72rem;
-      font-weight: 500;
-      color: #64748b;
-      margin-top: 0.25rem;
-    }
-    .summary-card .badge-status {
-      display: inline-block;
-      font-size: 0.68rem;
-      font-weight: 600;
-      padding: 0.2rem 0.6rem;
-      border-radius: 999px;
-      margin-top: 0.35rem;
-    }
-    .badge-green { background: #dcfce7; color: #166534; }
-    .badge-amber { background: #fef3c7; color: #92400e; }
-    .badge-red { background: #fee2e2; color: #991b1b; }
-    .badge-gray { background: #f1f5f9; color: #64748b; }
-    .badge-blue { background: #dbeafe; color: #1e40af; }
-
-    /* ── Donut chart ── */
-    .donut-container {
-      display: flex;
-      align-items: center;
-      gap: 2rem;
-      flex-wrap: wrap;
-      margin-bottom: 1.5rem;
-    }
-    .donut {
-      width: 140px;
-      height: 140px;
-      border-radius: 50%;
-      position: relative;
-      flex-shrink: 0;
-    }
-    .donut::after {
-      content: '';
-      position: absolute;
-      top: 28px; left: 28px;
-      width: 84px; height: 84px;
-      border-radius: 50%;
-      background: #fff;
-    }
-    .donut-center {
-      position: absolute;
-      top: 0; left: 0; width: 100%; height: 100%;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      z-index: 1;
-      font-size: 1.3rem;
-      font-weight: 700;
-      color: #334155;
-    }
-    .legend {
-      display: flex;
-      flex-direction: column;
-      gap: 0.6rem;
-    }
-    .legend-item {
-      display: flex;
-      align-items: center;
-      gap: 0.6rem;
-      font-size: 0.85rem;
-      color: #475569;
-    }
-    .legend-dot {
-      width: 12px; height: 12px;
-      border-radius: 4px;
-      flex-shrink: 0;
-    }
-    .legend-dot.go { background: #86efac; }
-    .legend-dot.cond { background: #fde68a; }
-    .legend-dot.stop { background: #fca5a5; }
-    .legend-value {
-      font-weight: 600;
-      color: #1e293b;
-      margin-left: auto;
-      padding-left: 1rem;
-    }
-    .conditions-counter {
-      display: inline-flex;
-      align-items: center;
-      gap: 0.5rem;
-      background: #fffbeb;
-      border: 1px solid #fde68a;
-      border-radius: 8px;
-      padding: 0.6rem 1rem;
-      font-size: 0.85rem;
-      color: #92400e;
-      margin-top: 1rem;
-    }
-    .conditions-counter strong { font-size: 1.1rem; }
-
-    /* ── Tables ── */
-    table {
-      width: 100%;
-      border-collapse: separate;
-      border-spacing: 0;
-      font-size: 0.82rem;
-    }
-    thead th {
-      background: #f8fafc;
-      font-weight: 600;
-      color: #475569;
-      text-align: left;
-      padding: 0.65rem 0.75rem;
-      border-bottom: 2px solid #e9edf3;
-      font-size: 0.75rem;
-      text-transform: uppercase;
-      letter-spacing: 0.04em;
-    }
-    tbody td {
-      padding: 0.6rem 0.75rem;
-      border-bottom: 1px solid #f1f5f9;
-      color: #334155;
-    }
-    tbody tr:hover td { background: #f8fafc; }
-    tbody tr:last-child td { border-bottom: none; }
-    .row-total td {
-      font-weight: 700;
-      background: #f0f4ff;
-      border-top: 2px solid #e2e8f0;
-      color: #1e293b;
-    }
-    .row-overhead td {
-      color: #64748b;
-      font-style: italic;
-    }
-    .cost-note {
-      font-size: 0.75rem;
-      color: #94a3b8;
-      margin-top: 0.75rem;
-    }
-
-    /* ── Role badges ── */
-    .role-badge {
-      display: inline-block;
-      font-size: 0.72rem;
-      font-weight: 600;
-      padding: 0.2rem 0.6rem;
-      border-radius: 999px;
-    }
-    .role-researcher { background: #dbeafe; color: #1e40af; }
-    .role-lead { background: #dcfce7; color: #166534; }
-    .role-developer { background: #ffedd5; color: #9a3412; }
-    .role-tester { background: #fce7f3; color: #9d174d; }
-    .role-architect { background: #ede9fe; color: #5b21b6; }
-    .role-azure-architect { background: #e0f2fe; color: #0369a1; }
-    .role-iac-author { background: #fef3c7; color: #92400e; }
-    .role-deployer { background: #fee2e2; color: #991b1b; }
-    .role-security { background: #fef2f2; color: #991b1b; }
-    .role-cost-manager { background: #f0fdf4; color: #166534; }
-    .role-scribe { background: #f1f5f9; color: #475569; }
-
-    /* ── Tier badges ── */
-    .tier-auto { background: #dcfce7; color: #166534; }
-    .tier-confirm { background: #fef3c7; color: #92400e; }
-    .tier-gated { background: #fee2e2; color: #991b1b; }
-
-    /* ── Cost bars ── */
-    .cost-bars {
-      display: flex;
-      flex-direction: column;
-      gap: 0.6rem;
-      margin-bottom: 1.25rem;
-    }
-    .cost-bar-row {
-      display: flex;
-      align-items: center;
-      gap: 0.75rem;
-    }
-    .cost-bar-label {
-      font-size: 0.78rem;
-      color: #475569;
-      width: 110px;
-      flex-shrink: 0;
-      text-align: right;
-      font-weight: 500;
-    }
-    .cost-bar-track {
-      flex: 1;
-      height: 24px;
-      background: #f1f5f9;
-      border-radius: 6px;
-      overflow: hidden;
-    }
-    .cost-bar-fill {
-      height: 100%;
-      border-radius: 6px;
-    }
-    .cost-bar-amount {
-      font-size: 0.78rem;
-      font-weight: 600;
-      color: #334155;
-      width: 55px;
-    }
-
-    /* ── Dispatch summary badges ── */
-    .dispatch-summary {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 0.75rem;
-      margin-top: 1.25rem;
-    }
-    .dispatch-badge {
-      display: inline-flex;
-      align-items: center;
-      gap: 0.4rem;
-      background: #f8fafc;
-      border: 1px solid #e9edf3;
-      border-radius: 8px;
-      padding: 0.5rem 0.85rem;
-      font-size: 0.8rem;
-      color: #334155;
-    }
-    .dispatch-badge .db-value {
-      font-weight: 700;
-      font-size: 0.95rem;
-    }
-
-    /* ── Compliance checklist ── */
-    .compliance-list {
-      display: flex;
-      flex-direction: column;
-      gap: 0.5rem;
-    }
-    .compliance-item {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 0.6rem 0.85rem;
-      background: #f8fafc;
-      border-radius: 8px;
-      border: 1px solid #eef1f6;
-      font-size: 0.82rem;
-    }
-    .compliance-item .status {
-      font-weight: 600;
-      font-size: 0.78rem;
-    }
-    .status-pass { color: #166534; }
-    .status-na { color: #64748b; }
-    .status-fail { color: #991b1b; }
-
-    /* ── Timeline ── */
-    .timeline {
-      position: relative;
-      padding-left: 1.75rem;
-    }
-    .timeline::before {
-      content: '';
-      position: absolute;
-      left: 7px;
-      top: 4px;
-      bottom: 4px;
-      width: 2px;
-      background: #e2e8f0;
-      border-radius: 1px;
-    }
-    .tl-entry {
-      position: relative;
-      padding: 0.65rem 0 0.65rem 1.25rem;
-      margin-left: -1.75rem;
-      padding-left: 2.75rem;
-    }
-    .tl-entry::before {
-      content: '';
-      position: absolute;
-      left: 1.53rem;
-      top: 1rem;
-      width: 10px;
-      height: 10px;
-      border-radius: 50%;
-      background: #60a5fa;
-      border: 2px solid #fff;
-      z-index: 1;
-    }
-    .tl-time {
-      font-size: 0.72rem;
-      color: #94a3b8;
-      font-weight: 500;
-    }
-    .tl-title {
-      font-size: 0.85rem;
-      font-weight: 600;
-      color: #1e293b;
-      margin-top: 0.1rem;
-    }
-    .tl-detail {
-      font-size: 0.78rem;
-      color: #64748b;
-      margin-top: 0.15rem;
-    }
-
-    /* ── Outcomes ── */
-    .outcome-badges {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 0.75rem;
-      margin-bottom: 1.25rem;
-    }
-    .outcome-badge {
-      display: inline-flex;
-      align-items: center;
-      gap: 0.4rem;
-      padding: 0.5rem 0.85rem;
-      border-radius: 8px;
-      font-size: 0.8rem;
-      font-weight: 500;
-    }
-    .outcome-badge .ob-value {
-      font-weight: 700;
-      font-size: 1rem;
-    }
-
-    /* ── Footer ── */
-    footer {
-      max-width: 1200px;
-      margin: 0 auto;
-      padding: 1.5rem 1.25rem 2rem;
-      font-size: 0.75rem;
-      color: #94a3b8;
-      border-top: 1px solid #e9edf3;
-    }
-    footer strong { color: #64748b; }
-  </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Squad Governance Report — contoso-platform — 2026-08-04</title>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;background:#f8f9fb;color:#1e293b;line-height:1.6;-webkit-font-smoothing:antialiased}
+header{background:linear-gradient(135deg,#1e2a4a,#2d3a6a,#3a4a8a);padding:2.5rem 2rem 2rem}
+header .header-inner{max-width:1200px;margin:0 auto}
+header h1{font-size:1.75rem;font-weight:700;color:#fff;letter-spacing:-.025em}
+header .subtitle{font-size:.9rem;color:rgba(255,255,255,.8);margin-top:.35rem}
+header .stats-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:.75rem;margin-top:1.5rem}
+header .stat{text-align:center;padding:.75rem .5rem;background:rgba(255,255,255,.06);border-radius:8px}
+header .stat .value{font-size:1.5rem;font-weight:700;color:#fff;line-height:1.2;overflow-wrap:anywhere}
+header .stat .label{font-size:.68rem;font-weight:500;color:rgba(255,255,255,.6);text-transform:uppercase;letter-spacing:.05em;margin-top:.2rem}
+header .stat .sub{font-size:.66rem;color:rgba(255,255,255,.75);margin-top:.15rem}
+header .roi-strip{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:.75rem;margin-top:1rem}
+header .roi-chip{padding:.7rem .85rem;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.18);border-radius:8px}
+header .roi-chip .rc-label{font-size:.66rem;text-transform:uppercase;letter-spacing:.05em;color:rgba(255,255,255,.65)}
+header .roi-chip .rc-value{font-size:1.25rem;font-weight:700;color:#fff;overflow-wrap:anywhere}
+header .roi-chip .rc-sub{font-size:.68rem;color:rgba(255,255,255,.75)}
+header .roi-chip.rc-good .rc-value{color:#86efac}
+header .roi-chip.rc-bad .rc-value{color:#fca5a5}
+header .roi-chip.rc-na .rc-value{color:rgba(255,255,255,.55);font-size:1rem}
+.container{max-width:1200px;margin:0 auto;padding:1.5rem 1.25rem 3rem}
+.card{background:#fff;border:1px solid #e9edf3;border-radius:12px;padding:1.5rem 1.75rem;margin-bottom:1.25rem;box-shadow:0 1px 3px rgba(0,0,0,.04),0 1px 2px rgba(0,0,0,.02)}
+.section-header{font-size:1.1rem;font-weight:700;color:#1e293b;margin-bottom:1.25rem;padding-bottom:.5rem;border-bottom:3px solid transparent;border-image:linear-gradient(90deg,#3b82f6,#8b5cf6) 1}
+.section-label{font-size:.7rem;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:#94a3b8;margin-bottom:.75rem;margin-top:1.5rem}
+.section-label:first-child{margin-top:0}
+.grid-2{display:grid;gap:1.25rem}
+@media (min-width:768px){.grid-2{grid-template-columns:1fr 1fr}}
+.grid-4{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:.75rem}
+.summary-card{background:#f8fafc;border:1px solid #eef1f6;border-radius:10px;padding:1rem 1.1rem;text-align:center}
+.summary-card .value{font-size:1.5rem;font-weight:700;line-height:1.2;color:#334155}
+.summary-card .label{font-size:.72rem;font-weight:500;color:#64748b;margin-top:.25rem}
+.badge-status{display:inline-block;font-size:.68rem;font-weight:600;padding:.2rem .6rem;border-radius:999px;margin-top:.35rem}
+.badge-green{background:#dcfce7;color:#166534}.badge-amber{background:#fef3c7;color:#92400e}.badge-red{background:#fee2e2;color:#991b1b}.badge-gray{background:#f1f5f9;color:#64748b}.badge-blue{background:#dbeafe;color:#1e40af}
+.empty-state{text-align:center;font-style:italic;color:#64748b;padding:1rem}
+.gate-notes{font-size:.78rem;color:#64748b;margin-top:.9rem}
+.donut-container{display:flex;align-items:center;gap:2rem;flex-wrap:wrap;margin-bottom:1.5rem}
+.donut{width:140px;height:140px;border-radius:50%;position:relative;flex-shrink:0}
+.donut::after{content:'';position:absolute;top:28px;left:28px;width:84px;height:84px;border-radius:50%;background:#fff}
+.donut-center{position:absolute;top:0;left:0;width:100%;height:100%;display:flex;align-items:center;justify-content:center;z-index:1;font-size:1.3rem;font-weight:700;color:#334155}
+.legend{display:flex;flex-direction:column;gap:.6rem}
+.legend-item{display:flex;align-items:center;gap:.6rem;font-size:.85rem;color:#475569}
+.legend-dot{width:12px;height:12px;border-radius:4px;flex-shrink:0}
+.legend-dot.go{background:#86efac}.legend-dot.cond{background:#fde68a}.legend-dot.stop{background:#fca5a5}
+.legend-value{font-weight:600;color:#1e293b;margin-left:auto;padding-left:1rem}
+.conditions-counter{display:inline-flex;align-items:center;gap:.5rem;background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:.6rem 1rem;font-size:.85rem;color:#92400e;margin-top:1rem}
+.table-wrap{overflow-x:auto}
+table{width:100%;border-collapse:separate;border-spacing:0;font-size:.82rem}
+thead th{background:#f8fafc;font-weight:600;color:#475569;text-align:left;padding:.65rem .75rem;border-bottom:2px solid #e9edf3;font-size:.75rem;text-transform:uppercase;letter-spacing:.04em;white-space:nowrap}
+tbody td{padding:.6rem .75rem;border-bottom:1px solid #f1f5f9;color:#334155;vertical-align:top;overflow-wrap:break-word}
+tbody tr:hover td{background:#f8fafc}
+tbody tr:last-child td{border-bottom:none}
+td.num,th.num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+.row-total td{font-weight:700;background:#f0f4ff;border-top:2px solid #e2e8f0;color:#1e293b}
+.cost-note,.note{font-size:.75rem;color:#64748b;margin-top:.75rem}
+.chip{display:inline-block;font-size:.72rem;font-weight:600;padding:.1rem .5rem;border-radius:999px;white-space:nowrap}
+.chip-good{background:#dcfce7;color:#166534}.chip-warn{background:#fef3c7;color:#92400e}.chip-bad{background:#fee2e2;color:#991b1b}.chip-info{background:#dbeafe;color:#1e40af}.chip-muted{background:#f1f5f9;color:#64748b}
+.role-badge{display:inline-block;font-size:.72rem;font-weight:600;padding:.2rem .6rem;border-radius:999px;white-space:nowrap}
+.tier-auto{background:#dcfce7;color:#166534}.tier-confirm{background:#fef3c7;color:#92400e}.tier-gated{background:#fee2e2;color:#991b1b}.tier-unrecorded{background:#f1f5f9;color:#64748b}
+.cost-bars{display:flex;flex-direction:column;gap:.6rem;margin-bottom:1.25rem}
+.cost-bar-row{display:flex;align-items:center;gap:.75rem}
+.cost-bar-label{font-size:.78rem;color:#475569;width:130px;flex-shrink:0;text-align:right;font-weight:500;overflow-wrap:anywhere}
+.cost-bar-track{flex:1;height:24px;background:#f1f5f9;border-radius:6px;overflow:hidden}
+.cost-bar-fill{height:100%;border-radius:6px}
+.cost-bar-amount{font-size:.78rem;font-weight:600;color:#334155;width:80px}
+.dispatch-summary,.outcome-badges{display:flex;flex-wrap:wrap;gap:.75rem;margin-top:1.25rem}
+.outcome-badges{margin-top:0;margin-bottom:1.25rem}
+.dispatch-badge{display:inline-flex;align-items:center;gap:.4rem;background:#f8fafc;border:1px solid #e9edf3;border-radius:8px;padding:.5rem .85rem;font-size:.8rem;color:#334155}
+.dispatch-badge .db-value,.outcome-badge .ob-value{font-weight:700;font-size:.95rem}
+.outcome-badge{display:inline-flex;align-items:center;gap:.4rem;padding:.5rem .85rem;border-radius:8px;font-size:.8rem;font-weight:500}
+.compliance-list{display:flex;flex-direction:column;gap:.5rem}
+.compliance-item{display:flex;align-items:center;justify-content:space-between;gap:1rem;padding:.6rem .85rem;background:#f8fafc;border-radius:8px;border:1px solid #eef1f6;font-size:.82rem}
+.compliance-item .status{font-weight:600;font-size:.78rem;white-space:nowrap}
+.status-pass{color:#166534}.status-na{color:#64748b}.status-fail{color:#991b1b}
+.timeline{position:relative;padding-left:1.75rem}
+.timeline::before{content:'';position:absolute;left:7px;top:4px;bottom:4px;width:2px;background:#e2e8f0;border-radius:1px}
+.tl-entry{position:relative;padding:.65rem 0 .65rem 1.25rem;margin-left:-1.75rem;padding-left:2.75rem}
+.tl-entry::before{content:'';position:absolute;left:1.53rem;top:1rem;width:10px;height:10px;border-radius:50%;background:#60a5fa;border:2px solid #fff;z-index:1}
+.tl-time{font-size:.72rem;color:#94a3b8;font-weight:500}
+.tl-title{font-size:.85rem;font-weight:600;color:#1e293b;margin-top:.1rem}
+.tl-detail{font-size:.78rem;color:#64748b;margin-top:.15rem}
+.legend-box{background:#f8fafc;border:1px solid #eef1f6;border-radius:8px;padding:.7rem .9rem;font-size:.76rem;color:#475569;margin-bottom:1rem}
+.legend-box ul{list-style:none;display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:.35rem .9rem}
+.evidence{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:.75rem;margin-top:.5rem}
+.evidence-item{border:1px solid #e9edf3;border-left:4px solid #94a3b8;border-radius:8px;padding:.7rem .9rem;background:#fff}
+.evidence-item.ev-shown{border-left-color:#22c55e;background:#f7fef9}.evidence-item.ev-not-shown{border-left-color:#f59e0b;background:#fffdf5}
+.evidence-item .ev-title{font-size:.82rem;font-weight:700;color:#1e293b}
+.evidence-item .ev-detail{font-size:.78rem;color:#475569;margin-top:.2rem}
+.evidence-item .ev-basis{font-size:.68rem;color:#94a3b8;margin-top:.25rem}
+details.ledger,details.ledger-sub{border:1px solid #e9edf3;border-radius:10px;margin:.75rem 0;background:#fff}
+details.ledger>summary,details.ledger-sub>summary{cursor:pointer;padding:.6rem .9rem;font-weight:600;font-size:.85rem;color:#334155;background:#f8fafc;border-radius:10px}
+details.ledger[open]>summary,details.ledger-sub[open]>summary{border-bottom:1px solid #e9edf3;border-radius:10px 10px 0 0}
+details.ledger>.ledger-body,details.ledger-sub>.ledger-body{padding:.8rem .9rem}
+.ledger-body p{font-size:.82rem;color:#334155;margin:.5rem 0}
+.ledger-body ul{margin:.5rem 0 .5rem 1.2rem;font-size:.82rem}
+.ledger-body h5{font-size:.8rem;margin:.9rem 0 .3rem;color:#475569}
+pre.ledger-code{background:#0f172a;color:#e2e8f0;border-radius:8px;padding:.8rem 1rem;font-size:.74rem;overflow-x:auto;margin:.6rem 0;line-height:1.5}
+.ledger-note{border-left:3px solid #cbd5e1;background:#f8fafc;padding:.5rem .8rem;margin:.6rem 0;font-size:.78rem;color:#475569}
+.ledger-note p{margin:.25rem 0;font-size:.78rem}
+.ledger-body code,td code{background:#f1f5f9;border-radius:4px;padding:0 .25rem;font-size:.92em}
+.dq-list{list-style:none;display:flex;flex-direction:column;gap:.4rem}
+.dq-list li{font-size:.8rem;padding:.5rem .75rem;border-radius:8px;border:1px solid #eef1f6;background:#f8fafc;color:#334155}
+.dq-list li.dq-warn{background:#fffbeb;border-color:#fde68a;color:#92400e}
+.dq-list li.dq-info{background:#f8fafc}
+.dq-list .dq-tag{font-weight:700;margin-right:.4rem;font-size:.7rem;text-transform:uppercase}
+footer{max-width:1200px;margin:0 auto;padding:1.5rem 1.25rem 2rem;font-size:.75rem;color:#94a3b8;border-top:1px solid #e9edf3;overflow-wrap:anywhere}
+footer strong{color:#64748b}</style>
 </head>
 <body>
-
-  <!-- ═══ Header ═══ -->
-  <header>
-    <div class="header-inner">
-      <h1>Squad Governance Report</h1>
-      <div class="subtitle">Federation · Sub-squad: azure · Period: 2026-07-05 to 2026-08-04 (30 days)</div>
-      <div class="stats-grid">
-        <div class="stat">
-          <div class="value">18</div>
-          <div class="label">Coordination Turns</div>
-        </div>
-        <div class="stat">
-          <div class="value">34</div>
-          <div class="label">Role Dispatches</div>
-        </div>
-        <div class="stat">
-          <div class="value">$7.43</div>
-          <div class="label">Est. Cost (calibrated 1–15)</div>
-        </div>
-        <div class="stat">
-          <div class="value">~284k</div>
-          <div class="label">Total Tokens</div>
-        </div>
-        <div class="stat">
-          <div class="value">5</div>
-          <div class="label">Human Gates Fired</div>
-        </div>
-        <div class="stat">
-          <div class="value">1</div>
-          <div class="label">Escalations</div>
-        </div>
-      </div>
-    </div>
-  </header>
-
-  <div class="container">
-
-    <!-- ═══ Section 1: Governance Gates ═══ -->
-    <div class="card">
-      <div class="section-header">1. Governance Gates</div>
-      <div class="grid-4">
-        <div class="summary-card">
-          <div class="value" style="color:#334155;">8</div>
-          <div class="label">Council Verdicts</div>
-        </div>
-        <div class="summary-card">
-          <div class="value" style="color:#334155;">6</div>
-          <div class="label">Intake Readiness Checks</div>
-        </div>
-        <div class="summary-card">
-          <div class="value" style="color:#166534;">5 / 5</div>
-          <div class="label">Human Gates Passed</div>
-          <span class="badge-status badge-green">All passed</span>
-        </div>
-        <div class="summary-card">
-          <div class="value" style="color:#334155;">1</div>
-          <div class="label">Escalations</div>
-        </div>
-      </div>
-
-      <p class="section-label">Human Gate Log</p>
-      <table>
-        <thead>
-          <tr><th>Turn</th><th>Date</th><th>Gate Type</th><th>Action</th><th>Status</th></tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td>4</td><td>2026-07-12</td><td>Impactful-Action Gate</td>
-            <td>Deploy landing-zone network (hub VNet + peering)</td>
-            <td style="color:#166534; font-weight:600;">✓ PASSED</td>
-          </tr>
-          <tr>
-            <td>7</td><td>2026-07-18</td><td>Impactful-Action Gate</td>
-            <td>Apply Key Vault RBAC policy assignment</td>
-            <td style="color:#166534; font-weight:600;">✓ PASSED</td>
-          </tr>
-          <tr>
-            <td>10</td><td>2026-07-23</td><td>Human Gate</td>
-            <td>Database schema migration (add partition key)</td>
-            <td style="color:#166534; font-weight:600;">✓ PASSED</td>
-          </tr>
-          <tr>
-            <td>14</td><td>2026-07-30</td><td>Impactful-Action Gate</td>
-            <td>Deploy Container Apps revision (prod slot swap)</td>
-            <td style="color:#166534; font-weight:600;">✓ PASSED</td>
-          </tr>
-          <tr>
-            <td>17</td><td>2026-08-03</td><td>Impactful-Action Gate</td>
-            <td>Enable diagnostic settings on all resources</td>
-            <td style="color:#166534; font-weight:600;">✓ PASSED</td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
-
-    <!-- ═══ Section 2: Council Verdicts ═══ -->
-    <div class="card">
-      <div class="section-header">2. Council Verdicts</div>
-
-      <div class="donut-container">
-        <!-- 5 Go (225deg), 2 Go-With-Conditions (90deg), 1 Stop (45deg) -->
-        <div class="donut" style="background: conic-gradient(#86efac 0deg 225deg, #fde68a 225deg 315deg, #fca5a5 315deg 360deg);">
-          <div class="donut-center">8</div>
-        </div>
-        <div class="legend">
-          <div class="legend-item">
-            <span class="legend-dot go"></span>
-            Go
-            <span class="legend-value">5 (62%)</span>
-          </div>
-          <div class="legend-item">
-            <span class="legend-dot cond"></span>
-            Go-With-Conditions
-            <span class="legend-value">2 (25%)</span>
-          </div>
-          <div class="legend-item">
-            <span class="legend-dot stop"></span>
-            Stop
-            <span class="legend-value">1 (13%)</span>
-          </div>
-        </div>
-      </div>
-
-      <p class="section-label">Findings by Role</p>
-      <table>
-        <thead>
-          <tr><th>Role</th><th>Approve</th><th>Conditional</th><th>Concern</th><th>Block</th><th>Risk: High</th></tr>
-        </thead>
-        <tbody>
-          <tr><td>Azure Architect</td><td>6</td><td>1</td><td>1</td><td>0</td><td>0</td></tr>
-          <tr><td>Security</td><td>5</td><td>2</td><td>0</td><td>1</td><td>1</td></tr>
-          <tr><td>Cost Manager</td><td>7</td><td>1</td><td>0</td><td>0</td><td>0</td></tr>
-          <tr><td>Architect</td><td>6</td><td>1</td><td>1</td><td>0</td><td>0</td></tr>
-        </tbody>
-      </table>
-
-      <div class="conditions-counter">
-        <strong>2</strong> conditions outstanding from Go-With-Conditions verdicts
-      </div>
-    </div>
-
-    <div class="grid-2">
-
-      <!-- ═══ Section 3: Cost Breakdown ═══ -->
-      <div class="card">
-        <div class="section-header">3. Cost Breakdown</div>
-
-        <p class="section-label">Cost by Role (calibrated turns 1–15)</p>
-        <div class="cost-bars">
-          <div class="cost-bar-row">
-            <span class="cost-bar-label">Developer</span>
-            <div class="cost-bar-track"><div class="cost-bar-fill" style="width:72%; background: linear-gradient(90deg, #fb923c, #f97316);"></div></div>
-            <span class="cost-bar-amount">$2.14</span>
-          </div>
-          <div class="cost-bar-row">
-            <span class="cost-bar-label">Azure Architect</span>
-            <div class="cost-bar-track"><div class="cost-bar-fill" style="width:54%; background: linear-gradient(90deg, #38bdf8, #0ea5e9);"></div></div>
-            <span class="cost-bar-amount">$1.61</span>
-          </div>
-          <div class="cost-bar-row">
-            <span class="cost-bar-label">IaC Author</span>
-            <div class="cost-bar-track"><div class="cost-bar-fill" style="width:40%; background: linear-gradient(90deg, #fbbf24, #f59e0b);"></div></div>
-            <span class="cost-bar-amount">$1.18</span>
-          </div>
-          <div class="cost-bar-row">
-            <span class="cost-bar-label">Security</span>
-            <div class="cost-bar-track"><div class="cost-bar-fill" style="width:28%; background: linear-gradient(90deg, #f87171, #ef4444);"></div></div>
-            <span class="cost-bar-amount">$0.83</span>
-          </div>
-          <div class="cost-bar-row">
-            <span class="cost-bar-label">Researcher</span>
-            <div class="cost-bar-track"><div class="cost-bar-fill" style="width:22%; background: linear-gradient(90deg, #60a5fa, #3b82f6);"></div></div>
-            <span class="cost-bar-amount">$0.65</span>
-          </div>
-          <div class="cost-bar-row">
-            <span class="cost-bar-label">Cost Manager</span>
-            <div class="cost-bar-track"><div class="cost-bar-fill" style="width:14%; background: linear-gradient(90deg, #4ade80, #22c55e);"></div></div>
-            <span class="cost-bar-amount">$0.41</span>
-          </div>
-        </div>
-
-        <p class="section-label">Cost by Model Tier</p>
-        <table>
-          <thead>
-            <tr><th>Model</th><th>Role Usage</th><th>Token Share</th></tr>
-          </thead>
-          <tbody>
-            <tr><td>claude-sonnet-4</td><td>Developer, Azure Architect, IaC Author, Security</td><td>68%</td></tr>
-            <tr><td>gpt-4o</td><td>Researcher, Cost Manager, Lead</td><td>22%</td></tr>
-            <tr><td>gpt-4o-mini</td><td>Scribe, Tester</td><td>10%</td></tr>
-          </tbody>
-        </table>
-        <p class="cost-note">Calibrated turns 1–15. Turns 16–18 pending calibration; not included in totals.</p>
-      </div>
-
-      <!-- ═══ Section 4: Role Dispatch Activity ═══ -->
-      <div class="card">
-        <div class="section-header">4. Role Dispatch Activity</div>
-
-        <table>
-          <thead>
-            <tr><th>Role</th><th>Agent</th><th>Dispatches</th><th>Model</th><th>Key Activities</th></tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td><span class="role-badge role-developer">Developer</span></td>
-              <td>squad-developer</td><td>8</td><td>claude-sonnet-4</td>
-              <td>API endpoints, auth middleware, container config</td>
-            </tr>
-            <tr>
-              <td><span class="role-badge role-azure-architect">Azure Architect</span></td>
-              <td>squad-azure-architect</td><td>6</td><td>claude-sonnet-4</td>
-              <td>HLD/LLD, landing zone, AVM module selection</td>
-            </tr>
-            <tr>
-              <td><span class="role-badge role-iac-author">IaC Author</span></td>
-              <td>squad-iac-author</td><td>5</td><td>claude-sonnet-4</td>
-              <td>Bicep modules, parameter files, what-if validation</td>
-            </tr>
-            <tr>
-              <td><span class="role-badge role-researcher">Researcher</span></td>
-              <td>squad-researcher</td><td>4</td><td>gpt-4o</td>
-              <td>AVM docs, WAF review, pricing research</td>
-            </tr>
-            <tr>
-              <td><span class="role-badge role-security">Security</span></td>
-              <td>squad-security</td><td>4</td><td>claude-sonnet-4</td>
-              <td>Threat model, RBAC review, network segmentation</td>
-            </tr>
-            <tr>
-              <td><span class="role-badge role-tester">Tester</span></td>
-              <td>squad-tester</td><td>3</td><td>gpt-4o-mini</td>
-              <td>Integration tests, IaC what-if review</td>
-            </tr>
-            <tr>
-              <td><span class="role-badge role-cost-manager">Cost Manager</span></td>
-              <td>squad-cost-manager</td><td>2</td><td>gpt-4o</td>
-              <td>WAF Cost findings, SKU recommendations</td>
-            </tr>
-            <tr>
-              <td><span class="role-badge role-lead">Lead</span></td>
-              <td>squad-lead</td><td>2</td><td>gpt-4o</td>
-              <td>Implementation planning, task sequencing</td>
-            </tr>
-          </tbody>
-        </table>
-
-        <div class="dispatch-summary">
-          <div class="dispatch-badge"><span class="db-value">8</span> Distinct Roles</div>
-          <div class="dispatch-badge"><span class="db-value">34</span> Total Dispatches</div>
-          <div class="dispatch-badge" style="border-color:#dcfce7;"><span class="db-value" style="color:#166534;">97%</span> Success Rate</div>
-          <div class="dispatch-badge"><span class="db-value" style="color:#166534;">1</span> Failed</div>
-        </div>
-      </div>
-
-    </div><!-- end grid-2 -->
-
-    <!-- ═══ Section 5: Risk & Compliance ═══ -->
-    <div class="card">
-      <div class="section-header">5. Risk &amp; Compliance</div>
-
-      <div class="grid-2">
-        <div>
-          <p class="section-label">Autonomy Tier Distribution</p>
-          <table>
-            <thead>
-              <tr><th>Tier</th><th>Dispatches</th><th>Outcome</th></tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td><span class="role-badge tier-auto">auto</span></td>
-                <td>22</td>
-                <td>All successful — no confirmation needed</td>
-              </tr>
-              <tr>
-                <td><span class="role-badge tier-confirm">confirm</span></td>
-                <td>7</td>
-                <td>User approved all 7</td>
-              </tr>
-              <tr>
-                <td><span class="role-badge tier-gated">gated</span></td>
-                <td>5</td>
-                <td>Human gate required — all passed</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-
-        <div>
-          <p class="section-label">Compliance Indicators</p>
-          <div class="compliance-list">
-            <div class="compliance-item">
-              <span>Artifact evidence for all dispatches</span>
-              <span class="status status-pass">✓ 34/34</span>
-            </div>
-            <div class="compliance-item">
-              <span>Test verification on code changes</span>
-              <span class="status status-pass">✓ 8/8</span>
-            </div>
-            <div class="compliance-item">
-              <span>Cost logged for calibrated turns</span>
-              <span class="status status-pass">✓ 15/15</span>
-            </div>
-            <div class="compliance-item">
-              <span>Impactful actions gated</span>
-              <span class="status status-pass">✓ 4/4</span>
-            </div>
-            <div class="compliance-item">
-              <span>Notifications sent</span>
-              <span class="status status-pass">✓ 5/5</span>
-            </div>
-            <div class="compliance-item">
-              <span>Open escalations</span>
-              <span class="status status-pass">✓ 0 open</span>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- ═══ Section 6: Activity Timeline ═══ -->
-    <div class="card">
-      <div class="section-header">6. Activity Timeline</div>
-
-      <div class="timeline">
-        <div class="tl-entry">
-          <span class="tl-time">2026-08-03 · Turn 18</span>
-          <div class="tl-title">Enable diagnostic settings on all resources</div>
-          <div class="tl-detail">Deployer → deployed diagnostic settings to 12 resources via Bicep</div>
-        </div>
-        <div class="tl-entry">
-          <span class="tl-time">2026-08-02 · Turn 17</span>
-          <div class="tl-title">As-Built documentation generated</div>
-          <div class="tl-detail">As-Built Author → resource inventory, compliance matrix, operations runbook</div>
-        </div>
-        <div class="tl-entry">
-          <span class="tl-time">2026-07-30 · Turn 14</span>
-          <div class="tl-title">Container Apps revision deployed (prod)</div>
-          <div class="tl-detail">Deployer → slot swap after what-if passed. Human gate approved.</div>
-        </div>
-        <div class="tl-entry">
-          <span class="tl-time">2026-07-28 · Turn 13</span>
-          <div class="tl-title">Council Verdict — container-apps-deploy (Go)</div>
-          <div class="tl-detail">All roles approved. Security validated network policies.</div>
-        </div>
-        <div class="tl-entry">
-          <span class="tl-time">2026-07-26 · Turn 11</span>
-          <div class="tl-title">Council Verdict — api-auth-layer (Go-With-Conditions)</div>
-          <div class="tl-detail">Security: conditional (add token rotation). 1 condition outstanding.</div>
-        </div>
-        <div class="tl-entry">
-          <span class="tl-time">2026-07-23 · Turn 10</span>
-          <div class="tl-title">Database schema migration</div>
-          <div class="tl-detail">Developer → added partition key to Cosmos DB container. Human gate approved.</div>
-        </div>
-        <div class="tl-entry">
-          <span class="tl-time">2026-07-21 · Turn 9</span>
-          <div class="tl-title">Council Verdict — cosmos-partitioning (Stop)</div>
-          <div class="tl-detail">Security blocked: cross-partition queries expose tenant data. Escalated.</div>
-        </div>
-        <div class="tl-entry">
-          <span class="tl-time">2026-07-18 · Turn 7</span>
-          <div class="tl-title">Key Vault RBAC policy applied</div>
-          <div class="tl-detail">IaC Author → Bicep deployment. Deployer → what-if confirmed, human gate passed.</div>
-        </div>
-        <div class="tl-entry">
-          <span class="tl-time">2026-07-15 · Turn 6</span>
-          <div class="tl-title">Council Verdict — keyvault-rbac (Go)</div>
-          <div class="tl-detail">All roles approved. Cost Manager confirmed no budget impact.</div>
-        </div>
-        <div class="tl-entry">
-          <span class="tl-time">2026-07-12 · Turn 4</span>
-          <div class="tl-title">Landing-zone network deployed</div>
-          <div class="tl-detail">IaC Author + Deployer → hub VNet, peering, NSG rules. Human gate approved.</div>
-        </div>
-        <div class="tl-entry">
-          <span class="tl-time">2026-07-10 · Turn 3</span>
-          <div class="tl-title">Council Verdict — landing-zone-network (Go)</div>
-          <div class="tl-detail">All roles approved. Azure Architect validated AVM module selection.</div>
-        </div>
-        <div class="tl-entry">
-          <span class="tl-time">2026-07-08 · Turn 2</span>
-          <div class="tl-title">HLD and LLD produced</div>
-          <div class="tl-detail">Azure Architect → high-level design, low-level design with AVM modules</div>
-        </div>
-        <div class="tl-entry">
-          <span class="tl-time">2026-07-05 · Turn 1</span>
-          <div class="tl-title">Research phase completed</div>
-          <div class="tl-detail">Researcher → AVM documentation, WAF pillars, pricing tiers analyzed</div>
-        </div>
-      </div>
-    </div>
-
-    <!-- ═══ Section 7: Key Outcomes This Period ═══ -->
-    <div class="card">
-      <div class="section-header">7. Key Outcomes This Period</div>
-
-      <div class="outcome-badges">
-        <div class="outcome-badge badge-green"><span class="ob-value">3</span> Azure Deployments</div>
-        <div class="outcome-badge badge-blue"><span class="ob-value">2</span> GitHub Issues Created</div>
-        <div class="outcome-badge badge-blue"><span class="ob-value">14</span> Tests (from 3 suites)</div>
-        <div class="outcome-badge badge-blue"><span class="ob-value">27</span> Files Created/Modified</div>
-      </div>
-
-      <p class="section-label">Delivered Capabilities</p>
-      <table>
-        <thead>
-          <tr><th>Capability</th><th>Type</th><th>Status</th></tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td>Landing-zone hub network with peering</td>
-            <td>Infrastructure</td>
-            <td><span class="role-badge badge-green">Deployed</span></td>
-          </tr>
-          <tr>
-            <td>Key Vault with RBAC policy</td>
-            <td>Infrastructure</td>
-            <td><span class="role-badge badge-green">Deployed</span></td>
-          </tr>
-          <tr>
-            <td>Container Apps (API + Worker)</td>
-            <td>Application</td>
-            <td><span class="role-badge badge-green">Deployed</span></td>
-          </tr>
-          <tr>
-            <td>Cosmos DB with tenant-isolated partitioning</td>
-            <td>Data</td>
-            <td><span class="role-badge badge-green">Shipped</span></td>
-          </tr>
-          <tr>
-            <td>Diagnostic settings (all resources)</td>
-            <td>Observability</td>
-            <td><span class="role-badge badge-green">Deployed</span></td>
-          </tr>
-          <tr>
-            <td>API auth middleware (JWT + token rotation)</td>
-            <td>Application</td>
-            <td><span class="role-badge badge-amber">In Progress</span></td>
-          </tr>
-          <tr>
-            <td>As-Built documentation &amp; runbook</td>
-            <td>Documentation</td>
-            <td><span class="role-badge badge-green">Complete</span></td>
-          </tr>
-          <tr>
-            <td>WAF Cost Optimization findings</td>
-            <td>Governance</td>
-            <td><span class="role-badge badge-blue">Planned</span></td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
-
-  </div><!-- end container -->
-
-  <!-- ═══ Footer ═══ -->
-  <footer>
-    <strong>Grounding sources:</strong> .copilot-tracking/squad/members/azure/decisions.md, history/*.md, consumption.md, notifications.md, state.json<br>
-    <strong>Sub-squad:</strong> azure (federation member) · <strong>Profile:</strong> azure<br>
-    <strong>Report generated by:</strong> /squad-governance-report squad=azure period=30d — CSS-only, no JavaScript, self-contained.<br>
-    <strong>Calibration:</strong> Turns 1–15 calibrated, turns 16–18 pending. Cost figures derived from calibrated turns only.
-  </footer>
-
-</body>
-</html>
+<header><div class="header-inner"><h1>Squad Governance Report</h1><div class="subtitle">Single squad · Period: all time: 2026-07-10 to 2026-07-14 (5 days)</div><div class="stats-grid"><div class="stat"><div class="value">6</div><div class="label">Coordination Turns</div></div><div class="stat"><div class="value">7</div><div class="label">Role Dispatches</div></div><div class="stat"><div class="value">$1.0000</div><div class="label">Exact Cost (exact-native)</div></div><div class="stat"><div class="value">471,000</div><div class="label">Total Tokens (exact billed categories)</div></div><div class="stat"><div class="value">2</div><div class="label">Human Gates Fired</div></div><div class="stat"><div class="value">0</div><div class="label">Escalations</div></div></div><div class="roi-strip"><div class="roi-chip "><div class="rc-label">Run spend</div><div class="rc-value">$1.0000</div><div class="rc-sub">exact-native · coordinator and Scribe included</div></div><div class="roi-chip "><div class="rc-label">Without HVE Squad</div><div class="rc-value">$2.5000</div><div class="rc-sub">modeled · single model: gpt-5.6-sol</div></div><div class="roi-chip rc-good"><div class="rc-label">Difference</div><div class="rc-value">$1.5000 (60.0%)</div><div class="rc-sub">lower with HVE Squad</div></div><div class="roi-chip rc-good"><div class="rc-label">Run ROI</div><div class="rc-value">+150%</div><div class="rc-sub">return on spend · 2.50× · exact-native</div></div><div class="roi-chip "><div class="rc-label">Per accepted deliverable</div><div class="rc-value">$0.3333</div><div class="rc-sub">measured · 3 accepted</div></div></div></div></header><div class="container"><div class="card"><p class="section-label">Scope and provenance</p><div class="table-wrap"><table><thead><tr><th>Squad</th><th>Trigger</th><th>Ledger run</th><th>Basis</th><th class="num">Cost (USD)</th><th class="num">Tokens</th><th>Ledger as of</th></tr></thead><tbody><tr><td>squad</td><td>issue contoso/platform#412 by avery-chen</td><td>contoso-auth-01</td><td><span class="chip chip-good">exact-native</span></td><td class="num">$1.0000</td><td class="num">471,000</td><td>2026-07-14T18:00:00.000Z</td></tr></tbody></table></div></div><div class="card" id="s1"><div class="section-header">1. Governance Gates</div><div class="grid-4"><div class="summary-card"><div class="value">3</div><div class="label">Council Verdicts</div></div><div class="summary-card"><div class="value">1</div><div class="label">Intake Readiness Checks</div></div><div class="summary-card"><div class="value">2 / 2</div><div class="label">Human Gates Passed</div><span class="badge-status badge-green">All passed</span></div><div class="summary-card"><div class="value">0</div><div class="label">Escalations</div><span class="badge-status badge-green">None</span></div></div><p class="gate-notes">Discovery sessions: 1 · Discovery offers declined: 1 · Council waivers: 0 · Cost preflight rounds: 2</p><p class="section-label">Human Gate Log</p><div class="table-wrap"><table><thead><tr><th>Turn</th><th>Date</th><th>Gate Type</th><th>Action</th><th>Status</th></tr></thead><tbody><tr><td>6</td><td>2026-07-15</td><td>Impactful-Action Gate</td><td>implement: Impactful-Action Gate: deploy to staging</td><td><span style="color:#166534;font-weight:600">✓ PASSED</span></td></tr><tr><td>6</td><td>2026-07-15</td><td>Human Gate</td><td>review: Risk Gate: security block resolved</td><td><span style="color:#166534;font-weight:600">✓ PASSED</span></td></tr></tbody></table></div></div><div class="card" id="s2"><div class="section-header">2. Council Verdicts</div><div class="donut-container"><div class="donut" style="background:conic-gradient(#86efac 0deg 120deg, #fde68a 120deg 240deg, #fca5a5 240deg 360deg)"><div class="donut-center">3</div></div><div class="legend"><div class="legend-item"><span class="legend-dot go"></span>Go<span class="legend-value">1 (33%)</span></div><div class="legend-item"><span class="legend-dot cond"></span>Go-With-Conditions<span class="legend-value">1 (33%)</span></div><div class="legend-item"><span class="legend-dot stop"></span>Stop<span class="legend-value">1 (33%)</span></div></div></div><p class="section-label">Findings by Role</p><div class="table-wrap"><table><thead><tr><th>Role</th><th class="num">Approve</th><th class="num">Conditional</th><th class="num">Concern</th><th class="num">Block</th><th class="num">Risk: High</th></tr></thead><tbody><tr><td>architect</td><td class="num">2</td><td class="num">0</td><td class="num">1</td><td class="num">0</td><td class="num">0</td></tr><tr><td>security</td><td class="num">1</td><td class="num">1</td><td class="num">0</td><td class="num">1</td><td class="num">1</td></tr></tbody></table></div><div class="conditions-counter"><strong>3</strong> conditions outstanding (latest verdict per topic)</div></div><div class="card" id="s3"><div class="section-header">3. Cost Breakdown</div><div class="legend-box"><strong>How to read these figures.</strong> Each figure carries its basis and bases are never added silently.<ul><li><span class="chip chip-good">exact-native</span> host-reported native usage records, priced by the host (1 AI credit = $0.01).</li><li><span class="chip chip-warn">estimated</span> dispatch-size estimator × per-model rates × calibration; approximate.</li><li><span class="chip chip-info">modeled</span> a counterfactual or blended-price figure computed from token counts; not a bill.</li><li><span class="chip chip-good">host-billed</span> whole-session AI units the host reported, coordinator included.</li></ul></div><p class="section-label">Run economics and ROI</p><div class="table-wrap"><table><thead><tr><th>Measure</th><th>Value</th><th>Basis</th><th>Derivation</th></tr></thead><tbody><tr><td>HVE Squad spend</td><td>$1.0000 <span class="note">(100.00 AI credits)</span></td><td><span class="chip chip-good">exact-native</span></td><td>Ledger Usage &amp; Cost total (all roles plus coordinator and Scribe overhead)</td></tr><tr><td>Without HVE Squad</td><td>$2.5000</td><td><span class="chip chip-info">modeled (exact-native)</span></td><td>Same work on one model: gpt-5.6-sol</td></tr><tr><td>Avoided cost</td><td>$1.5000</td><td><span class="chip chip-info">derived</span></td><td>Without HVE Squad − HVE Squad spend</td></tr><tr><td>Cost reduction</td><td>60.0%</td><td><span class="chip chip-info">derived</span></td><td>Avoided cost ÷ Without HVE Squad</td></tr><tr><td>Run ROI</td><td>150.0%</td><td><span class="chip chip-info">derived</span></td><td>Avoided cost ÷ HVE Squad spend (return per dollar spent)</td></tr><tr><td>Cost multiple</td><td>2.50×</td><td><span class="chip chip-info">derived</span></td><td>Without HVE Squad ÷ HVE Squad spend</td></tr><tr><td>Accepted / produced deliverables</td><td>3 / 4</td><td><span class="chip chip-info">derived</span></td><td>Unit Economics (value): accepted only after an independent review</td></tr><tr><td>First-pass yield</td><td>66.7%</td><td><span class="chip chip-info">derived</span></td><td>Share of accepted deliverables with no rework</td></tr><tr><td>Cost per accepted deliverable</td><td>$0.3333</td><td><span class="chip chip-info">measured</span></td><td>Spend ÷ accepted deliverables</td></tr><tr><td>Orchestration share of spend</td><td>15.0%</td><td><span class="chip chip-info">derived</span></td><td>Coordinator and Scribe row ÷ total</td></tr><tr><td>Prompt-cache share of input-side tokens</td><td>67.3%</td><td><span class="chip chip-info">derived</span></td><td>Cached ÷ (input + cached + cache write)</td></tr></tbody></table></div><p class="note">ROI = (Without HVE Squad − HVE Squad) ÷ HVE Squad. The without-HVE-Squad figure is a modeled counterfactual that holds the work constant on one model; it is not an observed alternate run and a negative value is shown as negative.</p><p class="section-label">Figures by basis (not added together)</p><div class="table-wrap"><table><thead><tr><th>Figure</th><th>Value</th><th>Basis</th><th>Scope</th></tr></thead><tbody><tr><td>Ledger total</td><td>$1.0000</td><td><span class="chip chip-good">exact-native</span></td><td>1 ledger(s); includes orchestration; cumulative</td></tr></tbody></table></div><p class="section-label">Comparisons stated by the ledgers</p><div class="table-wrap"><table><thead><tr><th>Squad</th><th>Kind</th><th class="num">With HVE Squad</th><th class="num">Without</th><th>Baseline model</th><th class="num">Saving</th><th class="num">Saving %</th><th>Ledger states</th><th class="num">ROI</th></tr></thead><tbody><tr><td>squad</td><td><span class="chip chip-good">exact-native</span></td><td class="num">$1.0000</td><td class="num">$2.5000</td><td>gpt-5.6-sol</td><td class="num">$1.5000</td><td class="num">60.0%</td><td>60.0% lower</td><td class="num">150%</td></tr></tbody></table></div><p class="section-label">Why HVE Squad: what this run spent</p><div class="evidence"><div class="evidence-item ev-shown"><div class="ev-title">✓ Lower spend for the same work</div><div class="ev-detail">HVE Squad spent $1.0000 against $2.5000 for the same work without HVE Squad (single model: gpt-5.6-sol): $1.5000 (60.0%) lower. Return on spend 150%; the single-model approach would have cost 2.50× as much. This is a modeled counterfactual, not an observed alternate run.</div><div class="ev-basis">basis: exact-native</div></div><div class="evidence-item ev-shown"><div class="ev-title">✓ Right-sized models per role</div><div class="ev-detail">3 distinct models served the roles (share of billed tokens: gpt-5.3-codex 47%, claude-sonnet-4.6 28%, claude-haiku-4.5 25%): each role ran on the model recorded for it instead of one session model for everything.</div><div class="ev-basis">basis: exact-native</div></div><div class="evidence-item ev-shown"><div class="ev-title">✓ Spend is measured, not guessed</div><div class="ev-detail">Every figure is host-reported native usage: 21 complete accounting record(s) through 2026-07-14T18:00:00.000Z, reconciled to the native session total (digest 0123456789AB…). Spend is audited, not estimated.</div><div class="ev-basis">basis: exact-native</div></div><div class="evidence-item ev-shown"><div class="ev-title">✓ Spend guarded by a ceiling</div><div class="ev-detail">Cost ceiling $5.00: 2 preflight round(s) recorded before dispatch (2 within-ceiling).</div><div class="ev-basis">basis: recorded</div></div></div><p class="section-label">Cost by Role (exact-native)</p><div class="cost-bars"><div class="cost-bar-row"><span class="cost-bar-label">Developer</span><div class="cost-bar-track"><div class="cost-bar-fill" style="width:100.0%;background:linear-gradient(90deg,#fbbf24,#f59e0b)"></div></div><span class="cost-bar-amount">$0.4000</span></div><div class="cost-bar-row"><span class="cost-bar-label">Researcher</span><div class="cost-bar-track"><div class="cost-bar-fill" style="width:75.0%;background:linear-gradient(90deg,#f87171,#ef4444)"></div></div><span class="cost-bar-amount">$0.3000</span></div><div class="cost-bar-row"><span class="cost-bar-label">Orchestration</span><div class="cost-bar-track"><div class="cost-bar-fill" style="width:37.5%;background:linear-gradient(90deg,#38bdf8,#0ea5e9)"></div></div><span class="cost-bar-amount">$0.1500</span></div><div class="cost-bar-row"><span class="cost-bar-label">Tester</span><div class="cost-bar-track"><div class="cost-bar-fill" style="width:37.5%;background:linear-gradient(90deg,#a78bfa,#8b5cf6)"></div></div><span class="cost-bar-amount">$0.1500</span></div></div><p class="section-label">Cost by Model Tier</p><div class="table-wrap"><table><thead><tr><th>Model</th><th>Role Usage</th><th>Priced as</th><th class="num">Cost (USD)</th><th class="num">Token Share</th></tr></thead><tbody><tr><td>gpt-5.3-codex</td><td>developer</td><td>native credits</td><td class="num">$0.4000</td><td class="num">47.1%</td></tr><tr><td>claude-sonnet-4.6</td><td>researcher</td><td>native credits</td><td class="num">$0.3000</td><td class="num">27.8%</td></tr><tr><td>claude-haiku-4.5</td><td>tester, orchestration</td><td>native credits</td><td class="num">$0.3000</td><td class="num">25.1%</td></tr></tbody></table></div><p class="section-label">Cost by tier</p><div class="table-wrap"><table><thead><tr><th>Tier</th><th>Role Usage</th><th class="num">Cost (USD)</th><th class="num">Token Share</th></tr></thead><tbody><tr><td>default</td><td>researcher, developer</td><td class="num">$0.7000</td><td class="num">74.9%</td></tr><tr><td>fast</td><td>tester</td><td class="num">$0.1500</td><td class="num">11.7%</td></tr><tr><td>mixed</td><td>orchestration</td><td class="num">$0.1500</td><td class="num">13.4%</td></tr></tbody></table></div><p class="section-label">Per-Turn Cost Trend</p><p class="note">Omitted: no ledger records cost per turn, and a per-turn figure the ledger cannot reproduce is never shown. Totals above are cumulative for the run.</p><p class="section-label">Consumption ledger: complete detail</p><div class="note ledger-title"><strong>Squad Consumption Ledger (Run: contoso-auth-01)</strong></div><details class="ledger" open><summary>Attribution</summary><div class="ledger-body"><div class="table-wrap"><table class="ledger-table"><thead><tr><th>Role</th><th>Member</th><th>Agent</th><th>Model</th><th>Model Source</th><th>Priced As</th><th>Tier</th></tr></thead><tbody><tr><td>researcher</td><td>Alpha</td><td>Squad Researcher</td><td>claude-sonnet-4.6</td><td><span class="chip chip-good">host-reported</span></td><td><span class="chip chip-good">native credits</span></td><td>default</td></tr><tr><td>developer</td><td>Beta</td><td>Squad Implementor</td><td>gpt-5.3-codex</td><td><span class="chip chip-good">host-reported</span></td><td><span class="chip chip-good">native credits</span></td><td>default</td></tr><tr><td>tester</td><td>Gamma</td><td>Squad Reviewer</td><td>claude-haiku-4.5</td><td><span class="chip chip-good">host-reported</span></td><td><span class="chip chip-good">native credits</span></td><td>fast</td></tr><tr><td>orchestration</td><td></td><td>Coordinator+Scribe</td><td>claude-haiku-4.5</td><td><span class="chip chip-good">host-reported</span></td><td><span class="chip chip-good">native credits</span></td><td>mixed</td></tr></tbody></table></div></div></details><details class="ledger" open><summary>Usage &amp; Cost</summary><div class="ledger-body"><div class="table-wrap"><table class="ledger-table"><thead><tr><th>Role</th><th class="num">Requests</th><th class="num">In Tokens</th><th class="num">Cached</th><th class="num">Cache Wr</th><th class="num">Out Tokens</th><th class="num">Exact Cost (USD)</th><th class="num">Exact Credits</th><th>Basis</th></tr></thead><tbody><tr><td>researcher</td><td class="num">3</td><td class="num">40,000</td><td class="num">80,000</td><td class="num">5,000</td><td class="num">6,000</td><td class="num">0.3000</td><td class="num">30.00</td><td><span class="chip chip-good">exact-native</span></td></tr><tr><td>developer</td><td class="num">5</td><td class="num">60,000</td><td class="num">150,000</td><td class="num">0</td><td class="num">12,000</td><td class="num">0.4000</td><td class="num">40.00</td><td><span class="chip chip-good">exact-native</span></td></tr><tr><td>tester</td><td class="num">2</td><td class="num">20,000</td><td class="num">30,000</td><td class="num">2,000</td><td class="num">3,000</td><td class="num">0.1500</td><td class="num">15.00</td><td><span class="chip chip-good">exact-native</span></td></tr><tr><td>orchestration</td><td class="num">4</td><td class="num">15,000</td><td class="num">40,000</td><td class="num">4,000</td><td class="num">4,000</td><td class="num">0.1500</td><td class="num">15.00</td><td><span class="chip chip-good">exact-native</span></td></tr><tr class="row-total"><td><strong>Total</strong></td><td class="num"><strong>14</strong></td><td class="num"><strong>135,000</strong></td><td class="num"><strong>300,000</strong></td><td class="num"><strong>11,000</strong></td><td class="num"><strong>25,000</strong></td><td class="num"><strong>1.0000</strong></td><td class="num"><strong>100.00</strong></td><td><span class="chip chip-good"><strong>exact-native</strong></span></td></tr></tbody></table></div><details class="ledger-sub"><summary>Derivation</summary><div class="ledger-body"><pre class="ledger-code"><code>Squad Researcher.md — 1 block(s) — identities: aaaa1111
+Squad Scribe.md — 2 block(s) — identities: bbbb2222,cccc3333
+Native usage snapshot — session: sess-7c1e4a; records: 21; through: 2026-07-14T18:00:00.000Z; digest: 0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF
+researcher         requests 3      input 40000      cached 80000      cache-write 5000       output 6000       nano-AIU 30000000000 = 30.00 credits / 0.3000 USD
+developer          requests 5      input 60000      cached 150000     cache-write 0          output 12000      nano-AIU 40000000000 = 40.00 credits / 0.4000 USD
+tester             requests 2      input 20000      cached 30000      cache-write 2000       output 3000       nano-AIU 15000000000 = 15.00 credits / 0.1500 USD
+orchestration      requests 4      input 15000      cached 40000      cache-write 4000       output 4000       nano-AIU 15000000000 = 15.00 credits / 0.1500 USD
+total nano-AIU 100000000000 = 100.00 credits / 1.0000 USD</code></pre><div class="ledger-note"><p>Basis: exact-native. Every row is host-reported native usage. Calibration factor 1.00 (0 reconciled runs — uncalibrated). 1 AI credit = $0.01 USD.</p></div></div></details></div></details><details class="ledger" open><summary>Unit Economics (value)</summary><div class="ledger-body"><div class="table-wrap"><table class="ledger-table"><thead><tr><th>Measure</th><th>Value</th><th>Label</th></tr></thead><tbody><tr><td>Deliverables produced</td><td>4</td><td>derived</td></tr><tr><td>Accepted by an independent review</td><td>3</td><td>derived</td></tr><tr><td>Rejected</td><td>0</td><td>derived</td></tr><tr><td>Unreviewed</td><td>1</td><td>derived</td></tr><tr><td>Dispatches (excluding Scribe)</td><td>10</td><td>derived</td></tr><tr><td>Rework dispatches</td><td>1</td><td>derived</td></tr><tr><td>First-pass yield</td><td>66.7%</td><td>derived</td></tr><tr><td>Exact credits per accepted deliverable</td><td>33.33</td><td><span class="chip chip-good">measured</span></td></tr><tr><td>Rework share of exact credits</td><td>n/a</td><td>unavailable without per-history-run identity</td></tr><tr><td>Orchestration share of exact credits</td><td>15.0%</td><td><span class="chip chip-good">measured</span></td></tr></tbody></table></div><p>Value is counted only for deliverables an independent review-class verdict accepted.</p></div></details><details class="ledger" open><summary>Cost Comparison (exact native actual)</summary><div class="ledger-body"><div class="table-wrap"><table class="ledger-table"><thead><tr><th>Scenario</th><th>Basis</th><th class="num">AI Credits</th><th class="num">USD</th></tr></thead><tbody><tr><td>With HVE Squad through 2026-07-14T18:00:00.000Z</td><td>complete deduplicated native records; coordinator and descendants included</td><td class="num">100.00</td><td class="num">1.0000</td></tr><tr><td>Without HVE Squad: same exact role-request token categories on <code>gpt-5.6-sol</code>, no coordinator or Scribe</td><td>calculated counterfactual from exact request tokens</td><td class="num">250.00</td><td class="num">2.5000</td></tr></tbody></table></div><p>HVE Squad is <strong>1.5000 USD (60.0%) lower</strong> than the same exact role traffic on <code>gpt-5.6-sol</code>.</p><div class="ledger-note"><p>The HVE Squad row is exact as of the native session snapshot: 21 complete accounting records. The without-Squad row is not an observed alternate run.</p></div></div></details><div class="ledger-note"><p><strong>Observed Usage (host-reported):</strong> not recorded in this ledger. An exact-native ledger folds host-reported usage into its main tables, so there is no separate section. Nothing is substituted.</p></div><details class="ledger-sub"><summary>Native sessions behind this ledger (consumption-sessions.json)</summary><div class="ledger-body"><div class="table-wrap"><table><thead><tr><th>Session</th><th>First record</th><th>Through</th><th class="num">Records</th><th class="num">Roles</th><th class="num">Requests</th><th class="num">Credits</th><th>Digest</th></tr></thead><tbody><tr><td>sess-7c1e4a</td><td>2026-07-10T09:00:00.000Z</td><td>2026-07-14T18:00:00.000Z</td><td class="num">21</td><td class="num">2</td><td class="num">8</td><td class="num">100.00</td><td>0123456789AB</td></tr></tbody></table></div></div></details><details class="ledger-sub"><summary>Methodology: rates, observation date, calibration</summary><div class="ledger-body"><div class="table-wrap"><table><thead><tr><th>Setting</th><th>Value</th></tr></thead><tbody><tr><td>Rates observed on</td><td>2026-09-27</td></tr><tr><td>Billing model</td><td>usage-based billing (UBB), token-metered, effective 2026-06-01.</td></tr><tr><td>Credit conversion</td><td>1 AI credit = $0.01 USD (fixed).</td></tr><tr><td>Calibration factor</td><td>1.00</td></tr><tr><td>Reconciled runs (observations)</td><td>0</td></tr><tr><td>Last reconciled</td><td>never</td></tr></tbody></table></div><p class="note">Per-model token rates in USD per 1M tokens, for the models this ledger used:</p><div class="table-wrap"><table class="ledger-table"><thead><tr><th>Model (as routed)</th><th>Tier</th><th class="num">Input</th><th class="num">Cached</th><th class="num">Cache write</th><th class="num">Output</th><th>Notes</th></tr></thead><tbody><tr><td>Claude Sonnet 4.6</td><td>default</td><td class="num">3.00</td><td class="num">0.30</td><td class="num">3.75</td><td class="num">15.00</td><td>versatile</td></tr></tbody></table></div></div></details><p class="section-label">Data quality and reading notes</p><p class="note">No inconsistency, unresolved identity, or fallback pricing was detected in the ledgers read.</p></div><div class="card" id="s4"><div class="section-header">4. Role Dispatch Activity</div><div class="table-wrap"><table><thead><tr><th>Role</th><th>Agent</th><th class="num">Dispatches</th><th>Model</th><th>Key Activities</th></tr></thead><tbody><tr><td><span class="role-badge" style="background:#ffedd5;color:#9a3412">Developer</span></td><td>Squad Implementor</td><td class="num">2</td><td>claude-sonnet-4.6</td><td>Implementing the auth layer; Fixing lint errors</td></tr><tr><td><span class="role-badge" style="background:#f1f5f9;color:#475569">Scribe</span></td><td>Squad Scribe</td><td class="num">2</td><td>claude-sonnet-4.6</td><td>Recording turn one; Recording the final turn</td></tr><tr><td><span class="role-badge" style="background:#dbeafe;color:#1e40af">Researcher</span></td><td>Squad Researcher</td><td class="num">1</td><td>claude-sonnet-4.6</td><td>Surveying the auth options</td></tr><tr><td><span class="role-badge" style="background:hsl(123,70%,92%);color:hsl(123,60%,28%)">Security</span></td><td>Security Planner</td><td class="num">1</td><td>claude-sonnet-4.6</td><td>Threat model for the auth layer</td></tr><tr><td><span class="role-badge" style="background:hsl(14,70%,92%);color:hsl(14,60%,28%)">Tester</span></td><td>Squad Reviewer</td><td class="num">1</td><td>claude-sonnet-4.6</td><td>Reviewing the auth layer</td></tr></tbody></table></div><div class="dispatch-summary"><div class="dispatch-badge"><span class="db-value">5</span> Distinct Roles Used</div><div class="dispatch-badge"><span class="db-value">7</span> Total Dispatches</div><div class="dispatch-badge"><span class="db-value">86%</span> Dispatch Success Rate</div><div class="dispatch-badge"><span class="db-value">1</span> Failed Dispatches</div></div></div><div class="card" id="s5"><div class="section-header">5. Risk &amp; Compliance</div><div class="grid-2"><div><p class="section-label">Autonomy Tier Distribution</p><div class="table-wrap"><table><thead><tr><th>Tier</th><th class="num">Dispatches</th><th>Outcome</th></tr></thead><tbody><tr><td><span class="role-badge tier-auto">auto</span></td><td class="num">2</td><td>2 success</td></tr><tr><td><span class="role-badge tier-confirm">confirm</span></td><td class="num">2</td><td>1 failure, 1 success</td></tr><tr><td><span class="role-badge tier-gated">gated</span></td><td class="num">1</td><td>1 success</td></tr><tr><td><span class="role-badge tier-unrecorded">unrecorded</span></td><td class="num">2</td><td>2 success</td></tr></tbody></table></div><p class="note">Tier is the routing.md autonomy tier of the dispatched role (escalate is shown as gated); unrecorded means the role has no routing rule.</p></div><div><p class="section-label">Compliance Indicators</p><div class="compliance-list"><div class="compliance-item"><span>Artifact evidence for all dispatches</span><span class="status status-pass">✓ 7/7</span></div><div class="compliance-item"><span>Test verification on code changes</span><span class="status status-fail">✗ 1/2</span></div><div class="compliance-item"><span>Cost logged for metered dispatches</span><span class="status status-pass">✓ 7/7</span></div><div class="compliance-item"><span>Impactful actions gated</span><span class="status status-pass">✓ 1/1</span></div><div class="compliance-item"><span>Notifications sent</span><span class="status status-pass">✓ 2/2</span></div><div class="compliance-item"><span>Open escalations</span><span class="status status-pass">✓ 0 open</span></div><div class="compliance-item"><span>Cost ceiling preflight admitted</span><span class="status status-pass">✓ 2/2</span></div></div></div></div></div><div class="card" id="s6"><div class="section-header">6. Activity Timeline</div><div class="timeline"><div class="tl-entry"><span class="tl-time">2026-07-15 · Turn 6</span><div class="tl-title">Human Gate — passed</div><div class="tl-detail">review: Risk Gate: security block resolved</div></div><div class="tl-entry"><span class="tl-time">2026-07-15 · Turn 6</span><div class="tl-title">Impactful-Action Gate — passed</div><div class="tl-detail">implement: Impactful-Action Gate: deploy to staging</div></div><div class="tl-entry"><span class="tl-time">2026-07-14 · Turn 6</span><div class="tl-title">Recording the final turn</div><div class="tl-detail">Scribe → Recorded the final turn.</div></div><div class="tl-entry"><span class="tl-time">2026-07-14</span><div class="tl-title">Council Verdict — public-api (Stop)</div><div class="tl-detail">architect: Concern, security: Block. 1 condition(s) outstanding.</div></div><div class="tl-entry"><span class="tl-time">2026-07-13 · Turn 5</span><div class="tl-title">Threat model for the auth layer</div><div class="tl-detail">Security → Produced the threat model.</div></div><div class="tl-entry"><span class="tl-time">2026-07-13 · Turn 5</span><div class="tl-title">Reviewing the auth layer</div><div class="tl-detail">Tester → Verified; 14 tests passed and the diff is accepted.</div></div><div class="tl-entry"><span class="tl-time">2026-07-12 · Turn 4</span><div class="tl-title">Fixing lint errors</div><div class="tl-detail">Developer → Failed: lint errors remained after the first pass.</div></div><div class="tl-entry"><span class="tl-time">2026-07-12</span><div class="tl-title">Council Verdict — data-store (Go-With-Conditions)</div><div class="tl-detail">architect: Approve, security: Conditional. 2 condition(s) outstanding.</div></div><div class="tl-entry"><span class="tl-time">2026-07-11 · Turn 3</span><div class="tl-title">Implementing the auth layer</div><div class="tl-detail">Developer → Implemented the layer; 12 tests pass.</div></div><div class="tl-entry"><span class="tl-time">2026-07-10 · Turn 1</span><div class="tl-title">Surveying the auth options</div><div class="tl-detail">Researcher → Surveyed three providers and recommended one.</div></div><div class="tl-entry"><span class="tl-time">2026-07-10 · Turn 1</span><div class="tl-title">Recording turn one</div><div class="tl-detail">Scribe → Recorded the turn.</div></div><div class="tl-entry"><span class="tl-time">2026-07-10</span><div class="tl-title">Council Verdict — auth-layer (Go)</div><div class="tl-detail">architect: Approve, security: Approve. 0 condition(s) outstanding.</div></div><div class="tl-entry"><span class="tl-time">2026-07-09</span><div class="tl-title">Intake Readiness — intake-1 (Ready-With-Gaps)</div><div class="tl-detail">Remediation cycles: 1.</div></div><div class="tl-entry"><span class="tl-time">2026-07-08</span><div class="tl-title">Discovery — brainstorm-1 (standard, offer-accepted)</div><div class="tl-detail">Options discarded: 2.</div></div><div class="tl-entry"><span class="tl-time">2026-07-08</span><div class="tl-title">Discovery — brainstorm-2 (skip, offer-declined)</div><div class="tl-detail">Options discarded: 0.</div></div></div></div><div class="card" id="s7"><div class="section-header">7. Key Outcomes This Period</div><div class="outcome-badges"><div class="outcome-badge badge-green"><span class="ob-value">0</span> Azure Deployments</div><div class="outcome-badge badge-blue"><span class="ob-value">2</span> GitHub Issues Created</div><div class="outcome-badge badge-blue"><span class="ob-value">26</span> Tests (from 2 sources)</div><div class="outcome-badge badge-blue"><span class="ob-value">5</span> Files Created/Modified</div></div><p class="section-label">Delivered Capabilities</p><div class="table-wrap"><table><thead><tr><th>Capability</th><th>Type</th><th>Status</th></tr></thead><tbody><tr><td><code>research/auth-options.md</code></td><td>Research</td><td><span class="role-badge badge-green">Complete</span></td></tr><tr><td><code>src/auth.py</code></td><td>Code</td><td><span class="role-badge badge-green">Complete</span></td></tr><tr><td><code>src/session.py</code></td><td>Code</td><td><span class="role-badge badge-green">Complete</span></td></tr><tr><td><code>reviews/auth-review.md</code></td><td>Review</td><td><span class="role-badge badge-green">Complete</span></td></tr><tr><td><code>docs/threat-model.md</code></td><td>Documentation</td><td><span class="role-badge badge-green">Complete</span></td></tr></tbody></table></div><p class="section-label">Why HVE Squad: what this run produced</p><div class="evidence"><div class="evidence-item ev-shown"><div class="ev-title">✓ Independent review before acceptance</div><div class="ev-detail">3 of 4 deliverable(s) accepted by an independent review (0 rejected, 1 unreviewed); first-pass yield 66.7%; $0.3333 per accepted deliverable (measured). Value is counted only for reviewed, accepted work.</div><div class="ev-basis">basis: ledger</div></div><div class="evidence-item ev-shown"><div class="ev-title">✓ Risk surfaced before implementation</div><div class="ev-detail">3 council verdict(s) (1 Go, 1 Go-With-Conditions, 1 Stop) with 3 condition(s) outstanding, and 1 intake readiness check(s): concerns were raised and recorded before code was written.</div><div class="ev-basis">basis: decisions</div></div><div class="evidence-item ev-shown"><div class="ev-title">✓ Humans stay in control</div><div class="ev-detail">2 human gate(s) fired: 2 passed, 0 blocked, 0 pending; 0 escalation event(s) recorded. Impactful actions wait for approval.</div><div class="ev-basis">basis: runs</div></div><div class="evidence-item ev-shown"><div class="ev-title">✓ Every dispatch leaves proof</div><div class="ev-detail">7 dispatch(es) across 5 role(s), each recorded in append-only history with its request, deliverable, outcome, and consumption block; 100% carry deliverable evidence.</div><div class="ev-basis">basis: history</div></div><div class="evidence-item ev-shown"><div class="ev-title">✓ Deliverables with evidence</div><div class="ev-detail">5 file(s) delivered and 26 test result(s) reported across 2 source(s), taken from dispatch outcomes.</div><div class="ev-basis">basis: history</div></div></div></div></div><footer><strong>Grounding sources:</strong> .copilot-tracking/squad/consumption-rates.md, .copilot-tracking/squad/consumption-sessions.json, .copilot-tracking/squad/consumption.md, .copilot-tracking/squad/decisions.md, .copilot-tracking/squad/history/autopilot-run-run-1.md, .copilot-tracking/squad/history/Security Planner.md, .copilot-tracking/squad/history/Squad Implementor.md, .copilot-tracking/squad/history/Squad Researcher.md, .copilot-tracking/squad/history/Squad Reviewer.md, .copilot-tracking/squad/history/Squad Scribe.md, .copilot-tracking/squad/notifications.md, .copilot-tracking/squad/routing.md, .copilot-tracking/squad/state.json, .copilot-tracking/squad/team.md<br><strong>Scope:</strong> single squad · <strong>Period:</strong> all time: 2026-07-10 to 2026-07-14 (5 days)<br><strong>Report generated by:</strong> /squad-governance-report period=all — deterministic renderer (New-SquadGovernanceReport.ps1); read-only, CSS-only, no JavaScript, self-contained. Generated for 2026-08-04.<br><strong>Input digest:</strong> sha256:366dca62e56021b1420ca8d509ca3c74210e852b796d2db24d4456f27ba4f21c (same state and arguments always produce the same report).<br><strong>Calibration:</strong> squad: factor 1.00, 0 reconciled run(s) (uncalibrated)<br><strong>Badge thresholds</strong> are guidance: green marks success, amber in-progress or conditional, red blocked or failed, gray not activated.</footer></body></html>

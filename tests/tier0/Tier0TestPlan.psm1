@@ -51,6 +51,7 @@ function Get-Tier0TestPlan {
                 'BoundedLane.Tests.ps1'
                 'SquadCoach.Tests.ps1'
                 'ConnectorDispatch.Tests.ps1'
+                'GovernanceReport.Tests.ps1'
             )
         }
         @{

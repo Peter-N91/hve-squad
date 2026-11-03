@@ -1228,19 +1228,33 @@ flowchart TD
       <ul>
         <li><code>output=&lt;path&gt;</code> &mdash; où enregistrer le fichier HTML. Par défaut : <code>docs/squad-governance-report-&lt;YYYY-MM-DD&gt;.html</code>.</li>
         <li><code>squad=&lt;name&gt;</code> &mdash; dans une fédération, limite le périmètre à une sous-squad précise. En cas d'omission, agrège toutes les sous-squads.</li>
-        <li><code>period={all|30d|7d}</code> &mdash; période à inclure (<code>all</code> par défaut).</li>
+        <li data-release-change="20261102-governance-report-consumption-roi"><code>period={all|30d|7d}</code> &mdash; période à inclure (<code>all</code> par défaut) : les 7 ou 30 jours calendaires se terminant à la date de référence. Les entrées datées sont filtrées ; le registre des coûts est cumulatif pour toute l'exécution, ses chiffres sont donc étiquetés comme tels plutôt que filtrés.</li>
       </ul>
       <h3>Sections du tableau de bord</h3>
       <p>Le rapport généré contient sept sections :</p>
       <ol>
         <li><strong>Contrôles de gouvernance</strong> &mdash; verdicts du conseil, contrôles des entrées, validations humaines et nombre de demandes d'intervention.</li>
         <li><strong>Verdicts du conseil</strong> &mdash; répartition des verdicts (feu vert / feu vert sous conditions / arrêt), avec les constats par rôle.</li>
-        <li><strong>Répartition des coûts</strong> &mdash; coût estimé par rôle et par niveau de modèle.</li>
+        <li data-release-change="20261102-governance-report-consumption-roi"><strong>Répartition des coûts</strong> &mdash; coût par rôle et par niveau de modèle avec sa base, registre de consommation complet, usage observé lorsque le registre l'enregistre, comparaison « sans HVE Squad », ROI de l'exécution et raisons, étayées par des preuves, pour lesquelles HVE Squad a été rentable.</li>
         <li><strong>Activité de lancement des rôles</strong> &mdash; nombre de lancements, modèles utilisés, taux de réussite et répartition des niveaux d'autonomie.</li>
         <li><strong>Risques et conformité</strong> &mdash; preuves issues des artefacts, vérification des tests, contrôle des actions à impact et demandes d'intervention ouvertes.</li>
         <li><strong>Chronologie des activités</strong> &mdash; vue chronologique des lancements et des décisions.</li>
-        <li><strong>Principaux résultats</strong> &mdash; déploiements, issues créées, tests exécutés, fichiers modifiés et capacités livrées.</li>
+        <li data-release-change="20261102-governance-report-consumption-roi"><strong>Principaux résultats</strong> &mdash; déploiements, issues créées, tests exécutés, fichiers modifiés, capacités livrées et preuves de ce que l'exécution a produit (revue indépendante, risques repérés tôt, validations humaines).</li>
       </ol>
+      <h3 data-release-change="20261102-governance-report-consumption-roi">Coûts, consommation et ROI</h3>
+      <p>
+        La commande exécute un script déterministe, <code>New-SquadGovernanceReport.ps1</code>, qui lit
+        l'état de la squad en lecture seule, écrit le fichier et affiche un reçu avec le chemin, un résumé
+        en une ligne, les sources et les éventuelles lacunes. Le même état et la même date <code>-AsOf</code>
+        produisent toujours un fichier identique à l'octet près.
+      </p>
+      <ul>
+        <li><strong>Le registre complet, tel qu'il est écrit.</strong> Chaque section et chaque tableau de <code>consumption.md</code> est affiché : attribution, usage et coût, dérivation, économie unitaire, comparaison des coûts et, lorsque le registre en contient, usage observé. Comme le registre est reproduit plutôt que décrit champ par champ, une section ou une colonne ajoutée plus tard apparaît sans modifier le rapport. Un chiffre que le rapport ne reconnaît pas affiche « non calculable » ; rien n'est deviné.</li>
+        <li><strong>Chaque chiffre indique sa base.</strong> <code>exact-native</code> (usage déclaré par l'hôte), <code>estimated</code> (estimé), <code>modeled</code> (contrefactuel ou prix mixte) et <code>host-billed</code> (total d'une session entière) ne sont jamais additionnés.</li>
+        <li><strong>ROI de l'exécution.</strong> Coût évité, réduction de coût, multiple de coût et ROI = (Sans HVE Squad &minus; HVE Squad) &divide; HVE Squad, à partir des chiffres « avec » et « sans » du registre lui-même. Le chiffre « sans » est un contrefactuel modélisé, et non une exécution parallèle observée ; une exécution plus coûteuse est affichée en négatif.</li>
+        <li><strong>Pourquoi HVE Squad.</strong> Deux panneaux de preuves, ce que l'exécution a dépensé et ce qu'elle a produit, marquent chaque affirmation comme démontrée, non démontrée ou indisponible d'après les propres enregistrements de l'exécution.</li>
+        <li><strong>Notes de lecture.</strong> Les modèles inconnus ou non résolus et leur prix de repli, les résumés périmés, les totaux incohérents, les bases mixtes et une session d'hôte partagée par deux sous-squads sont signalés sans réparer le registre.</li>
+      </ul>
       <p>
         Le résultat est un fichier <code>.html</code> unique, sans dépendances externes &mdash; tous les styles
         sont intégrés : il s'affiche donc correctement lorsqu'il est ouvert dans n'importe quel navigateur ou partagé en pièce jointe.
