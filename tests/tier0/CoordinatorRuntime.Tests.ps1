@@ -58,6 +58,23 @@ BeforeAll {
         }
     }
 
+    function Get-RegisteredAgentInstallCommand {
+        param([Parameter(Mandatory)][string]$AgentName)
+        $catalog = Join-Path $script:References 'roster-catalog.md'
+        $tables = @(Read-SquadTables $catalog | Where-Object {
+                'Install or Entry' -in $_.Header -and 'Resource Kind' -in $_.Header -and 'Resource' -in $_.Header
+            })
+        if ($tables.Count -ne 1) { throw 'Registered external cast table is missing.' }
+        $slug = ($AgentName.ToLowerInvariant() -replace '[^a-z0-9]+', '-').Trim('-')
+        $rows = @($tables[0].Rows | Where-Object {
+                $_['Resource Kind'] -ceq 'agent' -and (
+                    $_['Resource'] -ceq $AgentName -or $_['Resource'] -ceq $slug
+                )
+            })
+        if ($rows.Count -ne 1) { throw "No unique registered agent row for '$AgentName'." }
+        [string]$rows[0]['Install or Entry']
+    }
+
     function Initialize-Fixture {
         param(
             [string]$Repo,
@@ -943,6 +960,8 @@ Describe 'Pack Alternate resolution uses the dispatch plan' {
         $absent = Invoke-Local 'New-SquadDispatchPlan.ps1' $repo @('-RepoRoot', $repo, '-InputPath', $absentPath)
         $absent.ExitCode | Should -Not -Be 0
         $absent.Output | Should -Match 'not installed and dispatchable'
+        $absent.Output | Should -Match ([regex]::Escape((Get-RegisteredAgentInstallCommand -AgentName 'Power Platform Expert')))
+        $absent.Output | Should -Match ([regex]::Escape('apm install github/awesome-copilot/agents/power-platform-expert.agent.md'))
         $absent.Output | Should -Not -Match 'Squad Power Platform Integrator'
 
         Write-FixtureText (Join-Path $repo '.github/agents/power-platform-expert.agent.md') "---`nname: Power Platform Expert`nuser-invocable: false`ndisable-model-invocation: false`n---`n# Alternate`n"
@@ -1071,6 +1090,7 @@ Describe 'Pack Alternate resolution uses the dispatch plan' {
             else {
                 $absent.ExitCode | Should -Not -Be 0 -Because $case.Request
                 $absent.Output | Should -Match 'not installed and dispatchable'
+                $absent.Output | Should -Match ([regex]::Escape((Get-RegisteredAgentInstallCommand -AgentName $resolved.Agent)))
                 $absent.Output | Should -Not -Match ([regex]::Escape($primary))
             }
         }

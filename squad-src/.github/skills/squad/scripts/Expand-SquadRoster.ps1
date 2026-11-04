@@ -14,7 +14,9 @@
     decisions.md entry, then checks the ledger read-only. An all-present registered
     pack may seal zero added roles only when that pack is absent from Packs:; the
     writer rejects an unregistered or already-active pack even if the sealed team
-    text contains the name. Empty expansions stay invalid.
+    text contains the name. Under the writer lock, the sealed Packs line must equal
+    the baseline packs plus the requested packs, in that order, with no extras or
+    duplicates. Empty expansions stay invalid.
 
     consumption.md, optional consumption-sessions.json, state.json, consumption-rates.md, notifications.md, and history/
     must remain byte-identical. A stale plan, lock timeout, failed ledger check, or
@@ -349,6 +351,25 @@ try {
             if ($registered.Count -ne 1) { throw "Unregistered pack: $packName" }
             if ([string]$packName -cin $baselinePacks) { throw "Pack '$packName' is already active." }
         }
+        $expectedPacks = [Collections.Generic.List[string]]::new()
+        foreach ($name in @($baselinePacks)) { $expectedPacks.Add([string]$name) }
+        foreach ($name in @($plan.packs)) { $expectedPacks.Add([string]$name) }
+        $seenPacks = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+        foreach ($name in $expectedPacks) {
+            if (-not $seenPacks.Add($name)) { throw "Duplicate pack '$name'." }
+        }
+        $seenPacks.Clear()
+        foreach ($name in @($sealedPacks)) {
+            if (-not $seenPacks.Add([string]$name)) { throw "Sealed Packs line repeats '$name'." }
+        }
+        $sealedList = @($sealedPacks)
+        $packMismatch = $sealedList.Count -ne $expectedPacks.Count
+        if (-not $packMismatch) {
+            for ($index = 0; $index -lt $expectedPacks.Count; $index++) {
+                if ([string]$sealedList[$index] -cne $expectedPacks[$index]) { $packMismatch = $true; break }
+            }
+        }
+        if ($packMismatch) { throw 'Sealed Packs line does not equal baseline packs plus requested packs.' }
     }
 
     foreach ($name in @('team.md', 'routing.md', 'decisions.md')) {

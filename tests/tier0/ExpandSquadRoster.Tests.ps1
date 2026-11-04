@@ -793,6 +793,14 @@ Describe 'All-present registered pack expansion' {
         $unregisteredApply.Output | Should -Match 'Unregistered pack'
         Get-TreeHash $cleanRoot | Should -BeExactly $cleanBefore
         [IO.File]::ReadAllText((Join-Path $cleanRoot 'team.md')) | Should -Not -Match 'not-a-pack'
+
+        $smuggled = Write-TamperedExpansionPlan -Repo $clean -SourcePath $planned.Path -PackName 'foundry' -SealedPackLine 'Packs: foundry, not-a-pack'
+        $smuggledApply = Invoke-Expansion -Repo $clean -Plan $smuggled -Sha $smuggled.Sha
+        $smuggledApply.ExitCode | Should -Not -Be 0
+        $smuggledApply.Output | Should -Match 'does not equal baseline packs plus requested packs'
+        Get-TreeHash $cleanRoot | Should -BeExactly $cleanBefore
+        [IO.File]::ReadAllText((Join-Path $cleanRoot 'team.md')) | Should -Not -Match 'not-a-pack'
+        [IO.File]::ReadAllText((Join-Path $cleanRoot 'team.md')) | Should -Not -Match '(?m)^Packs:.*\bfoundry\b'
     }
 
     It 'keeps pack apply inside one member and refuses the federation root' {
