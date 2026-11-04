@@ -275,6 +275,16 @@ removal, and the interval before reapplication do not select them. Host
 visibility is not selection. Power BI rows and `fabric-lakehouse` stay
 registered and unchanged. No Fabric candidate is blocklisted.
 
+| ID | Assertion | Source |
+|---|---|---|
+| SRC-01 | Origin preference stays inside the ten-column External Cast. Allowed classes are exactly `vendor-official`, `github-marketplace`, and `community`. Ambiguous licences stay unregistered. The licence citation is the delivered hve-core path | `roster-catalog.md`, Origin Preference; `PackRegistry.Tests.ps1` |
+| SRC-02 | `use-ai-gateway` installs from `Azure/aigateway`, not `Azure/ai-gateway` | `roster-catalog.md`, Registered External Cast; `docs/usage.html`; `docs/fr/usage.html` |
+| SRC-03 | `azure-deployment-preflight` stays registered. `azure-validate` and `azure-enterprise-infra-planner` stay unregistered and unblocked | `roster-catalog.md`, Deferred official candidates |
+| SRC-04 | A confirmed registered pack whose Adds roles are already present applies metadata and provenance only. Empty cells, unknown packs, and role-only no-ops still fail | `Get-SquadRosterExpansionPlan.ps1`; `Expand-SquadRoster.ps1` |
+| SRC-05 | Supported official Power Platform and M365 jobs select the local Primary. Broad legacy cues select the named community Alternate only when that cue matches and the agent is installed and dispatchable | `squad-roster.instructions.md`, Pack cues; `New-SquadDispatchPlan.ps1` |
+| SRC-06 | `foundry` Adds includes `data-scientist`. Foundry-specific skills are squad-selected only while `foundry` is active. Removal does not hide a host-installed skill | `profiles-and-packs.md`; `squad-data-scientist.agent.md` |
+| SRC-07 | `fabric` reuses `data-scientist` and admits only the eight gated skills. Selection requires an active `fabric` pack. Current Power BI and `fabric-lakehouse` rows do not change, and no Fabric candidate is blocklisted | `fabric-blueprint.md`; PRF-25 |
+
 Tier 1 has one opt-in `pack-lifecycle` scenario. It is excluded from the default live matrix and
 requires `-Pack <registered-pack>`, so adding packs does not multiply paid requests. Provision it
 without model calls first:
