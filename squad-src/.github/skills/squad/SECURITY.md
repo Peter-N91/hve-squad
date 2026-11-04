@@ -97,13 +97,21 @@ Different filesystem permissions or unattended policies change the risk.
   agents up through host parent identities. `Measure-SquadLedger.ps1` stores only
   closed-schema per-session aggregates, hashed accounting identities, and ordered
   history coverage in `consumption-sessions.json`; repeated writes replace one
-  native session and cross-session merges reject overlaps or history-prefix drift.
-  If the journal is absent, bootstrap reads only repository-matching local logs and
-  accepts them only when complete native event windows uniquely cover every metered
-  history timestamp; overlapping or missing coverage fails closed. Only the selected
-  active session receives a bounded open-tail allowance while its outer tool completion
-  is pending. A later session revalidates and refreshes the latest cached native session
-  from the completed log before appending. JSON timestamps remain strings during digest
+  native session, a cross-session merge counts a request that two logs repeat once,
+  and history-prefix drift is rejected.
+  Session discovery reads only repository-matching local logs (the session the host
+  names in `COPILOT_AGENT_SESSION_ID` is preferred when its folder is the repository or
+  a parent or child of it, an accepted session is looked up by id only as a plain
+  folder name under the session-state root whose folder relates to the repository, and
+  an earlier session is adopted for older history only when its own log shows the
+  entry more convincingly than the running one, which takes a shell call that runs a
+  history writer for this squad root, never a view, search, or ledger check, or
+  another root's hand-off); a log that
+  cannot be trusted is skipped and the last accepted snapshot is kept, never replaced
+  by a guess. Only the selected active session receives a bounded open-tail allowance
+  while its outer tool completion is pending, and an unparseable final log line is
+  ignored. A later write revalidates and refreshes the cached native sessions from
+  their logs before appending. JSON timestamps remain strings during digest
   validation, avoiding culture-dependent replay drift.
   The ledger, run totals, and journal publish as one rollback-capable transaction.
   These helpers never emit prompts, responses, tool arguments, or raw log lines;
@@ -239,7 +247,11 @@ records require complete status and stable host accounting identities. Cumulativ
 accounting additionally requires a unique native session id, non-overlapping hashed
 request identities, a closed cache schema, and cached history identities that remain
 an ordered prefix of current append-only history. Any mismatch keeps the journal
-unchanged and returns to the all-history estimator.
+unchanged and returns to the all-history estimator. The one exception is a journal
+that is not a JSON object (cut short, emptied by a crash, merge markers): nothing in
+it can be trusted or edited back, so a write rebuilds it from the native logs and
+keeps its bytes as `consumption-sessions.json.unreadable-<digest>` in the same
+rollback-capable transaction, while a printed ledger leaves it untouched.
 
 Native role attribution does not trust a package-qualified host label by itself.
 The raw `agentName`, `agentDisplayName`, and final namespace/path segment may resolve

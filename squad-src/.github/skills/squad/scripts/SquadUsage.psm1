@@ -5,10 +5,105 @@
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
+# PowerShell 7.4 has no ConvertFrom-Json -DateKind, and without it timestamps become
+# culture-formatted DateTime values; the fallback parser keeps them as the log's own strings.
+$script:JsonDateKindSupported = (Get-Command -Name ConvertFrom-Json -CommandType Cmdlet).Parameters.ContainsKey('DateKind')
+
+function ConvertFrom-SquadJsonElement {
+    [CmdletBinding()]
+    param([Parameter(Mandatory)][Text.Json.JsonElement]$Element)
+
+    switch ($Element.ValueKind) {
+        ([Text.Json.JsonValueKind]::Object) {
+            $value = [ordered]@{}
+            foreach ($property in $Element.EnumerateObject()) {
+                $value[$property.Name] = ConvertFrom-SquadJsonElement -Element $property.Value
+            }
+            return $value
+        }
+        ([Text.Json.JsonValueKind]::Array) {
+            $items = [Collections.Generic.List[object]]::new()
+            foreach ($item in $Element.EnumerateArray()) { $items.Add((ConvertFrom-SquadJsonElement -Element $item)) }
+            return , $items.ToArray()
+        }
+        ([Text.Json.JsonValueKind]::String) { return $Element.GetString() }
+        ([Text.Json.JsonValueKind]::Number) {
+            [long]$integer = 0
+            if ($Element.TryGetInt64([ref]$integer)) { return $integer }
+            return $Element.GetDouble()
+        }
+        ([Text.Json.JsonValueKind]::True) { return $true }
+        ([Text.Json.JsonValueKind]::False) { return $false }
+        default { return $null }
+    }
+}
+
+function ConvertFrom-SquadEventLine {
+    <#
+    .SYNOPSIS
+        Parses one events.jsonl line into nested dictionaries with every timestamp left as text.
+    #>
+    [CmdletBinding()]
+    param([Parameter(Mandatory)][string]$Line)
+
+    if ($script:JsonDateKindSupported) {
+        return $Line | ConvertFrom-Json -AsHashtable -Depth 100 -DateKind String
+    }
+    $options = [Text.Json.JsonDocumentOptions]::new()
+    $options.MaxDepth = 100
+    $document = [Text.Json.JsonDocument]::Parse($Line, $options)
+    try { return ConvertFrom-SquadJsonElement -Element $document.RootElement }
+    finally { $document.Dispose() }
+}
+
+function Get-SquadSessionWorkspaceCwd {
+    <#
+    .SYNOPSIS
+        Reads the normalized cwd recorded in a Copilot session's workspace.yaml, or $null.
+    #>
+    [CmdletBinding()]
+    param([Parameter(Mandatory)][string]$SessionDirectory)
+
+    $workspace = Join-Path $SessionDirectory 'workspace.yaml'
+    if (-not (Test-Path -LiteralPath $workspace -PathType Leaf)) { return $null }
+    $match = [regex]::Match([IO.File]::ReadAllText($workspace), '(?m)^cwd:\s*(?<cwd>.+?)\s*$')
+    if (-not $match.Success) { return $null }
+    try { return [IO.Path]::GetFullPath($match.Groups['cwd'].Value.Trim('"', "'")).TrimEnd('\', '/') }
+    catch { return $null }
+}
+
+function Test-SquadPathRelated {
+    <#
+    .SYNOPSIS
+        True when two directories are the same or one contains the other.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][string]$Left,
+        [Parameter(Mandatory)][string]$Right
+    )
+
+    $a = [IO.Path]::GetFullPath($Left).TrimEnd('\', '/')
+    $b = [IO.Path]::GetFullPath($Right).TrimEnd('\', '/')
+    if ([string]::Equals($a, $b, [StringComparison]::OrdinalIgnoreCase)) { return $true }
+    foreach ($separator in '\', '/') {
+        if ($a.StartsWith($b + $separator, [StringComparison]::OrdinalIgnoreCase)) { return $true }
+        if ($b.StartsWith($a + $separator, [StringComparison]::OrdinalIgnoreCase)) { return $true }
+    }
+    $false
+}
+
 function Resolve-SquadSessionLogPaths {
     <#
     .SYNOPSIS
         Resolves an explicit events.jsonl path or every matching Copilot session for a repository.
+    .DESCRIPTION
+        For `auto`, every session whose workspace cwd is the repository is returned newest
+        first. The session that is running this process (COPILOT_AGENT_SESSION_ID, which
+        the host exports to shell commands) is moved to the front, and is admitted even
+        when its cwd is only a parent or child of the repository, so a second window on the
+        same repository, or a session opened one folder away, can never make a later session
+        stand in for the one doing the work.
     #>
     [CmdletBinding()]
     param(
@@ -44,23 +139,56 @@ function Resolve-SquadSessionLogPaths {
             $right.LastWriteTimeUtc.CompareTo($left.LastWriteTimeUtc)
         })
 
-    $matches = [Collections.Generic.List[string]]::new()
+    $found = [Collections.Generic.List[string]]::new()
     foreach ($events in $candidates) {
-        $workspace = Join-Path $events.DirectoryName 'workspace.yaml'
-        if (-not (Test-Path -LiteralPath $workspace -PathType Leaf)) { continue }
-        $match = [regex]::Match([IO.File]::ReadAllText($workspace), '(?m)^cwd:\s*(?<cwd>.+?)\s*$')
-        if (-not $match.Success) { continue }
-        try {
-            $cwd = [IO.Path]::GetFullPath($match.Groups['cwd'].Value.Trim('"', "'")).TrimEnd('\', '/')
-        }
-        catch {
-            continue
-        }
+        $cwd = Get-SquadSessionWorkspaceCwd -SessionDirectory $events.DirectoryName
+        if (-not $cwd) { continue }
         if ([string]::Equals($cwd, $repository, [StringComparison]::OrdinalIgnoreCase)) {
-            $matches.Add($events.FullName)
+            $found.Add($events.FullName)
         }
     }
-    return $matches.ToArray()
+
+    $activeId = [string]$env:COPILOT_AGENT_SESSION_ID
+    if ($activeId -and -not [regex]::IsMatch($activeId, '[\\/:]|^\.+$')) {
+        $activeEvents = [IO.Path]::GetFullPath([IO.Path]::Combine($stateRoot, $activeId, 'events.jsonl'))
+        if ([IO.File]::Exists($activeEvents)) {
+            $activeCwd = Get-SquadSessionWorkspaceCwd -SessionDirectory ([IO.Path]::GetDirectoryName($activeEvents))
+            if ($activeCwd -and (Test-SquadPathRelated -Left $activeCwd -Right $repository)) {
+                for ($i = $found.Count - 1; $i -ge 0; $i--) {
+                    if ([string]::Equals($found[$i], $activeEvents, [StringComparison]::OrdinalIgnoreCase)) { $found.RemoveAt($i) }
+                }
+                $found.Insert(0, $activeEvents)
+            }
+        }
+    }
+    return $found.ToArray()
+}
+
+function Resolve-SquadSessionLogPathById {
+    <#
+    .SYNOPSIS
+        The events.jsonl of one named Copilot session, when its folder is the repository or a parent or child of it.
+    .DESCRIPTION
+        Sessions the ledger already accepted are looked up by id rather than by folder, so a session
+        opened one folder away from the repository keeps being refreshed after it stops being the
+        running one. The id comes from an editable journal, so only a plain folder name is accepted
+        and the resolved file must stay under the session-state root.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][string]$SessionId,
+        [Parameter(Mandatory)][string]$RepoRoot
+    )
+
+    if (-not [regex]::IsMatch($SessionId, '^[A-Za-z0-9][A-Za-z0-9._-]*\z')) { return $null }
+    $copilotHome = if ($env:COPILOT_HOME) { $env:COPILOT_HOME } else { Join-Path $HOME '.copilot' }
+    $stateRoot = [IO.Path]::GetFullPath((Join-Path $copilotHome 'session-state')).TrimEnd('\', '/')
+    $events = [IO.Path]::GetFullPath([IO.Path]::Combine($stateRoot, $SessionId, 'events.jsonl'))
+    if (-not $events.StartsWith($stateRoot + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase)) { return $null }
+    if (-not [IO.File]::Exists($events)) { return $null }
+    $cwd = Get-SquadSessionWorkspaceCwd -SessionDirectory ([IO.Path]::GetDirectoryName($events))
+    if (-not $cwd -or -not (Test-SquadPathRelated -Left $cwd -Right $RepoRoot)) { return $null }
+    $events
 }
 
 function Resolve-SquadSessionLogPath {
@@ -253,11 +381,14 @@ function Get-SquadAgentUsageAttribution {
         while ($null -ne ($line = $reader.ReadLine())) {
             $type = [regex]::Match($line, '"type"\s*:\s*"(?<type>session\.start|subagent\.started|subagent\.completed|session\.usage_record|session\.compaction_complete)"')
             if (-not $type.Success) { continue }
-            try { $logEvent = $line | ConvertFrom-Json -AsHashtable -Depth 100 -DateKind String }
+            try { $logEvent = ConvertFrom-SquadEventLine -Line $line }
             catch {
+                # A host that is still appending leaves an unterminated last line; the next rewrite reads it whole.
+                if ($reader.EndOfStream) { continue }
                 $problems.Add("Malformed $($type.Groups['type'].Value) event.")
                 continue
             }
+            if ([string]$logEvent['type'] -cne $type.Groups['type'].Value) { continue }
             $data = $logEvent['data']
             if ($data -isnot [Collections.IDictionary]) {
                 $problems.Add("$($type.Groups['type'].Value) has no data object.")
@@ -564,11 +695,14 @@ function Get-SquadUsageSnapshot {
             while ($null -ne ($line = $reader.ReadLine())) {
                 $type = [regex]::Match($line, '"type"\s*:\s*"(?<type>session\.usage_record|session\.compaction_complete|session\.usage_checkpoint)"')
                 if (-not $type.Success) { continue }
-                try { $logEvent = $line | ConvertFrom-Json -AsHashtable -Depth 100 -DateKind String }
+                try { $logEvent = ConvertFrom-SquadEventLine -Line $line }
                 catch {
+                    # A host that is still appending leaves an unterminated last line; the next rewrite reads it whole.
+                    if ($reader.EndOfStream) { continue }
                     $problems.Add("Malformed $($type.Groups['type'].Value) event.")
                     continue
                 }
+                if ([string]$logEvent['type'] -cne $type.Groups['type'].Value) { continue }
                 $timestamp = [string]$logEvent['timestamp']
                 if ($timestamp) {
                     if (-not $first) { $first = $timestamp }
@@ -664,4 +798,4 @@ function Get-SquadUsageSnapshot {
     }
 }
 
-Export-ModuleMember -Function Resolve-SquadSessionLogPath, Resolve-SquadSessionLogPaths, Get-SquadUsageSnapshot
+Export-ModuleMember -Function Resolve-SquadSessionLogPath, Resolve-SquadSessionLogPaths, Resolve-SquadSessionLogPathById, Get-SquadUsageSnapshot

@@ -2795,16 +2795,20 @@ description: "Append-only dispatch history for a single squad agent"
         (Invoke-Ledger -SquadRoot $f.Root -Check -ExpectedHistoryCounts @{ 'Squad Researcher' = 1; 'Squad Scribe' = 1 }).ExitCode | Should -Be 0
     }
 
-    It 'falls back when the squad history predates the selected host session' {
+    It 'keeps the exact totals and names the history entries no accepted session billed near when the squad history predates the selected host session' {
         $events = @($script:BaseEvents)
         $events[0] = $events[0].Replace('2026-09-27T09:59:00.000Z', '2026-10-01T10:00:00.000Z')
         $f = New-SessionFixtureLocal -EventLines $events
         $result = Invoke-LedgerWithSessionLocal -Root $f.Root -SessionLog $f.SessionDir -Write
         $result.ExitCode | Should -Be 0 -Because $result.Output
-        $result.Output | Should -Match 'history predates the selected host session'
+        $result.Output | Should -Match 'no billed native request within 5 minutes of their time in any accepted session'
+        $result.Output | Should -Not -Match 'estimates remain the fallback'
         $ledger = Get-Content -LiteralPath (Join-Path $f.Root 'consumption.md') -Raw
-        $ledger | Should -Match 'Est\. Cost \(USD\)'
-        $ledger | Should -Not -Match 'Exact Cost \(USD\)'
+        $ledger | Should -Match 'Exact Cost \(USD\)'
+        $ledger | Should -Not -Match 'Est\. Cost \(USD\)'
+        $ledger | Should -Match '(?m)^NOTE: 2 metered history entries have no billed native request within 5 minutes of their time in any accepted session'
+        $ledger | Should -Match '(?m)^> Lower bound: '
+        (Invoke-Ledger -SquadRoot $f.Root -Check -ExpectedHistoryCounts @{ 'Squad Researcher' = 1; 'Squad Scribe' = 1 }).ExitCode | Should -Be 0
     }
 
     It 'rewrites the exact ledger idempotently instead of appending duplicate exact sections' {
@@ -3097,7 +3101,1384 @@ description: "Append-only dispatch history for a single squad agent"
         $researcher.output | Should -Be 70000
         $json.exact.baselineCostUsd | Should -Be 2.7946
     }
+
+    Context 'exact accounting survives gaps in the history and the journal' {
+        BeforeAll {
+            function New-NativeSessionLocal {
+                param(
+                    [Parameter(Mandatory)]$Fixture,
+                    [Parameter(Mandatory)][string]$SessionId,
+                    [Parameter(Mandatory)][string[]]$EventLines,
+                    [string]$LastWriteUtc
+                )
+                $directory = Join-Path $Fixture.Home "session-state/$SessionId"
+                New-Item -ItemType Directory -Path $directory -Force | Out-Null
+                Set-Content -LiteralPath (Join-Path $directory 'workspace.yaml') -Value "id: $SessionId`ncwd: $($Fixture.Repo)`n"
+                $eventsPath = Join-Path $directory 'events.jsonl'
+                Set-Content -LiteralPath $eventsPath -Value ($EventLines -join "`n")
+                if ($LastWriteUtc) { (Get-Item -LiteralPath $eventsPath).LastWriteTimeUtc = [datetime]$LastWriteUtc }
+                $directory
+            }
+
+            function New-DispatchEventLinesLocal {
+                <#
+                .SYNOPSIS
+                    One billed dispatch: sonnet = 20,000 fresh + 10,000 cached input and 2,000 output (9.30 credits),
+                    haiku = 1,000 fresh + 1,000 cached input and 1,000 output (0.61 credits).
+                #>
+                param(
+                    [Parameter(Mandatory)][string]$AgentName,
+                    [Parameter(Mandatory)][string]$Key,
+                    [Parameter(Mandatory)][string]$StartTimestamp,
+                    [Parameter(Mandatory)][string]$UsageTimestamp,
+                    [ValidateSet('sonnet', 'haiku')][string]$Kind = 'sonnet'
+                )
+                $model = if ($Kind -eq 'sonnet') { 'claude-sonnet-4.6' } else { 'claude-haiku-4.5' }
+                $usage = if ($Kind -eq 'sonnet') {
+                    New-ExactUsageEventLocal -AgentId $Key -SourceSessionId "src-$Key" -UsageId $Key -Model $model -FreshInput 20000 -Cached 10000 -CacheWrite 0 -Output 2000 -InputRate 3 -CachedRate 0.3 -CacheWriteRate 3.75 -OutputRate 15 -Timestamp $UsageTimestamp
+                }
+                else {
+                    New-ExactUsageEventLocal -AgentId $Key -SourceSessionId "src-$Key" -UsageId $Key -Model $model -FreshInput 1000 -Cached 1000 -CacheWrite 0 -Output 1000 -InputRate 1 -CachedRate 0.1 -CacheWriteRate 1.25 -OutputRate 5 -Timestamp $UsageTimestamp
+                }
+                @(
+                    ('{"type":"subagent.started","agentId":"' + $Key + '","data":{"toolCallId":"tc-' + $Key + '","agentName":"' + $AgentName + '","agentDisplayName":"' + $AgentName.ToLowerInvariant() + '","model":"' + $model + '"},"timestamp":"' + $StartTimestamp + '"}')
+                    $usage
+                )
+            }
+
+            function New-HandoffEventLocal {
+                param(
+                    [Parameter(Mandatory)][string]$Key,
+                    [Parameter(Mandatory)][string]$Timestamp,
+                    [string]$SquadRoot = '.copilot-tracking/squad',
+                    [string]$Script = 'Write-SquadHandoff.ps1',
+                    [string]$Switches = ''
+                )
+                $command = "pwsh -NoProfile -File .github/skills/squad/scripts/$Script -SquadRoot $SquadRoot$(if ($Switches) { " $Switches" })"
+                '{"type":"tool.execution_start","data":{"toolCallId":"hand-' + $Key + '","toolName":"powershell","arguments":{"command":' + ($command | ConvertTo-Json -Compress) + '}},"timestamp":"' + $Timestamp + '"}'
+            }
+
+            function New-ToolEventLocal {
+                param([Parameter(Mandatory)][string]$Timestamp, [Parameter(Mandatory)][string]$ToolName, [Parameter(Mandatory)][string]$ArgumentsJson)
+                '{"type":"tool.execution_start","data":{"toolCallId":"tool-' + [guid]::NewGuid().ToString('N').Substring(0, 8) + '","toolName":"' + $ToolName + '","arguments":' + $ArgumentsJson + '},"timestamp":"' + $Timestamp + '"}'
+            }
+
+            function New-ChatSessionLocal {
+                <#
+                .SYNOPSIS
+                    A plain chat in the repository folder: it bills only the coordinator, at $BilledAt, plus any extra log lines.
+                #>
+                param(
+                    [Parameter(Mandatory)]$Fixture,
+                    [Parameter(Mandatory)][string]$SessionId,
+                    [Parameter(Mandatory)][datetime]$Start,
+                    [Parameter(Mandatory)][datetime]$BilledAt,
+                    [string[]]$ExtraLines = @()
+                )
+                $lines = @(
+                    ('{"type":"session.start","data":{"sessionId":"' + $SessionId + '"},"timestamp":"' + (Format-StampLocal -At $Start -Milliseconds) + '"}')
+                    (New-ExactUsageEventLocal -AgentId '' -SourceSessionId $SessionId -UsageId "chat-$SessionId" -Model 'claude-sonnet-4.6' -FreshInput 5000 -Cached 0 -CacheWrite 0 -Output 500 -InputRate 3 -CachedRate 0.3 -CacheWriteRate 3.75 -OutputRate 15 -Timestamp (Format-StampLocal -At $BilledAt -Milliseconds))
+                ) + $ExtraLines
+                New-NativeSessionLocal -Fixture $Fixture -SessionId $SessionId -EventLines $lines -LastWriteUtc (Format-StampLocal -At $BilledAt.AddMinutes(30))
+            }
+
+            function Add-HistoryEntryLocal {
+                param(
+                    [Parameter(Mandatory)][string]$Root,
+                    [Parameter(Mandatory)][string]$Agent,
+                    [Parameter(Mandatory)][string]$Stamp,
+                    [Parameter(Mandatory)][string]$Title,
+                    [switch]$Orchestration
+                )
+                $path = Join-Path $Root "history/$Agent.md"
+                if (-not (Test-Path -LiteralPath $path)) {
+                    Set-Content -LiteralPath $path -Encoding utf8NoBOM -Value "---`ndescription: `"Append-only dispatch history for a single squad agent`"`n---`n`n# History: $Agent`n"
+                }
+                $heading = if ($Orchestration) { '#### Consumption — Orchestration' } else { '#### Consumption' }
+                $model = if ($Orchestration) { 'Claude Haiku 4.5' } else { 'Claude Sonnet 4.6' }
+                $source = if ($Orchestration) { 'agent-pinned' } else { 'session-inherited' }
+                $tier = if ($Orchestration) { 'fast' } else { 'default' }
+                Add-Content -LiteralPath $path -Encoding utf8NoBOM -Value @"
+
+### $Stamp $Title
+
+* Turn: 9
+* Request: $Title.
+* Deliverable: ``none``
+* Outcome: Recorded $Title.
+
+$heading
+
+``````json
+{
+  "model": "$model",
+  "model_source": "$source",
+  "priced_as": "$model",
+  "model_tier": "$tier",
+  "internal_turns": 2,
+  "input_tokens": 1000,
+  "cached_tokens": 1000,
+  "cache_write_tokens": 0,
+  "output_tokens": 1000,
+  "basis": "estimated"
 }
+``````
+"@
+            }
+
+            function Invoke-LedgerAutoLocal {
+                param(
+                    [Parameter(Mandatory)]$Fixture,
+                    [string]$AgentSessionId,
+                    [string]$CopilotHome,
+                    [string]$LedgerScript = $script:LedgerScript,
+                    [switch]$Write,
+                    [switch]$Json,
+                    [switch]$NoSessionLog
+                )
+                if (-not $CopilotHome) { $CopilotHome = $Fixture.Home }
+                $command = "& '$LedgerScript' -SquadRoot '$($Fixture.Root)'"
+                if (-not $NoSessionLog) { $command += " -SessionLog 'auto'" }
+                if ($Write) { $command += ' -Write' }
+                if ($Json) { $command += ' -Format json' }
+                $environment = "`$env:COPILOT_HOME = '$CopilotHome'; "
+                $environment += if ($AgentSessionId) { "`$env:COPILOT_AGENT_SESSION_ID = '$AgentSessionId'; " } else { 'Remove-Item Env:COPILOT_AGENT_SESSION_ID -ErrorAction SilentlyContinue; ' }
+                $output = & pwsh -NoProfile -Command ($environment + $command) 2>&1 | Out-String
+                [pscustomobject]@{ ExitCode = $LASTEXITCODE; Output = $output }
+            }
+
+            function ConvertFrom-LedgerJsonOutputLocal {
+                param([Parameter(Mandatory)][string]$Output)
+                ($Output -split '\r?\n' | Where-Object { $_ -notmatch '^(WARNING|AVERTISSEMENT)' }) -join "`n" | ConvertFrom-Json
+            }
+
+            function Get-JournalSessionsLocal {
+                param([Parameter(Mandatory)][string]$Root)
+                @((Get-Content -LiteralPath (Join-Path $Root 'consumption-sessions.json') -Raw | ConvertFrom-Json).sessions)
+            }
+
+            function New-FaultedLedgerScriptLocal {
+                <#
+                .SYNOPSIS
+                    A copy of the ledger scripts in which one step is replaced by a failing one, as an unforeseen defect would.
+                #>
+                param(
+                    [Parameter(Mandatory)][string]$Function,
+                    [Parameter(Mandatory)][string]$Replacement,
+                    [Parameter(Mandatory)][string]$InsertBefore
+                )
+                $copy = Join-Path $TestDrive ([System.Guid]::NewGuid().ToString('N'))
+                Copy-Item -LiteralPath (Split-Path -Parent $script:LedgerScript) -Destination $copy -Recurse
+                $path = Join-Path $copy 'Measure-SquadLedger.ps1'
+                $text = [IO.File]::ReadAllText($path)
+                $text.Contains("function $Function {") | Should -BeTrue -Because "the fault replaces $Function"
+                $text.Contains($InsertBefore) | Should -BeTrue
+                [IO.File]::WriteAllText($path, $text.Replace($InsertBefore, "function $Function { $Replacement }`r`n$InsertBefore"), [Text.UTF8Encoding]::new($false))
+                $path
+            }
+
+            function Get-LedgerTextLocal {
+                param([Parameter(Mandatory)][string]$Root)
+                Get-Content -LiteralPath (Join-Path $Root 'consumption.md') -Raw
+            }
+
+            function Format-StampLocal {
+                param([Parameter(Mandatory)][datetime]$At, [switch]$Milliseconds)
+                $format = if ($Milliseconds) { 'yyyy-MM-ddTHH:mm:ss.fffZ' } else { 'yyyy-MM-ddTHH:mm:ssZ' }
+                $At.ToUniversalTime().ToString($format, [Globalization.CultureInfo]::InvariantCulture)
+            }
+
+            function New-HandoffLinesLocal {
+                <#
+                .SYNOPSIS
+                    The log lines of one hand-off whose researcher dispatch starts at $At: a billed researcher, the history
+                    writer starting 30 s later (unless -NoWriter, as when the history was written with file tools), then a
+                    billed Scribe.
+                #>
+                param(
+                    [Parameter(Mandatory)][datetime]$At,
+                    [Parameter(Mandatory)][string]$Key,
+                    [switch]$NoWriter,
+                    [string]$WriterRoot = '.copilot-tracking/squad'
+                )
+                $lines = [Collections.Generic.List[string]]::new()
+                foreach ($line in (New-DispatchEventLinesLocal -AgentName 'Squad Researcher' -Key "r-$Key" -StartTimestamp (Format-StampLocal -At $At -Milliseconds) -UsageTimestamp (Format-StampLocal -At $At.AddSeconds(20) -Milliseconds))) { $lines.Add($line) }
+                if (-not $NoWriter) { $lines.Add((New-HandoffEventLocal -Key $Key -Timestamp (Format-StampLocal -At $At.AddSeconds(30) -Milliseconds) -SquadRoot $WriterRoot)) }
+                foreach ($line in (New-DispatchEventLinesLocal -AgentName 'Squad Scribe' -Key "s-$Key" -StartTimestamp (Format-StampLocal -At $At.AddSeconds(40) -Milliseconds) -UsageTimestamp (Format-StampLocal -At $At.AddSeconds(50) -Milliseconds) -Kind haiku)) { $lines.Add($line) }
+                $lines.ToArray()
+            }
+
+            function Add-HandoffHistoryLocal {
+                <#
+                .SYNOPSIS
+                    The two history entries the hand-off that starts at $At writes (the stamps sit 35 s and 55 s after it).
+                #>
+                param([Parameter(Mandatory)]$Fixture, [Parameter(Mandatory)][datetime]$At, [Parameter(Mandatory)][string]$Key)
+                Add-HistoryEntryLocal -Root $Fixture.Root -Agent 'Squad Researcher' -Stamp (Format-StampLocal -At $At.AddSeconds(35)) -Title "Survey $Key"
+                Add-HistoryEntryLocal -Root $Fixture.Root -Agent 'Squad Scribe' -Stamp (Format-StampLocal -At $At.AddSeconds(55)) -Title "Record $Key" -Orchestration
+            }
+
+            function New-HandoffSessionLocal {
+                <#
+                .SYNOPSIS
+                    A session that billed one researcher dispatch, ran a hand-off, and billed the Scribe, plus the two
+                    history entries that hand-off wrote. -Start is the log's first event; -Work is when the dispatch runs.
+                    Hand-offs are written in time order, because the history is append-only.
+                #>
+                param(
+                    [Parameter(Mandatory)]$Fixture,
+                    [Parameter(Mandatory)][string]$SessionId,
+                    [Parameter(Mandatory)][datetime]$Start,
+                    [Parameter(Mandatory)][string]$Key,
+                    [datetime]$Work,
+                    [switch]$NoWriter,
+                    [string]$WriterRoot = '.copilot-tracking/squad'
+                )
+                if (-not $PSBoundParameters.ContainsKey('Work')) { $Work = $Start }
+                $t = $Work.AddMinutes(1)
+                $lines = @('{"type":"session.start","data":{"sessionId":"' + $SessionId + '"},"timestamp":"' + (Format-StampLocal -At $Start -Milliseconds) + '"}') + @(New-HandoffLinesLocal -At $t -Key $Key -NoWriter:$NoWriter -WriterRoot $WriterRoot)
+                $directory = New-NativeSessionLocal -Fixture $Fixture -SessionId $SessionId -EventLines $lines -LastWriteUtc (Format-StampLocal -At $t.AddSeconds(60))
+                Add-HandoffHistoryLocal -Fixture $Fixture -At $t -Key $Key
+                $directory
+            }
+
+            function Add-ReviewedDeliverableLocal {
+                <#
+                .SYNOPSIS
+                    A tester roster row and a passing review entry, so Unit Economics has an accepted deliverable to count.
+                #>
+                param([Parameter(Mandatory)]$Fixture, [Parameter(Mandatory)][string]$Stamp)
+                $team = Join-Path $Fixture.Root 'team.md'
+                Set-Content -LiteralPath $team -NoNewline -Value ((Get-Content -LiteralPath $team -Raw).TrimEnd() + "`n| tester | Gamma | Squad Tester | — | — | runSubagent / task | default | reviews/ |`n")
+                Set-Content -LiteralPath (Join-Path $Fixture.Root 'history/Squad Tester.md') -Encoding utf8NoBOM -Value @"
+---
+description: "Append-only dispatch history for a single squad agent"
+---
+
+# History: Squad Tester
+
+### $Stamp Review the survey
+
+* Turn: 2
+* Request: Review the survey.
+* Deliverable: ``reviews/survey-review.md``
+* Outcome: pass
+
+#### Consumption
+
+``````json
+{
+  "model": "Claude Sonnet 4.6",
+  "model_source": "session-inherited",
+  "priced_as": "Claude Sonnet 4.6",
+  "model_tier": "default",
+  "internal_turns": 2,
+  "input_tokens": 1000,
+  "cached_tokens": 1000,
+  "cache_write_tokens": 0,
+  "output_tokens": 1000,
+  "basis": "estimated"
+}
+``````
+"@
+            }
+
+            # The shared fixture stamps its history on 2026-09-27 while BaseEvents bills on 2026-10-01. A real history entry sits
+            # minutes from the request that paid for it, so these tests bill on the day the history was written.
+            $script:SharedBaseEvents = $script:BaseEvents
+            $script:BaseEvents = @($script:SharedBaseEvents | ForEach-Object { $_.Replace('2026-10-01T10:0', '2026-09-27T10:0') })
+
+            # BaseEvents without its in-flight last line, so more complete events can follow it.
+            $script:CompleteBaseEvents = @($script:BaseEvents | Where-Object { $_ -notmatch 'content":"partial$' })
+            $script:SurveyCounts = @{ 'Squad Researcher' = 1; 'Squad Scribe' = 1 }
+        }
+
+        AfterAll {
+            $script:BaseEvents = $script:SharedBaseEvents
+        }
+
+        It 'includes native usage by an agent with no history entry or roster row, names it once, and rewrites identically' {
+            $events = $script:CompleteBaseEvents + @(New-DispatchEventLinesLocal -AgentName 'Squad Lead' -Key 'lead-x' -StartTimestamp '2026-10-01T10:03:30.000Z' -UsageTimestamp '2026-10-01T10:03:40.000Z')
+            $f = New-SessionFixtureLocal -EventLines $events
+
+            $first = Invoke-LedgerWithSessionLocal -Root $f.Root -SessionLog $f.SessionDir -Write
+            $first.ExitCode | Should -Be 0 -Because $first.Output
+            $first.Output | Should -Match "WARN: exact ledger note: exact usage for 'Squad Lead' \(1 request, 9\.30 credits\) has no history entry"
+            $first.Output | Should -Not -Match 'estimates remain the fallback'
+            $ledger = Get-LedgerTextLocal -Root $f.Root
+            $ledger | Should -Match '\| Squad Lead \| 1 \| 20,000 \| 10,000 \| 0 \| 2,000 \| 0\.0930 \| 9\.30 \| exact-native \|'
+            $ledger | Should -Match '\*\*0\.6185\*\* \| \*\*61\.85\*\* \| \*\*exact-native\*\*'
+            $ledger | Should -Match "(?m)^NOTE: exact usage for 'Squad Lead' \(1 request, 9\.30 credits\) has no history entry; it is included from the native session log\.\s*$"
+            $ledger | Should -Not -Match '(?m)^> Lower bound'
+            (Invoke-Ledger -SquadRoot $f.Root -Check -ExpectedHistoryCounts $script:SurveyCounts).ExitCode | Should -Be 0
+
+            $second = Invoke-LedgerWithSessionLocal -Root $f.Root -SessionLog $f.SessionDir -Write
+            $second.ExitCode | Should -Be 0 -Because $second.Output
+            $second.Output | Should -Not -Match 'exact ledger note'
+            Get-LedgerTextLocal -Root $f.Root | Should -Be $ledger
+
+            $json = ConvertFrom-LedgerJsonOutputLocal -Output (Invoke-LedgerWithSessionLocal -Root $f.Root -SessionLog $f.SessionDir -Format json).Output
+            $json.basis | Should -Be 'exact-native'
+            $json.exact.partial | Should -BeFalse
+            @($json.exact.notes | ForEach-Object kind) | Should -Be @('unrecorded')
+        }
+
+        It 'maps a native alternate agent to its roster role when only the primary agent has history' {
+            $events = $script:CompleteBaseEvents + @(New-DispatchEventLinesLocal -AgentName 'ADR Creator' -Key 'adr-x' -StartTimestamp '2026-10-01T10:03:30.000Z' -UsageTimestamp '2026-10-01T10:03:40.000Z')
+            $f = New-SessionFixtureLocal -EventLines $events
+            $team = Join-Path $f.Root 'team.md'
+            Set-Content -LiteralPath $team -NoNewline -Value ((Get-Content -LiteralPath $team -Raw).TrimEnd() + "`n| architect | Beta | System Architecture Reviewer | ADR Creator | — | runSubagent / task | default | docs/ |`n")
+
+            $result = Invoke-LedgerWithSessionLocal -Root $f.Root -SessionLog $f.SessionDir -Write
+            $result.ExitCode | Should -Be 0 -Because $result.Output
+            $ledger = Get-LedgerTextLocal -Root $f.Root
+            $ledger | Should -Match '(?m)^\| architect \| Beta \| ADR Creator \| claude-sonnet-4\.6 \| host-reported \| native credits \| default \|'
+            $ledger | Should -Match '\| architect \| 1 \| 20,000 \| 10,000 \| 0 \| 2,000 \| 0\.0930 \| 9\.30 \| exact-native \|'
+            $ledger | Should -Match "(?m)^NOTE: exact usage for 'ADR Creator' "
+            (Invoke-Ledger -SquadRoot $f.Root -Check -ExpectedHistoryCounts $script:SurveyCounts).ExitCode | Should -Be 0
+        }
+
+        It 'announces a note once per subject even when its figures later change' {
+            $events = $script:CompleteBaseEvents + @(New-DispatchEventLinesLocal -AgentName 'Squad Lead' -Key 'lead-x' -StartTimestamp '2026-10-01T10:03:30.000Z' -UsageTimestamp '2026-10-01T10:03:40.000Z')
+            $f = New-SessionFixtureLocal -EventLines $events
+            $first = Invoke-LedgerWithSessionLocal -Root $f.Root -SessionLog $f.SessionDir -Write
+            $first.ExitCode | Should -Be 0 -Because $first.Output
+            $first.Output | Should -Match "exact ledger note: exact usage for 'Squad Lead' \(1 request, 9\.30 credits\)"
+
+            Add-Content -LiteralPath (Join-Path $f.SessionDir 'events.jsonl') -Value (New-DispatchEventLinesLocal -AgentName 'Squad Lead' -Key 'lead-y' -StartTimestamp '2026-10-01T10:03:50.000Z' -UsageTimestamp '2026-10-01T10:04:00.000Z')
+            $second = Invoke-LedgerWithSessionLocal -Root $f.Root -SessionLog $f.SessionDir -Write
+            $second.ExitCode | Should -Be 0 -Because $second.Output
+            $second.Output | Should -Not -Match 'exact ledger note'
+            Get-LedgerTextLocal -Root $f.Root | Should -Match "(?m)^NOTE: exact usage for 'Squad Lead' \(2 requests, 18\.60 credits\) has no history entry"
+        }
+
+        It 'reports history that no native log shows as a lower bound instead of estimating it' {
+            $f = New-SessionFixtureLocal -EventLines $script:BaseEvents
+            Add-HistoryEntryLocal -Root $f.Root -Agent 'Squad Lead' -Stamp '2026-09-27T10:01:00Z' -Title 'Planning that no native log recorded'
+
+            $result = Invoke-LedgerWithSessionLocal -Root $f.Root -SessionLog $f.SessionDir -Write
+            $result.ExitCode | Should -Be 0 -Because $result.Output
+            $result.Output | Should -Not -Match 'estimates remain the fallback'
+            $ledger = Get-LedgerTextLocal -Root $f.Root
+            $ledger | Should -Match '\*\*0\.5255\*\* \| \*\*52\.55\*\* \| \*\*exact-native\*\*'
+            $ledger | Should -Not -Match 'Est\. Cost'
+            $ledger | Should -Match "(?m)^NOTE: history for 'Squad Lead' has 1 metered entry but the accepted native sessions show no usage by that agent; nothing is estimated for them\.\s*$"
+            $ledger | Should -Match '(?m)^> Lower bound: '
+            (Invoke-Ledger -SquadRoot $f.Root -Check -ExpectedHistoryCounts @{ 'Squad Researcher' = 1; 'Squad Scribe' = 1; 'Squad Lead' = 1 }).ExitCode | Should -Be 0
+
+            $json = ConvertFrom-LedgerJsonOutputLocal -Output (Invoke-LedgerWithSessionLocal -Root $f.Root -SessionLog $f.SessionDir -Format json).Output
+            $json.exact.partial | Should -BeTrue
+            @($json.exact.notes | ForEach-Object kind) | Should -Be @('history-without-native')
+        }
+
+        It 'counts Scribe usage in the log even when no Scribe history exists' {
+            $f = New-SessionFixtureLocal -EventLines $script:BaseEvents
+            Remove-Item -LiteralPath (Join-Path $f.Root 'history/Squad Scribe.md') -Force
+
+            $result = Invoke-LedgerWithSessionLocal -Root $f.Root -SessionLog $f.SessionDir -Write
+            $result.ExitCode | Should -Be 0 -Because $result.Output
+            $ledger = Get-LedgerTextLocal -Root $f.Root
+            $ledger | Should -Match '\| orchestration \| 1 \| 10,000 \| 40,000 \| 10,000 \| 5,000 \| 0\.0515 \| 5\.15 \| exact-native \|'
+            $ledger | Should -Match '\*\*0\.5255\*\* \| \*\*52\.55\*\* \| \*\*exact-native\*\*'
+            (Invoke-Ledger -SquadRoot $f.Root -Check -ExpectedHistoryCounts @{ 'Squad Researcher' = 1 }).ExitCode | Should -Be 0
+        }
+
+        It 'prices a usage record that names no model under "unknown" and keeps the baseline on a rated model' {
+            $noModel = New-ExactUsageEventLocal -AgentId 'owner-research' -SourceSessionId 'research-session' -UsageId 'one' -Model '' -FreshInput 100000 -Cached 80000 -CacheWrite 0 -Output 10000 -InputRate 3 -CachedRate 0.3 -CacheWriteRate 3.75 -OutputRate 15 -Timestamp '2026-09-27T10:02:00.000Z'
+            $events = @($script:BaseEvents | ForEach-Object { if ($_ -match '"usageId":"one"') { $noModel } else { $_ } })
+            $f = New-SessionFixtureLocal -EventLines $events
+
+            $result = Invoke-LedgerWithSessionLocal -Root $f.Root -SessionLog $f.SessionDir -Write
+            $result.ExitCode | Should -Be 0 -Because $result.Output
+            $result.Output | Should -Not -Match "baseline model 'unknown'"
+            $ledger = Get-LedgerTextLocal -Root $f.Root
+            $ledger | Should -Match '\| researcher \| Alpha \| Squad Researcher \| unknown \| host-reported \| native credits \| default \|'
+            $ledger | Should -Match '\*\*0\.5255\*\* \| \*\*52\.55\*\* \| \*\*exact-native\*\*'
+            $ledger | Should -Match 'Without HVE Squad: same exact role-request token categories on `claude-sonnet-4\.6`'
+            (Invoke-Ledger -SquadRoot $f.Root -Check -ExpectedHistoryCounts $script:SurveyCounts).ExitCode | Should -Be 0
+        }
+
+        It 'recovers a journal that stopped while an earlier session kept working, then replays identically' {
+            $f = New-SessionFixtureLocal -EventLines $script:BaseEvents
+            (Invoke-LedgerWithSessionLocal -Root $f.Root -SessionLog $f.SessionDir -Write).ExitCode | Should -Be 0
+
+            # sess-0001 keeps working and writing history, but no later hand-off reaches the journal.
+            $more = @(
+                New-DispatchEventLinesLocal -AgentName 'Squad Researcher' -Key 'research-1b' -StartTimestamp '2026-10-01T10:20:00.000Z' -UsageTimestamp '2026-10-01T10:20:20.000Z'
+                New-DispatchEventLinesLocal -AgentName 'Squad Scribe' -Key 'scribe-1b' -StartTimestamp '2026-10-01T10:34:40.000Z' -UsageTimestamp '2026-10-01T10:34:55.000Z' -Kind haiku
+                New-HandoffEventLocal -Key '1b' -Timestamp '2026-10-01T10:34:50.000Z'
+            )
+            $firstEvents = Join-Path $f.SessionDir 'events.jsonl'
+            Set-Content -LiteralPath $firstEvents -Value (($script:CompleteBaseEvents + $more) -join "`n")
+            Add-HistoryEntryLocal -Root $f.Root -Agent 'Squad Researcher' -Stamp '2026-10-01T10:20:30Z' -Title 'Second survey in the first session'
+            Add-HistoryEntryLocal -Root $f.Root -Agent 'Squad Scribe' -Stamp '2026-10-01T10:35:00Z' -Title 'Recording the second survey' -Orchestration
+            Add-SecondSessionHistoryLocal -Root $f.Root
+            $null = Add-SecondSessionLogLocal -Fixture $f -CloseAfterHistory
+            (Get-Item -LiteralPath $firstEvents).LastWriteTimeUtc = [datetime]'2026-10-01T10:36:00Z'
+
+            $write = Invoke-LedgerAutoLocal -Fixture $f -Write
+            $write.ExitCode | Should -Be 0 -Because $write.Output
+            $write.Output | Should -Not -Match 'estimates remain the fallback'
+            $ledger = Get-LedgerTextLocal -Root $f.Root
+            $ledger | Should -Match 'Native usage snapshots — sessions: 2; records: 6;'
+            $ledger | Should -Match '\| \*\*Total\*\* \| \*\*6\*\* \| \*\*152,000\*\* \| \*\*142,000\*\* \| \*\*10,000\*\* \| \*\*21,000\*\* \| \*\*0\.7237\*\* \| \*\*72\.37\*\* \| \*\*exact-native\*\* \|'
+            $sessions = Get-JournalSessionsLocal -Root $f.Root
+            @($sessions.sessionId) | Should -Be @('sess-0001', 'sess-0002')
+            @($sessions.records) | Should -Be @(4, 2)
+            (Invoke-Ledger -SquadRoot $f.Root -Check -ExpectedHistoryCounts @{ 'Squad Researcher' = 3; 'Squad Scribe' = 3 }).ExitCode | Should -Be 0
+
+            $replay = Invoke-LedgerAutoLocal -Fixture $f -Write
+            $replay.ExitCode | Should -Be 0 -Because $replay.Output
+            Get-LedgerTextLocal -Root $f.Root | Should -Be $ledger
+        }
+
+        It 'adopts a session that never reached the journal but never a plain chat in the same folder' {
+            $f = New-SessionFixtureLocal -EventLines $script:BaseEvents
+            (Invoke-LedgerWithSessionLocal -Root $f.Root -SessionLog $f.SessionDir -Write).ExitCode | Should -Be 0
+
+            # sess-0002 wrote history and ran a hand-off that never reached the journal.
+            Add-SecondSessionHistoryLocal -Root $f.Root
+            $second = Add-SecondSessionLogLocal -Fixture $f
+            $secondEvents = Join-Path $second 'events.jsonl'
+            Add-Content -LiteralPath $secondEvents -Value (New-HandoffEventLocal -Key '2' -Timestamp '2026-10-02T10:04:50.000Z')
+            (Get-Item -LiteralPath $secondEvents).LastWriteTimeUtc = [datetime]'2026-10-02T10:06:00Z'
+
+            # A chat in the same folder bills only the coordinator and spans every history entry.
+            $chat = @(
+                '{"type":"session.start","data":{"sessionId":"sess-0004"},"timestamp":"2026-10-01T08:00:00.000Z"}'
+                (New-ExactUsageEventLocal -AgentId '' -SourceSessionId 'sess-0004' -UsageId 'chat-1' -Model 'claude-sonnet-4.6' -FreshInput 5000 -Cached 0 -CacheWrite 0 -Output 500 -InputRate 3 -CachedRate 0.3 -CacheWriteRate 3.75 -OutputRate 15 -Timestamp '2026-10-02T10:01:00.000Z')
+                (New-ExactUsageEventLocal -AgentId '' -SourceSessionId 'sess-0004' -UsageId 'chat-2' -Model 'claude-sonnet-4.6' -FreshInput 5000 -Cached 0 -CacheWrite 0 -Output 500 -InputRate 3 -CachedRate 0.3 -CacheWriteRate 3.75 -OutputRate 15 -Timestamp '2026-10-03T10:30:00.000Z')
+            )
+            $null = New-NativeSessionLocal -Fixture $f -SessionId 'sess-0004' -EventLines $chat -LastWriteUtc '2026-10-03T10:30:00Z'
+
+            # sess-0003 is the active session.
+            Add-ThirdSessionHistoryLocal -Root $f.Root
+            $third = Add-ThirdSessionLogLocal -Fixture $f
+            (Get-Item -LiteralPath (Join-Path $third 'events.jsonl')).LastWriteTimeUtc = [datetime]'2026-10-03T10:31:00Z'
+
+            $write = Invoke-LedgerAutoLocal -Fixture $f -Write
+            $write.ExitCode | Should -Be 0 -Because $write.Output
+            $write.Output | Should -Not -Match 'estimates remain the fallback'
+            $sessions = Get-JournalSessionsLocal -Root $f.Root
+            @($sessions.sessionId) | Should -Be @('sess-0001', 'sess-0002', 'sess-0003')
+            $ledger = Get-LedgerTextLocal -Root $f.Root
+            $ledger | Should -Match 'Native usage snapshots — sessions: 3; records: 6;'
+            $ledger | Should -Match '\*\*0\.7237\*\* \| \*\*72\.37\*\* \| \*\*exact-native\*\*'
+            (Invoke-Ledger -SquadRoot $f.Root -Check -ExpectedHistoryCounts @{ 'Squad Researcher' = 2; 'Squad Scribe' = 3; 'Squad Lead' = 1 }).ExitCode | Should -Be 0
+        }
+
+        It 'follows the session the host reports as running when an older cached session is resumed after a later one' {
+            $f = New-SessionFixtureLocal -EventLines $script:BaseEvents
+            (Invoke-LedgerWithSessionLocal -Root $f.Root -SessionLog $f.SessionDir -Write).ExitCode | Should -Be 0
+            Add-SecondSessionHistoryLocal -Root $f.Root
+            $second = Add-SecondSessionLogLocal -Fixture $f
+            (Invoke-LedgerWithSessionLocal -Root $f.Root -SessionLog $second -Write).ExitCode | Should -Be 0
+
+            # sess-0001 is resumed and writes new history; a later write makes sess-0002 the newest log.
+            $more = @(
+                New-DispatchEventLinesLocal -AgentName 'Squad Researcher' -Key 'research-1c' -StartTimestamp '2026-10-04T10:00:00.000Z' -UsageTimestamp '2026-10-04T10:00:20.000Z'
+                New-DispatchEventLinesLocal -AgentName 'Squad Scribe' -Key 'scribe-1c' -StartTimestamp '2026-10-04T10:04:40.000Z' -UsageTimestamp '2026-10-04T10:04:55.000Z' -Kind haiku
+            )
+            $firstEvents = Join-Path $f.SessionDir 'events.jsonl'
+            Set-Content -LiteralPath $firstEvents -Value (($script:CompleteBaseEvents + $more) -join "`n")
+            Add-HistoryEntryLocal -Root $f.Root -Agent 'Squad Researcher' -Stamp '2026-10-04T10:00:30Z' -Title 'Third survey after resuming the first session'
+            Add-HistoryEntryLocal -Root $f.Root -Agent 'Squad Scribe' -Stamp '2026-10-04T10:05:00Z' -Title 'Recording the third survey' -Orchestration
+            (Get-Item -LiteralPath $firstEvents).LastWriteTimeUtc = [datetime]'2026-10-04T10:05:00Z'
+            (Get-Item -LiteralPath (Join-Path $second 'events.jsonl')).LastWriteTimeUtc = [datetime]'2026-10-04T10:06:00Z'
+
+            $write = Invoke-LedgerAutoLocal -Fixture $f -AgentSessionId 'sess-0001' -Write
+            $write.ExitCode | Should -Be 0 -Because $write.Output
+            $write.Output | Should -Not -Match 'estimates remain the fallback'
+            $ledger = Get-LedgerTextLocal -Root $f.Root
+            $ledger | Should -Match 'Native usage snapshots — sessions: 2; records: 6;'
+            $ledger | Should -Match '\*\*0\.7237\*\* \| \*\*72\.37\*\* \| \*\*exact-native\*\*'
+            $sessions = Get-JournalSessionsLocal -Root $f.Root
+            @($sessions.sessionId) | Should -Be @('sess-0001', 'sess-0002')
+            @($sessions.records) | Should -Be @(4, 2)
+            (Invoke-Ledger -SquadRoot $f.Root -Check -ExpectedHistoryCounts @{ 'Squad Researcher' = 3; 'Squad Scribe' = 3 }).ExitCode | Should -Be 0
+
+            $replay = Invoke-LedgerAutoLocal -Fixture $f -AgentSessionId 'sess-0001' -Write
+            $replay.ExitCode | Should -Be 0 -Because $replay.Output
+            Get-LedgerTextLocal -Root $f.Root | Should -Be $ledger
+        }
+
+        It 'keeps the last accepted totals, labelled, when no native session log can be read' {
+            $f = New-SessionFixtureLocal -EventLines $script:BaseEvents
+            (Invoke-LedgerWithSessionLocal -Root $f.Root -SessionLog $f.SessionDir -Write).ExitCode | Should -Be 0
+            Add-SecondSessionHistoryLocal -Root $f.Root
+            $emptyHome = Join-Path $f.Repo '_empty_home'
+            New-Item -ItemType Directory -Path (Join-Path $emptyHome 'session-state') -Force | Out-Null
+
+            $write = Invoke-LedgerAutoLocal -Fixture $f -CopilotHome $emptyHome -Write
+            $write.ExitCode | Should -Be 0 -Because $write.Output
+            $write.Output | Should -Not -Match 'estimates remain the fallback'
+            $ledger = Get-LedgerTextLocal -Root $f.Root
+            $ledger | Should -Match '\*\*0\.5255\*\* \| \*\*52\.55\*\* \| \*\*exact-native\*\*'
+            $ledger | Should -Not -Match 'Est\. Cost'
+            $ledger | Should -Match '(?m)^NOTE: no native session log was available for the latest 2 metered history entries; the totals are exact as of 2026-09-27T10:03:00\.000Z\.\s*$'
+            $ledger | Should -Match '(?m)^> Lower bound: '
+            $ledger | Should -Not -Match 'nano-AIU \d+\.0 ' -Because 'a journal round trip must not change how the amounts are written'
+            $again = Invoke-LedgerAutoLocal -Fixture $f -CopilotHome $emptyHome -Write
+            $again.ExitCode | Should -Be 0 -Because $again.Output
+            Get-LedgerTextLocal -Root $f.Root | Should -Be $ledger -Because 'the notes come from the history and the journal, so an unchanged rewrite repeats them'
+            (Invoke-Ledger -SquadRoot $f.Root -Check -ExpectedHistoryCounts @{ 'Squad Researcher' = 2; 'Squad Scribe' = 2 }).ExitCode | Should -Be 0
+            $json = ConvertFrom-LedgerJsonOutputLocal -Output (Invoke-LedgerAutoLocal -Fixture $f -CopilotHome $emptyHome -Json).Output
+            $json.exact.partial | Should -BeTrue
+        }
+
+        It 'keeps the last accepted snapshot of a cached session whose log lost records, and says so' {
+            $f = New-SessionFixtureLocal -EventLines $script:BaseEvents
+            (Invoke-LedgerWithSessionLocal -Root $f.Root -SessionLog $f.SessionDir -Write).ExitCode | Should -Be 0
+            $withoutResearch = @($script:BaseEvents | Where-Object { $_ -notmatch 'owner-research|research-session|"toolCallId":"t1"' })
+            Set-Content -LiteralPath (Join-Path $f.SessionDir 'events.jsonl') -Value ($withoutResearch -join "`n")
+
+            $write = Invoke-LedgerWithSessionLocal -Root $f.Root -SessionLog $f.SessionDir -Write
+            $write.ExitCode | Should -Be 0 -Because $write.Output
+            $write.Output | Should -Not -Match 'estimates remain the fallback'
+            $ledger = Get-LedgerTextLocal -Root $f.Root
+            $ledger | Should -Match '\*\*0\.5255\*\* \| \*\*52\.55\*\* \| \*\*exact-native\*\*'
+            $ledger | Should -Match "(?m)^NOTE: native session 'sess-0001' could not be re-read \(.*regressed from 2 to 1 complete records.*\); its last accepted snapshot is used\.\s*$"
+            @((Get-JournalSessionsLocal -Root $f.Root).records) | Should -Be @(2)
+        }
+
+        It 'keeps the last accepted totals when a record in the middle of the active log is damaged' {
+            $f = New-SessionFixtureLocal -EventLines $script:BaseEvents
+            (Invoke-LedgerWithSessionLocal -Root $f.Root -SessionLog $f.SessionDir -Write).ExitCode | Should -Be 0
+            $damaged = '{"type":"session.usage_record","agentId":"owner-research","timestamp":"2026-10-01T10:03:30.000Z","data":{"usage":{"model":"claude-sonnet-4.6","inputTokens":'
+            $events = @($script:BaseEvents[0..3]) + @($damaged) + @($script:BaseEvents[4..($script:BaseEvents.Count - 1)])
+            Set-Content -LiteralPath (Join-Path $f.SessionDir 'events.jsonl') -Value ($events -join "`n")
+
+            $write = Invoke-LedgerWithSessionLocal -Root $f.Root -SessionLog $f.SessionDir -Write
+            $write.ExitCode | Should -Be 0 -Because $write.Output
+            $write.Output | Should -Not -Match 'estimates remain the fallback'
+            $ledger = Get-LedgerTextLocal -Root $f.Root
+            $ledger | Should -Match '\*\*0\.5255\*\* \| \*\*52\.55\*\* \| \*\*exact-native\*\*'
+            $ledger | Should -Match "(?m)^NOTE: the live native session 'sess-0001' could not be added \(.*Malformed session\.usage_record event.*\); the totals are exact as of 2026-09-27T10:03:00\.000Z\.\s*$"
+            @((Get-JournalSessionsLocal -Root $f.Root).records) | Should -Be @(2)
+            (Invoke-Ledger -SquadRoot $f.Root -Check -ExpectedHistoryCounts $script:SurveyCounts).ExitCode | Should -Be 0
+            $again = Invoke-LedgerWithSessionLocal -Root $f.Root -SessionLog $f.SessionDir -Write
+            $again.ExitCode | Should -Be 0 -Because $again.Output
+            Get-LedgerTextLocal -Root $f.Root | Should -Be $ledger
+
+            # History that arrives while the log stays damaged is accounted to the same snapshot without repeating what it holds.
+            Add-SecondSessionHistoryLocal -Root $f.Root
+            $later = Invoke-LedgerWithSessionLocal -Root $f.Root -SessionLog $f.SessionDir -Write
+            $later.ExitCode | Should -Be 0 -Because $later.Output
+            $later.Output | Should -Not -Match 'unavailable or inconsistent'
+            Get-LedgerTextLocal -Root $f.Root | Should -Match '\*\*0\.5255\*\* \| \*\*52\.55\*\* \| \*\*exact-native\*\*'
+            (Invoke-Ledger -SquadRoot $f.Root -Check -ExpectedHistoryCounts @{ 'Squad Researcher' = 2; 'Squad Scribe' = 2 }).ExitCode | Should -Be 0
+        }
+
+        It 'ignores a usage record that is still being written at the end of the active log' {
+            $partial = '{"type":"session.usage_record","agentId":"owner-research","timestamp":"2026-10-01T10:03:30.000Z","data":{"usage":{"model":"claude-sonnet-4.6","inputTokens":'
+            $f = New-SessionFixtureLocal -EventLines ($script:CompleteBaseEvents + @($partial))
+
+            $result = Invoke-LedgerWithSessionLocal -Root $f.Root -SessionLog $f.SessionDir -Write
+            $result.ExitCode | Should -Be 0 -Because $result.Output
+            $result.Output | Should -Not -Match 'estimates remain the fallback'
+            Get-LedgerTextLocal -Root $f.Root | Should -Match '\*\*0\.5255\*\* \| \*\*52\.55\*\* \| \*\*exact-native\*\*'
+        }
+
+        It 'stays estimated only when no native usage can be trusted at all, and says why' {
+            $damaged = '{"type":"session.usage_record","agentId":"owner-research","timestamp":"2026-10-01T10:03:30.000Z","data":{"usage":{"model":"claude-sonnet-4.6","inputTokens":'
+            $events = @($script:BaseEvents[0..3]) + @($damaged) + @($script:BaseEvents[4..($script:BaseEvents.Count - 1)])
+            $f = New-SessionFixtureLocal -EventLines $events
+
+            $result = Invoke-LedgerWithSessionLocal -Root $f.Root -SessionLog $f.SessionDir -Write
+            $result.ExitCode | Should -Be 0 -Because $result.Output
+            $result.Output | Should -Match 'Malformed session\.usage_record event'
+            $result.Output | Should -Match 'estimates remain the fallback'
+            Get-LedgerTextLocal -Root $f.Root | Should -Match 'Est\. Cost \(USD\)'
+            (Invoke-Ledger -SquadRoot $f.Root -Check -ExpectedHistoryCounts $script:SurveyCounts).ExitCode | Should -Be 0
+        }
+
+        It 'replaces the exact comparison with the estimated one when the journal is inconsistent, leaving the journal alone' {
+            $f = New-SessionFixtureLocal -EventLines $script:BaseEvents
+            (Invoke-LedgerWithSessionLocal -Root $f.Root -SessionLog $f.SessionDir -Write).ExitCode | Should -Be 0
+            $journalPath = Join-Path $f.Root 'consumption-sessions.json'
+            # A well-formed document this version does not understand may have been written by another one, so it is never replaced.
+            Set-Content -LiteralPath $journalPath -Value '{ "schemaVersion": 2, "sessions": [] }'
+            $journalBytes = [IO.File]::ReadAllBytes($journalPath)
+
+            $result = Invoke-LedgerWithSessionLocal -Root $f.Root -SessionLog $f.SessionDir -Write
+            $result.ExitCode | Should -Be 0 -Because $result.Output
+            $result.Output | Should -Match 'consumption-sessions\.json is unavailable or inconsistent'
+            $ledger = Get-LedgerTextLocal -Root $f.Root
+            $ledger | Should -Match 'Est\. Cost \(USD\)'
+            $ledger | Should -Not -Match 'exact-native'
+            $ledger | Should -Not -Match '(?m)^## Cost Comparison \(exact native actual\)'
+            $ledger | Should -Match '(?m)^## Cost Comparison \(illustrative\)'
+            [IO.File]::ReadAllBytes($journalPath) | Should -Be $journalBytes
+            @(Get-ChildItem -LiteralPath $f.Root -Filter 'consumption-sessions.json.unreadable-*').Count | Should -Be 0
+            (Invoke-Ledger -SquadRoot $f.Root -Check -ExpectedHistoryCounts $script:SurveyCounts).ExitCode | Should -Be 0
+        }
+
+        It 'rebuilds a journal that is not a JSON object from the native logs and keeps the unreadable file, <Case>' -ForEach @(
+            @{ Case = 'cut short'; Content = '{ "schemaVersion": 1, "sessions": [ {'; KeepsFile = $true }
+            @{ Case = 'emptied by a crash'; Content = ''; KeepsFile = $false }
+            @{ Case = 'holding merge markers'; Content = "<<<<<<< HEAD`n{ `"schemaVersion`": 1 }`n=======`n{ `"schemaVersion`": 1 }`n>>>>>>> topic`n"; KeepsFile = $true }
+            @{ Case = 'holding an array'; Content = '[]'; KeepsFile = $true }
+        ) {
+            $f = New-SessionFixtureLocal -EventLines $script:BaseEvents
+            (Invoke-LedgerWithSessionLocal -Root $f.Root -SessionLog $f.SessionDir -Write).ExitCode | Should -Be 0
+            $journalPath = Join-Path $f.Root 'consumption-sessions.json'
+            [IO.File]::WriteAllText($journalPath, $Content)
+            $corruptBytes = [IO.File]::ReadAllBytes($journalPath)
+
+            $write = Invoke-LedgerWithSessionLocal -Root $f.Root -SessionLog $f.SessionDir -Write
+            $write.ExitCode | Should -Be 0 -Because $write.Output
+            $write.Output | Should -Not -Match 'estimates remain the fallback'
+            $write.Output | Should -Match 'consumption-sessions\.json was not valid JSON; the exact totals were rebuilt from the native session logs still on disk'
+            $ledger = Get-LedgerTextLocal -Root $f.Root
+            $ledger | Should -Match '\*\*0\.5255\*\* \| \*\*52\.55\*\* \| \*\*exact-native\*\*'
+            $ledger | Should -Not -Match 'Est\. Cost'
+            @((Get-JournalSessionsLocal -Root $f.Root).sessionId) | Should -Be @('sess-0001')
+            $kept = @(Get-ChildItem -LiteralPath $f.Root -Filter 'consumption-sessions.json.unreadable-*')
+            if ($KeepsFile) {
+                $kept.Count | Should -Be 1
+                $kept[0].Name | Should -Match '^consumption-sessions\.json\.unreadable-[0-9A-F]{8}$'
+                [IO.File]::ReadAllBytes($kept[0].FullName) | Should -Be $corruptBytes
+                $write.Output | Should -Match ([regex]::Escape("the unreadable file was kept as $($kept[0].Name)"))
+            }
+            else {
+                $kept.Count | Should -Be 0
+                $write.Output | Should -Match 'it held no data'
+            }
+            (Invoke-Ledger -SquadRoot $f.Root -Check -ExpectedHistoryCounts $script:SurveyCounts).ExitCode | Should -Be 0
+
+            $again = Invoke-LedgerWithSessionLocal -Root $f.Root -SessionLog $f.SessionDir -Write
+            $again.ExitCode | Should -Be 0 -Because $again.Output
+            $again.Output | Should -Not -Match 'not valid JSON'
+            Get-LedgerTextLocal -Root $f.Root | Should -Be $ledger
+            @(Get-ChildItem -LiteralPath $f.Root -Filter 'consumption-sessions.json.unreadable-*').Count | Should -Be $kept.Count
+        }
+
+        It 'shows exact totals without touching a journal that is not a JSON object when the ledger is only printed' {
+            $f = New-SessionFixtureLocal -EventLines $script:BaseEvents
+            (Invoke-LedgerWithSessionLocal -Root $f.Root -SessionLog $f.SessionDir -Write).ExitCode | Should -Be 0
+            $journalPath = Join-Path $f.Root 'consumption-sessions.json'
+            [IO.File]::WriteAllText($journalPath, '{ "schemaVersion": 1, "sessions": [ {')
+            $journalBytes = [IO.File]::ReadAllBytes($journalPath)
+
+            $printed = Invoke-LedgerWithSessionLocal -Root $f.Root -SessionLog $f.SessionDir
+            $printed.ExitCode | Should -Be 0 -Because $printed.Output
+            $printed.Output | Should -Match 'exact-native'
+            $printed.Output | Should -Match 'the file is left unchanged until -Write'
+            [IO.File]::ReadAllBytes($journalPath) | Should -Be $journalBytes
+            @(Get-ChildItem -LiteralPath $f.Root -Filter 'consumption-sessions.json.unreadable-*').Count | Should -Be 0
+        }
+
+        It 'leaves a journal that is not a JSON object alone and estimates when no native session can rebuild it' {
+            $f = New-SessionFixtureLocal -EventLines $script:BaseEvents
+            (Invoke-LedgerWithSessionLocal -Root $f.Root -SessionLog $f.SessionDir -Write).ExitCode | Should -Be 0
+            $journalPath = Join-Path $f.Root 'consumption-sessions.json'
+            [IO.File]::WriteAllText($journalPath, '{ "schemaVersion": 1, "sessions": [ {')
+            $journalBytes = [IO.File]::ReadAllBytes($journalPath)
+            $emptyHome = Join-Path $f.Repo '_empty_home'
+            New-Item -ItemType Directory -Path (Join-Path $emptyHome 'session-state') -Force | Out-Null
+
+            $result = Invoke-LedgerAutoLocal -Fixture $f -CopilotHome $emptyHome -Write
+            $result.ExitCode | Should -Be 0 -Because $result.Output
+            $result.Output | Should -Match 'no native session usage could rebuild it; it was left unchanged and estimates remain the fallback'
+            Get-LedgerTextLocal -Root $f.Root | Should -Match 'Est\. Cost \(USD\)'
+            [IO.File]::ReadAllBytes($journalPath) | Should -Be $journalBytes
+            @(Get-ChildItem -LiteralPath $f.Root -Filter 'consumption-sessions.json.unreadable-*').Count | Should -Be 0
+        }
+
+        It 'keeps exact totals when -Write is run by hand without -SessionLog on a root that keeps a journal, <Case>' -ForEach @(
+            @{ Case = 'with the session log available'; EmptyHome = $false }
+            @{ Case = 'with no session log available'; EmptyHome = $true }
+        ) {
+            $f = New-SessionFixtureLocal -EventLines $script:BaseEvents
+            (Invoke-LedgerWithSessionLocal -Root $f.Root -SessionLog $f.SessionDir -Write).ExitCode | Should -Be 0
+            $copilotHome = $f.Home
+            if ($EmptyHome) {
+                $copilotHome = Join-Path $f.Repo '_empty_home'
+                New-Item -ItemType Directory -Path (Join-Path $copilotHome 'session-state') -Force | Out-Null
+            }
+
+            $result = Invoke-LedgerAutoLocal -Fixture $f -CopilotHome $copilotHome -NoSessionLog -Write
+            $result.ExitCode | Should -Be 0 -Because $result.Output
+            $ledger = Get-LedgerTextLocal -Root $f.Root
+            $ledger | Should -Match '\*\*0\.5255\*\* \| \*\*52\.55\*\* \| \*\*exact-native\*\*'
+            $ledger | Should -Not -Match 'Est\. Cost'
+            (Invoke-Ledger -SquadRoot $f.Root -Check -ExpectedHistoryCounts $script:SurveyCounts).ExitCode | Should -Be 0
+        }
+
+        It 'keeps accepted member totals, labelled, when a later session also dispatches outside the member root' {
+            $events = @($script:BaseEvents | ForEach-Object { $_.Replace('Write to .copilot-tracking/research/x.md', 'Write to .copilot-tracking/squad/members/product/research/x.md') })
+            $f = New-SessionFixtureLocal -Member 'product' -EventLines $events
+            $first = Invoke-LedgerWithSessionLocal -Root $f.Root -SessionLog $f.SessionDir -Write
+            $first.ExitCode | Should -Be 0 -Because $first.Output
+            Get-LedgerTextLocal -Root $f.Root | Should -Match '\*\*0\.5255\*\* \| \*\*52\.55\*\* \| \*\*exact-native\*\*'
+
+            Add-Content -LiteralPath (Join-Path $f.SessionDir 'events.jsonl') -Value '{"type":"tool.execution_start","data":{"toolCallId":"other-member","toolName":"task","arguments":{"agent_type":"Squad Researcher","prompt":"Write to .copilot-tracking/squad/members/azure/research/y.md"}},"timestamp":"2026-10-01T10:03:30.000Z"}'
+            $second = Invoke-LedgerWithSessionLocal -Root $f.Root -SessionLog $f.SessionDir -Write
+            $second.ExitCode | Should -Be 0 -Because $second.Output
+            $second.Output | Should -Not -Match 'estimates remain the fallback'
+            $ledger = Get-LedgerTextLocal -Root $f.Root
+            $ledger | Should -Match '\*\*0\.5255\*\* \| \*\*52\.55\*\* \| \*\*exact-native\*\*'
+            $ledger | Should -Match "(?m)^NOTE: the live native session 'sess-0001' could not be added \(.*member 'product'.*\); the totals are exact as of "
+            $ledger | Should -Not -Match '(?m)^NOTE: .*estimates remain the fallback'
+            @((Get-JournalSessionsLocal -Root $f.Root).records) | Should -Be @(2)
+        }
+
+        It 'does not let a plain chat written more recently stand in for the session doing the hand-off, <Case>' -ForEach @(
+            @{ Case = 'when the host names the running session'; AgentSessionId = 'sess-0002' }
+            @{ Case = 'when the host names none'; AgentSessionId = '' }
+        ) {
+            $f = New-SessionFixtureLocal -EventLines $script:BaseEvents
+            (Invoke-LedgerWithSessionLocal -Root $f.Root -SessionLog $f.SessionDir -Write).ExitCode | Should -Be 0
+            Add-SecondSessionHistoryLocal -Root $f.Root
+            $second = Add-SecondSessionLogLocal -Fixture $f
+            Add-Content -LiteralPath (Join-Path $second 'events.jsonl') -Value (New-HandoffEventLocal -Key '2' -Timestamp '2026-10-02T10:04:50.000Z')
+            (Get-Item -LiteralPath (Join-Path $second 'events.jsonl')).LastWriteTimeUtc = [datetime]'2026-10-02T10:06:00Z'
+
+            $chat = @(
+                '{"type":"session.start","data":{"sessionId":"sess-0005"},"timestamp":"2026-10-02T08:00:00.000Z"}'
+                (New-ExactUsageEventLocal -AgentId '' -SourceSessionId 'sess-0005' -UsageId 'chat-9' -Model 'claude-sonnet-4.6' -FreshInput 5000 -Cached 0 -CacheWrite 0 -Output 500 -InputRate 3 -CachedRate 0.3 -CacheWriteRate 3.75 -OutputRate 15 -Timestamp '2026-10-02T10:31:00.000Z')
+            )
+            $null = New-NativeSessionLocal -Fixture $f -SessionId 'sess-0005' -EventLines $chat -LastWriteUtc '2026-10-02T10:40:00Z'
+
+            $write = Invoke-LedgerAutoLocal -Fixture $f -AgentSessionId $AgentSessionId -Write
+            $write.ExitCode | Should -Be 0 -Because $write.Output
+            @((Get-JournalSessionsLocal -Root $f.Root).sessionId) | Should -Be @('sess-0001', 'sess-0002')
+            $ledger = Get-LedgerTextLocal -Root $f.Root
+            $ledger | Should -Match 'Native usage snapshots — sessions: 2; records: 4;'
+            $ledger | Should -Match '\*\*0\.6246\*\* \| \*\*62\.46\*\* \| \*\*exact-native\*\*'
+            (Invoke-Ledger -SquadRoot $f.Root -Check -ExpectedHistoryCounts @{ 'Squad Researcher' = 2; 'Squad Scribe' = 2 }).ExitCode | Should -Be 0
+        }
+
+        It 'adopts a session whose hand-off never reached the journal when an already-journaled session is resumed, then replays identically' {
+            $f = New-SessionFixtureLocal -EventLines $script:BaseEvents
+            (Invoke-LedgerWithSessionLocal -Root $f.Root -SessionLog $f.SessionDir -Write).ExitCode | Should -Be 0
+
+            # sess-0002 handed off and billed, but its ledger write never ran.
+            $null = New-HandoffSessionLocal -Fixture $f -SessionId 'sess-0002' -Start ([datetime]'2026-10-02T09:00:00Z') -Key 'k2'
+
+            # sess-0001 is resumed and hands off again; this write succeeds.
+            $more = @(
+                New-DispatchEventLinesLocal -AgentName 'Squad Researcher' -Key 'research-1c' -StartTimestamp '2026-10-03T10:00:00.000Z' -UsageTimestamp '2026-10-03T10:00:20.000Z'
+                New-HandoffEventLocal -Key '1c' -Timestamp '2026-10-03T10:00:30.000Z'
+                New-DispatchEventLinesLocal -AgentName 'Squad Scribe' -Key 'scribe-1c' -StartTimestamp '2026-10-03T10:00:40.000Z' -UsageTimestamp '2026-10-03T10:00:50.000Z' -Kind haiku
+            )
+            $firstEvents = Join-Path $f.SessionDir 'events.jsonl'
+            Set-Content -LiteralPath $firstEvents -Value (($script:CompleteBaseEvents + $more) -join "`n")
+            Add-HistoryEntryLocal -Root $f.Root -Agent 'Squad Researcher' -Stamp '2026-10-03T10:00:35Z' -Title 'Third survey in the resumed first session'
+            Add-HistoryEntryLocal -Root $f.Root -Agent 'Squad Scribe' -Stamp '2026-10-03T10:00:55Z' -Title 'Recording the third survey' -Orchestration
+            (Get-Item -LiteralPath $firstEvents).LastWriteTimeUtc = [datetime]'2026-10-03T10:01:00Z'
+
+            $write = Invoke-LedgerAutoLocal -Fixture $f -AgentSessionId 'sess-0001' -Write
+            $write.ExitCode | Should -Be 0 -Because $write.Output
+            $write.Output | Should -Not -Match 'estimates remain the fallback'
+            $ledger = Get-LedgerTextLocal -Root $f.Root
+            $ledger | Should -Match 'Native usage snapshots — sessions: 2; records: 6;'
+            $ledger | Should -Match '\*\*0\.7237\*\* \| \*\*72\.37\*\* \| \*\*exact-native\*\*'
+            $ledger | Should -Not -Match '(?m)^> Lower bound'
+            $ledger | Should -Not -Match 'no billed native request'
+            $sessions = Get-JournalSessionsLocal -Root $f.Root
+            @($sessions.sessionId) | Should -Be @('sess-0001', 'sess-0002')
+            @($sessions.records) | Should -Be @(4, 2)
+            (Invoke-Ledger -SquadRoot $f.Root -Check -ExpectedHistoryCounts @{ 'Squad Researcher' = 3; 'Squad Scribe' = 3 }).ExitCode | Should -Be 0
+
+            $replay = Invoke-LedgerAutoLocal -Fixture $f -AgentSessionId 'sess-0001' -Write
+            $replay.ExitCode | Should -Be 0 -Because $replay.Output
+            Get-LedgerTextLocal -Root $f.Root | Should -Be $ledger
+
+            # A brand-new session then writes: nothing adopted is lost, and nothing is counted twice.
+            $null = New-HandoffSessionLocal -Fixture $f -SessionId 'sess-0003' -Start ([datetime]'2026-10-04T09:00:00Z') -Key 'k4'
+            $later = Invoke-LedgerAutoLocal -Fixture $f -AgentSessionId 'sess-0003' -Write
+            $later.ExitCode | Should -Be 0 -Because $later.Output
+            @((Get-JournalSessionsLocal -Root $f.Root).sessionId) | Should -Be @('sess-0001', 'sess-0002', 'sess-0003')
+            Get-LedgerTextLocal -Root $f.Root | Should -Match '\*\*0\.8228\*\* \| \*\*82\.28\*\* \| \*\*exact-native\*\*'
+            (Invoke-Ledger -SquadRoot $f.Root -Check -ExpectedHistoryCounts @{ 'Squad Researcher' = 4; 'Squad Scribe' = 4 }).ExitCode | Should -Be 0
+        }
+
+        It 'adopts a session that never reached the journal when the session doing the hand-off was opened before it' {
+            $f = New-SessionFixtureLocal -EventLines $script:BaseEvents
+            (Invoke-LedgerWithSessionLocal -Root $f.Root -SessionLog $f.SessionDir -Write).ExitCode | Should -Be 0
+
+            # sess-0003 is opened early but only used later; sess-0002 hands off in between and never reaches the journal.
+            $third = New-NativeSessionLocal -Fixture $f -SessionId 'sess-0003' -LastWriteUtc '2026-10-01T11:00:00Z' -EventLines @(
+                '{"type":"session.start","data":{"sessionId":"sess-0003"},"timestamp":"2026-10-01T11:00:00.000Z"}'
+            )
+            $null = New-HandoffSessionLocal -Fixture $f -SessionId 'sess-0002' -Start ([datetime]'2026-10-02T09:00:00Z') -Key 'k2'
+            $thirdEvents = Join-Path $third 'events.jsonl'
+            Add-Content -LiteralPath $thirdEvents -Value (@(
+                    New-DispatchEventLinesLocal -AgentName 'Squad Researcher' -Key 'r-k3' -StartTimestamp '2026-10-03T10:00:00.000Z' -UsageTimestamp '2026-10-03T10:00:20.000Z'
+                    New-HandoffEventLocal -Key 'k3' -Timestamp '2026-10-03T10:00:30.000Z'
+                    New-DispatchEventLinesLocal -AgentName 'Squad Scribe' -Key 's-k3' -StartTimestamp '2026-10-03T10:00:40.000Z' -UsageTimestamp '2026-10-03T10:00:50.000Z' -Kind haiku
+                ) -join "`n")
+            Add-HistoryEntryLocal -Root $f.Root -Agent 'Squad Researcher' -Stamp '2026-10-03T10:00:35Z' -Title 'Survey in the early-opened session'
+            Add-HistoryEntryLocal -Root $f.Root -Agent 'Squad Scribe' -Stamp '2026-10-03T10:00:55Z' -Title 'Record in the early-opened session' -Orchestration
+            (Get-Item -LiteralPath $thirdEvents).LastWriteTimeUtc = [datetime]'2026-10-03T10:01:00Z'
+
+            $write = Invoke-LedgerAutoLocal -Fixture $f -AgentSessionId 'sess-0003' -Write
+            $write.ExitCode | Should -Be 0 -Because $write.Output
+            $write.Output | Should -Not -Match 'estimates remain the fallback'
+            $ledger = Get-LedgerTextLocal -Root $f.Root
+            @((Get-JournalSessionsLocal -Root $f.Root).sessionId) | Should -Be @('sess-0001', 'sess-0002', 'sess-0003')
+            $ledger | Should -Match 'Native usage snapshots — sessions: 3; records: 6;'
+            $ledger | Should -Match '\*\*0\.7237\*\* \| \*\*72\.37\*\* \| \*\*exact-native\*\*'
+            $ledger | Should -Not -Match '(?m)^> Lower bound'
+            (Invoke-Ledger -SquadRoot $f.Root -Check -ExpectedHistoryCounts @{ 'Squad Researcher' = 3; 'Squad Scribe' = 3 }).ExitCode | Should -Be 0
+        }
+
+        It 'keeps the readable sessions exact and marks every figure a lower bound when the log of a session with history is gone' {
+            $tester = New-DispatchEventLinesLocal -AgentName 'Squad Tester' -Key 'tester-x' -StartTimestamp '2026-09-27T10:01:00.000Z' -UsageTimestamp '2026-09-27T10:01:20.000Z'
+            $f = New-SessionFixtureLocal -EventLines ($script:CompleteBaseEvents + @($tester))
+            Add-ReviewedDeliverableLocal -Fixture $f -Stamp '2026-09-27T10:01:00Z'
+            $first = Invoke-LedgerWithSessionLocal -Root $f.Root -SessionLog $f.SessionDir -Write
+            $first.ExitCode | Should -Be 0 -Because $first.Output
+            $complete = Get-LedgerTextLocal -Root $f.Root
+            $complete | Should -Match '(?m)^\| Exact credits per accepted deliverable \| 61\.85 \| measured \|'
+            $complete | Should -Not -Match '(?m)^> Lower bound'
+
+            # sess-0002 wrote history, but its log is not on this machine.
+            Add-SecondSessionHistoryLocal -Root $f.Root
+            $write = Invoke-LedgerAutoLocal -Fixture $f -Write
+            $write.ExitCode | Should -Be 0 -Because $write.Output
+            $write.Output | Should -Not -Match 'estimates remain the fallback'
+            $ledger = Get-LedgerTextLocal -Root $f.Root
+            $ledger | Should -Match '\*\*0\.6185\*\* \| \*\*61\.85\*\* \| \*\*exact-native\*\*'
+            $ledger | Should -Not -Match 'Est\. Cost'
+            $ledger | Should -Match '(?m)^NOTE: 2 metered history entries have no billed native request within 5 minutes of their time in any accepted session \(Squad Researcher\.md x1, Squad Scribe\.md x1\); '
+            $ledger | Should -Match '(?m)^> Lower bound: '
+            $ledger | Should -Match '(?m)^\| Exact credits per accepted deliverable \| 61\.85 \| measured \(lower bound\) \|'
+            $ledger | Should -Match '(?m)^\| Orchestration share of exact credits \| [\d.]+% \| measured \(lower bound\) \|'
+            (Invoke-Ledger -SquadRoot $f.Root -Check -ExpectedHistoryCounts @{ 'Squad Researcher' = 2; 'Squad Scribe' = 2; 'Squad Tester' = 1 }).ExitCode | Should -Be 0
+
+            $json = ConvertFrom-LedgerJsonOutputLocal -Output (Invoke-LedgerAutoLocal -Fixture $f -Json).Output
+            $json.exact.partial | Should -BeTrue
+            @($json.exact.notes | ForEach-Object kind) | Should -Be @('unaccounted')
+            $json.unitEconomics.lowerBound | Should -BeTrue
+        }
+
+        It 'prints a native agent name <Case> as plain text that cannot break a table, the Derivation block, or the Total row' -ForEach @(
+            @{ Case = 'with a table pipe'; Name = 'Odd | Agent'; Printed = 'Odd / Agent' }
+            @{ Case = 'with a line break and a code fence'; Name = 'Evil\n```\nAgent'; Printed = "Evil ''' Agent" }
+            @{ Case = 'that merely contains Total'; Name = 'Total Recall'; Printed = 'Total Recall' }
+            @{ Case = 'that is Total'; Name = 'Total'; Printed = 'Total (agent)' }
+            @{ Case = 'shaped like a Markdown heading'; Name = '## Cost Comparison'; Printed = 'Cost Comparison' }
+            @{ Case = 'longer than a table cell should be'; Name = ('Long' * 40); Printed = ('Long' * 20) }
+        ) {
+            $events = $script:CompleteBaseEvents + @(New-DispatchEventLinesLocal -AgentName $Name -Key 'odd-x' -StartTimestamp '2026-09-27T10:03:30.000Z' -UsageTimestamp '2026-09-27T10:03:40.000Z')
+            $f = New-SessionFixtureLocal -EventLines $events
+
+            $write = Invoke-LedgerWithSessionLocal -Root $f.Root -SessionLog $f.SessionDir -Write
+            $write.ExitCode | Should -Be 0 -Because $write.Output
+            $write.Output | Should -Not -Match 'estimates remain the fallback'
+            $ledger = Get-LedgerTextLocal -Root $f.Root
+            $ledger | Should -Match ('(?m)^\| ' + [regex]::Escape($Printed) + ' \| 1 \| 20,000 \| 10,000 \| 0 \| 2,000 \| 0\.0930 \| 9\.30 \| exact-native \|')
+            $ledger | Should -Match '\*\*0\.6185\*\* \| \*\*61\.85\*\* \| \*\*exact-native\*\*'
+            @([regex]::Matches($ledger, '(?m)^\| \*\*Total\*\* \|')).Count | Should -Be 1
+            @([regex]::Matches($ledger, '(?m)^```')).Count | Should -Be 2 -Because 'the Derivation block opens and closes once'
+            (Invoke-Ledger -SquadRoot $f.Root -Check -ExpectedHistoryCounts $script:SurveyCounts).ExitCode | Should -Be 0
+            $again = Invoke-LedgerWithSessionLocal -Root $f.Root -SessionLog $f.SessionDir -Write
+            $again.ExitCode | Should -Be 0 -Because $again.Output
+            Get-LedgerTextLocal -Root $f.Root | Should -Be $ledger
+        }
+
+        It 'counts a request that a forked session log repeats only once, and says so' {
+            $f = New-SessionFixtureLocal -EventLines $script:BaseEvents
+            (Invoke-LedgerWithSessionLocal -Root $f.Root -SessionLog $f.SessionDir -Write).ExitCode | Should -Be 0
+            Add-SecondSessionHistoryLocal -Root $f.Root
+            $second = Add-SecondSessionLogLocal -Fixture $f
+
+            # sess-0002 replays the billed requests of sess-0001 before its own.
+            $secondEvents = Join-Path $second 'events.jsonl'
+            $own = @(Get-Content -LiteralPath $secondEvents | Select-Object -Skip 1)
+            $forked = @('{"type":"session.start","data":{"sessionId":"sess-0002"},"timestamp":"2026-09-27T09:59:00.000Z"}') + @($script:CompleteBaseEvents | Select-Object -Skip 1) + $own
+            Set-Content -LiteralPath $secondEvents -Value ($forked -join "`n")
+            (Get-Item -LiteralPath $secondEvents).LastWriteTimeUtc = [datetime]'2026-10-02T10:03:00Z'
+
+            $write = Invoke-LedgerAutoLocal -Fixture $f -AgentSessionId 'sess-0002' -Write
+            $write.ExitCode | Should -Be 0 -Because $write.Output
+            $write.Output | Should -Not -Match 'estimates remain the fallback'
+            $ledger = Get-LedgerTextLocal -Root $f.Root
+            $ledger | Should -Match 'Native usage snapshots — sessions: 2; records: 4;'
+            $ledger | Should -Match '\*\*0\.6246\*\* \| \*\*62\.46\*\* \| \*\*exact-native\*\*'
+            $ledger | Should -Match '(?m)^NOTE: 2 native requests appear in more than one accepted session log \(a forked or replayed session\); each is counted once\.\s*$'
+            $ledger | Should -Not -Match '(?m)^> Lower bound'
+            @((Get-JournalSessionsLocal -Root $f.Root).records) | Should -Be @(2, 4)
+            (Invoke-Ledger -SquadRoot $f.Root -Check -ExpectedHistoryCounts @{ 'Squad Researcher' = 2; 'Squad Scribe' = 2 }).ExitCode | Should -Be 0
+
+            $replay = Invoke-LedgerAutoLocal -Fixture $f -AgentSessionId 'sess-0002' -Write
+            $replay.ExitCode | Should -Be 0 -Because $replay.Output
+            Get-LedgerTextLocal -Root $f.Root | Should -Be $ledger
+        }
+
+        It 'adopts a session whose hand-off never reached the journal even when the running session worked within minutes of it' {
+            $f = New-SessionFixtureLocal -EventLines $script:BaseEvents
+            (Invoke-LedgerWithSessionLocal -Root $f.Root -SessionLog $f.SessionDir -Write).ExitCode | Should -Be 0
+
+            # sess-0002 hands off and never reaches the ledger; the running sess-0003, opened earlier, hands off 90 s after it.
+            $null = New-HandoffSessionLocal -Fixture $f -SessionId 'sess-0002' -Start ([datetime]'2026-09-27T11:00:00Z') -Work ([datetime]'2026-09-27T11:09:00Z') -Key 'k2'
+            $null = New-HandoffSessionLocal -Fixture $f -SessionId 'sess-0003' -Start ([datetime]'2026-09-27T10:30:00Z') -Work ([datetime]'2026-09-27T11:10:30Z') -Key 'k3'
+
+            $write = Invoke-LedgerAutoLocal -Fixture $f -AgentSessionId 'sess-0003' -Write
+            $write.ExitCode | Should -Be 0 -Because $write.Output
+            $write.Output | Should -Not -Match 'estimates remain the fallback'
+            @((Get-JournalSessionsLocal -Root $f.Root).sessionId) | Should -Be @('sess-0001', 'sess-0002', 'sess-0003')
+            $ledger = Get-LedgerTextLocal -Root $f.Root
+            $ledger | Should -Match '\*\*0\.7237\*\* \| \*\*72\.37\*\* \| \*\*exact-native\*\*'
+            $ledger | Should -Not -Match '(?m)^> Lower bound'
+            (Invoke-Ledger -SquadRoot $f.Root -Check -ExpectedHistoryCounts @{ 'Squad Researcher' = 3; 'Squad Scribe' = 3 }).ExitCode | Should -Be 0
+
+            $replay = Invoke-LedgerAutoLocal -Fixture $f -AgentSessionId 'sess-0003' -Write
+            $replay.ExitCode | Should -Be 0 -Because $replay.Output
+            Get-LedgerTextLocal -Root $f.Root | Should -Be $ledger
+        }
+
+        It 'adopts a session whose hand-off never reached the journal when the running session bills squad agents the whole time' {
+            $f = New-SessionFixtureLocal -EventLines $script:BaseEvents
+            (Invoke-LedgerWithSessionLocal -Root $f.Root -SessionLog $f.SessionDir -Write).ExitCode | Should -Be 0
+
+            # sess-0003 bills a researcher request every minute from 11:00 to 11:29; sess-0002 hands off in the middle of it and never writes.
+            $null = New-HandoffSessionLocal -Fixture $f -SessionId 'sess-0002' -Start ([datetime]'2026-09-27T11:00:00Z') -Work ([datetime]'2026-09-27T11:14:00Z') -Key 'k2'
+            $busy = [Collections.Generic.List[string]]::new()
+            $busy.Add('{"type":"session.start","data":{"sessionId":"sess-0003"},"timestamp":"2026-09-27T10:30:00.000Z"}')
+            $busy.Add('{"type":"subagent.started","agentId":"busy","data":{"toolCallId":"tc-busy","agentName":"Squad Researcher","agentDisplayName":"squad researcher","model":"claude-sonnet-4.6"},"timestamp":"2026-09-27T11:00:00.000Z"}')
+            for ($minute = 0; $minute -lt 30; $minute++) {
+                $billedAt = Format-StampLocal -At ([datetime]'2026-09-27T11:00:30Z').AddMinutes($minute) -Milliseconds
+                $busy.Add((New-ExactUsageEventLocal -AgentId 'busy' -SourceSessionId 'src-busy' -UsageId "busy-$minute" -Model 'claude-sonnet-4.6' -FreshInput 1000 -Cached 1000 -CacheWrite 0 -Output 200 -InputRate 3 -CachedRate 0.3 -CacheWriteRate 3.75 -OutputRate 15 -Timestamp $billedAt))
+            }
+            foreach ($line in (New-HandoffLinesLocal -At ([datetime]'2026-09-27T11:41:00Z') -Key 'k3')) { $busy.Add($line) }
+            $null = New-NativeSessionLocal -Fixture $f -SessionId 'sess-0003' -EventLines $busy.ToArray() -LastWriteUtc '2026-09-27T11:42:00Z'
+            Add-HandoffHistoryLocal -Fixture $f -At ([datetime]'2026-09-27T11:41:00Z') -Key 'k3'
+
+            $write = Invoke-LedgerAutoLocal -Fixture $f -AgentSessionId 'sess-0003' -Write
+            $write.ExitCode | Should -Be 0 -Because $write.Output
+            $write.Output | Should -Not -Match 'estimates remain the fallback'
+            @((Get-JournalSessionsLocal -Root $f.Root).sessionId) | Should -Be @('sess-0001', 'sess-0002', 'sess-0003')
+            # 52.55 + 9.91 + 30 x 0.63 + 9.91
+            $ledger = Get-LedgerTextLocal -Root $f.Root
+            $ledger | Should -Match '\*\*0\.9127\*\* \| \*\*91\.27\*\* \| \*\*exact-native\*\*'
+            $ledger | Should -Not -Match '(?m)^> Lower bound'
+            (Invoke-Ledger -SquadRoot $f.Root -Check -ExpectedHistoryCounts @{ 'Squad Researcher' = 3; 'Squad Scribe' = 3 }).ExitCode | Should -Be 0
+        }
+
+        It 'does not take a plain chat that only reads or checks the squad scripts for the session that wrote the history, <Case>' -ForEach @(
+            @{ Case = 'when it viewed the hand-off script just before the stamp'; EarlyWriter = $false; Tool = 'view'; ToolAt = '2026-09-27T12:00:10.000Z'; ArgumentsJson = '{"path":"C:\\repo\\.github\\skills\\squad\\scripts\\Write-SquadHandoff.ps1"}' }
+            @{ Case = 'when it only checked the ledger just before the stamp'; EarlyWriter = $false; Tool = 'powershell'; ToolAt = '2026-09-27T12:00:15.000Z'; ArgumentsJson = '{"command":"pwsh -NoProfile -File .github/skills/squad/scripts/Measure-SquadLedger.ps1 -SquadRoot .copilot-tracking/squad -Check"}' }
+            @{ Case = 'when it viewed the script nearer the stamp than the real writer started'; EarlyWriter = $true; Tool = 'view'; ToolAt = '2026-09-27T12:00:25.000Z'; ArgumentsJson = '{"path":"C:\\repo\\.github\\skills\\squad\\scripts\\Write-SquadHandoff.ps1"}' }
+        ) {
+            $f = New-SessionFixtureLocal -EventLines $script:BaseEvents
+            (Invoke-LedgerWithSessionLocal -Root $f.Root -SessionLog $f.SessionDir -Write).ExitCode | Should -Be 0
+
+            # sess-0002 is the running session; its entries are stamped 12:00:35 and 12:00:55, and its log shows no history writer
+            # near them (or one 25 s before the first stamp), so only usage or that early writer explains them.
+            $second = New-HandoffSessionLocal -Fixture $f -SessionId 'sess-0002' -Start ([datetime]'2026-09-27T11:00:00Z') -Work ([datetime]'2026-09-27T11:59:00Z') -Key 'k2' -NoWriter
+            if ($EarlyWriter) { Add-Content -LiteralPath (Join-Path $second 'events.jsonl') -Value (New-HandoffEventLocal -Key 'k2w' -Timestamp '2026-09-27T12:00:10.000Z') }
+            $null = New-ChatSessionLocal -Fixture $f -SessionId 'chat-A' -Start ([datetime]'2026-09-27T09:00:00Z') -BilledAt ([datetime]'2026-09-27T12:00:05Z') `
+                -ExtraLines @(New-ToolEventLocal -Timestamp $ToolAt -ToolName $Tool -ArgumentsJson $ArgumentsJson)
+
+            $write = Invoke-LedgerAutoLocal -Fixture $f -AgentSessionId 'sess-0002' -Write
+            $write.ExitCode | Should -Be 0 -Because $write.Output
+            $write.Output | Should -Not -Match 'estimates remain the fallback'
+            @((Get-JournalSessionsLocal -Root $f.Root).sessionId) | Should -Be @('sess-0001', 'sess-0002')
+            $ledger = Get-LedgerTextLocal -Root $f.Root
+            $ledger | Should -Match '\*\*0\.6246\*\* \| \*\*62\.46\*\* \| \*\*exact-native\*\*'
+            $ledger | Should -Not -Match '(?m)^> Lower bound'
+            (Invoke-Ledger -SquadRoot $f.Root -Check -ExpectedHistoryCounts @{ 'Squad Researcher' = 2; 'Squad Scribe' = 2 }).ExitCode | Should -Be 0
+        }
+
+        It 'does not adopt a session that only handed off for another squad root, <Case>' -ForEach @(
+            @{ Case = 'whose own billing sits minutes away'; WriterAt = '2026-09-27T12:00:25.000Z'; StartAt = '2026-09-27T12:03:00.000Z'; UsageAt = '2026-09-27T12:03:20.000Z' }
+            @{ Case = 'whose own billing sits right at the stamp'; WriterAt = '2026-09-27T12:00:25.000Z'; StartAt = '2026-09-27T12:00:30.000Z'; UsageAt = '2026-09-27T12:00:35.000Z' }
+            @{ Case = 'whose hand-off began almost four minutes before the stamp and whose billing sits at it'; WriterAt = '2026-09-27T11:56:55.000Z'; StartAt = '2026-09-27T12:00:30.000Z'; UsageAt = '2026-09-27T12:00:35.000Z' }
+        ) {
+            $f = New-SessionFixtureLocal -EventLines $script:BaseEvents
+            (Invoke-LedgerWithSessionLocal -Root $f.Root -SessionLog $f.SessionDir -Write).ExitCode | Should -Be 0
+
+            # sess-0002 ran a hand-off for the federation member azure shortly before this root's first stamp (12:00:35).
+            $other = @('{"type":"session.start","data":{"sessionId":"sess-0002"},"timestamp":"2026-09-27T11:00:00.000Z"}') +
+                @(New-HandoffEventLocal -Key 'az' -Timestamp $WriterAt -SquadRoot '.copilot-tracking/squad/members/azure') +
+                @(New-DispatchEventLinesLocal -AgentName 'Squad Researcher' -Key 'r-az' -StartTimestamp $StartAt -UsageTimestamp $UsageAt)
+            $null = New-NativeSessionLocal -Fixture $f -SessionId 'sess-0002' -EventLines $other -LastWriteUtc '2026-09-27T12:30:00Z'
+            $null = New-HandoffSessionLocal -Fixture $f -SessionId 'sess-0003' -Start ([datetime]'2026-09-27T11:30:00Z') -Work ([datetime]'2026-09-27T11:59:00Z') -Key 'k3' -NoWriter
+
+            $write = Invoke-LedgerAutoLocal -Fixture $f -AgentSessionId 'sess-0003' -Write
+            $write.ExitCode | Should -Be 0 -Because $write.Output
+            $write.Output | Should -Not -Match 'estimates remain the fallback'
+            @((Get-JournalSessionsLocal -Root $f.Root).sessionId) | Should -Be @('sess-0001', 'sess-0003')
+            $ledger = Get-LedgerTextLocal -Root $f.Root
+            $ledger | Should -Match '\*\*0\.6246\*\* \| \*\*62\.46\*\* \| \*\*exact-native\*\*'
+            $ledger | Should -Not -Match '(?m)^> Lower bound'
+            (Invoke-Ledger -SquadRoot $f.Root -Check -ExpectedHistoryCounts @{ 'Squad Researcher' = 2; 'Squad Scribe' = 2 }).ExitCode | Should -Be 0
+        }
+
+        It 'recognizes a hand-off typed <Case>, so that it alone explains the entries it wrote' -ForEach @(
+            @{ Case = 'over several lines'; Command = "pwsh -NoProfile -File .github/skills/squad/scripts/Write-SquadHandoff.ps1 $([char]96)`n    -SquadRoot .copilot-tracking/squad $([char]96)`n    -PayloadPath p.json -Quiet" }
+            @{ Case = 'with an expression for the root'; Command = 'pwsh -NoProfile -File .github/skills/squad/scripts/Write-SquadHandoff.ps1 -SquadRoot (Join-Path $PWD ''.copilot-tracking/squad'') -PayloadPath p.json -Quiet' }
+        ) {
+            $f = New-SessionFixtureLocal -EventLines $script:BaseEvents
+            (Invoke-LedgerWithSessionLocal -Root $f.Root -SessionLog $f.SessionDir -Write).ExitCode | Should -Be 0
+
+            # sess-0002 wrote the entries (12:00:35 and 12:00:55) with this hand-off but billed its squad agents minutes away;
+            # the running sess-0003 has only usage near them. Without the writer, sess-0002 would never be found.
+            $second = @('{"type":"session.start","data":{"sessionId":"sess-0002"},"timestamp":"2026-09-27T11:00:00.000Z"}') +
+                @(New-ToolEventLocal -Timestamp '2026-09-27T12:00:30.000Z' -ToolName 'powershell' -ArgumentsJson (@{ command = $Command } | ConvertTo-Json -Compress)) +
+                @(New-DispatchEventLinesLocal -AgentName 'Squad Researcher' -Key 'r-ml' -StartTimestamp '2026-09-27T12:03:00.000Z' -UsageTimestamp '2026-09-27T12:03:20.000Z')
+            $null = New-NativeSessionLocal -Fixture $f -SessionId 'sess-0002' -EventLines $second -LastWriteUtc '2026-09-27T12:30:00Z'
+            $null = New-HandoffSessionLocal -Fixture $f -SessionId 'sess-0003' -Start ([datetime]'2026-09-27T11:30:00Z') -Work ([datetime]'2026-09-27T11:59:00Z') -Key 'k3' -NoWriter
+
+            $write = Invoke-LedgerAutoLocal -Fixture $f -AgentSessionId 'sess-0003' -Write
+            $write.ExitCode | Should -Be 0 -Because $write.Output
+            $write.Output | Should -Not -Match 'estimates remain the fallback'
+            @((Get-JournalSessionsLocal -Root $f.Root).sessionId) | Should -Be @('sess-0001', 'sess-0002', 'sess-0003')
+            # 52.55 + 9.30 (sess-0002's researcher) + 9.91
+            Get-LedgerTextLocal -Root $f.Root | Should -Match '\*\*0\.7176\*\* \| \*\*71\.76\*\* \| \*\*exact-native\*\*'
+            (Invoke-Ledger -SquadRoot $f.Root -Check -ExpectedHistoryCounts @{ 'Squad Researcher' = 2; 'Squad Scribe' = 2 }).ExitCode | Should -Be 0
+        }
+
+        It 'does not report another member''s session as part of a member root''s history, <Case>' -ForEach @(
+            @{ Case = 'whose own billing sits minutes away'; StartAt = '2026-09-27T12:03:00.000Z'; UsageAt = '2026-09-27T12:03:20.000Z' }
+            @{ Case = 'whose own billing sits right at the stamp'; StartAt = '2026-09-27T12:00:30.000Z'; UsageAt = '2026-09-27T12:00:35.000Z' }
+        ) {
+            $events = @($script:BaseEvents | ForEach-Object { $_.Replace('Write to .copilot-tracking/research/x.md', 'Write to .copilot-tracking/squad/members/product/research/x.md') })
+            $f = New-SessionFixtureLocal -Member 'product' -EventLines $events
+            (Invoke-LedgerWithSessionLocal -Root $f.Root -SessionLog $f.SessionDir -Write).ExitCode | Should -Be 0
+
+            # sess-0002 served the member azure and handed off for it 10 s before product's first stamp; sess-0003, running, served product.
+            $azure = @('{"type":"session.start","data":{"sessionId":"sess-0002"},"timestamp":"2026-09-27T11:00:00.000Z"}') +
+                @(New-ToolEventLocal -Timestamp '2026-09-27T12:03:00.000Z' -ToolName 'task' -ArgumentsJson '{"agent_type":"Squad Researcher","prompt":"Write to .copilot-tracking/squad/members/azure/research/x.md"}') +
+                @(New-HandoffEventLocal -Key 'az' -Timestamp '2026-09-27T12:00:25.000Z' -SquadRoot '.copilot-tracking/squad/members/azure') +
+                @(New-DispatchEventLinesLocal -AgentName 'Squad Researcher' -Key 'r-az' -StartTimestamp $StartAt -UsageTimestamp $UsageAt)
+            $null = New-NativeSessionLocal -Fixture $f -SessionId 'sess-0002' -EventLines $azure -LastWriteUtc '2026-09-27T12:30:00Z'
+            $product = @('{"type":"session.start","data":{"sessionId":"sess-0003"},"timestamp":"2026-09-27T11:30:00.000Z"}') +
+                @(New-ToolEventLocal -Timestamp '2026-09-27T12:00:00.000Z' -ToolName 'task' -ArgumentsJson '{"agent_type":"Squad Researcher","prompt":"Write to .copilot-tracking/squad/members/product/research/y.md"}') +
+                @(New-HandoffLinesLocal -At ([datetime]'2026-09-27T12:00:00Z') -Key 'pr' -NoWriter)
+            $null = New-NativeSessionLocal -Fixture $f -SessionId 'sess-0003' -EventLines $product -LastWriteUtc '2026-09-27T12:30:00Z'
+            Add-HandoffHistoryLocal -Fixture $f -At ([datetime]'2026-09-27T12:00:00Z') -Key 'pr'
+
+            $write = Invoke-LedgerAutoLocal -Fixture $f -AgentSessionId 'sess-0003' -Write
+            $write.ExitCode | Should -Be 0 -Because $write.Output
+            $write.Output | Should -Not -Match 'estimates remain the fallback'
+            $write.Output | Should -Not -Match "sess-0002"
+            @((Get-JournalSessionsLocal -Root $f.Root).sessionId) | Should -Be @('sess-0001', 'sess-0003')
+            $ledger = Get-LedgerTextLocal -Root $f.Root
+            $ledger | Should -Match '\*\*0\.6246\*\* \| \*\*62\.46\*\* \| \*\*exact-native\*\*'
+            $ledger | Should -Not -Match '(?m)^> Lower bound'
+            $ledger | Should -Not -Match 'sess-0002'
+        }
+
+        It 'adopts a session that never reached the journal when no log shows a history writer and the running session worked <Gap> minutes later' -ForEach @(
+            @{ Gap = 2 }
+            @{ Gap = 4 }
+        ) {
+            $f = New-SessionFixtureLocal -EventLines $script:BaseEvents
+            (Invoke-LedgerWithSessionLocal -Root $f.Root -SessionLog $f.SessionDir -Write).ExitCode | Should -Be 0
+
+            # The history was written with file tools, so no log holds a writer; only billed squad agents show who worked when.
+            $null = New-HandoffSessionLocal -Fixture $f -SessionId 'sess-0002' -Start ([datetime]'2026-09-27T11:00:00Z') -Work ([datetime]'2026-09-27T11:59:00Z') -Key 'k2' -NoWriter
+            $null = New-HandoffSessionLocal -Fixture $f -SessionId 'sess-0003' -Start ([datetime]'2026-09-27T10:30:00Z') -Work ([datetime]'2026-09-27T11:59:00Z').AddMinutes($Gap) -Key 'k3' -NoWriter
+
+            $write = Invoke-LedgerAutoLocal -Fixture $f -AgentSessionId 'sess-0003' -Write
+            $write.ExitCode | Should -Be 0 -Because $write.Output
+            $write.Output | Should -Not -Match 'estimates remain the fallback'
+            @((Get-JournalSessionsLocal -Root $f.Root).sessionId) | Should -Be @('sess-0001', 'sess-0002', 'sess-0003')
+            $ledger = Get-LedgerTextLocal -Root $f.Root
+            $ledger | Should -Match '\*\*0\.7237\*\* \| \*\*72\.37\*\* \| \*\*exact-native\*\*'
+            $ledger | Should -Not -Match '(?m)^> Lower bound'
+            (Invoke-Ledger -SquadRoot $f.Root -Check -ExpectedHistoryCounts @{ 'Squad Researcher' = 3; 'Squad Scribe' = 3 }).ExitCode | Should -Be 0
+        }
+
+        It 'adopts a session that never reached the journal even when a cached session handed off nearer the same entries' {
+            $f = New-SessionFixtureLocal -EventLines $script:BaseEvents
+            (Invoke-LedgerWithSessionLocal -Root $f.Root -SessionLog $f.SessionDir -Write).ExitCode | Should -Be 0
+
+            # sess-0002 hands off at 12:00 and never reaches the journal; sess-0001 is resumed and hands off 3 s later, so its writer
+            # sits nearer sess-0002's stamps than sess-0002's own; sess-0003 is running later.
+            $null = New-HandoffSessionLocal -Fixture $f -SessionId 'sess-0002' -Start ([datetime]'2026-09-27T11:00:00Z') -Work ([datetime]'2026-09-27T11:59:00Z') -Key 'k2'
+            $firstEvents = Join-Path $f.SessionDir 'events.jsonl'
+            Set-Content -LiteralPath $firstEvents -Value (($script:CompleteBaseEvents + @(New-HandoffLinesLocal -At ([datetime]'2026-09-27T12:00:03Z') -Key 'k1b')) -join "`n")
+            (Get-Item -LiteralPath $firstEvents).LastWriteTimeUtc = [datetime]'2026-09-27T12:02:00Z'
+            Add-HandoffHistoryLocal -Fixture $f -At ([datetime]'2026-09-27T12:00:03Z') -Key 'k1b'
+            $null = New-HandoffSessionLocal -Fixture $f -SessionId 'sess-0003' -Start ([datetime]'2026-09-27T13:50:00Z') -Work ([datetime]'2026-09-27T13:59:00Z') -Key 'k3'
+
+            $write = Invoke-LedgerAutoLocal -Fixture $f -AgentSessionId 'sess-0003' -Write
+            $write.ExitCode | Should -Be 0 -Because $write.Output
+            $write.Output | Should -Not -Match 'estimates remain the fallback'
+            $sessions = Get-JournalSessionsLocal -Root $f.Root
+            @($sessions.sessionId) | Should -Be @('sess-0001', 'sess-0002', 'sess-0003')
+            @($sessions.records) | Should -Be @(4, 2, 2)
+            $ledger = Get-LedgerTextLocal -Root $f.Root
+            # 52.55 + 9.91 (sess-0001 resumed) + 9.91 + 9.91
+            $ledger | Should -Match '\*\*0\.8228\*\* \| \*\*82\.28\*\* \| \*\*exact-native\*\*'
+            $ledger | Should -Not -Match '(?m)^> Lower bound'
+            (Invoke-Ledger -SquadRoot $f.Root -Check -ExpectedHistoryCounts @{ 'Squad Researcher' = 4; 'Squad Scribe' = 4 }).ExitCode | Should -Be 0
+
+            $replay = Invoke-LedgerAutoLocal -Fixture $f -AgentSessionId 'sess-0003' -Write
+            $replay.ExitCode | Should -Be 0 -Because $replay.Output
+            Get-LedgerTextLocal -Root $f.Root | Should -Be $ledger
+        }
+
+        It 'keeps every adopted session when hand-offs ran in a different order than the sessions were opened, <Case>' -ForEach @(
+            @{ Case = 'when the host names the running session'; AgentSessionId = 'sess-0004' }
+            @{ Case = 'when the host names none'; AgentSessionId = '' }
+        ) {
+            $f = New-SessionFixtureLocal -EventLines $script:BaseEvents
+            (Invoke-LedgerWithSessionLocal -Root $f.Root -SessionLog $f.SessionDir -Write).ExitCode | Should -Be 0
+
+            # sess-0002 was opened first but hands off after sess-0003; neither reaches the journal, and sess-0004 is running.
+            $null = New-HandoffSessionLocal -Fixture $f -SessionId 'sess-0003' -Start ([datetime]'2026-09-27T11:00:00Z') -Work ([datetime]'2026-09-27T11:59:00Z') -Key 'kB'
+            $null = New-HandoffSessionLocal -Fixture $f -SessionId 'sess-0002' -Start ([datetime]'2026-09-27T10:30:00Z') -Work ([datetime]'2026-09-27T12:59:00Z') -Key 'kA'
+            $null = New-HandoffSessionLocal -Fixture $f -SessionId 'sess-0004' -Start ([datetime]'2026-09-27T13:30:00Z') -Work ([datetime]'2026-09-27T13:59:00Z') -Key 'kC'
+
+            $write = Invoke-LedgerAutoLocal -Fixture $f -AgentSessionId $AgentSessionId -Write
+            $write.ExitCode | Should -Be 0 -Because $write.Output
+            $write.Output | Should -Not -Match 'estimates remain the fallback'
+            @((Get-JournalSessionsLocal -Root $f.Root).sessionId) | Should -Be @('sess-0001', 'sess-0003', 'sess-0002', 'sess-0004') -Because 'sessions sit in the order in which they wrote'
+            $ledger = Get-LedgerTextLocal -Root $f.Root
+            $ledger | Should -Match '\*\*0\.8228\*\* \| \*\*82\.28\*\* \| \*\*exact-native\*\*'
+            $ledger | Should -Not -Match '(?m)^> Lower bound'
+            (Invoke-Ledger -SquadRoot $f.Root -Check -ExpectedHistoryCounts @{ 'Squad Researcher' = 4; 'Squad Scribe' = 4 }).ExitCode | Should -Be 0
+
+            $replay = Invoke-LedgerAutoLocal -Fixture $f -AgentSessionId $AgentSessionId -Write
+            $replay.ExitCode | Should -Be 0 -Because $replay.Output
+            Get-LedgerTextLocal -Root $f.Root | Should -Be $ledger
+        }
+
+        It 'keeps refreshing an accepted session opened one folder below the repository after it stops being the running one' {
+            $f = New-SessionFixtureLocal -EventLines $script:BaseEvents
+            (Invoke-LedgerWithSessionLocal -Root $f.Root -SessionLog $f.SessionDir -Write).ExitCode | Should -Be 0
+
+            $second = New-HandoffSessionLocal -Fixture $f -SessionId 'sess-0002' -Start ([datetime]'2026-09-27T11:00:00Z') -Work ([datetime]'2026-09-27T11:59:00Z') -Key 'k2'
+            Set-Content -LiteralPath (Join-Path $second 'workspace.yaml') -Value "id: sess-0002`ncwd: $(Join-Path $f.Repo 'src')`n"
+            $first = Invoke-LedgerAutoLocal -Fixture $f -AgentSessionId 'sess-0002' -Write
+            $first.ExitCode | Should -Be 0 -Because $first.Output
+            @((Get-JournalSessionsLocal -Root $f.Root).sessionId) | Should -Be @('sess-0001', 'sess-0002')
+
+            # It keeps working after that write (a billed researcher request, no hand-off), then another session writes.
+            $secondEvents = Join-Path $second 'events.jsonl'
+            Add-Content -LiteralPath $secondEvents -Value (@(New-DispatchEventLinesLocal -AgentName 'Squad Researcher' -Key 'r-k2tail' -StartTimestamp '2026-09-27T12:30:00.000Z' -UsageTimestamp '2026-09-27T12:30:20.000Z') -join "`n")
+            (Get-Item -LiteralPath $secondEvents).LastWriteTimeUtc = [datetime]'2026-09-27T12:31:00Z'
+            $null = New-HandoffSessionLocal -Fixture $f -SessionId 'sess-0003' -Start ([datetime]'2026-09-27T13:50:00Z') -Work ([datetime]'2026-09-27T13:59:00Z') -Key 'k3'
+
+            $write = Invoke-LedgerAutoLocal -Fixture $f -AgentSessionId 'sess-0003' -Write
+            $write.ExitCode | Should -Be 0 -Because $write.Output
+            $write.Output | Should -Not -Match 'estimates remain the fallback'
+            $sessions = Get-JournalSessionsLocal -Root $f.Root
+            @($sessions.sessionId) | Should -Be @('sess-0001', 'sess-0002', 'sess-0003')
+            @($sessions.records) | Should -Be @(2, 3, 2)
+            # 52.55 + 9.91 + 9.30 billed after its write + 9.91
+            Get-LedgerTextLocal -Root $f.Root | Should -Match '\*\*0\.8167\*\* \| \*\*81\.67\*\* \| \*\*exact-native\*\*'
+            (Invoke-Ledger -SquadRoot $f.Root -Check -ExpectedHistoryCounts @{ 'Squad Researcher' = 3; 'Squad Scribe' = 3 }).ExitCode | Should -Be 0
+        }
+
+        It 'refuses to write when another writer changed the journal while the ledger was being computed, and loses nothing on the next write' {
+            $f = New-SessionFixtureLocal -EventLines $script:BaseEvents
+            (Invoke-LedgerWithSessionLocal -Root $f.Root -SessionLog $f.SessionDir -Write).ExitCode | Should -Be 0
+            Add-SecondSessionHistoryLocal -Root $f.Root
+            $null = Add-SecondSessionLogLocal -Fixture $f -CloseAfterHistory
+            $ledgerBefore = [IO.File]::ReadAllBytes((Join-Path $f.Root 'consumption.md'))
+            $stateBefore = [IO.File]::ReadAllBytes((Join-Path $f.Root 'state.json'))
+
+            # The comparison step touches the journal, as a second writer finishing meanwhile would.
+            $faulted = New-FaultedLedgerScriptLocal -Function 'Get-ExactNotesLocal' -InsertBefore 'function Get-ExactSessionBootstrapLocal {' -Replacement @'
+param($Exact, $HistoryCoverage, $MeteredHistoryCoverage, $EntryByKey)
+    [IO.File]::AppendAllText((Join-Path $SquadRoot 'consumption-sessions.json'), ' ')
+    @()
+'@
+            $refused = Invoke-LedgerAutoLocal -Fixture $f -LedgerScript $faulted -Write
+            $refused.ExitCode | Should -Not -Be 0
+            $refused.Output | Should -Match 'consumption-sessions\.json changed while the ledger was being computed'
+            [IO.File]::ReadAllBytes((Join-Path $f.Root 'consumption.md')) | Should -Be $ledgerBefore
+            [IO.File]::ReadAllBytes((Join-Path $f.Root 'state.json')) | Should -Be $stateBefore
+
+            $again = Invoke-LedgerAutoLocal -Fixture $f -Write
+            $again.ExitCode | Should -Be 0 -Because $again.Output
+            Get-LedgerTextLocal -Root $f.Root | Should -Match '\*\*0\.6246\*\* \| \*\*62\.46\*\* \| \*\*exact-native\*\*'
+            @((Get-JournalSessionsLocal -Root $f.Root).sessionId) | Should -Be @('sess-0001', 'sess-0002')
+        }
+
+        It 'reports a session that wrote part of the history but whose usage cannot be attributed, and still adds the others' {
+            $f = New-SessionFixtureLocal -EventLines $script:BaseEvents
+            (Invoke-LedgerWithSessionLocal -Root $f.Root -SessionLog $f.SessionDir -Write).ExitCode | Should -Be 0
+
+            # sess-0002 handed off, but one of its usage records is still pending, so its credits cannot be counted yet.
+            $second = New-HandoffSessionLocal -Fixture $f -SessionId 'sess-0002' -Start ([datetime]'2026-09-27T11:00:00Z') -Work ([datetime]'2026-09-27T11:59:00Z') -Key 'k2'
+            $secondEvents = Join-Path $second 'events.jsonl'
+            [IO.File]::WriteAllText($secondEvents, [regex]::new('"aiCreditsStatus":"complete"').Replace([IO.File]::ReadAllText($secondEvents), '"aiCreditsStatus":"pending"', 1))
+            $null = New-HandoffSessionLocal -Fixture $f -SessionId 'sess-0003' -Start ([datetime]'2026-09-27T13:50:00Z') -Work ([datetime]'2026-09-27T13:59:00Z') -Key 'k3'
+
+            $write = Invoke-LedgerAutoLocal -Fixture $f -AgentSessionId 'sess-0003' -Write
+            $write.ExitCode | Should -Be 0 -Because $write.Output
+            $write.Output | Should -Not -Match 'estimates remain the fallback'
+            @((Get-JournalSessionsLocal -Root $f.Root).sessionId) | Should -Be @('sess-0001', 'sess-0003')
+            $ledger = Get-LedgerTextLocal -Root $f.Root
+            $ledger | Should -Match '\*\*0\.6246\*\* \| \*\*62\.46\*\* \| \*\*exact-native\*\*'
+            $ledger | Should -Match "(?m)^NOTE: native session 'sess-0002' wrote part of this history but its usage could not be attributed \("
+            $ledger | Should -Match '(?m)^> Lower bound: '
+            (Invoke-Ledger -SquadRoot $f.Root -Check -ExpectedHistoryCounts @{ 'Squad Researcher' = 3; 'Squad Scribe' = 3 }).ExitCode | Should -Be 0
+
+            # The session is no longer examined once its entries are covered, but the gap stays labelled.
+            $replay = Invoke-LedgerAutoLocal -Fixture $f -AgentSessionId 'sess-0003' -Write
+            $replay.ExitCode | Should -Be 0 -Because $replay.Output
+            $again = Get-LedgerTextLocal -Root $f.Root
+            $again | Should -Match '\*\*0\.6246\*\* \| \*\*62\.46\*\* \| \*\*exact-native\*\*'
+            $again | Should -Match '(?m)^> Lower bound: '
+        }
+
+        It 'adds the sessions it can, in order, when an earlier one cannot be attributed and no journal exists yet' {
+            $f = New-SessionFixtureLocal -EventLines $script:BaseEvents
+            # The fixture's own session is gone, so only the sessions below remain on this machine.
+            Remove-Item -LiteralPath (Join-Path $f.Home 'session-state/sess-0001') -Recurse -Force
+
+            $second = New-HandoffSessionLocal -Fixture $f -SessionId 'sess-0002' -Start ([datetime]'2026-09-27T11:00:00Z') -Work ([datetime]'2026-09-27T11:59:00Z') -Key 'k2'
+            $secondEvents = Join-Path $second 'events.jsonl'
+            [IO.File]::WriteAllText($secondEvents, [regex]::new('"aiCreditsStatus":"complete"').Replace([IO.File]::ReadAllText($secondEvents), '"aiCreditsStatus":"pending"', 1))
+            $null = New-HandoffSessionLocal -Fixture $f -SessionId 'sess-0004' -Start ([datetime]'2026-09-27T12:30:00Z') -Work ([datetime]'2026-09-27T12:59:00Z') -Key 'k4'
+            $null = New-HandoffSessionLocal -Fixture $f -SessionId 'sess-0003' -Start ([datetime]'2026-09-27T13:30:00Z') -Work ([datetime]'2026-09-27T13:59:00Z') -Key 'k3'
+
+            $write = Invoke-LedgerAutoLocal -Fixture $f -AgentSessionId 'sess-0003' -Write
+            $write.ExitCode | Should -Be 0 -Because $write.Output
+            $write.Output | Should -Not -Match 'estimates remain the fallback'
+            @((Get-JournalSessionsLocal -Root $f.Root).sessionId) | Should -Be @('sess-0004', 'sess-0003')
+            $ledger = Get-LedgerTextLocal -Root $f.Root
+            $ledger | Should -Match '\*\*0\.1982\*\* \| \*\*19\.82\*\* \| \*\*exact-native\*\*'
+            $ledger | Should -Match "(?m)^NOTE: native session 'sess-0002' wrote part of this history but its usage could not be attributed \("
+            $ledger | Should -Match '(?m)^> Lower bound: '
+            (Invoke-Ledger -SquadRoot $f.Root -Check -ExpectedHistoryCounts @{ 'Squad Researcher' = 4; 'Squad Scribe' = 4 }).ExitCode | Should -Be 0
+        }
+
+        It 'keeps the accepted exact totals, with a one-line note, when reconciling the live logs fails unexpectedly, and recovers on the next healthy write' {
+            $f = New-SessionFixtureLocal -EventLines $script:BaseEvents
+            (Invoke-LedgerWithSessionLocal -Root $f.Root -SessionLog $f.SessionDir -Write).ExitCode | Should -Be 0
+            Add-SecondSessionHistoryLocal -Root $f.Root
+            $null = Add-SecondSessionLogLocal -Fixture $f -CloseAfterHistory
+            $journalBefore = [IO.File]::ReadAllBytes((Join-Path $f.Root 'consumption-sessions.json'))
+
+            # The failure message carries line breaks and a code fence, which must not break the Derivation block.
+            $faulted = New-FaultedLedgerScriptLocal -Function 'Resolve-HistoryOwnersLocal' -InsertBefore '$script:ExactPartialNoteKinds = @(' `
+                -Replacement 'throw ("injected`nadoption`n" + ([string][char]96 * 3) + "`nfailure")'
+            $write = Invoke-LedgerAutoLocal -Fixture $f -LedgerScript $faulted -Write
+            $write.ExitCode | Should -Be 0 -Because $write.Output
+            $write.Output | Should -Not -Match 'estimates remain the fallback'
+            $write.Output | Should -Match 'the native session logs could not be reconciled \(injected'
+            $ledger = Get-LedgerTextLocal -Root $f.Root
+            $ledger | Should -Match '\*\*0\.5255\*\* \| \*\*52\.55\*\* \| \*\*exact-native\*\*'
+            $ledger | Should -Not -Match 'Est\. Cost'
+            $ledger | Should -Match "(?m)^NOTE: the native session logs could not be reconciled \(injected adoption ''' failure\); the totals are exact as of 2026-09-27T10:03:00\.000Z\.\s*$"
+            $ledger | Should -Match '(?m)^> Lower bound: '
+            [IO.File]::ReadAllBytes((Join-Path $f.Root 'consumption-sessions.json')) | Should -Be $journalBefore -Because 'the history stays uncovered so a healthy write can still place it'
+            $check = Invoke-Ledger -SquadRoot $f.Root -Check -ExpectedHistoryCounts @{ 'Squad Researcher' = 2; 'Squad Scribe' = 2 }
+            $check.ExitCode | Should -Be 1
+            $check.Output | Should -Match 'failure class: ledger-only' -Because 'the next healthy write re-derives it, so a hand-off only warns'
+
+            $healthy = Invoke-LedgerAutoLocal -Fixture $f -Write
+            $healthy.ExitCode | Should -Be 0 -Because $healthy.Output
+            $recovered = Get-LedgerTextLocal -Root $f.Root
+            $recovered | Should -Match '\*\*0\.6246\*\* \| \*\*62\.46\*\* \| \*\*exact-native\*\*'
+            $recovered | Should -Not -Match 'could not be reconciled'
+            $recovered | Should -Not -Match '(?m)^> Lower bound'
+            @((Get-JournalSessionsLocal -Root $f.Root).sessionId) | Should -Be @('sess-0001', 'sess-0002')
+            (Invoke-Ledger -SquadRoot $f.Root -Check -ExpectedHistoryCounts @{ 'Squad Researcher' = 2; 'Squad Scribe' = 2 }).ExitCode | Should -Be 0
+        }
+
+        It 'keeps the exact totals and labels them a lower bound when the history cannot be compared with the native sessions' {
+            $f = New-SessionFixtureLocal -EventLines $script:BaseEvents
+            $faulted = New-FaultedLedgerScriptLocal -Function 'Get-ExactNotesLocal' -InsertBefore 'function Get-ExactSessionBootstrapLocal {' `
+                -Replacement "throw 'injected comparison failure'"
+
+            $write = Invoke-LedgerAutoLocal -Fixture $f -LedgerScript $faulted -Write
+            $write.ExitCode | Should -Be 0 -Because $write.Output
+            $write.Output | Should -Not -Match 'estimates remain the fallback'
+            $ledger = Get-LedgerTextLocal -Root $f.Root
+            $ledger | Should -Match '\*\*0\.5255\*\* \| \*\*52\.55\*\* \| \*\*exact-native\*\*'
+            $ledger | Should -Match '(?m)^NOTE: the history could not be compared with the native sessions \(injected comparison failure\); '
+            $ledger | Should -Match '(?m)^> Lower bound: '
+            (Invoke-Ledger -SquadRoot $f.Root -Check -ExpectedHistoryCounts $script:SurveyCounts).ExitCode | Should -Be 0
+        }
+
+        It 'still falls back to estimates when the history no longer matches what the journal accepted' {
+            $f = New-SessionFixtureLocal -EventLines $script:BaseEvents
+            (Invoke-LedgerWithSessionLocal -Root $f.Root -SessionLog $f.SessionDir -Write).ExitCode | Should -Be 0
+
+            # An older-format ledger records no entry identities, so only the journal can notice an entry rewritten in place.
+            $ledgerPath = Join-Path $f.Root 'consumption.md'
+            Set-Content -LiteralPath $ledgerPath -NoNewline -Value ((Get-Content -LiteralPath $ledgerPath -Raw) -replace 'identities: [0-9a-fA-F,]+', 'identities: (none)')
+            $history = Join-Path $f.Root 'history/Squad Researcher.md'
+            Set-Content -LiteralPath $history -NoNewline -Value ((Get-Content -LiteralPath $history -Raw).Replace('Surveying the fixture-topic', 'Re-surveying the fixture-topic'))
+
+            $write = Invoke-LedgerAutoLocal -Fixture $f -Write
+            $write.ExitCode | Should -Be 0 -Because $write.Output
+            $write.Output | Should -Match 'estimates remain the fallback: Exact session cache coverage for .Squad Researcher\.md. is not a prefix of current history'
+            $write.Output | Should -Not -Match 'last accepted exact totals are kept'
+            Get-LedgerTextLocal -Root $f.Root | Should -Match 'Est\. Cost \(USD\)'
+        }
+    }
+}
+Describe 'Measure-SquadLedger history-writer evidence is a shell call that writes this squad root' {
+    BeforeAll {
+        $tokens = $null
+        $parseErrors = $null
+        $ast = [System.Management.Automation.Language.Parser]::ParseFile($script:LedgerScript, [ref]$tokens, [ref]$parseErrors)
+        if ($parseErrors.Count) { throw 'Measure-SquadLedger did not parse.' }
+        $pattern = $ast.Find({ param($node) $node -is [System.Management.Automation.Language.AssignmentStatementAst] -and $node.Left.Extent.Text -eq '$script:HandoffWriterPattern' }, $true)
+        . ([scriptblock]::Create($pattern.Extent.Text))
+        foreach ($name in 'ConvertTo-RootKeyLocal', 'Test-RootArgumentLocal', 'Get-HandoffWriterScopeLocal') {
+            $function = $ast.Find({ param($node) $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq $name }, $true)
+            . ([scriptblock]::Create($function.Extent.Text))
+        }
+
+        function New-LogLineLocal {
+            param([Parameter(Mandatory)][string]$Tool, [Parameter(Mandatory)][hashtable]$Arguments, [string]$Type = 'tool.execution_start')
+            @{ type = $Type; data = @{ toolCallId = 't1'; toolName = $Tool; arguments = $Arguments }; timestamp = '2026-09-27T12:00:00.000Z' } | ConvertTo-Json -Depth 6 -Compress
+        }
+    }
+
+    It 'reads <Case> as <Expected>' -ForEach @(
+        @{ Case = 'a hand-off with the root relative and typed with backslashes'; Expected = 'own'; Tool = 'powershell'; Arguments = @{ command = 'pwsh -NoProfile -File .agents\skills\squad\scripts\Write-SquadHandoff.ps1 -SquadRoot .copilot-tracking\squad -PayloadPath "$d\h.json" -Quiet; "exit $LASTEXITCODE"' } }
+        @{ Case = 'a call operator, a quoted script and a quoted relative root'; Expected = 'own'; Tool = 'powershell'; Arguments = @{ command = '& "$s\Write-SquadHandoff.ps1" -SquadRoot ".copilot-tracking/squad" -Quiet' } }
+        @{ Case = 'a verdict with the absolute root in single quotes'; Expected = 'own'; Tool = 'powershell'; Arguments = @{ command = 'pwsh -File C:\x\Write-SquadVerdict.ps1 -SquadRoot ''C:\repo\.copilot-tracking\squad''' } }
+        @{ Case = 'a hand-off that follows a read of the same script in one command'; Expected = 'own'; Tool = 'powershell'; Arguments = @{ command = 'Select-String -Path "$s\Write-SquadHandoff.ps1" -Pattern x; pwsh -File $s\Write-SquadHandoff.ps1 -SquadRoot .copilot-tracking\squad' } }
+        @{ Case = 'a hand-off whose root is a variable'; Expected = 'own'; Tool = 'powershell'; Arguments = @{ command = 'pwsh -File $s\Write-SquadHandoff.ps1 -SquadRoot $root -Quiet' } }
+        @{ Case = 'a hand-off from a bash tool'; Expected = 'own'; Tool = 'bash'; Arguments = @{ command = 'pwsh -File ./Write-SquadHandoff.ps1 -SquadRoot .copilot-tracking/squad' } }
+        @{ Case = 'a hand-off from a terminal tool'; Expected = 'own'; Tool = 'run_in_terminal'; Arguments = @{ command = 'pwsh -File ./Write-SquadHandoff.ps1 -SquadRoot .copilot-tracking/squad' } }
+        @{ Case = 'a federation hand-off'; Expected = 'own'; Tool = 'powershell'; Arguments = @{ command = 'pwsh -File $s\Write-SquadFederationHandoff.ps1 -SquadRoot .copilot-tracking/squad' } }
+        @{ Case = 'a federation hand-off that names no root'; Expected = 'own'; Tool = 'powershell'; Arguments = @{ command = 'pwsh -File $s\Write-SquadFederationHandoff.ps1 -PayloadPath p.json' } }
+        @{ Case = 'a ledger write'; Expected = 'own'; Tool = 'powershell'; Arguments = @{ command = 'pwsh -File $s\Measure-SquadLedger.ps1 -SquadRoot .copilot-tracking/squad -Write -SessionLog auto' } }
+        @{ Case = 'an initialization with no repository named'; Expected = 'own'; Tool = 'powershell'; Arguments = @{ command = 'pwsh -File $s\Initialize-Squad.ps1 -PayloadPath p.json' } }
+        @{ Case = 'an initialization for this repository'; Expected = 'own'; Tool = 'powershell'; Arguments = @{ command = 'pwsh -File $s\Initialize-Squad.ps1 -PayloadPath p.json -RepoRoot C:\repo' } }
+        @{ Case = 'a hand-off wrapped over several lines with backticks'; Expected = 'own'; Tool = 'powershell'; Arguments = @{ command = "pwsh -NoProfile -File `$s\Write-SquadHandoff.ps1 $([char]96)`n    -SquadRoot .copilot-tracking/squad $([char]96)`n    -PayloadPath p.json -Quiet" } }
+        @{ Case = 'a bash hand-off wrapped over several lines with backslashes'; Expected = 'own'; Tool = 'bash'; Arguments = @{ command = "pwsh -File ./Write-SquadHandoff.ps1 \`n    -SquadRoot .copilot-tracking/squad \`n    -Quiet" } }
+        @{ Case = 'a hand-off wrapped in parentheses'; Expected = 'own'; Tool = 'powershell'; Arguments = @{ command = '$out = (pwsh -File $s\Write-SquadHandoff.ps1 -SquadRoot .copilot-tracking/squad)' } }
+        @{ Case = 'a hand-off whose root is an expression'; Expected = 'own'; Tool = 'powershell'; Arguments = @{ command = 'pwsh -File $s\Write-SquadHandoff.ps1 -SquadRoot (Join-Path $PWD ''.copilot-tracking/squad'') -Quiet' } }
+        @{ Case = 'a hand-off whose root is a Resolve-Path expression'; Expected = 'own'; Tool = 'powershell'; Arguments = @{ command = 'pwsh -File $s\Write-SquadHandoff.ps1 -SquadRoot (Resolve-Path .copilot-tracking/squad) -Quiet' } }
+        @{ Case = 'a hand-off whose root is a placeholder'; Expected = 'own'; Tool = 'powershell'; Arguments = @{ command = 'pwsh -File $s\Write-SquadHandoff.ps1 -SquadRoot <squadRoot> -Quiet' } }
+        @{ Case = 'a hand-off whose root ends in a dot segment'; Expected = 'own'; Tool = 'powershell'; Arguments = @{ command = 'pwsh -File $s\Write-SquadHandoff.ps1 -SquadRoot .copilot-tracking/squad/. -Quiet' } }
+        @{ Case = 'an initialization whose repository is an expression'; Expected = 'own'; Tool = 'powershell'; Arguments = @{ command = 'pwsh -File $s\Initialize-Squad.ps1 -RepoRoot (Get-Location)' } }
+        @{ Case = 'a hand-off with a stray apostrophe before the root'; Expected = 'own'; Tool = 'powershell'; Arguments = @{ command = 'pwsh -File $s\Write-SquadHandoff.ps1 -Request it''s -SquadRoot .copilot-tracking/squad -Quiet' } }
+        @{ Case = 'a hand-off whose payload holds a semicolon before the root'; Expected = 'own'; Tool = 'powershell'; Arguments = @{ command = 'pwsh -File $s\Write-SquadHandoff.ps1 -PayloadJson ''{"request":"a; b | c"}'' -SquadRoot .copilot-tracking/squad' } }
+        @{ Case = 'a hand-off with an MSYS path to the root'; Expected = 'own'; Tool = 'bash'; Arguments = @{ command = 'pwsh -File ./Write-SquadHandoff.ps1 -SquadRoot /c/repo/.copilot-tracking/squad' } }
+        @{ Case = 'a hand-off for the member itself'; Expected = 'own'; Root = 'C:\repo\.copilot-tracking\squad\members\product'; Tool = 'powershell'; Arguments = @{ command = 'pwsh -File $s\Write-SquadHandoff.ps1 -SquadRoot .copilot-tracking/squad/members/product' } }
+        @{ Case = 'a federation hand-off seen from a member root'; Expected = 'own'; Root = 'C:\repo\.copilot-tracking\squad\members\product'; Tool = 'powershell'; Arguments = @{ command = 'pwsh -File $s\Write-SquadFederationHandoff.ps1 -SquadRoot .copilot-tracking/squad' } }
+        @{ Case = 'a hand-off for a federation member'; Expected = 'other'; Tool = 'powershell'; Arguments = @{ command = 'pwsh -File $s\Write-SquadHandoff.ps1 -SquadRoot .copilot-tracking/squad/members/azure' } }
+        @{ Case = 'a hand-off for another repository'; Expected = 'other'; Tool = 'powershell'; Arguments = @{ command = 'pwsh -File $s\Write-SquadHandoff.ps1 -SquadRoot ''C:\other\.copilot-tracking\squad''' } }
+        @{ Case = 'an initialization for another repository'; Expected = 'other'; Tool = 'powershell'; Arguments = @{ command = 'pwsh -File $s\Initialize-Squad.ps1 -PayloadPath p.json -RepoRoot C:\other' } }
+        @{ Case = 'a ledger write for a federation member'; Expected = 'other'; Tool = 'powershell'; Arguments = @{ command = 'pwsh -File $s\Measure-SquadLedger.ps1 -SquadRoot .copilot-tracking/squad/members/azure -Write' } }
+        @{ Case = 'a hand-off for another member seen from a member root'; Expected = 'other'; Root = 'C:\repo\.copilot-tracking\squad\members\product'; Tool = 'powershell'; Arguments = @{ command = 'pwsh -File $s\Write-SquadHandoff.ps1 -SquadRoot .copilot-tracking/squad/members/azure' } }
+        @{ Case = 'a viewed hand-off script'; Expected = 'none'; Tool = 'view'; Arguments = @{ path = 'C:\repo\.github\skills\squad\scripts\Write-SquadHandoff.ps1' } }
+        @{ Case = 'a search of the writer scripts'; Expected = 'none'; Tool = 'grep'; Arguments = @{ pattern = 'dimension'; paths = 'C:\repo\.agents\skills\squad\scripts\Write-SquadVerdict.ps1' } }
+        @{ Case = 'an edit that mentions the full command'; Expected = 'none'; Tool = 'edit'; Arguments = @{ path = 'docs.md'; new_str = 'Write-SquadHandoff.ps1 -SquadRoot .copilot-tracking/squad' } }
+        @{ Case = 'a sub-agent prompt that tells it to run the hand-off'; Expected = 'none'; Tool = 'task'; Arguments = @{ agent_type = 'Squad Scribe'; prompt = 'Run Write-SquadHandoff.ps1 -SquadRoot .copilot-tracking/squad' } }
+        @{ Case = 'a shell search of the script'; Expected = 'none'; Tool = 'powershell'; Arguments = @{ command = 'Select-String -Path "$s\Write-SquadHandoff.ps1","$s\Write-SquadVerdict.ps1" -Pattern x' } }
+        @{ Case = 'a shell read of the script'; Expected = 'none'; Tool = 'powershell'; Arguments = @{ command = 'Get-Content .\Write-SquadHandoff.ps1 | Select-Object -First 5' } }
+        @{ Case = 'a hand-off that names no root'; Expected = 'none'; Tool = 'powershell'; Arguments = @{ command = 'pwsh -File $s\Write-SquadHandoff.ps1 -PayloadPath p.json' } }
+        @{ Case = 'a ledger check'; Expected = 'none'; Tool = 'powershell'; Arguments = @{ command = 'pwsh -File $s\Measure-SquadLedger.ps1 -SquadRoot .copilot-tracking/squad -Check' } }
+        @{ Case = 'a ledger check for a federation member'; Expected = 'none'; Tool = 'powershell'; Arguments = @{ command = 'pwsh -File $s\Measure-SquadLedger.ps1 -SquadRoot .copilot-tracking/squad/members/azure -Check' } }
+        @{ Case = 'a ledger that is only printed'; Expected = 'none'; Tool = 'powershell'; Arguments = @{ command = 'pwsh -File $s\Measure-SquadLedger.ps1 -SquadRoot .copilot-tracking/squad -SessionLog auto' } }
+        @{ Case = 'a script whose name only ends like a writer'; Expected = 'none'; Tool = 'powershell'; Arguments = @{ command = 'pwsh -File $s\My-Write-SquadHandoff.ps1 -SquadRoot .copilot-tracking/squad' } }
+        @{ Case = 'a finished tool call'; Expected = 'none'; Tool = 'powershell'; Type = 'tool.execution_complete'; Arguments = @{ command = 'pwsh -File $s\Write-SquadHandoff.ps1 -SquadRoot .copilot-tracking/squad' } }
+    ) {
+        $line = New-LogLineLocal -Tool $_.Tool -Arguments $_.Arguments -Type $(if ($_.Type) { $_.Type } else { 'tool.execution_start' })
+        $squadRoot = if ($_.Root) { $_.Root } else { 'C:\repo\.copilot-tracking\squad' }
+        Get-HandoffWriterScopeLocal -Line $line -SquadRoot $squadRoot | Should -Be $_.Expected
+    }
+}
+
 Describe 'Measure-SquadLedger names an insert-above-the-end as an ordering defect, not lost content' {
     It 'reports entries inserted inside the file, with every original byte kept, distinctly from a prefix edit' {
         $root = Join-Path $TestDrive ([System.Guid]::NewGuid().ToString('N'))

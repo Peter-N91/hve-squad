@@ -45,8 +45,8 @@
   },
   "everyMode": {
     "squad-src/.github/skills/squad/references/consumption.md": {
-      "bytes": 4545,
-      "reason": "FinOps unit economics (#143) plus cumulative exact native accounting apply in every routing mode by design. The reference documents accepted-value metrics, the cross-session journal, active-tail finalization, promotion preservation, plugin/APM identity reconciliation, and fail-closed federation-member attribution. This allowance accepts the current 28,930-byte accounting reference against its 24,129-byte baseline with the unchanged 256-byte per-file threshold."
+      "bytes": 6104,
+      "reason": "FinOps unit economics (#143) plus cumulative exact native accounting apply in every routing mode by design. The reference documents accepted-value metrics, the cross-session journal, active-tail finalization, promotion preservation, plugin/APM identity reconciliation, fail-closed federation-member attribution, and the tolerant reconciliation that keeps totals exact across history gaps (unrecorded agents, entries no log accounts for, journal recovery and rebuild of a file that is not JSON, evidence-ranked adoption of sessions that never reached the journal, session selection, NOTE lines, lower-bound label). This allowance accepts the current 30,489-byte accounting reference against its 24,129-byte baseline with the unchanged 256-byte per-file threshold."
     },
     "squad-src/.github/skills/squad/references/model-routing.md": {
       "bytes": 1086,
