@@ -20,6 +20,9 @@ Primaries and availability. Use repository/request signals to recommend a
 profile; explicit `profile=` wins, then discovery, then `default`. Offer packs
 when their domain fits, never impose one. A pack adds to a profile and is not a
 federation. A missing external agent is offered with its install path, not seeded.
+Pack Primaries for `power-platform` and `m365-copilot` are local charters.
+Read each row's Selection Cue: a broad match selects the community Alternate,
+and a missing Alternate escalates instead of substituting the Primary.
 
 With neither top-level `team.md` nor `federation.md`, ask single squad versus
 federation first; single is the recommended start. Federation seeds nothing here:

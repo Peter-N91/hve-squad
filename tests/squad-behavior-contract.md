@@ -245,6 +245,20 @@ same-job replacement stays deferred: `azure-deployment-preflight` remains regist
 and default unpacked selection is unchanged until a user accepts global supersession or
 a pack-scoped collision mechanism exists.
 
+Power Platform and M365 official jobs resolve to local charter Primaries
+(`Squad Power Platform Architect`, `Squad Power Platform Integrator`,
+`Squad M365 Agent Architect`, `Squad M365 Agent Integrator`). Those charters
+are `user-invocable: false`, `disable-model-invocation: false`, have no prompt
+binding, and name only the nine gated skills. Broad legacy cues select
+`Power Platform Expert`, `Power Platform MCP Integration Expert`,
+`Declarative Agents Architect`, and `MCP M365 Agent Expert`. Those community
+agents stay registered Alternates and are not blocklisted. No cue match keeps
+the Primary. A matched Alternate that is absent escalates; it is not replaced.
+Pack absence does not squad-select the official skills. Installed skills may
+remain host-visible. `New-SquadDispatchPlan.ps1` accepts an Alternate only when
+the supplied `selectionCue` is a substring of the roster cue and the agent is
+installed and dispatchable.
+
 Tier 1 has one opt-in `pack-lifecycle` scenario. It is excluded from the default live matrix and
 requires `-Pack <registered-pack>`, so adding packs does not multiply paid requests. Provision it
 without model calls first:

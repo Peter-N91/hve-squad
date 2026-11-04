@@ -901,3 +901,78 @@ Describe 'Federation scheduling and deterministic persistence (COORD-08, COORD-1
         $after.activeSubSquads | Should -Be @('product')
     }
 }
+
+Describe 'Pack Alternate resolution uses the dispatch plan' {
+    It 'selects the local Primary, reaches an installed Alternate only with its cue, and escalates when that Alternate is absent' {
+        $repo = New-FixtureRepo
+        $choicesPath = Join-Path $repo 'pack-choices.json'
+        $payloadPath = Join-Path $repo 'pack-init.json'
+        $choices = New-Choices
+        $choices.packs = @('power-platform')
+        $choices.runId = 'pp-pack'
+        Write-FixtureJson $choicesPath $choices
+        $prepared = Invoke-Local 'Get-SquadInitContext.ps1' $repo @('-RepoRoot', $repo, '-ChoicesPath', $choicesPath, '-PayloadPath', $payloadPath)
+        $prepared.ExitCode | Should -Be 0 -Because $prepared.Output
+        $initialized = Invoke-Local 'Initialize-Squad.ps1' $repo @('-RepoRoot', $repo, '-PayloadPath', $payloadPath, '-Direct')
+        $initialized.ExitCode | Should -Be 0 -Because $initialized.Output
+        $root = Join-Path $repo '.copilot-tracking/squad'
+        $team = [IO.File]::ReadAllText((Join-Path $root 'team.md'))
+        $team | Should -Match 'Squad Power Platform Architect'
+        $team | Should -Match 'Power Platform Expert'
+        $team | Should -Match 'broader Power Platform architecture or Copilot Studio'
+
+        $primaryPath = Join-Path $repo 'primary.json'
+        Write-FixtureJson $primaryPath @{
+            squadRoot = $root
+            units = @(@{ id = 'official'; role = 'pp-architect' })
+        }
+        $primary = Invoke-Local 'New-SquadDispatchPlan.ps1' $repo @('-RepoRoot', $repo, '-InputPath', $primaryPath)
+        $primary.ExitCode | Should -Be 0 -Because $primary.Output
+        ($primary.Output | ConvertFrom-Json).units[0].endpoint.agent | Should -BeExactly 'Squad Power Platform Architect'
+
+        $absentPath = Join-Path $repo 'absent-alternate.json'
+        Write-FixtureJson $absentPath @{
+            squadRoot = $root
+            units = @(@{
+                id = 'broad'
+                role = 'pp-architect'
+                agent = 'Power Platform Expert'
+                selectionCue = 'broader Power Platform architecture or Copilot Studio'
+            })
+        }
+        $absent = Invoke-Local 'New-SquadDispatchPlan.ps1' $repo @('-RepoRoot', $repo, '-InputPath', $absentPath)
+        $absent.ExitCode | Should -Not -Be 0
+        $absent.Output | Should -Match 'not installed and dispatchable'
+        $absent.Output | Should -Not -Match 'Squad Power Platform Integrator'
+
+        Write-FixtureText (Join-Path $repo '.github/agents/power-platform-expert.agent.md') "---`nname: Power Platform Expert`nuser-invocable: false`ndisable-model-invocation: false`n---`n# Alternate`n"
+        $present = Invoke-Local 'New-SquadDispatchPlan.ps1' $repo @('-RepoRoot', $repo, '-InputPath', $absentPath)
+        $present.ExitCode | Should -Be 0 -Because $present.Output
+        ($present.Output | ConvertFrom-Json).units[0].endpoint.agent | Should -BeExactly 'Power Platform Expert'
+
+        $wrongPath = Join-Path $repo 'wrong-cue.json'
+        Write-FixtureJson $wrongPath @{
+            squadRoot = $root
+            units = @(@{
+                id = 'wrong'
+                role = 'pp-architect'
+                agent = 'Power Platform Expert'
+                selectionCue = 'not a roster cue'
+            })
+        }
+        $wrong = Invoke-Local 'New-SquadDispatchPlan.ps1' $repo @('-RepoRoot', $repo, '-InputPath', $wrongPath)
+        $wrong.ExitCode | Should -Not -Be 0
+        $wrong.Output | Should -Match 'Selection Cue'
+
+        $plainRepo = New-FixtureRepo
+        $plain = Initialize-Fixture $plainRepo
+        $plainPath = Join-Path $plainRepo 'no-pack.json'
+        Write-FixtureJson $plainPath @{
+            squadRoot = $plain.Root
+            units = @(@{ id = 'missing'; role = 'pp-architect' })
+        }
+        $unpacked = Invoke-Local 'New-SquadDispatchPlan.ps1' $plainRepo @('-RepoRoot', $plainRepo, '-InputPath', $plainPath)
+        $unpacked.ExitCode | Should -Not -Be 0
+        $unpacked.Output | Should -Not -Match 'Squad Power Platform Architect'
+    }
+}

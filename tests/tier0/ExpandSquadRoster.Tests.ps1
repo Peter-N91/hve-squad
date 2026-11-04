@@ -769,4 +769,45 @@ Describe 'All-present registered pack expansion' {
         $teamAfter | Should -Match '(?m)^Packs: foundry$'
         @([regex]::Matches($teamAfter, '(?m)^\| [a-z]')).Count | Should -Be $roleCount
     }
+
+    It 'applies, cold-removes, and reapplies power-platform without substituting Alternates' {
+        $repo = New-RepoFixture
+        $root = Initialize-PlainSquad $repo
+        $before = [IO.File]::ReadAllText((Join-Path $root 'team.md'))
+        $before | Should -Not -Match 'pp-architect'
+        $plan = New-ExpansionPlan -Repo $repo -Choices @{
+            confirmed = $true
+            runId = 'pp-apply'
+            packs = @('power-platform')
+        }
+        $plan.Result.ExitCode | Should -Be 0 -Because $plan.Result.Output
+        (@($plan.Receipt.addedRoles | Sort-Object) -join ',') | Should -BeExactly 'pp-architect,pp-connector'
+        (Invoke-Expansion -Repo $repo -Plan $plan).ExitCode | Should -Be 0
+        $teamPath = Join-Path $root 'team.md'
+        $applied = [IO.File]::ReadAllText($teamPath)
+        $applied | Should -Match '(?m)^Packs: power-platform$'
+        $applied | Should -Match 'Squad Power Platform Architect'
+        $applied | Should -Match 'Power Platform Expert'
+        $applied | Should -Match 'broader Power Platform architecture or Copilot Studio'
+        $applied | Should -Match 'Squad Power Platform Integrator'
+        $applied | Should -Match 'Power Platform MCP Integration Expert'
+
+        $removed = $applied -replace '(?m)^Packs: power-platform\r?\n', ''
+        $removed = [regex]::Replace($removed, '(?m)^\| pp-(architect|connector) \|.*\r?\n', '')
+        [IO.File]::WriteAllText($teamPath, $removed, [Text.UTF8Encoding]::new($false))
+        [IO.File]::ReadAllText($teamPath) | Should -Not -Match 'pp-architect'
+
+        $reapplied = New-ExpansionPlan -Repo $repo -Choices @{
+            confirmed = $true
+            runId = 'pp-reapply'
+            packs = @('power-platform')
+        }
+        $reapplied.Result.ExitCode | Should -Be 0 -Because $reapplied.Result.Output
+        (@($reapplied.Receipt.addedRoles | Sort-Object) -join ',') | Should -BeExactly 'pp-architect,pp-connector'
+        (Invoke-Expansion -Repo $repo -Plan $reapplied).ExitCode | Should -Be 0
+        $after = [IO.File]::ReadAllText($teamPath)
+        $after | Should -Match '(?m)^Packs: power-platform$'
+        $after | Should -Match 'Squad Power Platform Architect'
+        $after | Should -Match 'Power Platform Expert'
+    }
 }

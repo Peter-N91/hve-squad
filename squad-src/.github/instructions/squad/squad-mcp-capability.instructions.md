@@ -24,6 +24,8 @@ The coordinator passes a capability hint to each dispatched role when the role n
 | code-context       | `context7` MCP when configured               | Squad Researcher against the published library documentation                 |
 | github-issue       | `github` MCP (GitHub official) when configured | The `gh` CLI when authenticated; otherwise an in-chat ping (no remote approval) |
 
+Power Platform, Dataverse, and Agents SDK MCPs are used only if the consumer already installed them. Otherwise author files or escalate. Never install, consent, or provision.
+
 The "Preferred MCP" column names the server the role tries first. The "Non-MCP Fallback" column is what the role does when the preferred MCP is not configured, is unreachable, or returns an error during the dispatched turn.
 
 The `github-issue` capability backs the remote approval channel in `.github/instructions/squad/squad-notifications.instructions.md`. Its fallback chain is `github` MCP → `gh` CLI → in-chat: on a headless VM an authenticated `gh` CLI is sufficient and the MCP is not required, and when neither is available the squad degrades to an in-chat approval (the user simply cannot approve remotely).

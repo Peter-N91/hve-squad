@@ -197,3 +197,160 @@ Describe 'Registered pack consistency' -Tag 'Unit' {
         $script:RosterCatalogBody | Should -Match '33200af2901bce6da01ce37498aa2b68e0c43f7c'
     }
 }
+
+Describe 'Power Platform and M365 official selection' -Tag 'Unit' {
+    BeforeAll {
+        function Resolve-OfficialRoleAgent {
+            param(
+                [Parameter(Mandatory)][string]$Cue,
+                [Parameter(Mandatory)][string]$Primary,
+                [Parameter(Mandatory)][string]$Request,
+                [string[]]$Installed = @()
+            )
+
+            $clauses = @(
+                $Cue -split ';' |
+                    ForEach-Object { $_.Trim() } |
+                    Where-Object { $_ -match '→' }
+            )
+            foreach ($clause in $clauses) {
+                $parts = @($clause -split '→', 2)
+                $condition = $parts[0].Trim()
+                $agent = ($parts[1] -split '\.')[0].Trim()
+                $phrases = @(
+                    $condition -split ', or |, | or ' |
+                        ForEach-Object { $_.Trim() } |
+                        Where-Object { $_.Length -gt 8 }
+                )
+                foreach ($phrase in $phrases) {
+                    if ($Request.IndexOf($phrase, [StringComparison]::OrdinalIgnoreCase) -lt 0) { continue }
+                    if ($agent -ceq $Primary) {
+                        return [pscustomobject]@{ Status = 'primary'; Agent = $Primary; Cue = $null }
+                    }
+                    if ($Installed -notcontains $agent) {
+                        return [pscustomobject]@{ Status = 'escalate'; Agent = $null; Cue = $phrase }
+                    }
+                    if ($Cue.IndexOf($phrase, [StringComparison]::OrdinalIgnoreCase) -lt 0) {
+                        throw "Resolved cue '$phrase' is not a roster Selection Cue substring."
+                    }
+                    return [pscustomobject]@{ Status = 'alternate'; Agent = $agent; Cue = $phrase }
+                }
+            }
+
+            return [pscustomobject]@{ Status = 'primary'; Agent = $Primary; Cue = $null }
+        }
+    }
+
+    It 'registers the nine official skills and keeps the community Alternates' {
+        $registered = Get-MarkdownSectionBody -Body $script:RosterCatalogBody -Heading 'Registered External Cast'
+        $rows = @(Get-MarkdownTableRows -Body $registered -HeaderCell 'Role')
+        $expected = @{
+            'plan-alm' = 'plugins/power-pages/skills/plan-alm/SKILL.md'
+            'app-builder' = 'plugins/model-apps/skills/app-builder/SKILL.md'
+            'generate-codeful-mcp-tool' = 'plugins/mcp-apps/skills/generate-codeful-mcp-tool/SKILL.md'
+            'generate-mcp-app-ui' = 'plugins/mcp-apps/skills/generate-mcp-app-ui/SKILL.md'
+            'dv-overview' = '.github/plugins/dataverse/skills/dv-overview/SKILL.md'
+            'dv-connect' = '.github/plugins/dataverse/skills/dv-connect/SKILL.md'
+            'agents-sdk-to-prod' = 'agent-plugins/agents-for-net/skills/agents-sdk-to-prod/SKILL.md'
+            'agents-sdk-dotnet-otel' = 'agent-plugins/agents-for-net/skills/agents-sdk-dotnet-otel/SKILL.md'
+            'agents-sdk-provision' = 'agent-plugins/agents-sdk-common/skills/agents-sdk-provision/SKILL.md'
+        }
+        foreach ($name in $expected.Keys) {
+            $row = @($rows | Where-Object { $_[3].Trim() -eq ('`{0}`' -f $name) })
+            $row | Should -HaveCount 1
+            $row[0][5].Trim() | Should -Match '\(`vendor-official`\)'
+            $row[0][5].Trim() | Should -Match ([regex]::Escape($expected[$name]))
+            $row[0][6].Trim() | Should -Match 'apm install .+ --target copilot'
+            $row[0][7].Trim() | Should -Be 'MIT'
+            $row[0][10].Trim() | Should -Be '2026-11-04'
+            $row[0][8].Trim() | Should -Match 'Do not auto-install'
+        }
+
+        $resources = @($rows | ForEach-Object { $_[3].Trim().Trim('`') })
+        foreach ($alternate in @(
+                'power-platform-expert', 'power-platform-mcp-integration-expert',
+                'declarative-agents-architect', 'mcp-m365-agent-expert')) {
+            $resources | Should -Contain $alternate
+        }
+        $blocklist = Get-MarkdownSectionBody -Body $script:RosterCatalogBody -Heading 'External Cast Blocklist'
+        foreach ($alternate in @(
+                'power-platform-expert', 'power-platform-mcp-integration-expert',
+                'declarative-agents-architect', 'mcp-m365-agent-expert')) {
+            $blocklist | Should -Not -Match ([regex]::Escape($alternate))
+        }
+    }
+
+    It 'resolves supported jobs to local Primaries and broad jobs to installed Alternates' {
+        $cast = @(Get-MarkdownTableRows `
+                -Body (Get-MarkdownSectionBody -Body $script:RosterCatalogBody -Heading 'Cast Catalog') `
+                -HeaderCell 'Role')
+        $cases = @(
+            @{ Role = 'pp-architect'; Request = 'Power Pages ALM planning for a site'; Agent = 'Squad Power Platform Architect' }
+            @{ Role = 'pp-architect'; Request = 'model-driven app building for claims'; Agent = 'Squad Power Platform Architect' }
+            @{ Role = 'pp-architect'; Request = 'Dataverse overview of the tables'; Agent = 'Squad Power Platform Architect' }
+            @{ Role = 'pp-architect'; Request = 'broader Power Platform architecture for this tenant'; Agent = 'Power Platform Expert' }
+            @{ Role = 'pp-architect'; Request = 'Copilot Studio topic design'; Agent = 'Power Platform Expert' }
+            @{ Role = 'pp-connector'; Request = 'generate a codeful MCP tool'; Agent = 'Squad Power Platform Integrator' }
+            @{ Role = 'pp-connector'; Request = 'Dataverse connection diagnostics'; Agent = 'Squad Power Platform Integrator' }
+            @{ Role = 'pp-connector'; Request = 'broader connector or integration work and certification'; Agent = 'Power Platform MCP Integration Expert' }
+            @{ Role = 'm365-agent-architect'; Request = '.NET Agents SDK production readiness review'; Agent = 'Squad M365 Agent Architect' }
+            @{ Role = 'm365-agent-architect'; Request = 'declarative agent with a TypeSpec manifest'; Agent = 'Declarative Agents Architect' }
+            @{ Role = 'm365-agent-integrator'; Request = 'Agents SDK OpenTelemetry for the bot'; Agent = 'Squad M365 Agent Integrator' }
+            @{ Role = 'm365-agent-integrator'; Request = 'broader MCP-backed M365 integration'; Agent = 'MCP M365 Agent Expert' }
+            @{ Role = 'pp-architect'; Request = 'review this pull request'; Agent = 'Squad Power Platform Architect' }
+        )
+        $phrases = @(
+            'Power Pages ALM planning, model-driven app building, or Dataverse overview → Squad Power Platform Architect'
+            'broader Power Platform architecture or Copilot Studio → Power Platform Expert'
+            'codeful MCP tool or UI generation, or Dataverse connection → Squad Power Platform Integrator'
+            'broader connector or integration work → Power Platform MCP Integration Expert'
+            '.NET Agents SDK production readiness → Squad M365 Agent Architect'
+            'declarative agent, TypeSpec, API plugin, or broader M365 architecture → Declarative Agents Architect'
+            'Agents SDK OpenTelemetry or provisioning → Squad M365 Agent Integrator'
+            'broader MCP-backed M365 integration → MCP M365 Agent Expert'
+        )
+        foreach ($phrase in $phrases) {
+            $script:RosterCatalogBody | Should -Match ([regex]::Escape($phrase))
+            $script:RosterBody | Should -Match ([regex]::Escape($phrase))
+            $script:ProfilesBody | Should -Match ([regex]::Escape($phrase))
+        }
+
+        foreach ($case in $cases) {
+            $row = @($cast | Where-Object { $_[1].Trim().Trim('`') -eq $case.Role })
+            $row | Should -HaveCount 1
+            $primary = $row[0][2].Trim().Trim('`')
+            $cue = $row[0][4].Trim()
+            $installed = @($primary, 'Power Platform Expert', 'Power Platform MCP Integration Expert', 'Declarative Agents Architect', 'MCP M365 Agent Expert')
+            $resolved = Resolve-OfficialRoleAgent -Cue $cue -Primary $primary -Request $case.Request -Installed $installed
+            $resolved.Status | Should -BeIn @('primary', 'alternate')
+            $resolved.Agent | Should -BeExactly $case.Agent -Because $case.Request
+            if ($resolved.Status -eq 'alternate') {
+                $cue.IndexOf($resolved.Cue, [StringComparison]::OrdinalIgnoreCase) | Should -BeGreaterOrEqual 0
+            }
+        }
+
+        $absent = @($cast | Where-Object { $_[1].Trim().Trim('`') -eq 'pp-architect' })[0]
+        $missing = Resolve-OfficialRoleAgent -Cue $absent[4] -Primary $absent[2].Trim().Trim('`') -Request 'Copilot Studio topic design' -Installed @('Squad Power Platform Architect')
+        $missing.Status | Should -BeExactly 'escalate'
+        $missing.Agent | Should -BeNullOrEmpty
+    }
+
+    It 'keeps the new charters hidden, dispatchable, and unbound to a prompt' {
+        $agents = Join-Path $SourceRoot 'squad-src/.github/agents/squad'
+        $prompts = Get-ChildItem -LiteralPath (Join-Path $SourceRoot 'squad-src/.github/prompts') -Recurse -Filter '*.prompt.md' |
+            ForEach-Object { Get-Content -LiteralPath $_.FullName -Raw }
+        foreach ($file in @(
+                'squad-pp-architect.agent.md', 'squad-pp-connector.agent.md',
+                'squad-m365-agent-architect.agent.md', 'squad-m365-agent-integrator.agent.md')) {
+            $raw = (Get-Content -LiteralPath (Join-Path $agents $file) -Raw) -replace "`r`n", "`n"
+            $raw | Should -Match '(?m)^user-invocable: false$'
+            $raw | Should -Match '(?m)^disable-model-invocation: false$'
+            $raw | Should -Not -Match '(?m)^argument-hint:'
+            ($raw -replace '(?s)^---.*?---\r?\n', '').Length | Should -BeLessThan 30000
+            $name = [regex]::Match($raw, '(?m)^name: (.+)$').Groups[1].Value
+            foreach ($prompt in $prompts) {
+                $prompt | Should -Not -Match ('(?m)^agent:\s*' + [regex]::Escape($name) + '\s*$')
+            }
+        }
+    }
+}

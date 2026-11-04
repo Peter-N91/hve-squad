@@ -33,6 +33,10 @@
     "squad-scribe.agent.md": "Claude Haiku 5.5 (copilot)",
     "squad-sql-migration-advisor.agent.md": null,
     "squad-technical-writer.agent.md": "Claude Haiku 5.5 (copilot)",
-    "squad-vulnerability-manager.agent.md": "Claude Sonnet 5.5 (copilot)"
+    "squad-vulnerability-manager.agent.md": "Claude Sonnet 5.5 (copilot)",
+    "squad-m365-agent-architect.agent.md": null,
+    "squad-m365-agent-integrator.agent.md": null,
+    "squad-pp-architect.agent.md": null,
+    "squad-pp-connector.agent.md": null
   }
 }
