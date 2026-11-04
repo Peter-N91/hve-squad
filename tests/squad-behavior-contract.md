@@ -232,6 +232,15 @@ documents. The plugin build suite checks the generated invocation against the sa
 actual plugin output; APM installs do not contain plugin-only invocation skills. Adding a pack
 extends the table and test data rather than adding another pack-specific test.
 
+Origin preference stays inside the ten-column External Cast. Every registered `Origin` cell records
+`` `owner/repo` (`vendor-official`|`github-marketplace`|`community`) `` and the exact path. Official
+ownership does not waive the verification gate. A community row is superseded only after parity,
+prerequisites, dispatchability, installability, licence, and the no-pack baseline pass; the superseded
+resource moves to the blocklist and is not a runtime fallback. Ambiguous licences stay unregistered.
+The licence citation is `.github/instructions/hve-core/licensing-posture.instructions.md`, delivered by
+the pinned hve-core package. `PackRegistry.Tests.ps1` enforces the class set, the ten columns, the
+canonical `Azure/aigateway` origin for `use-ai-gateway`, and that licence citation.
+
 Tier 1 has one opt-in `pack-lifecycle` scenario. It is excluded from the default live matrix and
 requires `-Pack <registered-pack>`, so adding packs does not multiply paid requests. Provision it
 without model calls first:

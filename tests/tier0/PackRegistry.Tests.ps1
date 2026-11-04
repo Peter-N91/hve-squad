@@ -161,4 +161,24 @@ Describe 'Registered pack consistency' -Tag 'Unit' {
             $registeredSkills | Should -Contain $skill
         }
     }
+
+    It 'keeps origin class inline inside the ten-column registry' {
+        $registered = Get-MarkdownSectionBody -Body $script:RosterCatalogBody -Heading 'Registered External Cast'
+        $rows = @(Get-MarkdownTableRows -Body $registered -HeaderCell 'Role')
+        $rows | Should -Not -BeNullOrEmpty
+        $allowed = 'vendor-official|github-marketplace|community'
+        foreach ($cells in $rows) {
+            $cells.Count | Should -Be 12 -Because 'a ten-column row keeps the leading and trailing empty split cells'
+            $cells[5].Trim() | Should -MatchExactly ('^`[^`]+` \(`({0})`\), `[^`]+`$' -f $allowed)
+        }
+        $script:RosterCatalogBody | Should -Match '#### Origin Preference'
+        $script:RosterCatalogBody | Should -Not -Match 'Azure/ai-gateway'
+        $script:RosterCatalogBody | Should -Not -Match '(?<!hve-core/)\.github/instructions/licensing-posture\.instructions\.md'
+        $script:RosterCatalogBody | Should -Match '\.github/instructions/hve-core/licensing-posture\.instructions\.md'
+        $gateway = @($rows | Where-Object { $_[3].Trim() -eq '`use-ai-gateway`' })
+        $gateway | Should -HaveCount 1
+        $gateway[0][5].Trim() | Should -BeExactly '`Azure/aigateway` (`vendor-official`), `skills/use-ai-gateway/SKILL.md`'
+        $gateway[0][6].Trim() | Should -BeExactly '`copilot plugin marketplace add Azure/aigateway`, then `copilot plugin install ai-gateway@azure`'
+        $gateway[0][10].Trim() | Should -BeExactly '2026-11-04'
+    }
 }

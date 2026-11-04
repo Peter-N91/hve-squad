@@ -231,6 +231,16 @@ apm run sync-deps
 
 That rewrites `dependencies:` in `apm.yml` to include your new files, and commits are expected to contain it. It deliberately does **not** move the `microsoft/hve-core` pin: with no `-Ref`, the script stays on whatever SHA `apm.yml` already names. Moving that pin re-points the entire package at a different upstream revision, which is a separate reviewed operation owned by the scheduled sync workflow, and CI rejects a pull request that does it.
 
+## Registering an external cast resource
+
+The External Cast in `squad-src/.github/skills/squad/references/roster-catalog.md` stays a ten-column table. Do not add a column. For each demanded job, choose one origin in this order: the vendor-owned product repository, then an official `github/copilot-plugins` marketplace entry resolved to its underlying vendor repository, then `github/awesome-copilot` or another community origin only when no official candidate passes the gate. Official ownership does not waive the gate.
+
+Record the class inline in the existing `Origin` cell as `` `owner/repo` (`vendor-official`|`github-marketplace`|`community`) ``, followed by the exact path. Allowed classes are exactly those three. Before a row is accepted, or before a touched row's `Verified On` date moves, re-run the eight-step gate at an exact ref and keep the path, frontmatter, licence, prerequisites, and install command from that evidence. Do not invent a SHA or path, and do not refresh a date you did not re-verify.
+
+Replace a community row only after parity, prerequisites, dispatchability, installability, licence, and the no-pack baseline have been checked. A narrower official resource is a different job or a rejected candidate, not an automatic replacement. When an accepted official row supersedes a community row for the same role and job, move the community resource to the blocklist with: `Gate step 5, second case — superseded by official origin <owner/repo> resource <name> at <ref>; equivalent job <job>; parity and install path re-verified <YYYY-MM-DD>. Do not resolve while the official row remains registered.`
+
+Cite licences against `.github/instructions/hve-core/licensing-posture.instructions.md`, the file delivered by the pinned hve-core package. If that delivered path is absent, or the published licence is ambiguous, leave the row unregistered. Do not invent a licence interpretation. Registry wording that ships to consumers is updated in English and French together, and the registry tests move in the same change.
+
 ## Proposing a shared learning
 
 A shared learning is a durable, broadly applicable rule or correction discovered while using the squad that should help every other consumer facing the same scenario. Live agent memory always stays local to each consumer and is never promoted automatically. Promotion is a deliberate, human-reviewed pull request.
