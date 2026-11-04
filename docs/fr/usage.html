@@ -68,7 +68,7 @@
           propose un profil recommandé avant toute création.
         </li>
         <li>
-          <code>pack=power-platform</code>, <code>pack=m365-copilot</code>, <code>pack=aws</code> ou <code data-release-change="20261008-foundry-agentic-pack">pack=foundry</code>
+          <code>pack=power-platform</code>, <code>pack=m365-copilot</code>, <code>pack=aws</code>, <code data-release-change="20261008-foundry-agentic-pack">pack=foundry</code> ou <code>pack=fabric</code>
           &mdash; ajoute au profil
           les rôles spécialisés, les consignes ciblées ou les deux pour un domaine technologique. Un pack ne remplace jamais le profil, et vous
           pouvez en appliquer plusieurs, séparés par des virgules. Voir <em>Packs</em> ci-dessous.
@@ -1360,6 +1360,60 @@ flowchart TD
         aussi pourquoi <code>azure</code> et <code>modernization</code> restent des profils : ils définissent
         l'orientation dominante d'une équipe plutôt qu'un complément.
       </p>
+      <h3 data-release-change="20261104-official-source-packs">Les sources officielles restent facultatives</h3>
+      <p data-release-change="20261104-official-source-packs">
+        Lorsqu'un travail a plus d'une ressource externe, le catalogue préfère le dépôt du fournisseur,
+        puis une entrée marketplace officielle résolue vers ce dépôt, puis une ressource communautaire.
+        Ce choix reste dans le registre à dix colonnes. Une licence ambiguë n'est pas enregistrée.
+        Appliquer un pack n'installe jamais une compétence, un plugin, un CLI ou un serveur MCP.
+      </p>
+      <p data-release-change="20261104-official-source-packs">
+        Un pack enregistré dont les rôles sont déjà dans l'équipe met à jour <code>Packs:</code> et
+        ajoute une décision. Il n'invente pas de membre. <code>full +foundry</code> et
+        <code>full +fabric</code> sont ce cas. Un pack déjà listé dans <code>Packs:</code> est rejeté. Retirer un pack arrête la sélection de la squad et la
+        transmission des consignes. Cela ne désinstalle pas une compétence que l'hôte peut encore voir,
+        et ne la cache pas.
+      </p>
+      <p data-release-change="20261104-official-source-packs">
+        Les travaux pris en charge sur Power Pages, les applications pilotées par modèle, Dataverse et
+        le SDK Agents .NET sélectionnent la charte locale. L'architecture Power Platform plus large,
+        Copilot Studio, les connecteurs, les agents déclaratifs, TypeSpec et l'intégration MCP
+        sélectionnent encore l'alternative communautaire lorsque cet agent est installé. Power Automate,
+        cloud flow, canvas app, DLP policy et solution ALM sélectionnent <code>Power Platform Expert</code>.
+        Microsoft Graph, Graph SDK et Graph permission scope sélectionnent <code>MCP M365 Agent Expert</code>.
+        Sans indice
+        correspondant, la Primary reste retenue. Une alternative absente est escaladée, pas remplacée.
+        <code>foundry</code> inclut le <code>data-scientist</code> existant afin que Foundry IQ ait un
+        propriétaire dans <code>azure +foundry</code>. <code>azure-deployment-preflight</code> reste la
+        compétence de validation avant déploiement. <code>azure-validate</code> et
+        <code>azure-enterprise-infra-planner</code> ne sont ni enregistrés ni bloqués.
+      </p>
+      <p data-release-change="20261104-official-source-packs">
+        N'installez que la compétence utile. Le catalogue fait foi. Ces commandes granulaires couvrent
+        les compétences enregistrées avec ce changement ; les formes de plugin complet ont été rejetées
+        lorsqu'elles tirent des hooks, des agents supplémentaires ou un consentement de tenant.
+      </p>
+      <pre data-release-change="20261104-official-source-packs"><code>apm install microsoft/power-platform-skills/plugins/power-pages/skills/plan-alm/SKILL.md --target copilot
+apm install microsoft/power-platform-skills/plugins/model-apps/skills/app-builder/SKILL.md --target copilot
+apm install microsoft/power-platform-skills/plugins/mcp-apps/skills/generate-codeful-mcp-tool/SKILL.md --target copilot
+apm install microsoft/power-platform-skills/plugins/mcp-apps/skills/generate-mcp-app-ui/SKILL.md --target copilot
+apm install microsoft/Dataverse-skills/.github/plugins/dataverse/skills/dv-overview/SKILL.md --target copilot
+apm install microsoft/Dataverse-skills/.github/plugins/dataverse/skills/dv-connect/SKILL.md --target copilot
+apm install microsoft/Agents/agent-plugins/agents-for-net/skills/agents-sdk-to-prod/SKILL.md --target copilot
+apm install microsoft/Agents/agent-plugins/agents-for-net/skills/agents-sdk-dotnet-otel/SKILL.md --target copilot
+apm install microsoft/Agents/agent-plugins/agents-sdk-common/skills/agents-sdk-provision/SKILL.md --target copilot
+apm install microsoft/skills/.github/plugins/foundry-iq-skills/skills/foundry-iq/SKILL.md --target copilot
+apm install microsoft/azure-skills/skills/appinsights-instrumentation/SKILL.md --target copilot
+copilot plugin marketplace add Azure/aigateway
+copilot plugin install ai-gateway@azure
+apm install microsoft/skills-for-fabric/skills/sqldw-cli --target copilot
+apm install microsoft/skills-for-fabric/skills/sqldb-cli --target copilot
+apm install microsoft/skills-for-fabric/skills/eventhouse-cli --target copilot
+apm install microsoft/skills-for-fabric/skills/eventstream-cli --target copilot
+apm install microsoft/skills-for-fabric/skills/spark-cli --target copilot
+apm install microsoft/skills-for-fabric/skills/dataflows-cli --target copilot
+apm install microsoft/skills-for-fabric/skills/databricks-migration --target copilot
+apm install microsoft/skills-for-fabric/skills/pipeline-migration --target copilot</code></pre>
       <table>
         <thead>
           <tr><th>Pack</th><th>Ajoute</th><th>À utiliser lorsque</th></tr>
@@ -1368,7 +1422,8 @@ flowchart TD
           <tr><td><code>power-platform</code></td><td>pp-architect, pp-connector</td><td>Le projet repose sur Power Platform &mdash; Power Apps, Power Automate, Dataverse, Power Pages ou Copilot Studio</td></tr>
           <tr><td><code>m365-copilot</code></td><td>m365-agent-architect, m365-agent-integrator</td><td>Le projet repose sur Microsoft 365 Copilot &mdash; agents déclaratifs, définitions d'agents TypeSpec, plugins API, agents s'appuyant sur MCP ou intégration Microsoft Graph</td></tr>
           <tr><td><code>aws</code></td><td>aws-architect, aws-diagnose</td><td>Le projet repose sur AWS &mdash; Lambda et serverless, ECS ou EKS, CDK, SAM, CloudFormation, Organizations et zones d'atterrissage, ou une charge de travail AWS en service à diagnostiquer</td></tr>
-          <tr><td data-release-change="20261008-foundry-agentic-pack"><code>foundry</code></td><td>architect, azure-architect, deployer, prompt-engineer, security, rai, observability, cost-manager</td><td>Planification, revue indépendante et déploiement contrôlé d'un projet Microsoft Foundry avec un blueprint en sept blocs, des preuves de source et une vérification SDK/API ; réutilise les rôles existants</td></tr>
+          <tr><td data-release-change="20261008-foundry-agentic-pack"><code>foundry</code></td><td>architect, azure-architect, deployer, prompt-engineer, security, rai, observability, cost-manager, data-scientist</td><td>Planification, revue indépendante et déploiement contrôlé d'un projet Microsoft Foundry avec un blueprint en sept blocs, des preuves de source et une vérification SDK/API ; réutilise les rôles existants, dont data-scientist pour Foundry IQ</td></tr>
+          <tr><td><code>fabric</code></td><td>data-scientist</td><td>Entrepôt Fabric, Eventhouse, Spark ou Dataflow au-delà de l'introduction Lakehouse. Activation explicite ; réutilise <code>data-scientist</code> et n'ajoute aucun rôle. Les commandes d'installation restent dans le catalogue. Rien n'est installé automatiquement.</td></tr>
         </tbody>
       </table>
       <p>
@@ -1418,7 +1473,7 @@ apm install microsoft/azure-skills/skills/microsoft-foundry --target copilot
 apm install microsoft/azure-skills/skills/azure-aigateway --target copilot
 
 # Consume an existing AI Gateway from GitHub Copilot CLI
-copilot plugin marketplace add Azure/ai-gateway
+copilot plugin marketplace add Azure/aigateway
 copilot plugin install ai-gateway@azure
 
 # Inspect selected CAIRA reference components
@@ -1433,7 +1488,7 @@ npx skills add github.com/microsoft/CAIRA/skills</code></pre>
       <pre><code>/squad request="Plan a Foundry support assistant" profile=azure pack=foundry
 /squad request="Remove the Foundry pack"</code></pre>
       <p>
-        <code>foundry</code> ajoute jusqu'à huit rôles spécialistes existants ; les quatre rôles du
+        <code>foundry</code> ajoute les rôles spécialistes existants de sa cellule Ajoute, dont <code>data-scientist</code> ; les quatre rôles du
         socle méthodologique reçoivent également les consignes. Il ne crée aucun nouvel agent
         spécialiste, outil ou dépendance. Le <code>researcher</code> rassemble les preuves de capacité
         et de compatibilité SDK/API ; le <code>lead</code> assemble le
@@ -1449,7 +1504,7 @@ npx skills add github.com/microsoft/CAIRA/skills</code></pre>
       </p>
       <p>
         L'activation exige une décision Init ou apply acceptée pour cette squad. Le profil <code>full</code>
-        contient déjà les huit rôles spécialistes, mais n'active pas les consignes Foundry. Les demandes génériques sur
+        contient déjà ces rôles spécialistes, mais n'active pas les consignes Foundry. Les demandes génériques sur
         l'IA, les agents ou MCP ne l'activent pas non plus ; Microsoft 365 Copilot et Copilot Studio
         conservent leurs packs. Vous pouvez appliquer Foundry plus tard ou le réappliquer sans dupliquer les
         membres. Son retrait désactive la transmission de ses consignes tout en préservant les rôles du
@@ -1511,19 +1566,20 @@ npx skills add github.com/microsoft/CAIRA/skills</code></pre>
       <h3>Certains domaines technologiques ne sont pas des packs</h3>
       <p>
         Certaines capacités arrivent comme des extensions d'un rôle que vous avez déjà, plutôt que comme des packs.
-        <strong>Power BI et Fabric</strong> (revue du modèle sémantique, optimisation DAX,
+        <strong>Power BI et l'introduction Lakehouse</strong> (revue du modèle sémantique, optimisation DAX,
         conception de rapports, fondamentaux du Lakehouse) relèvent de <code>data-scientist</code>.
+                L'entrepôt, Eventhouse, Spark et Dataflow au-delà de cette introduction forment le pack <code>fabric</code>, à activer explicitement.
         <strong>L'ingénierie des applications d'IA</strong> (Microsoft Agent Framework, Semantic Kernel) relève
         de <code>developer</code>. Le pack Foundry ajoute une coordination de projet et des transmissions
         fondées sur des preuves ; il ne remplace pas ce rôle d'implémentation.
       </p>
       <p>
-        Il n'y a rien à appliquer pour l'un ou l'autre. <code>developer</code> figure dans tous les profils : l'ingénierie
-        des applications d'IA est donc toujours disponible. <code>data-scientist</code> est initialisé par <code>full</code> et
-        <code>product</code> ; dans tout autre profil, posez une question Power BI ou Fabric et la squad
-        remarquera l'absence du rôle, puis proposera de l'ajouter, comme pour n'importe quel autre rôle. Cela fonctionne,
-        mais vous le découvrez au moment du besoin plutôt qu'à la création de la squad &mdash; c'est le
-        coût réel d'un domaine qui n'a pas pu devenir un pack.
+        Il n'y a rien à appliquer pour Power BI, l'introduction Lakehouse ou l'ingénierie des applications d'IA.
+                <code>developer</code> figure dans tous les profils : l'ingénierie des applications d'IA est donc toujours disponible.
+                <code>data-scientist</code> est initialisé par <code>full</code> et <code>product</code> ; dans tout autre profil, une question
+                Power BI ou Lakehouse fait proposer l'ajout du rôle. Le pack <code>fabric</code> est différent : appliquez-le avant que
+                ses compétences soient sélectionnées par la squad. Une compétence installée qui reste visible pour l'hôte n'est pas une sélection.
+                Retirer le pack arrête cette sélection et ne désinstalle pas la compétence.
       </p>
 
       <h3>Exemples de combinaisons</h3>
@@ -1542,6 +1598,7 @@ npx skills add github.com/microsoft/CAIRA/skills</code></pre>
           <tr><td>Conception d'une charge de travail AWS avant toute réalisation</td><td><code>profile=architecture pack=aws</code></td></tr>
           <tr><td>Un environnement couvrant Azure et AWS</td><td><code>profile=azure pack=aws</code></td></tr>
           <tr><td>Planification d'un assistant de support Microsoft Foundry</td><td><code>profile=azure pack=foundry</code></td></tr>
+          <tr><td>Entrepôt Fabric ou Eventhouse au-delà de l'introduction Lakehouse</td><td><code>profile=azure pack=fabric</code></td></tr>
           <tr><td>Astreinte pour une charge de travail AWS en service</td><td><code>profile=operations pack=aws</code></td></tr>
           <tr><td>Agent M365 Copilot traitant des données personnelles</td><td><code>profile=security pack=m365-copilot</code></td></tr>
           <tr><td>Solution Power Platform dont l'interface est un agent M365 Copilot</td><td><code>profile=default pack=power-platform,m365-copilot</code></td></tr>

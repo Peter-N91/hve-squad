@@ -248,9 +248,13 @@ dependencies:
     - Peter-N91/hve-squad/squad-src/.github/agents/squad/squad-implementor.agent.md
     - Peter-N91/hve-squad/squad-src/.github/agents/squad/squad-lead.agent.md
     - Peter-N91/hve-squad/squad-src/.github/agents/squad/squad-learn.agent.md
+    - Peter-N91/hve-squad/squad-src/.github/agents/squad/squad-m365-agent-architect.agent.md
+    - Peter-N91/hve-squad/squad-src/.github/agents/squad/squad-m365-agent-integrator.agent.md
     - Peter-N91/hve-squad/squad-src/.github/agents/squad/squad-modernization-planner.agent.md
     - Peter-N91/hve-squad/squad-src/.github/agents/squad/squad-observability-planner.agent.md
     - Peter-N91/hve-squad/squad-src/.github/agents/squad/squad-performance-planner.agent.md
+    - Peter-N91/hve-squad/squad-src/.github/agents/squad/squad-pp-architect.agent.md
+    - Peter-N91/hve-squad/squad-src/.github/agents/squad/squad-pp-connector.agent.md
     - Peter-N91/hve-squad/squad-src/.github/agents/squad/squad-prompt-engineer.agent.md
     - Peter-N91/hve-squad/squad-src/.github/agents/squad/squad-researcher.agent.md
     - Peter-N91/hve-squad/squad-src/.github/agents/squad/squad-reviewer.agent.md

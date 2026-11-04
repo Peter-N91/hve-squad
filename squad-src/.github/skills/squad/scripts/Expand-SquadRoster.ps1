@@ -11,7 +11,12 @@
     Get-SquadRosterExpansionPlan.ps1 and explicit confirmation. Under the same
     per-root writer lock as ordinary handoffs, the transaction revalidates every
     sealed file and history digest, writes only team.md, routing.md, and an appended
-    decisions.md entry, then checks the ledger read-only.
+    decisions.md entry, then checks the ledger read-only. An all-present registered
+    pack may seal zero added roles only when that pack is absent from Packs:; the
+    writer rejects an unregistered or already-active pack even if the sealed team
+    text contains the name. Under the writer lock, the sealed Packs line must equal
+    the baseline packs plus the requested packs, in that order, with no extras or
+    duplicates. Empty expansions stay invalid.
 
     consumption.md, optional consumption-sessions.json, state.json, consumption-rates.md, notifications.md, and history/
     must remain byte-identical. A stale plan, lock timeout, failed ledger check, or
@@ -249,10 +254,17 @@ try {
     )
     if ($plan.schemaVersion -ne 1 -or $plan.scope -notin @('plain-squad', 'federation-member') -or
         $plan.modelRouting -notin @('off', 'ranked', 'economy', 'manual') -or
-        $plan.addedRoles -isnot [array] -or -not $plan.addedRoles.Count -or
+        $plan.addedRoles -isnot [array] -or
         $plan.packs -isnot [array] -or $plan.routingRowsAdded -isnot [ValueType] -or
         $plan.routingRowsAdded -is [bool] -or $plan.routingRowsAdded -lt 0) {
         throw 'Roster expansion plan metadata is invalid.'
+    }
+    $metadataOnly = @($plan.packs).Count -gt 0 -and -not @($plan.addedRoles).Count
+    if (-not @($plan.addedRoles).Count -and -not $metadataOnly) {
+        throw 'Roster expansion plan metadata is invalid.'
+    }
+    foreach ($packName in @($plan.packs)) {
+        if ([string]::IsNullOrWhiteSpace([string]$packName)) { throw 'Empty pack cell.' }
     }
     Assert-FieldSet $plan.provenance @('before', 'after')
     Assert-FieldSet $plan.baseline @('files', 'history') @('federation')
@@ -270,6 +282,20 @@ try {
             'decisions' { 'decisions.md' }
         }
         $planned[$plannedName] = $bytes
+    }
+    if (@($plan.packs).Count) {
+        $teamBytes = $planned['team.md']
+        $teamOffset = 0
+        if ($teamBytes.Length -ge 3 -and $teamBytes[0] -eq 0xef -and $teamBytes[1] -eq 0xbb -and $teamBytes[2] -eq 0xbf) {
+            $teamOffset = 3
+        }
+        $teamText = [Text.UTF8Encoding]::new($false).GetString($teamBytes, $teamOffset, $teamBytes.Length - $teamOffset)
+        $packLine = [regex]::Match($teamText, '(?m)^Packs:\s*(?<packs>[^\r\n]+)\s*$')
+        if (-not $packLine.Success) { throw 'Roster expansion plan did not seal a Packs: line.' }
+        $sealedPacks = @($packLine.Groups['packs'].Value -split ',\s*' | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+        foreach ($packName in @($plan.packs)) {
+            if ($packName -notin $sealedPacks) { throw "Roster expansion plan did not seal pack '$packName'." }
+        }
     }
 
     $root = Resolve-SquadRepositoryPath -RepoRoot $RepoRoot -Path ([string]$plan.squadRoot)
@@ -311,6 +337,40 @@ try {
         $null = $locks.Add((Enter-WriterLock -Path $lockRoot -Deadline $deadline))
     }
     Assert-Baseline -Expected $plan.baseline -Root $root -Repository $RepoRoot -RelativeRoot $relativeRoot
+
+    if (@($plan.packs).Count) {
+        $registeredPacks = @(Get-SquadInitData -RepoRoot $RepoRoot).packs
+        $baselineTeamText = [IO.File]::ReadAllText((Join-Path $root 'team.md'))
+        $baselinePackMatch = [regex]::Match($baselineTeamText, '(?m)^Packs:\s*(?<packs>[^\r\n]*)\s*$')
+        $baselinePacks = @()
+        if ($baselinePackMatch.Success) {
+            $baselinePacks = @($baselinePackMatch.Groups['packs'].Value -split ',\s*' | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+        }
+        foreach ($packName in @($plan.packs)) {
+            $registered = @($registeredPacks | Where-Object { $_.Pack -ceq [string]$packName })
+            if ($registered.Count -ne 1) { throw "Unregistered pack: $packName" }
+            if ([string]$packName -cin $baselinePacks) { throw "Pack '$packName' is already active." }
+        }
+        $expectedPacks = [Collections.Generic.List[string]]::new()
+        foreach ($name in @($baselinePacks)) { $expectedPacks.Add([string]$name) }
+        foreach ($name in @($plan.packs)) { $expectedPacks.Add([string]$name) }
+        $seenPacks = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+        foreach ($name in $expectedPacks) {
+            if (-not $seenPacks.Add($name)) { throw "Duplicate pack '$name'." }
+        }
+        $seenPacks.Clear()
+        foreach ($name in @($sealedPacks)) {
+            if (-not $seenPacks.Add([string]$name)) { throw "Sealed Packs line repeats '$name'." }
+        }
+        $sealedList = @($sealedPacks)
+        $packMismatch = $sealedList.Count -ne $expectedPacks.Count
+        if (-not $packMismatch) {
+            for ($index = 0; $index -lt $expectedPacks.Count; $index++) {
+                if ([string]$sealedList[$index] -cne $expectedPacks[$index]) { $packMismatch = $true; break }
+            }
+        }
+        if ($packMismatch) { throw 'Sealed Packs line does not equal baseline packs plus requested packs.' }
+    }
 
     foreach ($name in @('team.md', 'routing.md', 'decisions.md')) {
         $originals[$name] = [IO.File]::ReadAllBytes((Join-Path $root $name))

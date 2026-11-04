@@ -199,7 +199,7 @@ Markdown histories, decisions, ledger, and state remain the compatibility contra
 | WRT-11 | Ledger `-Write -SessionLog auto` transactionally replaces estimates with exact-native per-role requests, four disjoint billed token categories, credits, and cost when event-agent attribution, nested-owner roll-up, and native nano-AIU reconciliation pass; the native total is authoritative and history is bookkeeping. APM human agent names and plugin-qualified names are canonicalized through the raw host name, display name, and unique namespace/path suffix against the history-backed agent set, and a native agent with no history entry, no roster row, or an ambiguous alias keeps its own row instead of forcing the estimator. A metered history entry with no billed request within five minutes in any accepted session, usage by an agent with no entry, or an unreadable log never becomes an estimate: each is a `NOTE:` in the Derivation (JSON `exact.notes`, `exact.partial`), gaps that only understate label the exact Cost Comparison and Unit Economics a lower bound, and the first appearance is a one-time `WARN:`. A federation member accepts coordinator usage only when every model-dispatch prompt in that native session names the same member root and no federation-root lifecycle writer ran; mixed, unscoped, or root-lifecycle sessions remain estimated. The optional `consumption-sessions.json` journal upserts the active native session by id, rejects history-prefix drift and a repeated identity inside one session, counts a request that a forked session's log repeats once (a `NOTE:`), and accumulates every accepted session into the single public `consumption.md`; history written after an earlier session's last accepted write is reconciled by re-reading that session's log (found by id, even when opened one folder away) and by adopting repository sessions whose logs show an entry more convincingly than the running session does (a shell call running a history writer for this root just before the stamp, never a view, search, ledger check or another root's hand-off, outranks squad usage billed nearby, and a session that was handing off for another root at that moment earns no usage credit for the entry), never a plain chat, whether or not the running session is already journaled; a write refuses, changing nothing, when another writer changed the journal while it ran; the running session is the host's `COPILOT_AGENT_SESSION_ID` or, absent that, the newest log that shows squad work; an older cached session that resumes keeps its own snapshot; when initially absent, repository logs may bootstrap it; with no readable log the last accepted totals stay exact as of their snapshot; a manual `-Write` without `-SessionLog` on a root with a journal acts as `auto`. The selected active session receives a bounded open-tail allowance while the outer host tool completion is pending (a last, partially written log line is ignored), and a later write refreshes cached sessions from their logs before appending, so late coordinator records are not lost. Journal JSON preserves timestamp strings so content digests remain stable on replay. The three replace-semantics files commit or roll back together. It removes duplicate Observed Usage and derives Cost Comparison from the same exact snapshots plus an identical-traffic single-model counterfactual when request details are available. Only untrustworthy native usage (none, incomplete or non-reconciling credit records, history-prefix drift, a journal this version rejects) keeps the all-history estimator, leaves accepted snapshots unchanged, and transactionally replaces any exact Cost Comparison with the estimated one; a journal that is not a JSON object (cut short, emptied by a crash, merge markers) is instead rebuilt from the native logs and its bytes kept as `consumption-sessions.json.unreadable-<digest>`. Host-supplied agent names print as plain text, with pipes, line breaks, backticks, and a bare `Total` neutralized. Read-only `-Check` validates exact row sums, snapshot metadata, state totals, and exact or fallback comparison arithmetic. Cold Scribe never edits derived figures after checking | `SquadUsage.psm1`; `Measure-SquadLedger.ps1`; `Write-SquadHandoff.ps1`; `references/consumption.md`; `references/scribe-procedure.md` |
 | WRT-12 | Single-dispatch fact parameters construct the ordinary payload without a payload file, derive activeRoles from the actual agent, preserve supplied consumption blocks and estimated fallbacks, and use the unchanged validation, freshness, replay, attribution, rollback, exit-code and quiet-receipt path in every routing mode | `Write-SquadHandoff.ps1`, SingleDispatch parameter set; `references/economy-scribe.md` |
 | WRT-13 | The compact coordinator runtime delegates one ordinary dispatch to the fact interface without constructing an envelope or activeRoles, retains structured JSON for complex metadata/state changes, preserves supplied usage, and allows the estimated fallback without forcing a consumption input on every call | `coordinator-runtime.md`, Native Work and Persistence; `economy-scribe.md` |
-| WRT-14 | Confirmed additive catalog-role/pack expansion is a sealed plan/apply transaction for a plain squad or one registered federation member. It preserves existing roster rows, custom routes and edited roots, writes only `team.md`, `routing.md`, and one decision, holds the required plain or ordered federation/member locks, rejects stale plans/collisions, checks the ledger read-only, and leaves `consumption.md`, `state.json`, rates, notifications, history, federation root metadata, and other members byte-identical. No Scribe dispatch or estimated/observed ledger rewrite occurs | `Get-SquadRosterExpansionPlan.ps1`; `Expand-SquadRoster.ps1`; `references/roster-expansion.md` |
+| WRT-14 | Confirmed additive catalog-role/pack expansion is a sealed plan/apply transaction for a plain squad or one registered federation member. It preserves existing roster rows, custom routes and edited roots, writes only `team.md`, `routing.md`, and one decision, holds the required plain or ordered federation/member locks, rejects stale plans/collisions, checks the ledger read-only, and leaves `consumption.md`, `state.json`, rates, notifications, history, federation root metadata, and other members byte-identical. A confirmed registered pack whose roles are already present updates only `Packs:` and append-only provenance, with `addedRoles` empty, when that pack is not already listed; an already-listed pack, an unregistered sealed pack, an empty or unknown pack cell, and a role-only no-op stay invalid. The writer never removes a pack or role. No Scribe dispatch or estimated/observed ledger rewrite occurs | `Get-SquadRosterExpansionPlan.ps1`; `Expand-SquadRoster.ps1`; `references/roster-expansion.md` |
 | WRT-15 | Council, Intake Readiness, and Discovery Verdicts persist through `Write-SquadVerdict.ps1` after the ordinary handoff, with closed schemas, deterministic council synthesis, replay/chronology checks, stable Decision Refs, the same per-root lock, and identical behavior at a plain squad or federation member root. The federation meta-root is refused; only unsupported exit 2 takes the cold Scribe fallback | `Write-SquadVerdict.ps1`; `WriteSquadVerdict.Tests.ps1`; `references/verdict-writer.md` |
 | WRT-16 | Exact Cost Comparison savings are calculated before display rounding. Read-only ledger checks account for four-decimal USD operand rounding and one-decimal percentage rounding, including very small amounts and either saving direction, with or without a session journal. Impossible amount, percentage, or direction changes still fail. Federation promotion accepts a valid rounding-boundary ledger without rewriting its native totals or consumption, and rejects a genuinely corrupted comparison without publishing | `Measure-SquadLedger.ps1`; `Promote-SquadFederation.ps1`; `references/consumption.md`, Cost Comparison |
 
@@ -231,6 +231,59 @@ choices, federation conventions, the Pack Discovery table, guidance-file existen
 documents. The plugin build suite checks the generated invocation against the same registry in the
 actual plugin output; APM installs do not contain plugin-only invocation skills. Adding a pack
 extends the table and test data rather than adding another pack-specific test.
+
+Origin preference stays inside the ten-column External Cast. Every registered `Origin` cell records
+`` `owner/repo` (`vendor-official`|`github-marketplace`|`community`) `` and the exact path. Official
+ownership does not waive the verification gate. A community row is superseded only after parity,
+prerequisites, dispatchability, installability, licence, and the no-pack baseline pass; the superseded
+resource moves to the blocklist and is not a runtime fallback. Ambiguous licences stay unregistered.
+The licence citation is `.github/instructions/hve-core/licensing-posture.instructions.md`, delivered by
+the pinned hve-core package. `PackRegistry.Tests.ps1` enforces the class set, the ten columns, the
+canonical `Azure/aigateway` origin for `use-ai-gateway`, and that licence citation. Azure
+same-job replacement stays deferred: `azure-deployment-preflight` remains registered,
+`azure-validate` and `azure-enterprise-infra-planner` stay unregistered and unblocked,
+and default unpacked selection is unchanged until a user accepts global supersession or
+a pack-scoped collision mechanism exists.
+
+Power Platform and M365 official jobs resolve to local charter Primaries
+(`Squad Power Platform Architect`, `Squad Power Platform Integrator`,
+`Squad M365 Agent Architect`, `Squad M365 Agent Integrator`). Those charters
+are `user-invocable: false`, `disable-model-invocation: false`, have no prompt
+binding, and name only the nine gated skills. Broad legacy cues select
+`Power Platform Expert`, `Power Platform MCP Integration Expert`,
+`Declarative Agents Architect`, and `MCP M365 Agent Expert`. Those community
+agents stay registered Alternates and are not blocklisted. No cue match keeps
+the Primary. A matched Alternate that is absent escalates; it is not replaced.
+Pack absence does not squad-select the official skills. Installed skills may
+remain host-visible. `New-SquadDispatchPlan.ps1` accepts an Alternate only when
+the supplied `selectionCue` is a substring of the roster cue and the agent is
+installed and dispatchable.
+
+`foundry` Adds includes existing `data-scientist` in both pack mirrors.
+`azure +foundry` adds that owner; `full +foundry` adds zero roles.
+`foundry-iq` is reached by `data-scientist` and `appinsights-instrumentation`
+by `observability` only while `foundry` is active. Pack removal stops that
+squad selection and guidance. It does not uninstall or hide a host-installed skill.
+
+`fabric` is an opt-in supplement. Its Adds cell is existing `data-scientist`
+only. `full +fabric` adds zero roles. `azure +fabric` adds `data-scientist`.
+Admitted skills are `sqldw-cli`, `sqldb-cli`, `eventhouse-cli`,
+`eventstream-cli`, `spark-cli`, `dataflows-cli`, `databricks-migration`, and
+`pipeline-migration`. `data-scientist` selects one only while `fabric` is
+active and only for the matching job in `fabric-blueprint.md`. Pack absence,
+removal, and the interval before reapplication do not select them. Host
+visibility is not selection. Power BI rows and `fabric-lakehouse` stay
+registered and unchanged. No Fabric candidate is blocklisted.
+
+| ID | Assertion | Source |
+|---|---|---|
+| SRC-01 | Origin preference stays inside the ten-column External Cast. Allowed classes are exactly `vendor-official`, `github-marketplace`, and `community`. Ambiguous licences stay unregistered. The licence citation is the delivered hve-core path | `roster-catalog.md`, Origin Preference; `PackRegistry.Tests.ps1` |
+| SRC-02 | `use-ai-gateway` installs from `Azure/aigateway`, not `Azure/ai-gateway` | `roster-catalog.md`, Registered External Cast; `docs/usage.html`; `docs/fr/usage.html` |
+| SRC-03 | `azure-deployment-preflight` stays registered. `azure-validate` and `azure-enterprise-infra-planner` stay unregistered and unblocked | `roster-catalog.md`, Deferred official candidates |
+| SRC-04 | A confirmed registered pack whose Adds roles are already present applies metadata and provenance only when the pack is not already listed. Already-active packs, unregistered sealed packs, empty cells, unknown packs, and role-only no-ops still fail | `Get-SquadRosterExpansionPlan.ps1`; `Expand-SquadRoster.ps1` |
+| SRC-05 | Supported official Power Platform and M365 jobs select the local Primary. Broad legacy cues select the named community Alternate only when that cue matches and the agent is installed and dispatchable | `squad-roster.instructions.md`, Pack cues; `New-SquadDispatchPlan.ps1` |
+| SRC-06 | `foundry` Adds includes `data-scientist`. Foundry-specific skills are squad-selected only while `foundry` is active. Removal does not hide a host-installed skill | `profiles-and-packs.md`; `squad-data-scientist.agent.md` |
+| SRC-07 | `fabric` reuses `data-scientist` and admits only the eight gated skills. Selection requires an active `fabric` pack. Current Power BI and `fabric-lakehouse` rows do not change, and no Fabric candidate is blocklisted | `fabric-blueprint.md`; PRF-25 |
 
 Tier 1 has one opt-in `pack-lifecycle` scenario. It is excluded from the default live matrix and
 requires `-Pack <registered-pack>`, so adding packs does not multiply paid requests. Provision it
@@ -560,6 +613,7 @@ Init with each profile and assert the seeded roster holds exactly the documented
 | PRF-22 | Every seeded role has a non-empty `Deliverable Root`, and no two roles at different tiers share a root in a way that makes the Artifact Gate ambiguous |
 | PRF-23 | Every seeded role's `Agent Name (Primary)` resolves to a delivered agent — the runtime counterpart of PKG-02 |
 | PRF-24 | Removing a pack removes only roles no other roster source owns; keeps profile, other-pack, and custom roles; appends a removal decision while earlier `decisions.md` content stays a byte-identical prefix; and stops that pack's guidance handoff (`profiles-and-packs.md`; `scenarios/pack-lifecycle.json`) |
+| PRF-25 | `fabric` reuses `data-scientist` and adds no role. `full +fabric` adds zero roles; a profile that lacks `data-scientist` adds that role only. Admitted Fabric skills are squad-selected only while `fabric` is active. Removal stops that selection and does not hide a host-installed skill. Existing Power BI and `fabric-lakehouse` rows do not change, and no Fabric candidate moves to the blocklist |
 
 ## Tier 1 — Federation
 

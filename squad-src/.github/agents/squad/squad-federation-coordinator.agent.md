@@ -66,6 +66,10 @@ agents:
   - Squad Observability Planner
   - Squad Vulnerability Manager
   - Squad Risk Manager
+  - Squad Power Platform Architect
+  - Squad Power Platform Integrator
+  - Squad M365 Agent Architect
+  - Squad M365 Agent Integrator
   - Power Platform Expert
   - Power Platform MCP Integration Expert
   - Declarative Agents Architect

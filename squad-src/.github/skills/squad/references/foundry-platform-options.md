@@ -35,7 +35,7 @@ Ask:
 * Which control-plane, model-download, update, management, and telemetry paths require connectivity?
 * Has the customer accepted every preview dependency and named a supported fallback?
 
-Use the registered `microsoft-foundry` skill for current product guidance, and verify Foundry Local on Azure Local against current Microsoft Learn documentation. Record unknown or conflicting claims as unverified with the smallest next check.
+Use the registered `microsoft-foundry` skill for current product guidance, and verify Foundry Local on Azure Local against current Microsoft Learn documentation. The pinned Azure plugin `mcp.json` declares only `mcpServers.azure`. It does not install a separate Foundry MCP server. Foundry operations use that Azure MCP server's `foundry` tool. Record unknown or conflicting claims as unverified with the smallest next check.
 
 Frame Azure Local as a distinct deployment option, not a cloud-equivalent checkbox:
 
@@ -57,3 +57,7 @@ Ask:
 Do not copy a latest-version number into this reference. Read the manifest and lockfile, then verify that baseline against official release and migration guidance at the checkpoint. A newer version is evidence to assess, not permission to upgrade.
 
 Use `microsoft-foundry` for current Foundry service and SDK workflows, `azure-aigateway` for a selected APIM configuration, `use-ai-gateway` to consume an existing gateway, and `caira` only to inspect reference components for an already selected stack.
+
+## Grounding and instrumentation
+
+Select `foundry-iq` through `data-scientist` and `appinsights-instrumentation` through `observability` only when the resolved root's `Packs:` line includes `foundry`. Pack removal stops that squad selection and this guidance. It does not uninstall or hide a host-installed skill. Identity, AgentOps, and governance remain deferred.

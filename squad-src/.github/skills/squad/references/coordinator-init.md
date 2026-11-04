@@ -18,8 +18,11 @@ Run `Get-SquadInitContext.ps1 -RepoRoot <repo>` for the installed root, profiles
 packs, naming choices and project metadata; add `-Profile <id>` for resolved
 Primaries and availability. Use repository/request signals to recommend a
 profile; explicit `profile=` wins, then discovery, then `default`. Offer packs
-when their domain fits, never impose one. A pack adds to a profile and is not a
+when their domain fits, never impose one. Offer `fabric` for Warehouse, Eventhouse, Spark, or Dataflow work beyond the Lakehouse primer; do not apply it, and do not select its skills, unless that pack is active. A pack adds to a profile and is not a
 federation. A missing external agent is offered with its install path, not seeded.
+Pack Primaries for `power-platform` and `m365-copilot` are local charters.
+Read each row's Selection Cue: a broad match selects the community Alternate,
+and a missing Alternate escalates instead of substituting the Primary.
 
 With neither top-level `team.md` nor `federation.md`, ask single squad versus
 federation first; single is the recommended start. Federation seeds nothing here:

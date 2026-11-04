@@ -47,6 +47,28 @@ Set-StrictMode -Version Latest
 Import-Module (Join-Path $PSScriptRoot 'SquadCoordinator.psm1') -Force
 Import-Module (Join-Path $PSScriptRoot 'SquadUsage.psm1') -Force
 
+function Get-SquadRegisteredAgentInstallCommand {
+    param([Parameter(Mandatory)][string]$AgentName)
+    $catalogPath = Join-Path (Split-Path -Parent $PSScriptRoot) 'references' 'roster-catalog.md'
+    if (-not (Test-Path -LiteralPath $catalogPath -PathType Leaf)) {
+        throw 'Registered roster catalog is missing; report a broken installation.'
+    }
+    $tables = @(Read-SquadTables $catalogPath | Where-Object {
+            'Install or Entry' -in $_.Header -and 'Resource Kind' -in $_.Header -and 'Resource' -in $_.Header
+        })
+    if ($tables.Count -ne 1) { throw 'Registered external cast table is missing or ambiguous.' }
+    $slug = ($AgentName.ToLowerInvariant() -replace '[^a-z0-9]+', '-').Trim('-')
+    $registeredRows = @($tables[0].Rows | Where-Object {
+            $_['Resource Kind'] -ceq 'agent' -and (
+                $_['Resource'] -ceq $AgentName -or $_['Resource'] -ceq $slug
+            )
+        })
+    if ($registeredRows.Count -ne 1) { return $null }
+    $command = [string]$registeredRows[0]['Install or Entry']
+    if ([string]::IsNullOrWhiteSpace($command)) { return $null }
+    $command
+}
+
 try {
     $RepoRoot = (Resolve-Path -LiteralPath $RepoRoot).ProviderPath
     $inputData = Get-Content -LiteralPath $InputPath -Raw | ConvertFrom-Json -AsHashtable
@@ -256,7 +278,14 @@ try {
             $selectedAgents = @($agent)
             if ($selection.Choice -eq 'both') { $selectedAgents += 'Squad Connector' }
             foreach ($name in $selectedAgents) {
-                if (-not $agents.ContainsKey($name) -or -not $agents[$name].dispatchable) { throw "Selected agent '$name' is not installed and dispatchable." }
+                $installed = $agents.ContainsKey($name)
+                if ($installed -and $agents[$name].dispatchable) { continue }
+                $detail = "Selected agent '$name' is not installed and dispatchable."
+                if (-not $installed) {
+                    $install = Get-SquadRegisteredAgentInstallCommand -AgentName $name
+                    if ($install) { $detail = "$detail Install or Entry: $install" }
+                }
+                throw $detail
             }
             $nativeTypes = [ordered]@{}
             if ($inputData.Contains('agentTypes')) {

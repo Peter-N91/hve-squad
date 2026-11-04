@@ -77,7 +77,9 @@ BeforeAll {
         foreach ($agent in @(
                 'Squad Researcher', 'Squad Lead', 'Squad Implementor', 'Squad Reviewer',
                 'Squad Scribe', 'System Architecture Reviewer', 'Squad Backlog Executor',
-                'Security Planner', 'aws-principal-architect', 'AWS Incident Triage'
+                'Security Planner', 'aws-principal-architect', 'AWS Incident Triage',
+                'Squad Power Platform Architect', 'Squad Power Platform Integrator',
+                'Squad M365 Agent Architect', 'Squad M365 Agent Integrator'
             )) {
             New-Agent -Root $agentRoot -Name $agent
         }
@@ -169,6 +171,88 @@ BeforeAll {
             Result = $result
             Receipt = $(if ($result.ExitCode -eq 0) { $result.Output | ConvertFrom-Json -AsHashtable } else { $null })
         }
+    }
+
+    function Write-TamperedExpansionPlan {
+        param(
+            [Parameter(Mandatory)][string]$Repo,
+            [Parameter(Mandatory)][string]$SourcePath,
+            [Parameter(Mandatory)][string]$PackName,
+            [string]$SealedPackLine
+        )
+        $plan = Get-Content -LiteralPath $SourcePath -Raw | ConvertFrom-Json -AsHashtable -Depth 50
+        $plan.packs = @($PackName)
+        if ($SealedPackLine) {
+            $bytes = [Convert]::FromBase64String([string]$plan.outputs.team.contentBase64)
+            $text = [Text.UTF8Encoding]::new($false).GetString($bytes)
+            $updated = [regex]::Replace($text, '(?m)^Packs:[^\r\n]*', $SealedPackLine, 1)
+            if ($updated -eq $text) { throw 'Sealed team Packs line was not tampered.' }
+            $newBytes = [Text.UTF8Encoding]::new($false).GetBytes($updated)
+            $plan.outputs.team.bytes = $newBytes.Length
+            $plan.outputs.team.sha256 = [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($newBytes))
+            $plan.outputs.team.contentBase64 = [Convert]::ToBase64String($newBytes)
+        }
+        $path = Join-Path $Repo ("tampered-plan-$([guid]::NewGuid().ToString('N')).json")
+        Write-Json $path $plan
+        [pscustomobject]@{
+            Path = $path
+            Sha = (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash
+        }
+    }
+
+    function Initialize-ProfileSquad {
+        param(
+            [string]$Repo,
+            [string]$Profile,
+            [string]$Root = '.copilot-tracking/squad'
+        )
+        $agentRoot = Join-Path $Repo '.github/agents'
+        for ($attempt = 0; $attempt -lt 40; $attempt++) {
+            $choicesPath = Join-Path $Repo ("profile-choices-$Profile-$attempt.json")
+            $payloadPath = Join-Path $Repo ("profile-payload-$Profile-$attempt.json")
+            Write-Json $choicesPath @{
+                confirmed = $true
+                squadRoot = $Root
+                runId = "roster-expansion-$Profile"
+                profile = $Profile
+                naming = 'aliases'
+                notify = @{ approvalChannel = 'in-chat'; enabled = $false }
+                sessionModel = 'claude-sonnet-5.5'
+            }
+            $prepared = Invoke-Local $script:InitPlan $Repo @(
+                '-RepoRoot', $Repo, '-ChoicesPath', $choicesPath, '-PayloadPath', $payloadPath
+            )
+            if ($prepared.ExitCode -ne 0) {
+                $missing = [regex]::Match($prepared.Output, "no installed dispatchable Primary '([^']+)'")
+                if (-not $missing.Success) { throw $prepared.Output }
+                New-Agent -Root $agentRoot -Name $missing.Groups[1].Value
+                continue
+            }
+            $initialized = Invoke-Local $script:Initialize $Repo @(
+                '-RepoRoot', $Repo, '-PayloadPath', $payloadPath, '-Direct'
+            )
+            if ($initialized.ExitCode -ne 0) { throw $initialized.Output }
+            return Join-Path $Repo $Root
+        }
+        throw "Could not provision primaries for profile $Profile."
+    }
+
+    function New-ExpansionPlanReady {
+        param(
+            [string]$Repo,
+            [string]$Root = '.copilot-tracking/squad',
+            $Choices
+        )
+        $agentRoot = Join-Path $Repo '.github/agents'
+        $plan = $null
+        for ($attempt = 0; $attempt -lt 12; $attempt++) {
+            $plan = New-ExpansionPlan -Repo $Repo -Root $Root -Choices $Choices
+            if ($plan.Result.ExitCode -eq 0) { return $plan }
+            $missing = [regex]::Match($plan.Result.Output, "no installed dispatchable Primary '([^']+)'")
+            if (-not $missing.Success) { return $plan }
+            New-Agent -Root $agentRoot -Name $missing.Groups[1].Value
+        }
+        $plan
     }
 
     function Invoke-Expansion {
@@ -565,5 +649,325 @@ Describe 'Deterministic additive roster expansion' {
         finally {
             $held.Dispose()
         }
+    }
+}
+
+Describe 'All-present registered pack expansion' {
+    It 'applies full +foundry as metadata and provenance only' {
+        $repo = New-RepoFixture
+        $root = Initialize-ProfileSquad -Repo $repo -Profile 'full'
+        $teamBefore = [IO.File]::ReadAllText((Join-Path $root 'team.md'))
+        $routingBefore = [IO.File]::ReadAllBytes((Join-Path $root 'routing.md'))
+        $roleCountBefore = @([regex]::Matches($teamBefore, '(?m)^\| [a-z]')).Count
+        $plan = New-ExpansionPlan -Repo $repo -Choices @{
+            confirmed = $true
+            runId = 'full-foundry'
+            packs = @('foundry')
+        }
+
+        $plan.Result.ExitCode | Should -Be 0 -Because $plan.Result.Output
+        @($plan.Receipt.addedRoles) | Should -BeNullOrEmpty
+        $plan.Receipt.routingRowsAdded | Should -Be 0
+        $applied = Invoke-Expansion -Repo $repo -Plan $plan
+        $applied.ExitCode | Should -Be 0 -Because $applied.Output
+        $teamAfter = [IO.File]::ReadAllText((Join-Path $root 'team.md'))
+        $teamAfter | Should -Match '(?m)^Packs: foundry$'
+        @([regex]::Matches($teamAfter, '(?m)^\| [a-z]')).Count | Should -Be $roleCountBefore
+        [IO.File]::ReadAllBytes((Join-Path $root 'routing.md')) | Should -Be $routingBefore
+        $decisions = [IO.File]::ReadAllText((Join-Path $root 'decisions.md'))
+        $decisions | Should -Match 'Provenance: full \+foundry'
+        $decisions | Should -Match 'Added roles: \(none\)'
+    }
+
+    It 'adds only the missing foundry roles for azure +foundry and records Packs' {
+        $repo = New-RepoFixture
+        $root = Initialize-ProfileSquad -Repo $repo -Profile 'azure'
+        $routingBefore = [IO.File]::ReadAllText((Join-Path $root 'routing.md'))
+        $plan = New-ExpansionPlanReady -Repo $repo -Choices @{
+            confirmed = $true
+            runId = 'azure-foundry'
+            packs = @('foundry')
+        }
+
+        $plan.Result.ExitCode | Should -Be 0 -Because $plan.Result.Output
+        (@($plan.Receipt.addedRoles | Sort-Object) -join ',') | Should -BeExactly 'data-scientist,observability,prompt-engineer,rai'
+        $applied = Invoke-Expansion -Repo $repo -Plan $plan
+        $applied.ExitCode | Should -Be 0 -Because $applied.Output
+        $team = [IO.File]::ReadAllText((Join-Path $root 'team.md'))
+        $team | Should -Match '(?m)^Packs: foundry$'
+        $team | Should -Match '\| prompt-engineer \|'
+        $team | Should -Match '\| rai \|'
+        $team | Should -Match '\| observability \|'
+        $team | Should -Match '\| data-scientist \|'
+        [IO.File]::ReadAllText((Join-Path $root 'routing.md')) | Should -Match ([regex]::Escape($routingBefore.TrimEnd()))
+        [IO.File]::ReadAllText((Join-Path $root 'decisions.md')) | Should -Match 'Provenance: azure \+foundry'
+    }
+
+    It 'rejects empty pack cells, unknown packs, and role-only no-ops' {
+        $repo = New-RepoFixture
+        $null = Initialize-PlainSquad $repo
+        $empty = New-ExpansionPlan -Repo $repo -Choices @{
+            confirmed = $true
+            runId = 'empty-pack-cell'
+            packs = @('')
+        }
+        $empty.Result.ExitCode | Should -Be 1
+        $empty.Result.Output | Should -Match 'Empty pack cell'
+
+        $unknown = New-ExpansionPlan -Repo $repo -Choices @{
+            confirmed = $true
+            runId = 'unknown-pack'
+            packs = @('not-a-pack')
+        }
+        $unknown.Result.ExitCode | Should -Be 1
+        $unknown.Result.Output | Should -Match 'Unknown or duplicate pack'
+
+        $noop = New-ExpansionPlan -Repo $repo -Choices @{
+            confirmed = $true
+            runId = 'role-only-noop'
+            roles = @('researcher')
+        }
+        $noop.Result.ExitCode | Should -Be 1
+        $noop.Result.Output | Should -Match 'already present'
+
+        $emptyExpansion = New-ExpansionPlan -Repo $repo -Choices @{
+            confirmed = $true
+            runId = 'empty-expansion'
+            packs = @()
+            roles = @()
+        }
+        $emptyExpansion.Result.ExitCode | Should -Be 1
+        $emptyExpansion.Result.Output | Should -Match 'at least one confirmed pack or role'
+    }
+
+    It 'rejects an already-active pack, an unregistered sealed pack, and a hash-bound tampered plan' {
+        $repo = New-RepoFixture
+        $root = Initialize-ProfileSquad -Repo $repo -Profile 'full'
+        $teamPath = Join-Path $root 'team.md'
+        $decisionsPath = Join-Path $root 'decisions.md'
+        $first = New-ExpansionPlan -Repo $repo -Choices @{
+            confirmed = $true
+            runId = 'foundry-first'
+            packs = @('foundry')
+        }
+        $first.Result.ExitCode | Should -Be 0 -Because $first.Result.Output
+        (Invoke-Expansion -Repo $repo -Plan $first).ExitCode | Should -Be 0
+        $afterFirst = Get-TreeHash $root
+        $decisionCount = @([regex]::Matches([IO.File]::ReadAllText($decisionsPath), '(?m)^## Roster Expansion ')).Count
+
+        $repeat = New-ExpansionPlan -Repo $repo -Choices @{
+            confirmed = $true
+            runId = 'foundry-repeat'
+            packs = @('foundry')
+        }
+        $repeat.Result.ExitCode | Should -Be 1
+        $repeat.Result.Output | Should -Match 'already active'
+        Get-TreeHash $root | Should -BeExactly $afterFirst
+
+        $fabric = New-ExpansionPlan -Repo $repo -Choices @{
+            confirmed = $true
+            runId = 'fabric-for-tamper'
+            packs = @('fabric')
+        }
+        $fabric.Result.ExitCode | Should -Be 0 -Because $fabric.Result.Output
+        $alreadyActive = Write-TamperedExpansionPlan -Repo $repo -SourcePath $fabric.Path -PackName 'foundry'
+        $activeApply = Invoke-Expansion -Repo $repo -Plan $alreadyActive -Sha $alreadyActive.Sha
+        $activeApply.ExitCode | Should -Not -Be 0
+        $activeApply.Output | Should -Match 'already active'
+        [IO.File]::ReadAllText($teamPath) | Should -Match '(?m)^Packs: foundry$'
+        [IO.File]::ReadAllText($teamPath) | Should -Not -Match '(?m)^Packs:.*\bfabric\b'
+        @([regex]::Matches([IO.File]::ReadAllText($decisionsPath), '(?m)^## Roster Expansion ')).Count | Should -Be $decisionCount
+
+        $clean = New-RepoFixture
+        $cleanRoot = Initialize-ProfileSquad -Repo $clean -Profile 'full'
+        $cleanBefore = Get-TreeHash $cleanRoot
+        $planned = New-ExpansionPlan -Repo $clean -Choices @{
+            confirmed = $true
+            runId = 'unregistered-source'
+            packs = @('foundry')
+        }
+        $planned.Result.ExitCode | Should -Be 0 -Because $planned.Result.Output
+        $unregistered = Write-TamperedExpansionPlan -Repo $clean -SourcePath $planned.Path -PackName 'not-a-pack' -SealedPackLine 'Packs: not-a-pack'
+        $unregisteredApply = Invoke-Expansion -Repo $clean -Plan $unregistered -Sha $unregistered.Sha
+        $unregisteredApply.ExitCode | Should -Not -Be 0
+        $unregisteredApply.Output | Should -Match 'Unregistered pack'
+        Get-TreeHash $cleanRoot | Should -BeExactly $cleanBefore
+        [IO.File]::ReadAllText((Join-Path $cleanRoot 'team.md')) | Should -Not -Match 'not-a-pack'
+
+        $smuggled = Write-TamperedExpansionPlan -Repo $clean -SourcePath $planned.Path -PackName 'foundry' -SealedPackLine 'Packs: foundry, not-a-pack'
+        $smuggledApply = Invoke-Expansion -Repo $clean -Plan $smuggled -Sha $smuggled.Sha
+        $smuggledApply.ExitCode | Should -Not -Be 0
+        $smuggledApply.Output | Should -Match 'does not equal baseline packs plus requested packs'
+        Get-TreeHash $cleanRoot | Should -BeExactly $cleanBefore
+        [IO.File]::ReadAllText((Join-Path $cleanRoot 'team.md')) | Should -Not -Match 'not-a-pack'
+        [IO.File]::ReadAllText((Join-Path $cleanRoot 'team.md')) | Should -Not -Match '(?m)^Packs:.*\bfoundry\b'
+    }
+
+    It 'keeps pack apply inside one member and refuses the federation root' {
+        $repo = New-RepoFixture
+        $federation = Initialize-Federation $repo
+        $rootFiles = @{}
+        foreach ($name in @('federation.md', 'decisions.md', 'state.json', 'consumption.md', 'team.md', 'routing.md')) {
+            $path = Join-Path $federation.Root $name
+            if (Test-Path -LiteralPath $path) { $rootFiles[$name] = [IO.File]::ReadAllBytes($path) }
+        }
+        $refused = New-ExpansionPlan -Repo $repo -Root '.copilot-tracking/squad' -Choices @{
+            confirmed = $true
+            runId = 'federation-root-pack'
+            packs = @('foundry')
+        }
+        $refused.Result.ExitCode | Should -Be 1
+        $refused.Result.Output | Should -Match 'federation root'
+        foreach ($name in $rootFiles.Keys) {
+            [IO.File]::ReadAllBytes((Join-Path $federation.Root $name)) | Should -Be $rootFiles[$name]
+        }
+
+        $productPlan = New-ExpansionPlan -Repo $repo -Root '.copilot-tracking/squad/members/product' -Choices @{
+            confirmed = $true
+            runId = 'member-aws'
+            packs = @('aws')
+        }
+        $productPlan.Result.ExitCode | Should -Be 0 -Because $productPlan.Result.Output
+        $applied = Invoke-Expansion -Repo $repo -Plan $productPlan
+        $applied.ExitCode | Should -Be 0 -Because $applied.Output
+        $memberTeam = [IO.File]::ReadAllText((Join-Path $federation.Member 'team.md'))
+        $memberTeam | Should -Match '(?m)^Packs: aws$'
+        foreach ($name in $rootFiles.Keys) {
+            [IO.File]::ReadAllBytes((Join-Path $federation.Root $name)) | Should -Be $rootFiles[$name]
+        }
+    }
+
+    It 'reapplies a pack after cold removal without dropping roles' {
+        $repo = New-RepoFixture
+        $root = Initialize-ProfileSquad -Repo $repo -Profile 'full'
+        $first = New-ExpansionPlan -Repo $repo -Choices @{
+            confirmed = $true
+            runId = 'foundry-apply'
+            packs = @('foundry')
+        }
+        (Invoke-Expansion -Repo $repo -Plan $first).ExitCode | Should -Be 0
+        $teamPath = Join-Path $root 'team.md'
+        $team = [IO.File]::ReadAllText($teamPath)
+        $roleCount = @([regex]::Matches($team, '(?m)^\| [a-z]')).Count
+        $removed = $team -replace '(?m)^Packs: foundry\r?\n', ''
+        [IO.File]::WriteAllText($teamPath, $removed, [Text.UTF8Encoding]::new($false))
+        $removal = New-ExpansionPlan -Repo $repo -Choices @{
+            confirmed = $true
+            runId = 'foundry-remove'
+            packs = @('foundry')
+            remove = $true
+        }
+        $removal.Result.ExitCode | Should -Be 1
+        $removal.Result.Output | Should -Match 'Unsupported field'
+        $reappliedPlan = New-ExpansionPlan -Repo $repo -Choices @{
+            confirmed = $true
+            runId = 'foundry-reapply'
+            packs = @('foundry')
+        }
+        $reappliedPlan.Result.ExitCode | Should -Be 0 -Because $reappliedPlan.Result.Output
+        @($reappliedPlan.Receipt.addedRoles) | Should -BeNullOrEmpty
+        (Invoke-Expansion -Repo $repo -Plan $reappliedPlan).ExitCode | Should -Be 0
+        $teamAfter = [IO.File]::ReadAllText($teamPath)
+        $teamAfter | Should -Match '(?m)^Packs: foundry$'
+        @([regex]::Matches($teamAfter, '(?m)^\| [a-z]')).Count | Should -Be $roleCount
+    }
+
+    It 'applies full +fabric as metadata only and azure +fabric as the missing owner' {
+        $repo = New-RepoFixture
+        $fullRoot = Initialize-ProfileSquad -Repo $repo -Profile 'full'
+        $fullPlan = New-ExpansionPlan -Repo $repo -Choices @{
+            confirmed = $true
+            runId = 'full-fabric'
+            packs = @('fabric')
+        }
+        $fullPlan.Result.ExitCode | Should -Be 0 -Because $fullPlan.Result.Output
+        @($fullPlan.Receipt.addedRoles) | Should -BeNullOrEmpty
+        (Invoke-Expansion -Repo $repo -Plan $fullPlan).ExitCode | Should -Be 0
+        [IO.File]::ReadAllText((Join-Path $fullRoot 'team.md')) | Should -Match '(?m)^Packs: fabric$'
+        [IO.File]::ReadAllText((Join-Path $fullRoot 'decisions.md')) | Should -Match 'Provenance: full \+fabric'
+        [IO.File]::ReadAllText((Join-Path $fullRoot 'decisions.md')) | Should -Match 'Added roles: \(none\)'
+
+        $azureRepo = New-RepoFixture
+        $azureRoot = Initialize-ProfileSquad -Repo $azureRepo -Profile 'azure'
+        $azurePlan = New-ExpansionPlanReady -Repo $azureRepo -Choices @{
+            confirmed = $true
+            runId = 'azure-fabric'
+            packs = @('fabric')
+        }
+        $azurePlan.Result.ExitCode | Should -Be 0 -Because $azurePlan.Result.Output
+        (@($azurePlan.Receipt.addedRoles | Sort-Object) -join ',') | Should -BeExactly 'data-scientist'
+        (Invoke-Expansion -Repo $azureRepo -Plan $azurePlan).ExitCode | Should -Be 0
+        $azureTeam = [IO.File]::ReadAllText((Join-Path $azureRoot 'team.md'))
+        $azureTeam | Should -Match '(?m)^Packs: fabric$'
+        $azureTeam | Should -Match '\| data-scientist \|'
+    }
+
+    It 'reapplies fabric after cold removal without selecting it while absent' {
+        $repo = New-RepoFixture
+        $root = Initialize-ProfileSquad -Repo $repo -Profile 'full'
+        $first = New-ExpansionPlan -Repo $repo -Choices @{
+            confirmed = $true
+            runId = 'fabric-apply'
+            packs = @('fabric')
+        }
+        (Invoke-Expansion -Repo $repo -Plan $first).ExitCode | Should -Be 0
+        $teamPath = Join-Path $root 'team.md'
+        $team = [IO.File]::ReadAllText($teamPath)
+        $roleCount = @([regex]::Matches($team, '(?m)^\| [a-z]')).Count
+        $removed = $team -replace '(?m)^Packs: fabric\r?\n', ''
+        $removed | Should -Not -Match '(?m)^Packs:.*\bfabric\b'
+        [IO.File]::WriteAllText($teamPath, $removed, [Text.UTF8Encoding]::new($false))
+        $reappliedPlan = New-ExpansionPlan -Repo $repo -Choices @{
+            confirmed = $true
+            runId = 'fabric-reapply'
+            packs = @('fabric')
+        }
+        $reappliedPlan.Result.ExitCode | Should -Be 0 -Because $reappliedPlan.Result.Output
+        @($reappliedPlan.Receipt.addedRoles) | Should -BeNullOrEmpty
+        (Invoke-Expansion -Repo $repo -Plan $reappliedPlan).ExitCode | Should -Be 0
+        $teamAfter = [IO.File]::ReadAllText($teamPath)
+        $teamAfter | Should -Match '(?m)^Packs: fabric$'
+        @([regex]::Matches($teamAfter, '(?m)^\| [a-z]')).Count | Should -Be $roleCount
+    }
+
+    It 'applies, cold-removes, and reapplies power-platform without substituting Alternates' {
+        $repo = New-RepoFixture
+        $root = Initialize-PlainSquad $repo
+        $before = [IO.File]::ReadAllText((Join-Path $root 'team.md'))
+        $before | Should -Not -Match 'pp-architect'
+        $plan = New-ExpansionPlan -Repo $repo -Choices @{
+            confirmed = $true
+            runId = 'pp-apply'
+            packs = @('power-platform')
+        }
+        $plan.Result.ExitCode | Should -Be 0 -Because $plan.Result.Output
+        (@($plan.Receipt.addedRoles | Sort-Object) -join ',') | Should -BeExactly 'pp-architect,pp-connector'
+        (Invoke-Expansion -Repo $repo -Plan $plan).ExitCode | Should -Be 0
+        $teamPath = Join-Path $root 'team.md'
+        $applied = [IO.File]::ReadAllText($teamPath)
+        $applied | Should -Match '(?m)^Packs: power-platform$'
+        $applied | Should -Match 'Squad Power Platform Architect'
+        $applied | Should -Match 'Power Platform Expert'
+        $applied | Should -Match 'broader Power Platform architecture or Copilot Studio'
+        $applied | Should -Match 'Squad Power Platform Integrator'
+        $applied | Should -Match 'Power Platform MCP Integration Expert'
+
+        $removed = $applied -replace '(?m)^Packs: power-platform\r?\n', ''
+        $removed = [regex]::Replace($removed, '(?m)^\| pp-(architect|connector) \|.*\r?\n', '')
+        [IO.File]::WriteAllText($teamPath, $removed, [Text.UTF8Encoding]::new($false))
+        [IO.File]::ReadAllText($teamPath) | Should -Not -Match 'pp-architect'
+
+        $reapplied = New-ExpansionPlan -Repo $repo -Choices @{
+            confirmed = $true
+            runId = 'pp-reapply'
+            packs = @('power-platform')
+        }
+        $reapplied.Result.ExitCode | Should -Be 0 -Because $reapplied.Result.Output
+        (@($reapplied.Receipt.addedRoles | Sort-Object) -join ',') | Should -BeExactly 'pp-architect,pp-connector'
+        (Invoke-Expansion -Repo $repo -Plan $reapplied).ExitCode | Should -Be 0
+        $after = [IO.File]::ReadAllText($teamPath)
+        $after | Should -Match '(?m)^Packs: power-platform$'
+        $after | Should -Match 'Squad Power Platform Architect'
+        $after | Should -Match 'Power Platform Expert'
     }
 }

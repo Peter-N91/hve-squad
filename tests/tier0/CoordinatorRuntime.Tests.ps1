@@ -58,6 +58,23 @@ BeforeAll {
         }
     }
 
+    function Get-RegisteredAgentInstallCommand {
+        param([Parameter(Mandatory)][string]$AgentName)
+        $catalog = Join-Path $script:References 'roster-catalog.md'
+        $tables = @(Read-SquadTables $catalog | Where-Object {
+                'Install or Entry' -in $_.Header -and 'Resource Kind' -in $_.Header -and 'Resource' -in $_.Header
+            })
+        if ($tables.Count -ne 1) { throw 'Registered external cast table is missing.' }
+        $slug = ($AgentName.ToLowerInvariant() -replace '[^a-z0-9]+', '-').Trim('-')
+        $rows = @($tables[0].Rows | Where-Object {
+                $_['Resource Kind'] -ceq 'agent' -and (
+                    $_['Resource'] -ceq $AgentName -or $_['Resource'] -ceq $slug
+                )
+            })
+        if ($rows.Count -ne 1) { throw "No unique registered agent row for '$AgentName'." }
+        [string]$rows[0]['Install or Entry']
+    }
+
     function Initialize-Fixture {
         param(
             [string]$Repo,
@@ -899,5 +916,213 @@ Describe 'Federation scheduling and deterministic persistence (COORD-08, COORD-1
         }
         [Math]::Abs(($after.currentRun.estCostUsd - $memberAfter) - 2 * $overhead) | Should -BeLessOrEqual 0.0001 -Because "root before=$($before.currentRun.estCostUsd), members before=$memberBefore, overhead=$overhead; root after=$($after.currentRun.estCostUsd), members after=$memberAfter"
         $after.activeSubSquads | Should -Be @('product')
+    }
+}
+
+Describe 'Pack Alternate resolution uses the dispatch plan' {
+    It 'selects the local Primary, reaches an installed Alternate only with its cue, and escalates when that Alternate is absent' {
+        $repo = New-FixtureRepo
+        $choicesPath = Join-Path $repo 'pack-choices.json'
+        $payloadPath = Join-Path $repo 'pack-init.json'
+        $choices = New-Choices
+        $choices.packs = @('power-platform')
+        $choices.runId = 'pp-pack'
+        Write-FixtureJson $choicesPath $choices
+        $prepared = Invoke-Local 'Get-SquadInitContext.ps1' $repo @('-RepoRoot', $repo, '-ChoicesPath', $choicesPath, '-PayloadPath', $payloadPath)
+        $prepared.ExitCode | Should -Be 0 -Because $prepared.Output
+        $initialized = Invoke-Local 'Initialize-Squad.ps1' $repo @('-RepoRoot', $repo, '-PayloadPath', $payloadPath, '-Direct')
+        $initialized.ExitCode | Should -Be 0 -Because $initialized.Output
+        $root = Join-Path $repo '.copilot-tracking/squad'
+        $team = [IO.File]::ReadAllText((Join-Path $root 'team.md'))
+        $team | Should -Match 'Squad Power Platform Architect'
+        $team | Should -Match 'Power Platform Expert'
+        $team | Should -Match 'broader Power Platform architecture or Copilot Studio'
+
+        $primaryPath = Join-Path $repo 'primary.json'
+        Write-FixtureJson $primaryPath @{
+            squadRoot = $root
+            units = @(@{ id = 'official'; role = 'pp-architect' })
+        }
+        $primary = Invoke-Local 'New-SquadDispatchPlan.ps1' $repo @('-RepoRoot', $repo, '-InputPath', $primaryPath)
+        $primary.ExitCode | Should -Be 0 -Because $primary.Output
+        ($primary.Output | ConvertFrom-Json).units[0].endpoint.agent | Should -BeExactly 'Squad Power Platform Architect'
+
+        $absentPath = Join-Path $repo 'absent-alternate.json'
+        Write-FixtureJson $absentPath @{
+            squadRoot = $root
+            units = @(@{
+                id = 'broad'
+                role = 'pp-architect'
+                agent = 'Power Platform Expert'
+                selectionCue = 'broader Power Platform architecture or Copilot Studio'
+            })
+        }
+        $absent = Invoke-Local 'New-SquadDispatchPlan.ps1' $repo @('-RepoRoot', $repo, '-InputPath', $absentPath)
+        $absent.ExitCode | Should -Not -Be 0
+        $absent.Output | Should -Match 'not installed and dispatchable'
+        $absent.Output | Should -Match ([regex]::Escape((Get-RegisteredAgentInstallCommand -AgentName 'Power Platform Expert')))
+        $absent.Output | Should -Match ([regex]::Escape('apm install github/awesome-copilot/agents/power-platform-expert.agent.md'))
+        $absent.Output | Should -Not -Match 'Squad Power Platform Integrator'
+
+        Write-FixtureText (Join-Path $repo '.github/agents/power-platform-expert.agent.md') "---`nname: Power Platform Expert`nuser-invocable: false`ndisable-model-invocation: false`n---`n# Alternate`n"
+        $present = Invoke-Local 'New-SquadDispatchPlan.ps1' $repo @('-RepoRoot', $repo, '-InputPath', $absentPath)
+        $present.ExitCode | Should -Be 0 -Because $present.Output
+        ($present.Output | ConvertFrom-Json).units[0].endpoint.agent | Should -BeExactly 'Power Platform Expert'
+
+        $wrongPath = Join-Path $repo 'wrong-cue.json'
+        Write-FixtureJson $wrongPath @{
+            squadRoot = $root
+            units = @(@{
+                id = 'wrong'
+                role = 'pp-architect'
+                agent = 'Power Platform Expert'
+                selectionCue = 'not a roster cue'
+            })
+        }
+        $wrong = Invoke-Local 'New-SquadDispatchPlan.ps1' $repo @('-RepoRoot', $repo, '-InputPath', $wrongPath)
+        $wrong.ExitCode | Should -Not -Be 0
+        $wrong.Output | Should -Match 'Selection Cue'
+
+        $plainRepo = New-FixtureRepo
+        $plain = Initialize-Fixture $plainRepo
+        $plainPath = Join-Path $plainRepo 'no-pack.json'
+        Write-FixtureJson $plainPath @{
+            squadRoot = $plain.Root
+            units = @(@{ id = 'missing'; role = 'pp-architect' })
+        }
+        $unpacked = Invoke-Local 'New-SquadDispatchPlan.ps1' $plainRepo @('-RepoRoot', $plainRepo, '-InputPath', $plainPath)
+        $unpacked.ExitCode | Should -Not -Be 0
+        $unpacked.Output | Should -Not -Match 'Squad Power Platform Architect'
+    }
+
+    It 'resolves legacy and official jobs through seeded routing and the dispatch plan, with and without the packs' {
+        function Resolve-SeededRole {
+            param([string]$RoutingPath, [string]$Request)
+            $tables = @(Read-SquadTables $RoutingPath | Where-Object {
+                    'Pattern / Keyword' -in $_.Header -and 'Role(s)' -in $_.Header
+                })
+            if ($tables.Count -ne 1) { throw 'Seeded routing table is missing.' }
+            $best = $null
+            foreach ($row in $tables[0].Rows) {
+                $role = (([string]$row['Role(s)'] -split ',\s*')[0] -replace ' \(optional\)$', '')
+                foreach ($keyword in ([string]$row['Pattern / Keyword'] -split ',\s*')) {
+                    $keyword = $keyword.Trim()
+                    if (-not $keyword) { continue }
+                    if ($Request.IndexOf($keyword, [StringComparison]::OrdinalIgnoreCase) -lt 0) { continue }
+                    if ($null -eq $best -or $keyword.Length -gt $best.Keyword.Length) {
+                        $best = [pscustomobject]@{ Keyword = $keyword; Role = $role }
+                    }
+                }
+            }
+            $best
+        }
+
+        function Resolve-SeededAgent {
+            param([string]$Cue, [string]$Primary, [string]$Request)
+            foreach ($clause in @($Cue -split ';' | ForEach-Object { $_.Trim() } | Where-Object { $_ -match '→' })) {
+                $parts = @($clause -split '→', 2)
+                $agent = ($parts[1] -split '\.')[0].Trim()
+                foreach ($phrase in @($parts[0] -split ', or |, | or ' | ForEach-Object { $_.Trim() } | Where-Object { $_ })) {
+                    if ($Request.IndexOf($phrase, [StringComparison]::OrdinalIgnoreCase) -lt 0) { continue }
+                    if ($Cue.IndexOf($phrase, [StringComparison]::OrdinalIgnoreCase) -lt 0) {
+                        throw "Resolved phrase '$phrase' is not in the seeded Selection Cue."
+                    }
+                    return [pscustomobject]@{ Agent = $agent; Phrase = $phrase; IsPrimary = ($agent -ceq $Primary) }
+                }
+            }
+            return [pscustomobject]@{ Agent = $Primary; Phrase = $null; IsPrimary = $true }
+        }
+
+        function Invoke-ResolvedDispatch {
+            param([string]$Repo, [string]$Root, [string]$Role, $Resolved)
+            $unit = @{ id = 'job'; role = $Role }
+            if (-not $Resolved.IsPrimary) {
+                $unit.agent = $Resolved.Agent
+                $unit.selectionCue = $Resolved.Phrase
+            }
+            $path = Join-Path $Repo ("dispatch-$([guid]::NewGuid().ToString('N')).json")
+            Write-FixtureJson $path @{ squadRoot = $Root; units = @($unit) }
+            Invoke-Local 'New-SquadDispatchPlan.ps1' $Repo @('-RepoRoot', $Repo, '-InputPath', $path)
+        }
+
+        $cases = @(
+            @{ Request = 'Power Pages ALM planning for the public site'; Role = 'pp-architect'; Agent = 'Squad Power Platform Architect'; Route = $true }
+            @{ Request = 'Build a Power Automate cloud flow for invoice approval'; Role = 'pp-architect'; Agent = 'Power Platform Expert'; Route = $true }
+            @{ Request = 'Review the canvas app DLP policy and solution ALM'; Role = 'pp-architect'; Agent = 'Power Platform Expert'; Route = $true }
+            @{ Request = 'generate a codeful MCP tool for the widget'; Role = 'pp-connector'; Agent = 'Squad Power Platform Integrator'; Route = $false }
+            @{ Request = 'Certify this custom connector before publication'; Role = 'pp-connector'; Agent = 'Power Platform MCP Integration Expert'; Route = $true }
+            @{ Request = '.NET Agents SDK production readiness review'; Role = 'm365-agent-architect'; Agent = 'Squad M365 Agent Architect'; Route = $false }
+            @{ Request = 'Author a Microsoft 365 Copilot agent manifest in Agents Toolkit'; Role = 'm365-agent-architect'; Agent = 'Declarative Agents Architect'; Route = $true }
+            @{ Request = 'Agents SDK OpenTelemetry for the bot'; Role = 'm365-agent-integrator'; Agent = 'Squad M365 Agent Integrator'; Route = $false }
+            @{ Request = 'Call Microsoft Graph with the Graph SDK'; Role = 'm365-agent-integrator'; Agent = 'MCP M365 Agent Expert'; Route = $true }
+        )
+
+        $repo = New-FixtureRepo
+        $choicesPath = Join-Path $repo 'both-pack-choices.json'
+        $payloadPath = Join-Path $repo 'both-pack-init.json'
+        $choices = New-Choices
+        $choices.packs = @('power-platform', 'm365-copilot')
+        $choices.runId = 'both-packs'
+        Write-FixtureJson $choicesPath $choices
+        $prepared = Invoke-Local 'Get-SquadInitContext.ps1' $repo @('-RepoRoot', $repo, '-ChoicesPath', $choicesPath, '-PayloadPath', $payloadPath)
+        $prepared.ExitCode | Should -Be 0 -Because $prepared.Output
+        $initialized = Invoke-Local 'Initialize-Squad.ps1' $repo @('-RepoRoot', $repo, '-PayloadPath', $payloadPath, '-Direct')
+        $initialized.ExitCode | Should -Be 0 -Because $initialized.Output
+        $root = Join-Path $repo '.copilot-tracking/squad'
+        $routingPath = Join-Path $root 'routing.md'
+
+        foreach ($case in $cases) {
+            if ($case.Route) {
+                $routed = Resolve-SeededRole -RoutingPath $routingPath -Request $case.Request
+                $routed | Should -Not -BeNullOrEmpty -Because $case.Request
+                $routed.Role | Should -BeExactly $case.Role -Because "$($case.Request) matched '$($routed.Keyword)'"
+            }
+            $row = @(Get-SquadRoster $root | Where-Object { $_.Role -ceq $case.Role })
+            $row | Should -HaveCount 1
+            $primary = [string]$row[0]['Agent Name (Primary)']
+            $resolved = Resolve-SeededAgent -Cue ([string]$row[0]['Selection Cue']) -Primary $primary -Request $case.Request
+            $resolved.Agent | Should -BeExactly $case.Agent -Because $case.Request
+            $absent = Invoke-ResolvedDispatch -Repo $repo -Root $root -Role $case.Role -Resolved $resolved
+            if ($resolved.IsPrimary) {
+                $absent.ExitCode | Should -Be 0 -Because $absent.Output
+                ($absent.Output | ConvertFrom-Json).units[0].endpoint.agent | Should -BeExactly $case.Agent
+            }
+            else {
+                $absent.ExitCode | Should -Not -Be 0 -Because $case.Request
+                $absent.Output | Should -Match 'not installed and dispatchable'
+                $absent.Output | Should -Match ([regex]::Escape((Get-RegisteredAgentInstallCommand -AgentName $resolved.Agent)))
+                $absent.Output | Should -Not -Match ([regex]::Escape($primary))
+            }
+        }
+
+        foreach ($alternate in @(
+                'Power Platform Expert', 'Power Platform MCP Integration Expert',
+                'Declarative Agents Architect', 'MCP M365 Agent Expert')) {
+            $file = ($alternate.ToLowerInvariant() -replace '[^a-z0-9]+', '-').Trim('-') + '.agent.md'
+            Write-FixtureText (Join-Path $repo ".github/agents/$file") "---`nname: $alternate`nuser-invocable: false`ndisable-model-invocation: false`n---`n# Alternate`n"
+        }
+        foreach ($case in @($cases | Where-Object { -not $_.Agent.StartsWith('Squad ') })) {
+            $row = @(Get-SquadRoster $root | Where-Object { $_.Role -ceq $case.Role })
+            $resolved = Resolve-SeededAgent -Cue ([string]$row[0]['Selection Cue']) -Primary ([string]$row[0]['Agent Name (Primary)']) -Request $case.Request
+            $present = Invoke-ResolvedDispatch -Repo $repo -Root $root -Role $case.Role -Resolved $resolved
+            $present.ExitCode | Should -Be 0 -Because "$($case.Request): $($present.Output)"
+            ($present.Output | ConvertFrom-Json).units[0].endpoint.agent | Should -BeExactly $case.Agent
+        }
+
+        $plainRepo = New-FixtureRepo
+        foreach ($alternate in @(
+                'Power Platform Expert', 'Power Platform MCP Integration Expert',
+                'Declarative Agents Architect', 'MCP M365 Agent Expert')) {
+            $file = ($alternate.ToLowerInvariant() -replace '[^a-z0-9]+', '-').Trim('-') + '.agent.md'
+            Write-FixtureText (Join-Path $plainRepo ".github/agents/$file") "---`nname: $alternate`nuser-invocable: false`ndisable-model-invocation: false`n---`n# Alternate`n"
+        }
+        $plain = Initialize-Fixture $plainRepo
+        foreach ($role in @('pp-architect', 'pp-connector', 'm365-agent-architect', 'm365-agent-integrator')) {
+            $plainPath = Join-Path $plainRepo "no-pack-$role.json"
+            Write-FixtureJson $plainPath @{ squadRoot = $plain.Root; units = @(@{ id = 'missing'; role = $role }) }
+            $unpacked = Invoke-Local 'New-SquadDispatchPlan.ps1' $plainRepo @('-RepoRoot', $plainRepo, '-InputPath', $plainPath)
+            $unpacked.ExitCode | Should -Not -Be 0 -Because $role
+            $unpacked.Output | Should -Not -Match 'Squad Power Platform Architect|Squad Power Platform Integrator|Squad M365 Agent Architect|Squad M365 Agent Integrator|Power Platform Expert|MCP M365 Agent Expert'
+        }
     }
 }
