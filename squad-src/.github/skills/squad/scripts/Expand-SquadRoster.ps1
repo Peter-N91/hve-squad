@@ -11,7 +11,8 @@
     Get-SquadRosterExpansionPlan.ps1 and explicit confirmation. Under the same
     per-root writer lock as ordinary handoffs, the transaction revalidates every
     sealed file and history digest, writes only team.md, routing.md, and an appended
-    decisions.md entry, then checks the ledger read-only.
+    decisions.md entry, then checks the ledger read-only. An all-present registered
+    pack may seal zero added roles; that plan still updates Packs: and provenance.
 
     consumption.md, optional consumption-sessions.json, state.json, consumption-rates.md, notifications.md, and history/
     must remain byte-identical. A stale plan, lock timeout, failed ledger check, or
@@ -249,10 +250,17 @@ try {
     )
     if ($plan.schemaVersion -ne 1 -or $plan.scope -notin @('plain-squad', 'federation-member') -or
         $plan.modelRouting -notin @('off', 'ranked', 'economy', 'manual') -or
-        $plan.addedRoles -isnot [array] -or -not $plan.addedRoles.Count -or
+        $plan.addedRoles -isnot [array] -or
         $plan.packs -isnot [array] -or $plan.routingRowsAdded -isnot [ValueType] -or
         $plan.routingRowsAdded -is [bool] -or $plan.routingRowsAdded -lt 0) {
         throw 'Roster expansion plan metadata is invalid.'
+    }
+    $metadataOnly = @($plan.packs).Count -gt 0 -and -not @($plan.addedRoles).Count
+    if (-not @($plan.addedRoles).Count -and -not $metadataOnly) {
+        throw 'Roster expansion plan metadata is invalid.'
+    }
+    foreach ($packName in @($plan.packs)) {
+        if ([string]::IsNullOrWhiteSpace([string]$packName)) { throw 'Empty pack cell.' }
     }
     Assert-FieldSet $plan.provenance @('before', 'after')
     Assert-FieldSet $plan.baseline @('files', 'history') @('federation')
@@ -270,6 +278,20 @@ try {
             'decisions' { 'decisions.md' }
         }
         $planned[$plannedName] = $bytes
+    }
+    if (@($plan.packs).Count) {
+        $teamBytes = $planned['team.md']
+        $teamOffset = 0
+        if ($teamBytes.Length -ge 3 -and $teamBytes[0] -eq 0xef -and $teamBytes[1] -eq 0xbb -and $teamBytes[2] -eq 0xbf) {
+            $teamOffset = 3
+        }
+        $teamText = [Text.UTF8Encoding]::new($false).GetString($teamBytes, $teamOffset, $teamBytes.Length - $teamOffset)
+        $packLine = [regex]::Match($teamText, '(?m)^Packs:\s*(?<packs>[^\r\n]+)\s*$')
+        if (-not $packLine.Success) { throw 'Roster expansion plan did not seal a Packs: line.' }
+        $sealedPacks = @($packLine.Groups['packs'].Value -split ',\s*' | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+        foreach ($packName in @($plan.packs)) {
+            if ($packName -notin $sealedPacks) { throw "Roster expansion plan did not seal pack '$packName'." }
+        }
     }
 
     $root = Resolve-SquadRepositoryPath -RepoRoot $RepoRoot -Path ([string]$plan.squadRoot)

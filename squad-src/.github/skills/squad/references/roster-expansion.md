@@ -5,7 +5,7 @@ license: MIT
 metadata:
   authors: "Peter-N91/hve-squad"
   spec_version: "1.0"
-  last_updated: "2026-10-25"
+  last_updated: "2026-11-04"
 ---
 
 # Deterministic Roster Expansion
@@ -20,6 +20,16 @@ adding a second member for an existing role, connector binding changes, custom
 routing edits, an existing Deliverable Root change, and `routing=off` retain the
 cold refresh procedure. A missing external Primary is offered with its install
 command and is never seeded.
+
+A confirmed registered pack whose roles are already present is still a valid
+transaction. It changes only the `team.md` `Packs:` line and appends one
+decision. `addedRoles` is empty, no member row is invented, and routing stays
+byte-identical. Role-only confirmation of roles that are already present remains
+invalid, as do an empty pack cell, an unknown pack, and a pack whose Adds cell
+is empty. Reapplying a pack that is already listed appends provenance again and
+does not duplicate the pack token. Removing a pack is not this writer: drop the
+`Packs:` token through the cold path, then reapply here if the pack is confirmed
+again. The writer never drops a role or a pack token.
 
 ## Prepare and Confirm
 
@@ -74,6 +84,8 @@ pwsh -NoProfile -File "<skill>/scripts/Expand-SquadRoster.ps1" `
 
 The writer takes the plain root lock, or the federation root then selected member
 lock, and revalidates the sealed baseline.
+It accepts `addedRoles: []` only when the sealed plan names at least one pack and
+that plan's `team.md` contains a `Packs:` line listing every requested pack.
 It writes only:
 
 * new rows appended to the existing `team.md` Members table;

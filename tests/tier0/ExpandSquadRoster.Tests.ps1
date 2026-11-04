@@ -171,6 +171,61 @@ BeforeAll {
         }
     }
 
+    function Initialize-ProfileSquad {
+        param(
+            [string]$Repo,
+            [string]$Profile,
+            [string]$Root = '.copilot-tracking/squad'
+        )
+        $agentRoot = Join-Path $Repo '.github/agents'
+        for ($attempt = 0; $attempt -lt 40; $attempt++) {
+            $choicesPath = Join-Path $Repo ("profile-choices-$Profile-$attempt.json")
+            $payloadPath = Join-Path $Repo ("profile-payload-$Profile-$attempt.json")
+            Write-Json $choicesPath @{
+                confirmed = $true
+                squadRoot = $Root
+                runId = "roster-expansion-$Profile"
+                profile = $Profile
+                naming = 'aliases'
+                notify = @{ approvalChannel = 'in-chat'; enabled = $false }
+                sessionModel = 'claude-sonnet-5.5'
+            }
+            $prepared = Invoke-Local $script:InitPlan $Repo @(
+                '-RepoRoot', $Repo, '-ChoicesPath', $choicesPath, '-PayloadPath', $payloadPath
+            )
+            if ($prepared.ExitCode -ne 0) {
+                $missing = [regex]::Match($prepared.Output, "no installed dispatchable Primary '([^']+)'")
+                if (-not $missing.Success) { throw $prepared.Output }
+                New-Agent -Root $agentRoot -Name $missing.Groups[1].Value
+                continue
+            }
+            $initialized = Invoke-Local $script:Initialize $Repo @(
+                '-RepoRoot', $Repo, '-PayloadPath', $payloadPath, '-Direct'
+            )
+            if ($initialized.ExitCode -ne 0) { throw $initialized.Output }
+            return Join-Path $Repo $Root
+        }
+        throw "Could not provision primaries for profile $Profile."
+    }
+
+    function New-ExpansionPlanReady {
+        param(
+            [string]$Repo,
+            [string]$Root = '.copilot-tracking/squad',
+            $Choices
+        )
+        $agentRoot = Join-Path $Repo '.github/agents'
+        $plan = $null
+        for ($attempt = 0; $attempt -lt 12; $attempt++) {
+            $plan = New-ExpansionPlan -Repo $Repo -Root $Root -Choices $Choices
+            if ($plan.Result.ExitCode -eq 0) { return $plan }
+            $missing = [regex]::Match($plan.Result.Output, "no installed dispatchable Primary '([^']+)'")
+            if (-not $missing.Success) { return $plan }
+            New-Agent -Root $agentRoot -Name $missing.Groups[1].Value
+        }
+        $plan
+    }
+
     function Invoke-Expansion {
         param(
             [string]$Repo,
@@ -565,5 +620,153 @@ Describe 'Deterministic additive roster expansion' {
         finally {
             $held.Dispose()
         }
+    }
+}
+
+Describe 'All-present registered pack expansion' {
+    It 'applies full +foundry as metadata and provenance only' {
+        $repo = New-RepoFixture
+        $root = Initialize-ProfileSquad -Repo $repo -Profile 'full'
+        $teamBefore = [IO.File]::ReadAllText((Join-Path $root 'team.md'))
+        $routingBefore = [IO.File]::ReadAllBytes((Join-Path $root 'routing.md'))
+        $roleCountBefore = @([regex]::Matches($teamBefore, '(?m)^\| [a-z]')).Count
+        $plan = New-ExpansionPlan -Repo $repo -Choices @{
+            confirmed = $true
+            runId = 'full-foundry'
+            packs = @('foundry')
+        }
+
+        $plan.Result.ExitCode | Should -Be 0 -Because $plan.Result.Output
+        @($plan.Receipt.addedRoles) | Should -BeNullOrEmpty
+        $plan.Receipt.routingRowsAdded | Should -Be 0
+        $applied = Invoke-Expansion -Repo $repo -Plan $plan
+        $applied.ExitCode | Should -Be 0 -Because $applied.Output
+        $teamAfter = [IO.File]::ReadAllText((Join-Path $root 'team.md'))
+        $teamAfter | Should -Match '(?m)^Packs: foundry$'
+        @([regex]::Matches($teamAfter, '(?m)^\| [a-z]')).Count | Should -Be $roleCountBefore
+        [IO.File]::ReadAllBytes((Join-Path $root 'routing.md')) | Should -Be $routingBefore
+        $decisions = [IO.File]::ReadAllText((Join-Path $root 'decisions.md'))
+        $decisions | Should -Match 'Provenance: full \+foundry'
+        $decisions | Should -Match 'Added roles: \(none\)'
+    }
+
+    It 'adds only the missing foundry roles for azure +foundry and records Packs' {
+        $repo = New-RepoFixture
+        $root = Initialize-ProfileSquad -Repo $repo -Profile 'azure'
+        $routingBefore = [IO.File]::ReadAllText((Join-Path $root 'routing.md'))
+        $plan = New-ExpansionPlanReady -Repo $repo -Choices @{
+            confirmed = $true
+            runId = 'azure-foundry'
+            packs = @('foundry')
+        }
+
+        $plan.Result.ExitCode | Should -Be 0 -Because $plan.Result.Output
+        (@($plan.Receipt.addedRoles | Sort-Object) -join ',') | Should -BeExactly 'observability,prompt-engineer,rai'
+        $applied = Invoke-Expansion -Repo $repo -Plan $plan
+        $applied.ExitCode | Should -Be 0 -Because $applied.Output
+        $team = [IO.File]::ReadAllText((Join-Path $root 'team.md'))
+        $team | Should -Match '(?m)^Packs: foundry$'
+        $team | Should -Match '\| prompt-engineer \|'
+        $team | Should -Match '\| rai \|'
+        $team | Should -Match '\| observability \|'
+        [IO.File]::ReadAllText((Join-Path $root 'routing.md')) | Should -Match ([regex]::Escape($routingBefore.TrimEnd()))
+        [IO.File]::ReadAllText((Join-Path $root 'decisions.md')) | Should -Match 'Provenance: azure \+foundry'
+    }
+
+    It 'rejects empty pack cells, unknown packs, and role-only no-ops' {
+        $repo = New-RepoFixture
+        $null = Initialize-PlainSquad $repo
+        $empty = New-ExpansionPlan -Repo $repo -Choices @{
+            confirmed = $true
+            runId = 'empty-pack-cell'
+            packs = @('')
+        }
+        $empty.Result.ExitCode | Should -Be 1
+        $empty.Result.Output | Should -Match 'Empty pack cell'
+
+        $unknown = New-ExpansionPlan -Repo $repo -Choices @{
+            confirmed = $true
+            runId = 'unknown-pack'
+            packs = @('not-a-pack')
+        }
+        $unknown.Result.ExitCode | Should -Be 1
+        $unknown.Result.Output | Should -Match 'Unknown or duplicate pack'
+
+        $noop = New-ExpansionPlan -Repo $repo -Choices @{
+            confirmed = $true
+            runId = 'role-only-noop'
+            roles = @('researcher')
+        }
+        $noop.Result.ExitCode | Should -Be 1
+        $noop.Result.Output | Should -Match 'already present'
+    }
+
+    It 'keeps pack apply inside one member and refuses the federation root' {
+        $repo = New-RepoFixture
+        $federation = Initialize-Federation $repo
+        $rootFiles = @{}
+        foreach ($name in @('federation.md', 'decisions.md', 'state.json', 'consumption.md', 'team.md', 'routing.md')) {
+            $path = Join-Path $federation.Root $name
+            if (Test-Path -LiteralPath $path) { $rootFiles[$name] = [IO.File]::ReadAllBytes($path) }
+        }
+        $refused = New-ExpansionPlan -Repo $repo -Root '.copilot-tracking/squad' -Choices @{
+            confirmed = $true
+            runId = 'federation-root-pack'
+            packs = @('foundry')
+        }
+        $refused.Result.ExitCode | Should -Be 1
+        $refused.Result.Output | Should -Match 'federation root'
+        foreach ($name in $rootFiles.Keys) {
+            [IO.File]::ReadAllBytes((Join-Path $federation.Root $name)) | Should -Be $rootFiles[$name]
+        }
+
+        $productPlan = New-ExpansionPlan -Repo $repo -Root '.copilot-tracking/squad/members/product' -Choices @{
+            confirmed = $true
+            runId = 'member-aws'
+            packs = @('aws')
+        }
+        $productPlan.Result.ExitCode | Should -Be 0 -Because $productPlan.Result.Output
+        $applied = Invoke-Expansion -Repo $repo -Plan $productPlan
+        $applied.ExitCode | Should -Be 0 -Because $applied.Output
+        $memberTeam = [IO.File]::ReadAllText((Join-Path $federation.Member 'team.md'))
+        $memberTeam | Should -Match '(?m)^Packs: aws$'
+        foreach ($name in $rootFiles.Keys) {
+            [IO.File]::ReadAllBytes((Join-Path $federation.Root $name)) | Should -Be $rootFiles[$name]
+        }
+    }
+
+    It 'reapplies a pack after cold removal without dropping roles' {
+        $repo = New-RepoFixture
+        $root = Initialize-ProfileSquad -Repo $repo -Profile 'full'
+        $first = New-ExpansionPlan -Repo $repo -Choices @{
+            confirmed = $true
+            runId = 'foundry-apply'
+            packs = @('foundry')
+        }
+        (Invoke-Expansion -Repo $repo -Plan $first).ExitCode | Should -Be 0
+        $teamPath = Join-Path $root 'team.md'
+        $team = [IO.File]::ReadAllText($teamPath)
+        $roleCount = @([regex]::Matches($team, '(?m)^\| [a-z]')).Count
+        $removed = $team -replace '(?m)^Packs: foundry\r?\n', ''
+        [IO.File]::WriteAllText($teamPath, $removed, [Text.UTF8Encoding]::new($false))
+        $removal = New-ExpansionPlan -Repo $repo -Choices @{
+            confirmed = $true
+            runId = 'foundry-remove'
+            packs = @('foundry')
+            remove = $true
+        }
+        $removal.Result.ExitCode | Should -Be 1
+        $removal.Result.Output | Should -Match 'Unsupported field'
+        $reappliedPlan = New-ExpansionPlan -Repo $repo -Choices @{
+            confirmed = $true
+            runId = 'foundry-reapply'
+            packs = @('foundry')
+        }
+        $reappliedPlan.Result.ExitCode | Should -Be 0 -Because $reappliedPlan.Result.Output
+        @($reappliedPlan.Receipt.addedRoles) | Should -BeNullOrEmpty
+        (Invoke-Expansion -Repo $repo -Plan $reappliedPlan).ExitCode | Should -Be 0
+        $teamAfter = [IO.File]::ReadAllText($teamPath)
+        $teamAfter | Should -Match '(?m)^Packs: foundry$'
+        @([regex]::Matches($teamAfter, '(?m)^\| [a-z]')).Count | Should -Be $roleCount
     }
 }
