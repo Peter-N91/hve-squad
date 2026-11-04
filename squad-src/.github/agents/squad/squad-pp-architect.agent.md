@@ -14,7 +14,7 @@ Design the supported official Power Platform jobs and return the result to the S
 * When the resolved root's `team.md` `Packs:` line includes `power-platform`, reach only `plan-alm`, `app-builder`, and `dv-overview` for Power Pages ALM planning, model-driven app building, and Dataverse overview.
 * Read `references/power-platform-official-resources.md` before using those skills.
 * When the pack is absent, do not select those skills. An installed skill remaining visible to the host is not squad selection.
-* When the requested job is broader Power Platform architecture or Copilot Studio, stop. That cue selects `Power Platform Expert`. If that Alternate is absent or not dispatchable, escalate with its registry install command. Do not substitute this charter.
+* When the requested job is Power Automate, a cloud flow, a canvas app, a DLP policy, solution ALM, broader Power Platform architecture, or Copilot Studio, stop. That cue selects `Power Platform Expert`. If that Alternate is absent or not dispatchable, escalate with its registry install command. Do not substitute this charter.
 
 ## Boundaries
 

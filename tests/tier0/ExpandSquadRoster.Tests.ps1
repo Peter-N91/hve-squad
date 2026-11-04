@@ -173,6 +173,33 @@ BeforeAll {
         }
     }
 
+    function Write-TamperedExpansionPlan {
+        param(
+            [Parameter(Mandatory)][string]$Repo,
+            [Parameter(Mandatory)][string]$SourcePath,
+            [Parameter(Mandatory)][string]$PackName,
+            [string]$SealedPackLine
+        )
+        $plan = Get-Content -LiteralPath $SourcePath -Raw | ConvertFrom-Json -AsHashtable -Depth 50
+        $plan.packs = @($PackName)
+        if ($SealedPackLine) {
+            $bytes = [Convert]::FromBase64String([string]$plan.outputs.team.contentBase64)
+            $text = [Text.UTF8Encoding]::new($false).GetString($bytes)
+            $updated = [regex]::Replace($text, '(?m)^Packs:[^\r\n]*', $SealedPackLine, 1)
+            if ($updated -eq $text) { throw 'Sealed team Packs line was not tampered.' }
+            $newBytes = [Text.UTF8Encoding]::new($false).GetBytes($updated)
+            $plan.outputs.team.bytes = $newBytes.Length
+            $plan.outputs.team.sha256 = [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($newBytes))
+            $plan.outputs.team.contentBase64 = [Convert]::ToBase64String($newBytes)
+        }
+        $path = Join-Path $Repo ("tampered-plan-$([guid]::NewGuid().ToString('N')).json")
+        Write-Json $path $plan
+        [pscustomobject]@{
+            Path = $path
+            Sha = (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash
+        }
+    }
+
     function Initialize-ProfileSquad {
         param(
             [string]$Repo,
@@ -702,6 +729,70 @@ Describe 'All-present registered pack expansion' {
         }
         $noop.Result.ExitCode | Should -Be 1
         $noop.Result.Output | Should -Match 'already present'
+
+        $emptyExpansion = New-ExpansionPlan -Repo $repo -Choices @{
+            confirmed = $true
+            runId = 'empty-expansion'
+            packs = @()
+            roles = @()
+        }
+        $emptyExpansion.Result.ExitCode | Should -Be 1
+        $emptyExpansion.Result.Output | Should -Match 'at least one confirmed pack or role'
+    }
+
+    It 'rejects an already-active pack, an unregistered sealed pack, and a hash-bound tampered plan' {
+        $repo = New-RepoFixture
+        $root = Initialize-ProfileSquad -Repo $repo -Profile 'full'
+        $teamPath = Join-Path $root 'team.md'
+        $decisionsPath = Join-Path $root 'decisions.md'
+        $first = New-ExpansionPlan -Repo $repo -Choices @{
+            confirmed = $true
+            runId = 'foundry-first'
+            packs = @('foundry')
+        }
+        $first.Result.ExitCode | Should -Be 0 -Because $first.Result.Output
+        (Invoke-Expansion -Repo $repo -Plan $first).ExitCode | Should -Be 0
+        $afterFirst = Get-TreeHash $root
+        $decisionCount = @([regex]::Matches([IO.File]::ReadAllText($decisionsPath), '(?m)^## Roster Expansion ')).Count
+
+        $repeat = New-ExpansionPlan -Repo $repo -Choices @{
+            confirmed = $true
+            runId = 'foundry-repeat'
+            packs = @('foundry')
+        }
+        $repeat.Result.ExitCode | Should -Be 1
+        $repeat.Result.Output | Should -Match 'already active'
+        Get-TreeHash $root | Should -BeExactly $afterFirst
+
+        $fabric = New-ExpansionPlan -Repo $repo -Choices @{
+            confirmed = $true
+            runId = 'fabric-for-tamper'
+            packs = @('fabric')
+        }
+        $fabric.Result.ExitCode | Should -Be 0 -Because $fabric.Result.Output
+        $alreadyActive = Write-TamperedExpansionPlan -Repo $repo -SourcePath $fabric.Path -PackName 'foundry'
+        $activeApply = Invoke-Expansion -Repo $repo -Plan $alreadyActive -Sha $alreadyActive.Sha
+        $activeApply.ExitCode | Should -Not -Be 0
+        $activeApply.Output | Should -Match 'already active'
+        [IO.File]::ReadAllText($teamPath) | Should -Match '(?m)^Packs: foundry$'
+        [IO.File]::ReadAllText($teamPath) | Should -Not -Match '(?m)^Packs:.*\bfabric\b'
+        @([regex]::Matches([IO.File]::ReadAllText($decisionsPath), '(?m)^## Roster Expansion ')).Count | Should -Be $decisionCount
+
+        $clean = New-RepoFixture
+        $cleanRoot = Initialize-ProfileSquad -Repo $clean -Profile 'full'
+        $cleanBefore = Get-TreeHash $cleanRoot
+        $planned = New-ExpansionPlan -Repo $clean -Choices @{
+            confirmed = $true
+            runId = 'unregistered-source'
+            packs = @('foundry')
+        }
+        $planned.Result.ExitCode | Should -Be 0 -Because $planned.Result.Output
+        $unregistered = Write-TamperedExpansionPlan -Repo $clean -SourcePath $planned.Path -PackName 'not-a-pack' -SealedPackLine 'Packs: not-a-pack'
+        $unregisteredApply = Invoke-Expansion -Repo $clean -Plan $unregistered -Sha $unregistered.Sha
+        $unregisteredApply.ExitCode | Should -Not -Be 0
+        $unregisteredApply.Output | Should -Match 'Unregistered pack'
+        Get-TreeHash $cleanRoot | Should -BeExactly $cleanBefore
+        [IO.File]::ReadAllText((Join-Path $cleanRoot 'team.md')) | Should -Not -Match 'not-a-pack'
     }
 
     It 'keeps pack apply inside one member and refuses the federation root' {

@@ -10,8 +10,9 @@
     AI cost: none. Resolves confirmed catalog roles and packs, validates their installed
     Primaries, appends only missing roster rows and newly eligible canonical routing rows,
     and writes an exact hash-bound plan outside squad state. A confirmed registered pack
-    whose roles are already present seals a metadata-only plan: Packs: and one decision,
-    with no invented role row.
+    whose roles are already present seals a metadata-only plan only when that pack is
+    absent from Packs:: Packs: and one decision, with no invented role row. A pack
+    already listed in Packs: is rejected. Empty expansions stay invalid.
 
     The plan contains the final team.md, routing.md, and append-only decisions.md bytes.
     It seals state, accounting, rates, notifications, history, and (for a federation
@@ -398,6 +399,19 @@ try {
     if ($unknown.Count) { throw "Unknown catalog role(s): $($unknown -join ', ')" }
     $alreadyPresent = @($catalogOrder | Where-Object { $requestedRoles.Contains($_) -and $existingRoles.Contains($_) })
     $addRoles = @($catalogOrder | Where-Object { $requestedRoles.Contains($_) -and -not $existingRoles.Contains($_) })
+    $activePacks = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+    foreach ($line in $team.lines) {
+        if ($line -match '^Packs:\s*(?<packs>.*)$') {
+            foreach ($name in ($Matches.packs -split ',\s*')) {
+                $name = $name.Trim()
+                if ($name) { $null = $activePacks.Add($name) }
+            }
+            break
+        }
+    }
+    foreach ($packName in $requestedPacks) {
+        if ($activePacks.Contains($packName)) { throw "Pack '$packName' is already active." }
+    }
     $metadataOnly = $requestedPacks.Count -gt 0 -and -not $addRoles.Count
     if (-not $addRoles.Count -and -not $metadataOnly) { throw 'Every confirmed role is already present; nothing to expand.' }
 

@@ -35,7 +35,7 @@ Ask:
 * Which control-plane, model-download, update, management, and telemetry paths require connectivity?
 * Has the customer accepted every preview dependency and named a supported fallback?
 
-Use the registered `microsoft-foundry` skill for current product guidance, and verify Foundry Local on Azure Local against current Microsoft Learn documentation. Record unknown or conflicting claims as unverified with the smallest next check.
+Use the registered `microsoft-foundry` skill for current product guidance, and verify Foundry Local on Azure Local against current Microsoft Learn documentation. The pinned Azure plugin `mcp.json` declares only `mcpServers.azure`. It does not install a separate Foundry MCP server. Foundry operations use that Azure MCP server's `foundry` tool. Record unknown or conflicting claims as unverified with the smallest next check.
 
 Frame Azure Local as a distinct deployment option, not a cloud-equivalent checkbox:
 

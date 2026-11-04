@@ -22,14 +22,15 @@ cold refresh procedure. A missing external Primary is offered with its install
 command and is never seeded.
 
 A confirmed registered pack whose roles are already present is still a valid
-transaction. It changes only the `team.md` `Packs:` line and appends one
-decision. `addedRoles` is empty, no member row is invented, and routing stays
-byte-identical. Role-only confirmation of roles that are already present remains
-invalid, as do an empty pack cell, an unknown pack, and a pack whose Adds cell
-is empty. Reapplying a pack that is already listed appends provenance again and
-does not duplicate the pack token. Removing a pack is not this writer: drop the
-`Packs:` token through the cold path, then reapply here if the pack is confirmed
-again. The writer never drops a role or a pack token.
+transaction when that pack is not already listed in `Packs:`. It changes only
+the `team.md` `Packs:` line and appends one decision. `addedRoles` is empty, no
+member row is invented, and routing stays byte-identical. Role-only confirmation
+of roles that are already present remains invalid, as do an empty pack cell, an
+unknown pack, a pack whose Adds cell is empty, and a pack already listed in
+`Packs:`. Reapplying an already-listed pack is rejected at planning and at
+apply, even when a sealed plan is otherwise hash-bound. Removing a pack is not
+this writer: drop the `Packs:` token through the cold path, then reapply here
+if the pack is confirmed again. The writer never drops a role or a pack token.
 
 ## Prepare and Confirm
 

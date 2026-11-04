@@ -14,7 +14,7 @@ Assess supported .NET Agents SDK production readiness and return the result to t
 * When the resolved root's `team.md` `Packs:` line includes `m365-copilot`, reach only `agents-sdk-to-prod` for .NET Agents SDK production readiness.
 * Read `references/m365-copilot-platform-options.md` before using that skill.
 * When the pack is absent, do not select the skill. Host visibility is not squad selection.
-* When the request is a declarative agent, TypeSpec, an API plugin, or broader M365 architecture, stop and name `Declarative Agents Architect`. If that Alternate is absent or not dispatchable, escalate. Do not substitute this charter.
+* When the request is a declarative agent, TypeSpec, an API plugin, a Microsoft 365 Copilot agent, an agent manifest, Agents Toolkit, or broader M365 architecture, stop and name `Declarative Agents Architect`. If that Alternate is absent or not dispatchable, escalate. Do not substitute this charter.
 
 ## Boundaries
 

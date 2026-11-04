@@ -12,7 +12,9 @@
     per-root writer lock as ordinary handoffs, the transaction revalidates every
     sealed file and history digest, writes only team.md, routing.md, and an appended
     decisions.md entry, then checks the ledger read-only. An all-present registered
-    pack may seal zero added roles; that plan still updates Packs: and provenance.
+    pack may seal zero added roles only when that pack is absent from Packs:; the
+    writer rejects an unregistered or already-active pack even if the sealed team
+    text contains the name. Empty expansions stay invalid.
 
     consumption.md, optional consumption-sessions.json, state.json, consumption-rates.md, notifications.md, and history/
     must remain byte-identical. A stale plan, lock timeout, failed ledger check, or
@@ -333,6 +335,21 @@ try {
         $null = $locks.Add((Enter-WriterLock -Path $lockRoot -Deadline $deadline))
     }
     Assert-Baseline -Expected $plan.baseline -Root $root -Repository $RepoRoot -RelativeRoot $relativeRoot
+
+    if (@($plan.packs).Count) {
+        $registeredPacks = @(Get-SquadInitData -RepoRoot $RepoRoot).packs
+        $baselineTeamText = [IO.File]::ReadAllText((Join-Path $root 'team.md'))
+        $baselinePackMatch = [regex]::Match($baselineTeamText, '(?m)^Packs:\s*(?<packs>[^\r\n]*)\s*$')
+        $baselinePacks = @()
+        if ($baselinePackMatch.Success) {
+            $baselinePacks = @($baselinePackMatch.Groups['packs'].Value -split ',\s*' | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+        }
+        foreach ($packName in @($plan.packs)) {
+            $registered = @($registeredPacks | Where-Object { $_.Pack -ceq [string]$packName })
+            if ($registered.Count -ne 1) { throw "Unregistered pack: $packName" }
+            if ([string]$packName -cin $baselinePacks) { throw "Pack '$packName' is already active." }
+        }
+    }
 
     foreach ($name in @('team.md', 'routing.md', 'decisions.md')) {
         $originals[$name] = [IO.File]::ReadAllBytes((Join-Path $root $name))

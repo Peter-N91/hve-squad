@@ -1356,7 +1356,7 @@ flowchart TD
       <p data-release-change="20261104-official-source-packs">
         Un pack enregistré dont les rôles sont déjà dans l'équipe met à jour <code>Packs:</code> et
         ajoute une décision. Il n'invente pas de membre. <code>full +foundry</code> et
-        <code>full +fabric</code> sont ce cas. Retirer un pack arrête la sélection de la squad et la
+        <code>full +fabric</code> sont ce cas. Un pack déjà listé dans <code>Packs:</code> est rejeté. Retirer un pack arrête la sélection de la squad et la
         transmission des consignes. Cela ne désinstalle pas une compétence que l'hôte peut encore voir,
         et ne la cache pas.
       </p>
@@ -1364,7 +1364,10 @@ flowchart TD
         Les travaux pris en charge sur Power Pages, les applications pilotées par modèle, Dataverse et
         le SDK Agents .NET sélectionnent la charte locale. L'architecture Power Platform plus large,
         Copilot Studio, les connecteurs, les agents déclaratifs, TypeSpec et l'intégration MCP
-        sélectionnent encore l'alternative communautaire lorsque cet agent est installé. Sans indice
+        sélectionnent encore l'alternative communautaire lorsque cet agent est installé. Power Automate,
+        cloud flow, canvas app, DLP policy et solution ALM sélectionnent <code>Power Platform Expert</code>.
+        Microsoft Graph, Graph SDK et Graph permission scope sélectionnent <code>MCP M365 Agent Expert</code>.
+        Sans indice
         correspondant, la Primary reste retenue. Une alternative absente est escaladée, pas remplacée.
         <code>foundry</code> inclut le <code>data-scientist</code> existant afin que Foundry IQ ait un
         propriétaire dans <code>azure +foundry</code>. <code>azure-deployment-preflight</code> reste la

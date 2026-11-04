@@ -1364,14 +1364,16 @@ flowchart TD
       <p data-release-change="20261104-official-source-packs">
         A registered pack whose roles are already on the roster updates <code>Packs:</code> and appends
         one decision. It does not invent a member. <code>full +foundry</code> and <code>full +fabric</code>
-        are that case. Removing a pack stops squad selection and pack guidance. It does not uninstall or
+        are that case. A pack already listed in <code>Packs:</code> is rejected. Removing a pack stops squad selection and pack guidance. It does not uninstall or
         hide a skill the host can still see.
       </p>
       <p data-release-change="20261104-official-source-packs">
         Supported Power Pages, model-driven app, Dataverse, and .NET Agents SDK jobs select the local
         charter. Broader Power Platform architecture, Copilot Studio, connector work, declarative agents,
         TypeSpec, and MCP-backed integration still select the community Alternate when that agent is
-        installed. No cue match keeps the Primary. A missing Alternate is escalated, not replaced.
+        installed. Power Automate, cloud flow, canvas app, DLP policy, and solution ALM select
+        <code>Power Platform Expert</code>. Microsoft Graph, Graph SDK, and Graph permission scope select
+        <code>MCP M365 Agent Expert</code>. No cue match keeps the Primary. A missing Alternate is escalated, not replaced.
         <code>foundry</code> includes existing <code>data-scientist</code> so Foundry IQ has an owner in
         <code>azure +foundry</code>. <code>azure-deployment-preflight</code> remains the registered
         pre-deployment skill. <code>azure-validate</code> and <code>azure-enterprise-infra-planner</code>

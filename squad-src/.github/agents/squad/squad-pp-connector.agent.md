@@ -14,7 +14,7 @@ Author the supported official connector jobs and return the result to the Squad 
 * When the resolved root's `team.md` `Packs:` line includes `power-platform`, reach only `generate-codeful-mcp-tool`, `generate-mcp-app-ui`, and `dv-connect`.
 * Read `references/power-platform-official-resources.md` before using those skills.
 * When the pack is absent, do not select those skills. Host visibility of an installed skill is not squad selection.
-* When the request is broader connector or integration work, stop and name `Power Platform MCP Integration Expert`. If that Alternate is absent or not dispatchable, escalate. Do not substitute this charter.
+* When the request is a custom connector, connector certification, or broader connector or integration work, stop and name `Power Platform MCP Integration Expert`. If that Alternate is absent or not dispatchable, escalate. Do not substitute this charter.
 
 ## Boundaries
 

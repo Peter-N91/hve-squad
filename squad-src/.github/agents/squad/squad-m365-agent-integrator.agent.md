@@ -14,7 +14,7 @@ Plan supported Agents SDK OpenTelemetry and provisioning work and return the res
 * When the resolved root's `team.md` `Packs:` line includes `m365-copilot`, reach only `agents-sdk-dotnet-otel` and `agents-sdk-provision`.
 * Read `references/m365-copilot-platform-options.md` before using those skills.
 * When the pack is absent, do not select those skills. Host visibility is not squad selection.
-* When the request is broader MCP-backed M365 integration, stop and name `MCP M365 Agent Expert`. If that Alternate is absent or not dispatchable, escalate. Do not substitute this charter.
+* When the request is Microsoft Graph, Graph SDK, a Graph permission scope, an MCP-backed Copilot agent, or broader MCP-backed M365 integration, stop and name `MCP M365 Agent Expert`. If that Alternate is absent or not dispatchable, escalate. Do not substitute this charter.
 
 ## Boundaries
 

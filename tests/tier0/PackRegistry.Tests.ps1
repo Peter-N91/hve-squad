@@ -299,17 +299,22 @@ Describe 'Power Platform and M365 official selection' -Tag 'Unit' {
             @{ Role = 'm365-agent-architect'; Request = 'declarative agent with a TypeSpec manifest'; Agent = 'Declarative Agents Architect' }
             @{ Role = 'm365-agent-integrator'; Request = 'Agents SDK OpenTelemetry for the bot'; Agent = 'Squad M365 Agent Integrator' }
             @{ Role = 'm365-agent-integrator'; Request = 'broader MCP-backed M365 integration'; Agent = 'MCP M365 Agent Expert' }
+            @{ Role = 'pp-architect'; Request = 'Build a Power Automate cloud flow for invoice approval'; Agent = 'Power Platform Expert' }
+            @{ Role = 'pp-architect'; Request = 'Review the canvas app DLP policy and solution ALM'; Agent = 'Power Platform Expert' }
+            @{ Role = 'pp-connector'; Request = 'Certify this custom connector before publication'; Agent = 'Power Platform MCP Integration Expert' }
+            @{ Role = 'm365-agent-architect'; Request = 'Author a Microsoft 365 Copilot agent manifest in Agents Toolkit'; Agent = 'Declarative Agents Architect' }
+            @{ Role = 'm365-agent-integrator'; Request = 'Call Microsoft Graph with the Graph SDK'; Agent = 'MCP M365 Agent Expert' }
             @{ Role = 'pp-architect'; Request = 'review this pull request'; Agent = 'Squad Power Platform Architect' }
         )
         $phrases = @(
             'Power Pages ALM planning, model-driven app building, or Dataverse overview → Squad Power Platform Architect'
-            'broader Power Platform architecture or Copilot Studio → Power Platform Expert'
+            'broader Power Platform architecture or Copilot Studio, Power Automate, cloud flow, canvas app, DLP policy, or solution ALM → Power Platform Expert'
             'codeful MCP tool or UI generation, or Dataverse connection → Squad Power Platform Integrator'
-            'broader connector or integration work → Power Platform MCP Integration Expert'
+            'broader connector or integration work, custom connector, or connector certification → Power Platform MCP Integration Expert'
             '.NET Agents SDK production readiness → Squad M365 Agent Architect'
-            'declarative agent, TypeSpec, API plugin, or broader M365 architecture → Declarative Agents Architect'
+            'declarative agent, TypeSpec, API plugin, or broader M365 architecture, Microsoft 365 Copilot agent, agent manifest, or Agents Toolkit → Declarative Agents Architect'
             'Agents SDK OpenTelemetry or provisioning → Squad M365 Agent Integrator'
-            'broader MCP-backed M365 integration → MCP M365 Agent Expert'
+            'broader MCP-backed M365 integration, Microsoft Graph, Graph SDK, Graph permission scope, or MCP-backed Copilot agent → MCP M365 Agent Expert'
         )
         foreach ($phrase in $phrases) {
             $script:RosterCatalogBody | Should -Match ([regex]::Escape($phrase))
@@ -398,6 +403,18 @@ Describe 'Foundry pack-aware selection' -Tag 'Unit' {
         $observability | Should -Match 'do not select'
         $options = Get-Content -LiteralPath (Join-Path $SourceRoot 'squad-src/.github/skills/squad/references/foundry-platform-options.md') -Raw
         $options | Should -Match 'does not uninstall or hide'
+        $options | Should -Match 'separate Foundry MCP server'
+        $options | Should -Match 'mcpServers\.azure'
+        $registered = Get-MarkdownSectionBody -Body $script:RosterCatalogBody -Heading 'Registered External Cast'
+        $foundryRows = @(Get-MarkdownTableRows -Body $registered -HeaderCell 'Role' | Where-Object { $_[3].Trim() -eq '`microsoft-foundry`' })
+        $foundryRows | Should -HaveCount 2
+        foreach ($row in $foundryRows) {
+            $row[6].Trim() | Should -Match 'Azure MCP server only'
+            $row[6].Trim() | Should -Not -Match 'Foundry MCP servers'
+            $row[6].Trim() | Should -Match 'mcpServers\.azure'
+            $row[8].Trim() | Should -Match 'plugin MCP server;'
+            $row[8].Trim() | Should -Not -Match 'plugin MCP servers'
+        }
         $script:FoundryBlueprintBody | Should -Match 'Host visibility is not selection'
         $script:ProfilesBody | Should -Match 'foundry-iq'
         $script:ProfilesBody | Should -Match 'only when this pack is active'
