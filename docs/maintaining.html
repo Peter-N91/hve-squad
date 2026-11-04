@@ -432,11 +432,16 @@ flowchart TD
 # Valid state plus adversarial transition fixtures
 ./tests/tier1/Invoke-Tier1Tests.ps1 -SelfCheck -Output Normal
 
+# The same cases spread over worker processes, as CI runs them
+./tests/tier1/Invoke-Tier1Tests.ps1 -SelfCheck -Output Normal -Parallel 4
+
 # Whitespace and malformed patch output
 git diff --check</code></pre>
       <p>
         Tier 1 live runs invoke models and are a separate manual measurement lane. The self-check above
         is deterministic and proves each contract assertion can reject a deliberately corrupted tree.
+        <code>-Parallel</code> deals the self-check out to worker processes. The runner discovers every case
+        first and fails unless each one ran exactly once, so it changes scheduling, not coverage.
         A behavior change also needs a new file under <code>.changes/unreleased/</code>; editing an
         existing fragment does not satisfy the pull-request gate for a separate pull request.
       </p>

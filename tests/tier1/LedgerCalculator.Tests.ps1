@@ -4473,8 +4473,9 @@ Describe 'Measure-SquadLedger history-writer evidence is a shell call that write
         @{ Case = 'a script whose name only ends like a writer'; Expected = 'none'; Tool = 'powershell'; Arguments = @{ command = 'pwsh -File $s\My-Write-SquadHandoff.ps1 -SquadRoot .copilot-tracking/squad' } }
         @{ Case = 'a finished tool call'; Expected = 'none'; Tool = 'powershell'; Type = 'tool.execution_complete'; Arguments = @{ command = 'pwsh -File $s\Write-SquadHandoff.ps1 -SquadRoot .copilot-tracking/squad' } }
     ) {
-        $line = New-LogLineLocal -Tool $_.Tool -Arguments $_.Arguments -Type $(if ($_.Type) { $_.Type } else { 'tool.execution_start' })
-        $squadRoot = if ($_.Root) { $_.Root } else { 'C:\repo\.copilot-tracking\squad' }
+        $type = if ($_.ContainsKey('Type')) { $_.Type } else { 'tool.execution_start' }
+        $squadRoot = if ($_.ContainsKey('Root')) { $_.Root } else { 'C:\repo\.copilot-tracking\squad' }
+        $line = New-LogLineLocal -Tool $_.Tool -Arguments $_.Arguments -Type $type
         Get-HandoffWriterScopeLocal -Line $line -SquadRoot $squadRoot | Should -Be $_.Expected
     }
 }

@@ -411,11 +411,16 @@ flowchart TD
 # Valid state plus adversarial transition fixtures
 ./tests/tier1/Invoke-Tier1Tests.ps1 -SelfCheck -Output Normal
 
+# The same cases spread over worker processes, as CI runs them
+./tests/tier1/Invoke-Tier1Tests.ps1 -SelfCheck -Output Normal -Parallel 4
+
 # Whitespace and malformed patch output
 git diff --check</code></pre>
       <p>
         Les exécutions Tier 1 en conditions réelles invoquent des modèles et constituent une voie de mesure manuelle distincte. L’autocontrôle ci-dessus
         est déterministe et prouve que chaque assertion du contrat peut rejeter une arborescence volontairement corrompue.
+        <code>-Parallel</code> répartit l’autocontrôle sur des processus de travail. L’exécuteur découvre d’abord chaque cas et échoue
+        sauf si chacun s’est exécuté exactement une fois : cela change l’ordonnancement, pas la couverture.
         Un changement de comportement nécessite aussi un nouveau fichier dans <code>.changes/unreleased/</code> ; modifier un
         fragment existant ne satisfait pas le contrôle d’une pull request distincte.
       </p>

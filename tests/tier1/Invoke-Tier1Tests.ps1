@@ -26,10 +26,17 @@
     every figure in the ledger is an estimate; the self-check needs them blocking.
 .PARAMETER SelfCheck
     Verify the contract itself against a generated fixture and its mutations.
+.PARAMETER Parallel
+    Self-check only. Spreads the self-check over this many worker processes. Every case is
+    independent and starts child pwsh processes, so they scale across cores. The runner
+    discovers every case first and fails unless each one ran exactly once, so this changes
+    scheduling, not coverage. The default, 1, runs everything in this process.
 .PARAMETER Output
     Pester output verbosity.
 .EXAMPLE
     ./Invoke-Tier1Tests.ps1 -SelfCheck
+.EXAMPLE
+    ./Invoke-Tier1Tests.ps1 -SelfCheck -Parallel 4
 .EXAMPLE
     ./Invoke-Tier1Tests.ps1 -SquadRoot .copilot-tracking/squad
 .NOTES
@@ -54,6 +61,18 @@ param(
 
     [Parameter(ParameterSetName = 'SelfCheck')]
     [switch]$SelfCheck,
+
+    [Parameter(ParameterSetName = 'SelfCheck')]
+    [ValidateRange(1, 64)]
+    [int]$Parallel = 1,
+
+    # Internal: the coordinator re-invokes this script once per worker with the plan it wrote.
+    [Parameter(ParameterSetName = 'SelfCheck', DontShow)]
+    [string]$WorkerPlan,
+
+    [Parameter(ParameterSetName = 'SelfCheck', DontShow)]
+    [ValidateRange(1, 64)]
+    [int]$WorkerIndex = 1,
 
     [ValidateSet('None', 'Normal', 'Detailed', 'Diagnostic')]
     [string]$Output = 'Detailed'
@@ -82,20 +101,42 @@ else {
     # references/scripts and static fixtures, no live squad root - so they run as
     # additional containers alongside the mutation self-check rather than needing
     # their own switch.
-    $config.Run.Container = @(
-        New-PesterContainer -Path (Join-Path $PSScriptRoot 'Assertions.Tests.ps1')
-        New-PesterContainer -Path (Join-Path $PSScriptRoot 'ModelRouting.Tests.ps1')
-        New-PesterContainer -Path (Join-Path $PSScriptRoot 'LedgerCalculator.Tests.ps1')
-        New-PesterContainer -Path (Join-Path $PSScriptRoot 'ConnectorRoleModes.Tests.ps1')
-        New-PesterContainer -Path (Join-Path $PSScriptRoot 'ConnectorResumeHarness.Tests.ps1')
+    $selfCheckPath = @(
+        Join-Path $PSScriptRoot 'Assertions.Tests.ps1'
+        Join-Path $PSScriptRoot 'ModelRouting.Tests.ps1'
+        Join-Path $PSScriptRoot 'LedgerCalculator.Tests.ps1'
+        Join-Path $PSScriptRoot 'ConnectorRoleModes.Tests.ps1'
+        Join-Path $PSScriptRoot 'ConnectorResumeHarness.Tests.ps1'
         # U5 (routing-performance plan, Amendment 3 §5, P04-T04/T06): the live
         # pipelining benchmark's classification and void-rule logic is pure and
         # offline in the same way the containers above are -- no live squad
         # root, no model dispatch -- so it runs unconditionally here rather than
         # only when someone pays to run the paired benchmark driver.
-        New-PesterContainer -Path (Join-Path $PSScriptRoot 'benchmark' 'PipeliningClassification.Tests.ps1')
+        Join-Path $PSScriptRoot 'benchmark' 'PipeliningClassification.Tests.ps1'
+        # The planning and accounting that -Parallel relies on is pure and offline too.
+        Join-Path $PSScriptRoot 'Tier1Parallel.Tests.ps1'
     )
-    $config.TestResult.OutputPath = Join-Path $PSScriptRoot 'tier1-selfcheck-results.xml'
+
+    if ($WorkerPlan) {
+        # One worker process of a -Parallel run: only the blocks of the bundle it was given.
+        Import-Module (Join-Path $PSScriptRoot 'Tier1Parallel.psm1') -Force
+        $assignment = @(Get-Tier1WorkerAssignment -PlanPath $WorkerPlan -Index $WorkerIndex)
+        $config.Run.Container = @($assignment | ForEach-Object { $_.File } | Select-Object -Unique | ForEach-Object { New-PesterContainer -Path $_ })
+        $config.Filter.Line = @($assignment | ForEach-Object {
+                $file = $_.File
+                $_.Lines | ForEach-Object { '{0}:{1}' -f $file, $_ }
+            })
+        $config.TestResult.Enabled = $false
+    }
+    elseif ($Parallel -gt 1) {
+        Import-Module (Join-Path $PSScriptRoot 'Tier1Parallel.psm1') -Force
+        $parallelExit = @(Invoke-Tier1ParallelSelfCheck -Path $selfCheckPath -Workers $Parallel -RunnerPath $PSCommandPath -Output $Output)[-1]
+        exit $parallelExit
+    }
+    else {
+        $config.Run.Container = @($selfCheckPath | ForEach-Object { New-PesterContainer -Path $_ })
+        $config.TestResult.OutputPath = Join-Path $PSScriptRoot 'tier1-selfcheck-results.xml'
+    }
 }
 
 # An empty case set is a legitimate state, but Pester 6 treats it as an error by default.
@@ -139,9 +180,17 @@ if ($advisory.Count -gt 0) {
 }
 
 # A discovery failure yields zero tests and zero failures, which reads as success to
-# anything checking only the failure count. Treat an empty run as a failure.
-if ($blocking.Count -gt 0 -or $result.TotalCount -eq 0) {
-    if ($result.TotalCount -eq 0) {
+# anything checking only the failure count. Treat an empty run as a failure. A worker
+# has a second way to run nothing: a line filter that matched none of its blocks.
+$ranNothing = $result.TotalCount -eq 0 -or ($WorkerPlan -and $result.TotalCount -eq $result.NotRunCount)
+$failedRun = $blocking.Count -gt 0 -or $ranNothing
+
+if ($WorkerPlan) {
+    Write-Tier1WorkerSummary -PlanPath $WorkerPlan -Index $WorkerIndex -Result $result -ExitCode ([int]$failedRun)
+}
+
+if ($failedRun) {
+    if ($ranNothing) {
         Write-Error 'No tests ran. Discovery failed, or the container was filtered to nothing.' -ErrorAction Continue
     }
     exit 1
