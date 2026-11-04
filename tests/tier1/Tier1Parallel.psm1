@@ -392,6 +392,7 @@ function Invoke-Tier1WorkerProcess {
                 $running.Add([pscustomobject]@{
                         Index    = $next.Index
                         Process  = $process
+                        Started  = [datetime]::UtcNow
                         Out      = $process.StandardOutput.ReadLineAsync()
                         Err      = $process.StandardError.ReadLineAsync()
                         OutOpen  = $true
@@ -428,10 +429,13 @@ function Invoke-Tier1WorkerProcess {
                 $abandoned = $null -ne $entry.ExitSeen -and ([datetime]::UtcNow - $entry.ExitSeen).TotalSeconds -gt 3
                 if ($drained -or $abandoned) {
                     $entry.Process.WaitForExit()
+                    # Process.StartTime is not available once a process has exited on Linux, so
+                    # the clock is the one started with the process.
+                    $ended = if ($null -ne $entry.ExitSeen) { $entry.ExitSeen } else { [datetime]::UtcNow }
                     $finished.Add([pscustomobject]@{
                             Index    = $entry.Index
                             ExitCode = $entry.Process.ExitCode
-                            Seconds  = [math]::Round(($entry.Process.ExitTime - $entry.Process.StartTime).TotalSeconds, 1)
+                            Seconds  = [math]::Round(($ended - $entry.Started).TotalSeconds, 1)
                         })
                     $entry.Process.Dispose()
                     $null = $running.Remove($entry)
