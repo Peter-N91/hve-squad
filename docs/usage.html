@@ -68,7 +68,7 @@
           proposes a recommended profile before creating anything.
         </li>
         <li>
-          <code>pack=power-platform</code>, <code>pack=m365-copilot</code>, <code>pack=aws</code>, or <code data-release-change="20261008-foundry-agentic-pack">pack=foundry</code>
+          <code>pack=power-platform</code>, <code>pack=m365-copilot</code>, <code>pack=aws</code>, <code data-release-change="20261008-foundry-agentic-pack">pack=foundry</code>, or <code>pack=fabric</code>
           &mdash; adds a technology
           vertical's specialist roles, scoped guidance, or both on top of the profile. A pack never replaces the profile, and you
           can apply more than one (comma-separated). See <em>Packs</em> below.
@@ -1363,6 +1363,7 @@ flowchart TD
           <tr><td><code>m365-copilot</code></td><td>m365-agent-architect, m365-agent-integrator</td><td>The project is built on Microsoft 365 Copilot &mdash; declarative agents, TypeSpec agent definitions, API plugins, MCP-backed agents, or Microsoft Graph integration</td></tr>
           <tr><td><code>aws</code></td><td>aws-architect, aws-diagnose</td><td>The project is built on AWS &mdash; Lambda and serverless, ECS or EKS, CDK, SAM, CloudFormation, Organizations and landing zones, or a live AWS workload to triage</td></tr>
           <tr><td data-release-change="20261008-foundry-agentic-pack"><code>foundry</code></td><td>architect, azure-architect, deployer, prompt-engineer, security, rai, observability, cost-manager</td><td>Microsoft Foundry project planning, independent review, and gated deployment with a seven-block blueprint, source evidence, and SDK/API revalidation; reuses existing roles</td></tr>
+          <tr><td><code>fabric</code></td><td>data-scientist</td><td>Fabric Warehouse, Eventhouse, Spark, or Dataflow work beyond the Lakehouse primer. Opt-in; reuses <code>data-scientist</code> and adds no role. Install commands stay in the catalog. Nothing is installed automatically.</td></tr>
         </tbody>
       </table>
       <p>
@@ -1500,19 +1501,21 @@ npx skills add github.com/microsoft/CAIRA/skills</code></pre>
       <h3>Some verticals are not packs</h3>
       <p>
         Some capabilities arrive as extra reach on a role you already have rather than as a
-        separate pack. <strong>Power BI and Fabric</strong> (semantic-model review, DAX
+        separate pack. <strong>Power BI and the Lakehouse primer</strong> (semantic-model review, DAX
         optimization, report design, Lakehouse fundamentals) sit with <code>data-scientist</code>.
+                Warehouse, Eventhouse, Spark, and Dataflow work beyond that primer is the opt-in <code>fabric</code> pack.
         <strong>AI application engineering</strong> (Microsoft Agent Framework, Semantic Kernel) sits
         with <code>developer</code>. The Foundry pack adds project-level coordination and evidence,
         not a replacement for that implementation role.
       </p>
       <p>
-        There is nothing to apply for either. <code>developer</code> is in every profile, so the AI
-        engineering side is always there. <code>data-scientist</code> is seeded by <code>full</code> and
-        <code>product</code>; in any other profile, ask a Power BI or Fabric question and the squad will
-        notice the role is missing and offer to add it, the same way it offers any other role. That works,
-        but you find out at the moment you need it rather than when you build the squad &mdash; which is
-        the honest cost of a vertical that could not become a pack.
+        There is nothing to apply for Power BI, the Lakehouse primer, or AI application engineering.
+                <code>developer</code> is in every profile, so the AI engineering side is always there.
+                <code>data-scientist</code> is seeded by <code>full</code> and <code>product</code>; in any other
+                profile, ask a Power BI or Lakehouse question and the squad will notice the role is missing and
+                offer to add it. The <code>fabric</code> pack is different: apply it before its skills are
+                squad-selected. An installed skill that stays visible to the host is not selection. Removing the
+                pack stops that selection and does not uninstall the skill.
       </p>
 
       <h3>Worked combinations</h3>
@@ -1531,6 +1534,7 @@ npx skills add github.com/microsoft/CAIRA/skills</code></pre>
           <tr><td>Designing an AWS workload before anything is built</td><td><code>profile=architecture pack=aws</code></td></tr>
           <tr><td>One estate spanning Azure and AWS</td><td><code>profile=azure pack=aws</code></td></tr>
           <tr><td>Planning a Microsoft Foundry support assistant</td><td><code>profile=azure pack=foundry</code></td></tr>
+          <tr><td>Fabric Warehouse or Eventhouse work beyond the Lakehouse primer</td><td><code>profile=azure pack=fabric</code></td></tr>
           <tr><td>On call for a live AWS workload</td><td><code>profile=operations pack=aws</code></td></tr>
           <tr><td>An M365 Copilot agent that handles personal data</td><td><code>profile=security pack=m365-copilot</code></td></tr>
           <tr><td>A Power Platform solution fronted by an M365 Copilot agent</td><td><code>profile=default pack=power-platform,m365-copilot</code></td></tr>

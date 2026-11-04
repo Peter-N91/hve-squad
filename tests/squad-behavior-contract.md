@@ -265,6 +265,16 @@ installed and dispatchable.
 by `observability` only while `foundry` is active. Pack removal stops that
 squad selection and guidance. It does not uninstall or hide a host-installed skill.
 
+`fabric` is an opt-in supplement. Its Adds cell is existing `data-scientist`
+only. `full +fabric` adds zero roles. `azure +fabric` adds `data-scientist`.
+Admitted skills are `sqldw-cli`, `sqldb-cli`, `eventhouse-cli`,
+`eventstream-cli`, `spark-cli`, `dataflows-cli`, `databricks-migration`, and
+`pipeline-migration`. `data-scientist` selects one only while `fabric` is
+active and only for the matching job in `fabric-blueprint.md`. Pack absence,
+removal, and the interval before reapplication do not select them. Host
+visibility is not selection. Power BI rows and `fabric-lakehouse` stay
+registered and unchanged. No Fabric candidate is blocklisted.
+
 Tier 1 has one opt-in `pack-lifecycle` scenario. It is excluded from the default live matrix and
 requires `-Pack <registered-pack>`, so adding packs does not multiply paid requests. Provision it
 without model calls first:
@@ -593,6 +603,7 @@ Init with each profile and assert the seeded roster holds exactly the documented
 | PRF-22 | Every seeded role has a non-empty `Deliverable Root`, and no two roles at different tiers share a root in a way that makes the Artifact Gate ambiguous |
 | PRF-23 | Every seeded role's `Agent Name (Primary)` resolves to a delivered agent — the runtime counterpart of PKG-02 |
 | PRF-24 | Removing a pack removes only roles no other roster source owns; keeps profile, other-pack, and custom roles; appends a removal decision while earlier `decisions.md` content stays a byte-identical prefix; and stops that pack's guidance handoff (`profiles-and-packs.md`; `scenarios/pack-lifecycle.json`) |
+| PRF-25 | `fabric` reuses `data-scientist` and adds no role. `full +fabric` adds zero roles; a profile that lacks `data-scientist` adds that role only. Admitted Fabric skills are squad-selected only while `fabric` is active. Removal stops that selection and does not hide a host-installed skill. Existing Power BI and `fabric-lakehouse` rows do not change, and no Fabric candidate moves to the blocklist |
 
 ## Tier 1 — Federation
 

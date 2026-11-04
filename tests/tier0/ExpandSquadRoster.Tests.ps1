@@ -773,6 +773,64 @@ Describe 'All-present registered pack expansion' {
         @([regex]::Matches($teamAfter, '(?m)^\| [a-z]')).Count | Should -Be $roleCount
     }
 
+    It 'applies full +fabric as metadata only and azure +fabric as the missing owner' {
+        $repo = New-RepoFixture
+        $fullRoot = Initialize-ProfileSquad -Repo $repo -Profile 'full'
+        $fullPlan = New-ExpansionPlan -Repo $repo -Choices @{
+            confirmed = $true
+            runId = 'full-fabric'
+            packs = @('fabric')
+        }
+        $fullPlan.Result.ExitCode | Should -Be 0 -Because $fullPlan.Result.Output
+        @($fullPlan.Receipt.addedRoles) | Should -BeNullOrEmpty
+        (Invoke-Expansion -Repo $repo -Plan $fullPlan).ExitCode | Should -Be 0
+        [IO.File]::ReadAllText((Join-Path $fullRoot 'team.md')) | Should -Match '(?m)^Packs: fabric$'
+        [IO.File]::ReadAllText((Join-Path $fullRoot 'decisions.md')) | Should -Match 'Provenance: full \+fabric'
+        [IO.File]::ReadAllText((Join-Path $fullRoot 'decisions.md')) | Should -Match 'Added roles: \(none\)'
+
+        $azureRepo = New-RepoFixture
+        $azureRoot = Initialize-ProfileSquad -Repo $azureRepo -Profile 'azure'
+        $azurePlan = New-ExpansionPlanReady -Repo $azureRepo -Choices @{
+            confirmed = $true
+            runId = 'azure-fabric'
+            packs = @('fabric')
+        }
+        $azurePlan.Result.ExitCode | Should -Be 0 -Because $azurePlan.Result.Output
+        (@($azurePlan.Receipt.addedRoles | Sort-Object) -join ',') | Should -BeExactly 'data-scientist'
+        (Invoke-Expansion -Repo $azureRepo -Plan $azurePlan).ExitCode | Should -Be 0
+        $azureTeam = [IO.File]::ReadAllText((Join-Path $azureRoot 'team.md'))
+        $azureTeam | Should -Match '(?m)^Packs: fabric$'
+        $azureTeam | Should -Match '\| data-scientist \|'
+    }
+
+    It 'reapplies fabric after cold removal without selecting it while absent' {
+        $repo = New-RepoFixture
+        $root = Initialize-ProfileSquad -Repo $repo -Profile 'full'
+        $first = New-ExpansionPlan -Repo $repo -Choices @{
+            confirmed = $true
+            runId = 'fabric-apply'
+            packs = @('fabric')
+        }
+        (Invoke-Expansion -Repo $repo -Plan $first).ExitCode | Should -Be 0
+        $teamPath = Join-Path $root 'team.md'
+        $team = [IO.File]::ReadAllText($teamPath)
+        $roleCount = @([regex]::Matches($team, '(?m)^\| [a-z]')).Count
+        $removed = $team -replace '(?m)^Packs: fabric\r?\n', ''
+        $removed | Should -Not -Match '(?m)^Packs:.*\bfabric\b'
+        [IO.File]::WriteAllText($teamPath, $removed, [Text.UTF8Encoding]::new($false))
+        $reappliedPlan = New-ExpansionPlan -Repo $repo -Choices @{
+            confirmed = $true
+            runId = 'fabric-reapply'
+            packs = @('fabric')
+        }
+        $reappliedPlan.Result.ExitCode | Should -Be 0 -Because $reappliedPlan.Result.Output
+        @($reappliedPlan.Receipt.addedRoles) | Should -BeNullOrEmpty
+        (Invoke-Expansion -Repo $repo -Plan $reappliedPlan).ExitCode | Should -Be 0
+        $teamAfter = [IO.File]::ReadAllText($teamPath)
+        $teamAfter | Should -Match '(?m)^Packs: fabric$'
+        @([regex]::Matches($teamAfter, '(?m)^\| [a-z]')).Count | Should -Be $roleCount
+    }
+
     It 'applies, cold-removes, and reapplies power-platform without substituting Alternates' {
         $repo = New-RepoFixture
         $root = Initialize-PlainSquad $repo

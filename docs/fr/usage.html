@@ -68,7 +68,7 @@
           propose un profil recommandé avant toute création.
         </li>
         <li>
-          <code>pack=power-platform</code>, <code>pack=m365-copilot</code>, <code>pack=aws</code> ou <code data-release-change="20261008-foundry-agentic-pack">pack=foundry</code>
+          <code>pack=power-platform</code>, <code>pack=m365-copilot</code>, <code>pack=aws</code>, <code data-release-change="20261008-foundry-agentic-pack">pack=foundry</code> ou <code>pack=fabric</code>
           &mdash; ajoute au profil
           les rôles spécialisés, les consignes ciblées ou les deux pour un domaine technologique. Un pack ne remplace jamais le profil, et vous
           pouvez en appliquer plusieurs, séparés par des virgules. Voir <em>Packs</em> ci-dessous.
@@ -1355,6 +1355,7 @@ flowchart TD
           <tr><td><code>m365-copilot</code></td><td>m365-agent-architect, m365-agent-integrator</td><td>Le projet repose sur Microsoft 365 Copilot &mdash; agents déclaratifs, définitions d'agents TypeSpec, plugins API, agents s'appuyant sur MCP ou intégration Microsoft Graph</td></tr>
           <tr><td><code>aws</code></td><td>aws-architect, aws-diagnose</td><td>Le projet repose sur AWS &mdash; Lambda et serverless, ECS ou EKS, CDK, SAM, CloudFormation, Organizations et zones d'atterrissage, ou une charge de travail AWS en service à diagnostiquer</td></tr>
           <tr><td data-release-change="20261008-foundry-agentic-pack"><code>foundry</code></td><td>architect, azure-architect, deployer, prompt-engineer, security, rai, observability, cost-manager</td><td>Planification, revue indépendante et déploiement contrôlé d'un projet Microsoft Foundry avec un blueprint en sept blocs, des preuves de source et une vérification SDK/API ; réutilise les rôles existants</td></tr>
+          <tr><td><code>fabric</code></td><td>data-scientist</td><td>Entrepôt Fabric, Eventhouse, Spark ou Dataflow au-delà de l'introduction Lakehouse. Activation explicite ; réutilise <code>data-scientist</code> et n'ajoute aucun rôle. Les commandes d'installation restent dans le catalogue. Rien n'est installé automatiquement.</td></tr>
         </tbody>
       </table>
       <p>
@@ -1497,19 +1498,20 @@ npx skills add github.com/microsoft/CAIRA/skills</code></pre>
       <h3>Certains domaines technologiques ne sont pas des packs</h3>
       <p>
         Certaines capacités arrivent comme des extensions d'un rôle que vous avez déjà, plutôt que comme des packs.
-        <strong>Power BI et Fabric</strong> (revue du modèle sémantique, optimisation DAX,
+        <strong>Power BI et l'introduction Lakehouse</strong> (revue du modèle sémantique, optimisation DAX,
         conception de rapports, fondamentaux du Lakehouse) relèvent de <code>data-scientist</code>.
+                L'entrepôt, Eventhouse, Spark et Dataflow au-delà de cette introduction forment le pack <code>fabric</code>, à activer explicitement.
         <strong>L'ingénierie des applications d'IA</strong> (Microsoft Agent Framework, Semantic Kernel) relève
         de <code>developer</code>. Le pack Foundry ajoute une coordination de projet et des transmissions
         fondées sur des preuves ; il ne remplace pas ce rôle d'implémentation.
       </p>
       <p>
-        Il n'y a rien à appliquer pour l'un ou l'autre. <code>developer</code> figure dans tous les profils : l'ingénierie
-        des applications d'IA est donc toujours disponible. <code>data-scientist</code> est initialisé par <code>full</code> et
-        <code>product</code> ; dans tout autre profil, posez une question Power BI ou Fabric et la squad
-        remarquera l'absence du rôle, puis proposera de l'ajouter, comme pour n'importe quel autre rôle. Cela fonctionne,
-        mais vous le découvrez au moment du besoin plutôt qu'à la création de la squad &mdash; c'est le
-        coût réel d'un domaine qui n'a pas pu devenir un pack.
+        Il n'y a rien à appliquer pour Power BI, l'introduction Lakehouse ou l'ingénierie des applications d'IA.
+                <code>developer</code> figure dans tous les profils : l'ingénierie des applications d'IA est donc toujours disponible.
+                <code>data-scientist</code> est initialisé par <code>full</code> et <code>product</code> ; dans tout autre profil, une question
+                Power BI ou Lakehouse fait proposer l'ajout du rôle. Le pack <code>fabric</code> est différent : appliquez-le avant que
+                ses compétences soient sélectionnées par la squad. Une compétence installée qui reste visible pour l'hôte n'est pas une sélection.
+                Retirer le pack arrête cette sélection et ne désinstalle pas la compétence.
       </p>
 
       <h3>Exemples de combinaisons</h3>
@@ -1528,6 +1530,7 @@ npx skills add github.com/microsoft/CAIRA/skills</code></pre>
           <tr><td>Conception d'une charge de travail AWS avant toute réalisation</td><td><code>profile=architecture pack=aws</code></td></tr>
           <tr><td>Un environnement couvrant Azure et AWS</td><td><code>profile=azure pack=aws</code></td></tr>
           <tr><td>Planification d'un assistant de support Microsoft Foundry</td><td><code>profile=azure pack=foundry</code></td></tr>
+          <tr><td>Entrepôt Fabric ou Eventhouse au-delà de l'introduction Lakehouse</td><td><code>profile=azure pack=fabric</code></td></tr>
           <tr><td>Astreinte pour une charge de travail AWS en service</td><td><code>profile=operations pack=aws</code></td></tr>
           <tr><td>Agent M365 Copilot traitant des données personnelles</td><td><code>profile=security pack=m365-copilot</code></td></tr>
           <tr><td>Solution Power Platform dont l'interface est un agent M365 Copilot</td><td><code>profile=default pack=power-platform,m365-copilot</code></td></tr>

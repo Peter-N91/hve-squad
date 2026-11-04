@@ -343,6 +343,7 @@ Optional `Guidance` files go only to the accepted pack's roles and the methodolo
 | `m365-copilot`   | m365-agent-architect, m365-agent-integrator | `m365-copilot-platform-options.md` | Built on Microsoft 365 Copilot — declarative agents, TypeSpec agent definitions, API plugins, MCP-backed agents, or Microsoft Graph integration | Opt-in. Local Primaries; community Alternates stay external |
 | `aws`            | aws-architect, aws-diagnose |          | Built on AWS — Lambda and serverless, ECS or EKS, CDK, SAM, CloudFormation, Organizations and landing zones, or a live AWS workload to triage | Opt-in. Both roles rest on registered external agents; the install commands are in *Registered External Cast* |
 | `foundry`        | architect, azure-architect, deployer, prompt-engineer, security, rai, observability, cost-manager, data-scientist | `foundry-blueprint.md`; `foundry-platform-options.md` | Designing or delivering a Microsoft Foundry agentic AI project | Opt-in. Reuses existing roles and registered external skills; adds no replacement agent |
+| `fabric` | data-scientist | `fabric-blueprint.md` | Warehouse, Eventhouse, Spark, or Dataflow beyond the primer | Opt-in. No new role |
 
 **AWS is a pack while `azure` is a profile, and that asymmetry is deliberate.** `azure` predates the pack mechanism and stays a profile by the decision recorded in *Profile or Pack*: this repository's work is intrinsically Azure-shaped, so an Azure squad behaves as the dominant team shape rather than as an addition to one. AWS is new capability, so the three tests govern it, and all three say pack — it carries no methodology spine, it is not incoherent alongside any profile, and it answers "what is it built on". The practical consequence is the one the tests intend: a multi-cloud project takes `profile=azure` plus `pack=aws` and gets both, where two competing profiles would have forced a false choice. An AWS-only project takes whichever profile matches its *work* — usually `architecture` or `default` — plus the pack. Carrying the `aws` pack says the squad can reason about AWS; it does not imply general multi-cloud capability, and it says nothing at all about Google Cloud, which has no coverage anywhere (see the `gcp` row in the *Cast Catalog*).
 
@@ -355,6 +356,7 @@ Optional `Guidance` files go only to the accepted pack's roles and the methodolo
 | Designing an AWS workload before anything is built               | `architecture` | `aws`                         |
 | One estate spanning Azure and AWS                                | `azure`        | `aws`                         |
 | Planning a Microsoft Foundry support assistant                   | `azure`        | `foundry`                     |
+| Fabric Warehouse work | `azure` | `fabric` |
 | On call for a live AWS workload                                  | `operations`   | `aws`                         |
 | A Microsoft 365 Copilot agent that handles personal data         | `security`     | `m365-copilot`                |
 | A Power Platform solution fronted by an M365 Copilot agent       | `default`      | `power-platform`, `m365-copilot` |

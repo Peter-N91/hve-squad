@@ -403,3 +403,60 @@ Describe 'Foundry pack-aware selection' -Tag 'Unit' {
         $script:ProfilesBody | Should -Match 'only when this pack is active'
     }
 }
+
+Describe 'Fabric supplement pack' -Tag 'Unit' {
+    It 'reuses data-scientist, gates admitted skills, and leaves current Fabric rows unchanged' {
+        function Get-RoleSet {
+            param([string]$Body, [string]$Header, [string]$Name)
+            $rows = @(Get-MarkdownTableRows -Body $Body -HeaderCell $Header)
+            $row = @($rows | Where-Object { $_[1].Trim().Trim('`') -eq $Name })
+            $row | Should -HaveCount 1
+            @($row[0][2] -split ',' | ForEach-Object { $_.Trim().Trim('`') } | Where-Object { $_ } | Sort-Object -Unique)
+        }
+
+        $rosterAdds = Get-RoleSet -Body $script:RosterBody -Header 'Pack' -Name 'fabric'
+        $mirrorAdds = Get-RoleSet -Body $script:ProfilesBody -Header 'Pack' -Name 'fabric'
+        ($mirrorAdds -join ',') | Should -BeExactly ($rosterAdds -join ',')
+        ($rosterAdds -join ',') | Should -BeExactly 'data-scientist'
+
+        $full = Get-RoleSet -Body $script:RosterBody -Header 'Profile' -Name 'full'
+        $azure = Get-RoleSet -Body $script:RosterBody -Header 'Profile' -Name 'azure'
+        @($rosterAdds | Where-Object { $_ -notin $full }) | Should -BeNullOrEmpty
+        @($rosterAdds | Where-Object { $_ -notin $azure }) | Should -BeExactly @('data-scientist')
+
+        $registered = Get-MarkdownSectionBody -Body $script:RosterCatalogBody -Heading 'Registered External Cast'
+        $rows = @(Get-MarkdownTableRows -Body $registered -HeaderCell 'Role')
+        $admitted = @(
+            'sqldw-cli', 'sqldb-cli', 'eventhouse-cli', 'eventstream-cli',
+            'spark-cli', 'dataflows-cli', 'databricks-migration', 'pipeline-migration'
+        )
+        foreach ($name in $admitted) {
+            $row = @($rows | Where-Object { $_[3].Trim() -eq ('`' + $name + '`') })
+            $row | Should -HaveCount 1
+            $row[0][5].Trim() | Should -BeExactly ('`microsoft/skills-for-fabric` (`vendor-official`), `skills/{0}/SKILL.md`' -f $name)
+            $row[0][6].Trim() | Should -BeExactly ('`apm install microsoft/skills-for-fabric/skills/{0} --target copilot`' -f $name)
+            $row[0][10].Trim() | Should -BeExactly '2026-11-04'
+        }
+        $lakehouse = @($rows | Where-Object { $_[3].Trim() -eq '`fabric-lakehouse`' })
+        $lakehouse | Should -HaveCount 1
+        $lakehouse[0][6].Trim() | Should -BeExactly '`apm install github/awesome-copilot/skills/fabric-lakehouse`'
+        $resources = @($rows | ForEach-Object { $_[3].Trim().Trim('`') })
+        foreach ($excluded in @(
+                'semantic-model-authoring', 'powerbi-report-cli', 'e2e-medallion-architecture',
+                'onelake-catalog-govern-cli', 'activator-cli', 'synapse-migration', 'hdinsight-migration')) {
+            $resources | Should -Not -Contain $excluded
+        }
+        $blocklist = Get-MarkdownSectionBody -Body $script:RosterCatalogBody -Heading 'External Cast Blocklist'
+        $blocklist | Should -Not -Match 'sqldw-cli|semantic-model-authoring|fabric-lakehouse'
+
+        $scientist = Get-Content -LiteralPath (Join-Path $SourceRoot 'squad-src/.github/agents/squad/squad-data-scientist.agent.md') -Raw
+        $scientist | Should -Match 'sqldw-cli'
+        $scientist | Should -Match 'do not select the Fabric supplement skills'
+        $blueprint = Get-Content -LiteralPath (Join-Path $SourceRoot 'squad-src/.github/skills/squad/references/fabric-blueprint.md') -Raw
+        $blueprint | Should -Match 'Host visibility is not selection'
+        $script:ProfilesBody | Should -Match 'Select the admitted Fabric skills only when this pack is active'
+        $script:RoutingBody | Should -Match 'only while `fabric` is active'
+        $script:EnglishDocs | Should -Match '<td(?:\s+[^>]*)?><code>fabric</code></td>'
+        $script:FrenchDocs | Should -Match '<td(?:\s+[^>]*)?><code>fabric</code></td>'
+    }
+}

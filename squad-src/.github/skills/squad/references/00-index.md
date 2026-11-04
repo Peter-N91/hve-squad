@@ -30,6 +30,7 @@ load only references that contract conditionally requires.
 | [connector-role-modes.md](connector-role-modes.md) | Bindings/execution; [transport](connector-contract.md) |
 | [builder-workflows.md](builder-workflows.md) | User-invocable connector or external endpoint builder flow |
 | [foundry-blueprint.md](foundry-blueprint.md) | `foundry` pack role guidance |
+| [fabric-blueprint.md](fabric-blueprint.md) | `fabric` pack role guidance |
 | [foundry-platform-options.md](foundry-platform-options.md) | `foundry` platform guidance |
 | [operating-procedure.md](operating-procedure.md) | Full legacy turn procedure |
 | [gates-and-modes.md](gates-and-modes.md) | Active gate/mode sections |
