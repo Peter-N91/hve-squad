@@ -266,6 +266,13 @@ The blocklist is the rejection ledger. It carries collision rejections, not-need
 
 Add an entry whenever a candidate fails the gate. Two standing rules govern the common cases. **A resource that duplicates a capability the roster can already reach is blocked regardless of its quality**, whether that capability is one HVE Core deploys or one already registered against the same role, because the cost of an ambiguous owner exceeds the benefit of a second implementation. **A resource no role needs is blocked even when it passes every other check**, because a registry that collects what might be useful stops being a statement of what the squad can actually do. Removing a blocklist entry requires the collision, the absent demand, or the gate failure to have actually gone away, recorded with a fresh date.
 
+#### Deferred official candidates
+
+These candidates are not registered and are not blocklisted. Registering either one would change an unpacked Azure squad, and this catalog has no pack-scoped collision mechanism that can keep that change opt-in.
+
+* `azure-deployment-preflight` stays the registered pre-deployment validation skill. Do not replace it with `azure-validate`, and do not blocklist either resource, until a user explicitly accepts global supersession or a pack-scoped collision mechanism exists.
+* `azure-enterprise-infra-planner` was gated at `microsoft/azure-skills@33200af2901bce6da01ce37498aa2b68e0c43f7c`, path `skills/azure-enterprise-infra-planner/SKILL.md`. Its job is distinct from `update-avm-modules-in-bicep` and `import-infrastructure-as-code`, but it architects and provisions infrastructure, including a deploy phase. That overlaps the unpacked `azure-architect`, `iac-author`, and `deployer` defaults. It stays unregistered under the same follow-up decision: an explicit user exception for global enrichment, or a pack-scoped collision mechanism that leaves default selection unchanged.
+
 #### Resolving an External Role
 
 External resolution extends *Resolving a Role to an Agent* rather than replacing it:

@@ -181,4 +181,19 @@ Describe 'Registered pack consistency' -Tag 'Unit' {
         $gateway[0][6].Trim() | Should -BeExactly '`copilot plugin marketplace add Azure/aigateway`, then `copilot plugin install ai-gateway@azure`'
         $gateway[0][10].Trim() | Should -BeExactly '2026-11-04'
     }
+
+    It 'defers Azure same-job replacement without moving the blocklist' {
+        $registered = Get-MarkdownSectionBody -Body $script:RosterCatalogBody -Heading 'Registered External Cast'
+        $rows = @(Get-MarkdownTableRows -Body $registered -HeaderCell 'Role')
+        $resources = @($rows | ForEach-Object { $_[3].Trim().Trim('`') })
+        $resources | Should -Contain 'azure-deployment-preflight'
+        $resources | Should -Not -Contain 'azure-validate'
+        $resources | Should -Not -Contain 'azure-enterprise-infra-planner'
+        $blocklist = Get-MarkdownSectionBody -Body $script:RosterCatalogBody -Heading 'External Cast Blocklist'
+        $blocklist | Should -Not -Match 'azure-deployment-preflight'
+        $blocklist | Should -Not -Match 'azure-validate'
+        $blocklist | Should -Not -Match 'azure-enterprise-infra-planner'
+        $script:RosterCatalogBody | Should -Match '#### Deferred official candidates'
+        $script:RosterCatalogBody | Should -Match '33200af2901bce6da01ce37498aa2b68e0c43f7c'
+    }
 }

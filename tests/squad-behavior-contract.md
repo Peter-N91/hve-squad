@@ -239,7 +239,11 @@ prerequisites, dispatchability, installability, licence, and the no-pack baselin
 resource moves to the blocklist and is not a runtime fallback. Ambiguous licences stay unregistered.
 The licence citation is `.github/instructions/hve-core/licensing-posture.instructions.md`, delivered by
 the pinned hve-core package. `PackRegistry.Tests.ps1` enforces the class set, the ten columns, the
-canonical `Azure/aigateway` origin for `use-ai-gateway`, and that licence citation.
+canonical `Azure/aigateway` origin for `use-ai-gateway`, and that licence citation. Azure
+same-job replacement stays deferred: `azure-deployment-preflight` remains registered,
+`azure-validate` and `azure-enterprise-infra-planner` stay unregistered and unblocked,
+and default unpacked selection is unchanged until a user accepts global supersession or
+a pack-scoped collision mechanism exists.
 
 Tier 1 has one opt-in `pack-lifecycle` scenario. It is excluded from the default live matrix and
 requires `-Pack <registered-pack>`, so adding packs does not multiply paid requests. Provision it
