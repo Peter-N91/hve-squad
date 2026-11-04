@@ -4283,7 +4283,8 @@ param($Exact, $HistoryCoverage, $MeteredHistoryCoverage, $EntryByKey)
 '@
             $refused = Invoke-LedgerAutoLocal -Fixture $f -LedgerScript $faulted -Write
             $refused.ExitCode | Should -Not -Be 0
-            $refused.Output | Should -Match 'consumption-sessions\.json changed while the ledger was being computed'
+            # PowerShell wraps an error to the width of the host, and that width differs between platforms.
+            ($refused.Output -replace '\r?\n\s*\|?\s*', ' ') | Should -Match 'consumption-sessions\.json changed while the ledger was being computed'
             [IO.File]::ReadAllBytes((Join-Path $f.Root 'consumption.md')) | Should -Be $ledgerBefore
             [IO.File]::ReadAllBytes((Join-Path $f.Root 'state.json')) | Should -Be $stateBefore
 
