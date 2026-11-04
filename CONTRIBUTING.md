@@ -137,7 +137,16 @@ That is a shortcut for the Tier 0 runner. To invoke the tiers directly:
 
 # Tier 1 — mutation controls proving the state contract can fail
 ./tests/tier1/Invoke-Tier1Tests.ps1 -SelfCheck
+
+# The same cases spread over four worker processes, as CI runs them
+./tests/tier1/Invoke-Tier1Tests.ps1 -SelfCheck -Parallel 4
 ```
+
+Every Tier 1 self-check case starts child `pwsh` processes, so it is the slowest
+suite to run in one process. `-Parallel <n>` deals the work out to `n` worker
+processes. The runner discovers every case first and fails unless each one ran
+exactly once, so it changes scheduling, not coverage. The default runs everything
+in one process, as before.
 
 Pester 5.7.1 is required and is pinned deliberately; Pester 6 changes `-ForEach`
 and configuration semantics that these suites rely on:

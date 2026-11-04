@@ -252,27 +252,33 @@
     VS Code agent-host `events.jsonl`, the session directory that contains it,
     or `auto` to pick the most recently written session under
     `$COPILOT_HOME/session-state` (default `~/.copilot/session-state`) whose
-    `workspace.yaml` `cwd` is this squad root's repository. When no exact-session
+    `workspace.yaml` `cwd` is this squad root's repository; the session named by the
+    host's `COPILOT_AGENT_SESSION_ID` wins when it belongs to the repository. Native
+    usage is authoritative and the history is bookkeeping, so a gap in the history
+    never replaces exact numbers with estimates: usage by an agent with no history
+    entry is included under its own name, history older than the active session is
+    reconciled against the latest cached session (re-read from its completed log) or
+    the repository session that wrote it, and every history entry no log on this
+    machine accounts for is reported in a `NOTE:` line of the Derivation (JSON
+    `exact.notes`, `exact.partial`) instead of being estimated. When no exact-session
     journal exists and current history spans earlier sessions, `auto` may bootstrap
-    the journal from complete matching logs whose non-overlapping event windows
-    uniquely cover every metered history entry; missing or ambiguous coverage keeps
-    the estimator in place. The selected active session receives a bounded 30-second
-    open-tail allowance because the outer host cannot append the tool-completion event
-    while this child writer is still running. On the next session, the latest cached
-    native session is refreshed from its completed log before new usage is appended.
-    Complete
+    the journal from the matching repository logs. The selected active session
+    receives a bounded 30-second open-tail allowance because the outer host cannot
+    append the tool-completion event while this child writer is still running, and a
+    partial last line of a log still being written is ignored. Complete
     `session.usage_record` and native compaction records are deduplicated by host
     accounting identity. Event `agentId` joins to `subagent.started`; nested
     `parentAgentId` chains roll into their owning top-level role. Native token
     details provide disjoint uncached input, cache read, cache write, and output
-    counts whose charges must reproduce total nano-AIU. When every newly metered
-    history-backed row and orchestration entry reconcile to the active session total,
-    its closed-schema snapshot is upserted by native session id and merged with prior
-    accepted sessions. Duplicate request identities, history-prefix drift, or any
-    coverage gap leaves the journal unchanged and the estimator in place. Exact rows
-    drive state totals, unit economics, JSON `exact`, and Cost Comparison.
-    Member-scoped roots retain estimates because coordinator usage cannot be assigned
-    to one member.
+    counts whose charges must reproduce total nano-AIU. Each accepted snapshot is
+    upserted by native session id and merged with prior accepted sessions. Only
+    records that cannot be trusted keep the estimator in place: no native usage at
+    all, incomplete or non-reconciling credit records, duplicate request identities,
+    history-prefix drift, or a damaged journal file. Exact rows drive state totals,
+    unit economics, JSON `exact`, and Cost Comparison. Member-scoped roots retain
+    estimates because coordinator usage cannot be assigned to one member. Omitted,
+    `-Write` on a root that already keeps `consumption-sessions.json` behaves as
+    `auto`, so a manual run never replaces exact totals with estimates.
 .PARAMETER BaselineModel
     Model id that prices the without-Squad counterfactual: the same exact role
     request token categories on one model, with no coordinator or Scribe. Defaults
@@ -2055,6 +2061,135 @@ function Resolve-SessionLogPathsLocal {
     return @()
 }
 
+# A shell call that runs a history writer, or writes the ledger, marks the session that wrote an entry.
+$script:HandoffWriterPattern = '(?<![\w-])(?:Write-Squad(?:Federation)?Handoff|Write-SquadVerdict|Initialize-Squad(?:Federation)?|Promote-SquadFederation|Measure-SquadLedger)\.ps1(?![\w.-])'
+
+function ConvertTo-RootKeyLocal {
+    param([AllowEmptyString()][string]$Path)
+    $key = ([string]$Path).Trim().Trim('"', "'").Replace('\', '/')
+    $key = [regex]::Replace($key, '(?<!^)/{2,}', '/')
+    $key = [regex]::Replace($key, '^(?:\./)+', '')
+    $key = [regex]::Replace($key, '/(?:\./)+', '/')
+    $key = [regex]::Replace($key, '(?:/\.)+$', '')
+    $key = [regex]::Replace($key, '(?i)^/([a-z])/', '$1:/')
+    $key.TrimEnd('/').ToLowerInvariant()
+}
+
+function Test-RootArgumentLocal {
+    <#
+    .SYNOPSIS
+        False only when a folder typed in a shell command is a plain path that visibly differs from the accepted ones.
+    .DESCRIPTION
+        Commands usually give the root relative to the repository, so a relative value matches when an accepted
+        folder ends with it. A value that has to be evaluated first (a variable, a subexpression, a placeholder, a
+        wildcard, the working folder, a parent hop) cannot be compared from the log and gets the benefit of the
+        doubt: the hand-off was most likely for this root.
+    #>
+    param([AllowEmptyString()][string]$Value, [Parameter(Mandatory)][string[]]$Accepted)
+    $key = ConvertTo-RootKeyLocal -Path $Value
+    if (-not $key -or $key -eq '.' -or $key -notmatch '^[\w .:/+-]+$' -or $key -match '(?:^|/)\.\.(?:/|$)') { return $true }
+    foreach ($folder in $Accepted) {
+        $target = ConvertTo-RootKeyLocal -Path $folder
+        if ($key -ceq $target) { return $true }
+        if ($key -notmatch '^(?:[a-z]:|/)' -and $target.EndsWith("/$key", [System.StringComparison]::Ordinal)) { return $true }
+    }
+    $false
+}
+
+function Get-HandoffWriterScopeLocal {
+    <#
+    .SYNOPSIS
+        'own' when a log line is a shell call that runs a history writer, or writes the ledger, for this squad root,
+        'other' when it does so for a different root, otherwise 'none'.
+    .DESCRIPTION
+        Viewing, searching or editing a writer script, or only checking the ledger, proves nothing, and a
+        hand-off for another squad root (a federation member, a nested squad) wrote none of this root's
+        history. A member root also accepts the federation hand-off that runs from its federation root, and a
+        command wrapped over several lines reads as one statement.
+    #>
+    param([Parameter(Mandatory)][string]$Line, [Parameter(Mandatory)][string]$SquadRoot)
+    if ($Line.IndexOf('.ps1', [System.StringComparison]::Ordinal) -lt 0 -or
+        $Line -notmatch '"type"\s*:\s*"tool\.execution_start"' -or
+        $Line -notmatch '"toolName"\s*:\s*"(?:powershell|pwsh|bash|sh|zsh|shell|cmd|run_in_terminal|run_command|execute_command|terminal)"' -or
+        -not [regex]::IsMatch($Line, $script:HandoffWriterPattern)) { return 'none' }
+    $command = ''
+    try {
+        $logged = $Line | ConvertFrom-Json -AsHashtable
+        $arguments = $logged['data']['arguments']
+        if ($arguments -is [Collections.IDictionary] -and $arguments.Contains('command')) { $command = [string]$arguments['command'] }
+    }
+    catch { return 'none' }
+    $command = [regex]::Replace($command, '(?:`|\\)[ \t]*\r?\n[ \t]*', ' ')
+    $accepted = @($SquadRoot)
+    $federation = [regex]::Match($SquadRoot, '^(?<federation>.+?)[\\/]members[\\/][^\\/]+[\\/]?$')
+    if ($federation.Success) { $accepted += $federation.Groups['federation'].Value }
+    $repo = [regex]::Match($SquadRoot, '^(?<repo>.*?)[\\/]\.copilot-tracking([\\/]|$)')
+    $valuePattern = '[\s:=]+(?<value>"[^"]*"|''[^'']*''|[^\s"'']+)'
+    $scope = 'none'
+    # A statement ends at an unquoted ; | & or line break; the script's own closing quote is not part of it, and a quote that
+    # never closes is an ordinary character.
+    foreach ($call in [regex]::Matches($command, '(?<name>' + $script:HandoffWriterPattern + ')["'']?(?<tail>(?:"[^"]*"|''[^'']*''|[^;|&\r\n"'']|["''])*)')) {
+        $name = $call.Groups['name'].Value
+        $tail = $call.Groups['tail'].Value
+        if ($name -like 'Measure-SquadLedger*' -and $tail -notmatch '(?i)(?:^|\s)-Write(?![\w-])') { continue }
+        if ($name -match '^(?:Initialize-Squad|Promote-SquadFederation)') {
+            # These lifecycle scripts name the repository, not the squad root.
+            $repoArgument = [regex]::Match($tail, '(?i)(?:^|\s)-RepoRoot' + $valuePattern)
+            if (-not $repoArgument.Success -or -not $repo.Success -or -not $repo.Groups['repo'].Value -or
+                (Test-RootArgumentLocal -Value $repoArgument.Groups['value'].Value.TrimEnd(')', '}', ',', ']') -Accepted @($repo.Groups['repo'].Value))) { return 'own' }
+            $scope = 'other'
+            continue
+        }
+        $rootArgument = [regex]::Match($tail, '(?i)(?:^|\s)-SquadRoot' + $valuePattern)
+        # The federation hand-off defaults to the repository's top-level squad root.
+        $rootValue = $null
+        if ($rootArgument.Success) { $rootValue = $rootArgument.Groups['value'].Value.TrimEnd(')', '}', ',', ']') }
+        elseif ($name -like 'Write-SquadFederationHandoff*') { $rootValue = '.copilot-tracking/squad' }
+        if ($null -eq $rootValue) { continue }
+        if (Test-RootArgumentLocal -Value $rootValue -Accepted $accepted) { return 'own' }
+        $scope = 'other'
+    }
+    $scope
+}
+
+function Read-SessionHandoffTimesLocal {
+    <#
+    .SYNOPSIS
+        A cheap pass over a session log: its first and last timestamps and when a history writer started in it.
+    .DESCRIPTION
+        Candidate sessions are screened with this before the full usage read, which costs an order of
+        magnitude more. A line is only inspected when it names a script, and the log is opened with
+        shared read so a live session can keep writing. Writers for another squad root are kept apart.
+    #>
+    param([Parameter(Mandatory)][string]$Path, [Parameter(Mandatory)][string]$SquadRoot)
+    $handoffTimes = [System.Collections.Generic.List[string]]::new()
+    $otherTimes = [System.Collections.Generic.List[string]]::new()
+    $first = $null
+    $last = $null
+    $stream = [System.IO.FileStream]::new($Path, [System.IO.FileMode]::Open, [System.IO.FileAccess]::Read, [System.IO.FileShare]::ReadWrite)
+    $reader = [System.IO.StreamReader]::new($stream)
+    try {
+        while ($null -ne ($line = $reader.ReadLine())) {
+            if ($line.IndexOf('"timestamp"', [System.StringComparison]::Ordinal) -lt 0) { continue }
+            $timeMatch = [regex]::Match($line, '"timestamp"\s*:\s*"(?<ts>[^"]+)"')
+            if (-not $timeMatch.Success) { continue }
+            if (-not $first) { $first = $timeMatch.Groups['ts'].Value }
+            $last = $timeMatch.Groups['ts'].Value
+            if ($line.IndexOf('.ps1', [System.StringComparison]::Ordinal) -ge 0 -and
+                $line.IndexOf('"tool.execution_start"', [System.StringComparison]::Ordinal) -ge 0) {
+                $writerScope = Get-HandoffWriterScopeLocal -Line $line -SquadRoot $SquadRoot
+                if ($writerScope -eq 'own') { $handoffTimes.Add($timeMatch.Groups['ts'].Value) }
+                elseif ($writerScope -eq 'other') { $otherTimes.Add($timeMatch.Groups['ts'].Value) }
+            }
+        }
+    }
+    finally {
+        $reader.Dispose()
+        $stream.Dispose()
+    }
+    [pscustomobject]@{ First = $first; Last = $last; HandoffTimes = $handoffTimes.ToArray(); OtherHandoffTimes = $otherTimes.ToArray() }
+}
+
 function Read-SessionUsageLocal {
     <#
     .SYNOPSIS
@@ -2079,6 +2214,8 @@ function Read-SessionUsageLocal {
 
     $dispatches = [System.Collections.Generic.List[pscustomobject]]::new()
     $fusionSolvers = [System.Collections.Generic.List[string]]::new()
+    $handoffTimes = [System.Collections.Generic.List[string]]::new()
+    $otherHandoffTimes = [System.Collections.Generic.List[string]]::new()
     $prompts = @{}
     $taskPromptCount = 0
     $memberTaskPromptCount = 0
@@ -2099,6 +2236,13 @@ function Read-SessionUsageLocal {
             }
             if (-not $typeMatch.Success) { continue }
             $type = $typeMatch.Groups['type'].Value
+            # The instant a history writer started marks which session wrote an entry; kept as text, never parsed here.
+            if ($type -eq 'tool.execution_start' -and $timeMatch.Success -and
+                $line.IndexOf('.ps1', [System.StringComparison]::Ordinal) -ge 0) {
+                $writerScope = Get-HandoffWriterScopeLocal -Line $line -SquadRoot $SquadRoot
+                if ($writerScope -eq 'own') { $handoffTimes.Add($timeMatch.Groups['ts'].Value) }
+                elseif ($writerScope -eq 'other') { $otherHandoffTimes.Add($timeMatch.Groups['ts'].Value) }
+            }
             if ($type -eq 'tool.execution_start' -and
                 (-not $memberPattern -or $line -notmatch '"toolName"\s*:\s*"(?:task|runSubagent|powershell)"')) { continue }
             try { $sessionEvent = $line | ConvertFrom-Json -AsHashtable } catch { continue }
@@ -2154,6 +2298,8 @@ function Read-SessionUsageLocal {
         SessionId     = if ($usageSnapshot.sessionId) { [string]$usageSnapshot.sessionId } else { Split-Path -Leaf (Split-Path -Parent $Path) }
         Dispatches    = $dispatches
         FusionSolvers = @($fusionSolvers)
+        HandoffTimes  = $handoffTimes.ToArray()
+        OtherHandoffTimes = $otherHandoffTimes.ToArray()
         NanoAiu       = if ($usageSnapshot.status -eq 'complete') { $usageSnapshot.totalNanoAiu } else { $null }
         UsageSnapshot = $usageSnapshot
         First         = $first
@@ -2352,18 +2498,22 @@ function ConvertFrom-ExactCacheJsonLocal {
 function Read-ExactSessionCacheLocal {
     param([Parameter(Mandatory)][string]$Path)
     if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) { return @() }
-    try { $document = ConvertFrom-ExactCacheJsonLocal -Text ([IO.File]::ReadAllText($Path)) }
-    catch { throw "consumption-sessions.json is not valid JSON: $($_.Exception.Message)" }
-    if ($document -isnot [Collections.IDictionary]) { throw 'consumption-sessions.json must contain one object.' }
+    # InvalidDataException marks a file that is not one JSON object (cut short, emptied by a crash, or holding merge markers):
+    # only that may be set aside and rebuilt. A failed read or a rejected field never is.
+    $journalText = [IO.File]::ReadAllText($Path)
+    try { $document = ConvertFrom-ExactCacheJsonLocal -Text $journalText }
+    catch { throw [System.IO.InvalidDataException]::new("consumption-sessions.json is not valid JSON: $($_.Exception.Message)") }
+    if ($document -isnot [Collections.IDictionary]) { throw [System.IO.InvalidDataException]::new('consumption-sessions.json must contain one object.') }
     Assert-ExactCacheFieldsLocal -Object $document -Required @('schemaVersion', 'sessions') -Where 'consumption-sessions.json'
     if ([int]$document.schemaVersion -ne 1) { throw "consumption-sessions.json schemaVersion '$($document.schemaVersion)' is unsupported." }
 
     $seenSessions = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
-    $seenRequests = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
     $sessions = [Collections.Generic.List[object]]::new()
     $sessionIndex = 0
     foreach ($rawSession in @($document.sessions)) {
         $sessionIndex++
+        # A request identity may repeat across sessions (a forked or replayed log); the merge counts it once.
+        $seenRequests = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
         if ($rawSession -isnot [Collections.IDictionary]) { throw "consumption-sessions.json session $sessionIndex is not an object." }
         Assert-ExactCacheFieldsLocal -Object $rawSession -Required @(
             'sessionId', 'source', 'first', 'last', 'through', 'records', 'identityDigest',
@@ -2692,7 +2842,7 @@ function Convert-ExistingExactLedgerToCacheSessionLocal {
     $usage = @($tables | Where-Object { 'Requests' -in $_.Header -and 'Exact Cost (USD)' -in $_.Header } | Select-Object -First 1)
     if ($attribution.Count -ne 1 -or $usage.Count -ne 1) { return $null }
     $attributionRows = @($attribution[0].Rows)
-    $usageRows = @($usage[0].Rows | Where-Object { ([string]$_[$usage[0].Header[0]]) -notmatch 'Total' })
+    $usageRows = @($usage[0].Rows | Where-Object { -not (Test-LedgerTotalLabelLocal ([string]$_[$usage[0].Header[0]])) })
     if ($attributionRows.Count -ne $usageRows.Count -or $usageRows.Count -eq 0) { return $null }
 
     $nanoLines = @([regex]::Matches($ConsumptionContent, '(?m)^(?<role>.+?)\s+requests\s+(?<requests>\d+)\s+input\s+(?<input>\d+)\s+cached\s+(?<cached>\d+)\s+cache-write\s+(?<cacheWrite>\d+)\s+output\s+(?<output>\d+)\s+nano-AIU\s+(?<nano>\d+(?:\.\d+)?)\s+='))
@@ -2756,10 +2906,12 @@ function Get-ExactCoveragePlanLocal {
     for ($i = 0; $i -lt $Sessions.Count; $i++) {
         if ([string]$Sessions[$i].sessionId -ceq $CurrentSessionId) { $currentIndex = $i; break }
     }
-    if ($currentIndex -ge 0 -and $currentIndex -ne $Sessions.Count - 1) {
-        throw "Native session '$CurrentSessionId' is not the latest cached session; exact accumulation cannot rewrite an older session after later sessions were recorded."
-    }
-    $priorSessions = if ($currentIndex -eq 0) { @() }
+    # A cached session that resumes after a later one was recorded cannot own the history suffix
+    # in order, so the suffix is folded into the latest session's chunk; every snapshot still
+    # re-reads its own log, so no usage moves between sessions.
+    $activeIsLatest = $currentIndex -lt 0 -or $currentIndex -eq $Sessions.Count - 1
+    $priorSessions = if (-not $activeIsLatest) { @($Sessions) }
+    elseif ($currentIndex -eq 0) { @() }
     elseif ($currentIndex -gt 0) { @($Sessions[0..($currentIndex - 1)]) }
     else { @($Sessions) }
     $priorCoverage = Get-CumulativeHistoryCoverageLocal -Sessions $priorSessions
@@ -2775,7 +2927,7 @@ function Get-ExactCoveragePlanLocal {
         }
     }
     $existing = if ($currentIndex -ge 0) { $Sessions[$currentIndex] } else { $null }
-    $existingCoverage = if ($existing) { $existing.historyCoverage } else { [ordered]@{} }
+    $existingCoverage = if ($existing -and $activeIsLatest) { $existing.historyCoverage } else { [ordered]@{} }
     $null = Test-HistoryCoveragePrefixLocal -Recorded $existingCoverage -Current $currentCoverage
     $newHistoryCount = 0
     foreach ($fileName in $currentCoverage.Keys) {
@@ -2794,6 +2946,7 @@ function Get-ExactCoveragePlanLocal {
     [pscustomobject][ordered]@{
         ExistingIndex = $currentIndex
         ExistingSession = $existing
+        ActiveIsLatest = $activeIsLatest
         CurrentCoverage = $currentCoverage
         NewHistoryCount = $newHistoryCount
         CacheCoversAll = $cacheCoversAll
@@ -3016,6 +3169,47 @@ function Test-NativeSessionHasScribeUsageLocal {
     return $false
 }
 
+function ConvertTo-NativeDisplayNameLocal {
+    <#
+    .SYNOPSIS
+        Makes a host-supplied agent name safe for a ledger table cell and a Derivation line.
+    .DESCRIPTION
+        Agent names come from agent files a repository controls. Control characters, line
+        breaks, table pipes, and backticks would break the tables or the fenced Derivation
+        block, so they are replaced; the name is capped so one row cannot swamp the ledger.
+    #>
+    param([AllowEmptyString()][AllowNull()][string]$Name)
+    $clean = [regex]::Replace([string]$Name, '[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]+', ' ')
+    $clean = $clean.Replace('|', '/').Replace('`', "'")
+    # A leading # would start a Markdown heading, and the section editor would read it back as one inside the Derivation block.
+    $clean = [regex]::Replace([regex]::Replace($clean, '\s+', ' ').Trim(), '^[#\s]+', '')
+    if ($clean.Length -gt 80) { $clean = $clean.Substring(0, 80).TrimEnd() }
+    # A role literally named Total must not be read back as the Total row.
+    if (Test-LedgerTotalLabelLocal -Label $clean) { $clean = "$clean (agent)" }
+    $clean
+}
+
+function Test-LedgerTotalLabelLocal {
+    <#
+    .SYNOPSIS
+        True only for the Total row's own label (`Total`, `**Total**`), never a role whose name merely contains it.
+    #>
+    param([AllowEmptyString()][AllowNull()][string]$Label)
+    (([string]$Label) -replace '[\s*_`]', '') -ieq 'Total'
+}
+
+function ConvertTo-NoteTextLocal {
+    <#
+    .SYNOPSIS
+        Keeps a NOTE on one plain line: a failure message can carry line breaks or fences that would break the Derivation block.
+    #>
+    param([AllowEmptyString()][AllowNull()][string]$Text)
+    $clean = [regex]::Replace([string]$Text, '[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]+', ' ').Replace('`', "'")
+    $clean = [regex]::Replace($clean, '\s+', ' ').Trim()
+    if ($clean.Length -gt 1000) { $clean = $clean.Substring(0, 1000).TrimEnd() + '...' }
+    $clean
+}
+
 function Get-ExactLedgerUsageLocal {
     <#
     .SYNOPSIS
@@ -3024,22 +3218,20 @@ function Get-ExactLedgerUsageLocal {
         Each usage event carries the active agentId. SquadUsage.psm1 resolves that
         id through subagent.started parentAgentId links, so nested workers roll into
         the top-level roster role that owned them. APM human names and plugin-qualified
-        identities resolve through one unique history-backed canonical agent name.
-        Coordinator and Squad Scribe usage share the orchestration row. The exact row
-        sum must reconcile to the session nano-AIU total or the caller falls back to
-        estimates.
+        identities resolve through one unique known agent name (history files, then
+        roster rows). Coordinator and Squad Scribe usage share the orchestration row.
+        The native total is authoritative: a native agent that matches no known name
+        (a dispatch nobody recorded), an ambiguous alias, or a roster row that cannot be
+        resolved still prints under its own native name, so attribution can only be
+        less specific, never replaced by an estimate. The caller reports those gaps.
+        Only a snapshot that is itself incomplete, has no records, a model-less
+        request, or a member scope shared with other members returns $null.
     #>
     param(
         [Parameter(Mandatory)]$Session,
         [Parameter(Mandatory)]$Rates,
         [Parameter(Mandatory)]$Roster,
-        [AllowEmptyCollection()][object[]]$OrderedAggregates = @(),
-        $OrchestrationAggregate,
-        [AllowEmptyCollection()][object[]]$HistoryEntries = @(),
-        [AllowEmptyCollection()][string[]]$ExpectedAgentNames = @(),
-        [switch]$RequireOrchestration,
-        [switch]$EnforceExpectedSet,
-        [switch]$RequireSessionBoundary,
+        [AllowEmptyCollection()][string[]]$KnownAgentNames = @(),
         [AllowEmptyString()][string]$BaselineModel,
         [System.Collections.Generic.List[string]]$Warnings
     )
@@ -3062,44 +3254,23 @@ function Get-ExactLedgerUsageLocal {
         $Warnings.Add("WARN: exact per-role ledger replacement for member '$($Session.MemberName)' requires every model dispatch in the native session to name that member root and no federation-root lifecycle write; estimates remain the fallback.")
         return $null
     }
-    if ($RequireSessionBoundary -and $Session.First) {
-        try {
-            $sessionStart = [DateTimeOffset]::Parse([string]$Session.First, [Globalization.CultureInfo]::InvariantCulture)
-            $olderEntries = @(
-                $HistoryEntries | Where-Object {
-                    $_.Timestamp -and
-                    [DateTimeOffset]::Parse([string]$_.Timestamp, [Globalization.CultureInfo]::InvariantCulture) -lt $sessionStart
-                }
-            )
-            if ($olderEntries.Count -gt 0) {
-                $Warnings.Add('WARN: squad history predates the selected host session; one session log cannot exactly cover a multi-session run, so estimates remain the fallback.')
-                return $null
-            }
-        }
-        catch {
-            $Warnings.Add("WARN: exact session/history boundary could not be parsed; estimates remain the fallback: $($_.Exception.Message)")
-            return $null
-        }
-    }
 
-    $expectedAgents = if ($ExpectedAgentNames.Count -gt 0) {
-        @($ExpectedAgentNames | Where-Object { $_ } | Select-Object -Unique)
-    }
-    else {
-        @($OrderedAggregates | ForEach-Object AgentName | Where-Object { $_ } | Select-Object -Unique)
-    }
+    $knownAgents = @($KnownAgentNames | Where-Object { $_ } | Select-Object -Unique)
 
     $rowsByKey = @{}
     foreach ($run in @($snapshot.agentRuns)) {
         if ([int]$run.records -le 0) { continue }
-        $nativeIdentity = Resolve-NativeAgentIdentityLocal -Run $run -ExpectedAgentNames $expectedAgents
-        if ($nativeIdentity.Status -eq 'ambiguous') {
-            $reported = @($nativeIdentity.RawName, $nativeIdentity.DisplayName | Where-Object { $_ }) -join ' / '
-            $Warnings.Add("WARN: exact native agent identity '$reported' matches multiple history-backed identities ($(@($nativeIdentity.Matches) -join ', ')); estimates remain the fallback.")
-            return $null
+        $nativeIdentity = Resolve-NativeAgentIdentityLocal -Run $run -ExpectedAgentNames $knownAgents
+        $canonicalAgentName = if ($nativeIdentity.Status -eq 'ok') {
+            [string]$nativeIdentity.Name
         }
-        $canonicalAgentName = [string]$nativeIdentity.Name
-        $isOrchestration = $canonicalAgentName -in @('coordinator', 'Squad Scribe')
+        else {
+            # Unknown or ambiguous: keep the host's own name so the usage stays visible and exact.
+            $rawName = ([string]$run.agentName).Trim()
+            ConvertTo-NativeDisplayNameLocal -Name $(if ($rawName) { $rawName } else { ([string]$run.displayName).Trim() })
+        }
+        if (-not $canonicalAgentName) { $canonicalAgentName = 'unknown agent' }
+        $isOrchestration = $nativeIdentity.Status -eq 'ok' -and $canonicalAgentName -in @('coordinator', 'Squad Scribe')
         if ($isOrchestration) {
             $resolved = [pscustomobject]@{
                 Index = [int]::MaxValue
@@ -3114,8 +3285,15 @@ function Get-ExactLedgerUsageLocal {
         else {
             $resolved = Resolve-RoleForAgentLocal -AgentName $canonicalAgentName -Roster $Roster
             if ($resolved.Status -notin @('ok', 'unmapped')) {
-                $Warnings.Add("WARN: exact usage for '$canonicalAgentName' cannot be mapped to one roster row (status: $($resolved.Status)); estimates remain the fallback.")
-                return $null
+                # A shared or ambiguous roster identity cannot be split from native logs; print the agent itself.
+                $resolved = [pscustomobject]@{
+                    Index = [int]::MaxValue
+                    Role = $canonicalAgentName
+                    MemberName = ''
+                    Tier = ''
+                    AggregateKey = $canonicalAgentName
+                    Status = 'unmapped'
+                }
             }
             $agentName = $canonicalAgentName
         }
@@ -3160,7 +3338,7 @@ function Get-ExactLedgerUsageLocal {
                 Label = $row.Role
                 Member = $row.Member
                 Agent = $row.Agent
-                Models = @($row.Models | Sort-Object)
+                Models = @(if ($row.Models.Count -gt 0) { $row.Models | Sort-Object } else { 'unknown' })
                 ModelSources = @('host-reported')
                 PricedAsUsed = @('native credits')
                 Tier = $row.Tier
@@ -3179,34 +3357,6 @@ function Get-ExactLedgerUsageLocal {
             }
         }
     )
-    $modelLessRows = @($rows | Where-Object { @($_.Models).Count -eq 0 })
-    if ($modelLessRows.Count -gt 0) {
-        $Warnings.Add("WARN: exact native usage has no model identity for: $($modelLessRows.Agent -join ', '); estimates remain the fallback.")
-        return $null
-    }
-    $exactAgents = @($rows | Where-Object Label -ne 'orchestration' | ForEach-Object Agent | Select-Object -Unique)
-    $missingAgents = @($expectedAgents | Where-Object { $_ -notin $exactAgents })
-    if ($missingAgents.Count -gt 0) {
-        $Warnings.Add("WARN: exact native usage has no attributed records for history-backed agent(s): $($missingAgents -join ', '); estimates remain the fallback.")
-        return $null
-    }
-    if ($EnforceExpectedSet) {
-        $extraAgents = @($exactAgents | Where-Object { $_ -notin $expectedAgents })
-        if ($extraAgents.Count -gt 0) {
-            $Warnings.Add("WARN: exact native usage contains agent(s) without history coverage in this session: $($extraAgents -join ', '); estimates remain the fallback.")
-            return $null
-        }
-    }
-    $needsOrchestration = $RequireOrchestration -or $null -ne $OrchestrationAggregate
-    $hasOrchestration = @($rows | Where-Object Label -eq 'orchestration').Count -gt 0
-    if ($needsOrchestration -and -not $hasOrchestration) {
-        $Warnings.Add('WARN: exact native usage has no coordinator or Scribe records for the history-backed orchestration row; estimates remain the fallback.')
-        return $null
-    }
-    if ($EnforceExpectedSet -and -not $needsOrchestration -and $hasOrchestration) {
-        $Warnings.Add('WARN: exact native usage contains coordinator or Scribe records without matching orchestration history coverage in this session; estimates remain the fallback.')
-        return $null
-    }
     $totalNanoAiu = [decimal](($rows | Measure-Object NanoAiu -Sum).Sum)
     if ($totalNanoAiu -ne [decimal]$snapshot.totalNanoAiu) {
         $Warnings.Add("WARN: exact role rows total $totalNanoAiu nano-AIU but the session snapshot totals $($snapshot.totalNanoAiu); estimates remain the fallback.")
@@ -3216,7 +3366,7 @@ function Get-ExactLedgerUsageLocal {
     $roleRows = @($rows | Where-Object Label -ne 'orchestration')
     $baseline = $BaselineModel
     if (-not $baseline) {
-        $candidateModels = @($roleRows | ForEach-Object Models | Where-Object { (ConvertTo-RateKeyLocal $_) -ne 'hydrafusion-max' } | Select-Object -Unique)
+        $candidateModels = @($roleRows | ForEach-Object Models | Where-Object { (ConvertTo-RateKeyLocal $_) -notin @('hydrafusion-max', 'unknown') } | Select-Object -Unique)
         if ($candidateModels.Count -eq 0 -and $Rates.ByNormalized.ContainsKey('claude-sonnet-4.6')) {
             $candidateModels = @('claude-sonnet-4.6')
         }
@@ -3288,6 +3438,7 @@ function Merge-ExactSessionUsageLocal {
     if ($Sessions.Count -eq 0) { return $null }
     $rowsByKey = @{}
     $seenRequestIdentities = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+    $duplicateRequests = 0
     $requestDetailsComplete = $true
     foreach ($session in $Sessions) {
         if ([string]$session.requestDetailStatus -ne 'complete') { $requestDetailsComplete = $false }
@@ -3306,7 +3457,13 @@ function Merge-ExactSessionUsageLocal {
                     $resolved = Resolve-RoleForAgentLocal -AgentName ([string]$storedRow.Agent) -Roster $Roster
                 }
                 if ($resolved.Status -notin @('ok', 'unmapped')) {
-                    throw "Cached exact usage for '$($storedRow.Agent)' cannot be mapped to one current roster row (status: $($resolved.Status))."
+                    # The roster changed or is ambiguous for this agent; the stored exact row keeps its own identity.
+                    $resolved = [pscustomobject]@{
+                        Index = $null
+                        Role = [string]$storedRow.Label
+                        MemberName = [string]$storedRow.Member
+                        Tier = [string]$storedRow.Tier
+                    }
                 }
                 $index = if ($null -ne $resolved.Index) { [int]$resolved.Index } else { [int]::MaxValue }
                 $label = [string]$resolved.Role
@@ -3340,32 +3497,45 @@ function Merge-ExactSessionUsageLocal {
             elseif (-not $row.Tier) { $row.Tier = $tier }
             foreach ($model in @($storedRow.Models)) { if ($model) { $null = $row.Models.Add([string]$model) } }
             foreach ($name in @($storedRow.Descendants)) { if ($name) { $null = $row.Descendants.Add([string]$name) } }
-            $row.Runs += [long]$storedRow.Runs
-            $row.Requests += [long]$storedRow.Requests
-            $row.Input += [long]$storedRow.Input
-            $row.Cached += [long]$storedRow.Cached
-            $row.CacheWrite += [long]$storedRow.CacheWrite
-            $row.Output += [long]$storedRow.Output
-            $row.NanoAiu += [decimal]$storedRow.NanoAiu
+            # A host accounting identity is one billed request: a copy in a later session's log is counted once.
+            $unique = [Collections.Generic.List[object]]::new()
+            $repeatedCount = 0
+            $repeatedInput = 0L
+            $repeatedCached = 0L
+            $repeatedCacheWrite = 0L
+            $repeatedOutput = 0L
+            $repeatedNanoAiu = [decimal]0
             foreach ($request in @($storedRow.RequestDetails)) {
                 $identityHash = [string]$request.identityHash
-                if (-not $identityHash -or -not $seenRequestIdentities.Add($identityHash)) {
-                    throw "Exact session cache repeats native request identity '$identityHash' across sessions."
-                }
-                $row.RequestDetails.Add($request)
+                if (-not $identityHash) { throw 'Exact session cache holds a native request without an accounting identity.' }
+                if ($seenRequestIdentities.Add($identityHash)) { $unique.Add($request); continue }
+                $repeatedCount++
+                $repeatedInput += [long]$request.inputTokens
+                $repeatedCached += [long]$request.cacheReadTokens
+                $repeatedCacheWrite += [long]$request.cacheWriteTokens
+                $repeatedOutput += [long]$request.outputTokens
+                $repeatedNanoAiu += [decimal]$request.nanoAiu
             }
+            $row.Runs += [long]$storedRow.Runs
+            $row.Requests += [long]$storedRow.Requests - $repeatedCount
+            $row.Input += [long]$storedRow.Input - $repeatedInput
+            $row.Cached += [long]$storedRow.Cached - $repeatedCached
+            $row.CacheWrite += [long]$storedRow.CacheWrite - $repeatedCacheWrite
+            $row.Output += [long]$storedRow.Output - $repeatedOutput
+            $row.NanoAiu += [decimal]$storedRow.NanoAiu - $repeatedNanoAiu
+            $duplicateRequests += $repeatedCount
+            foreach ($request in $unique) { $row.RequestDetails.Add($request) }
         }
     }
 
     $rows = @(
-        foreach ($row in @($rowsByKey.Values | Sort-Object Index, Label, Agent)) {
-            if ($row.Models.Count -eq 0) { throw "Cached exact usage has no model identity for '$($row.Agent)'." }
+        foreach ($row in @($rowsByKey.Values | Where-Object { $_.Requests -gt 0 -or $_.NanoAiu -ne 0 } | Sort-Object Index, Label, Agent)) {
             [pscustomobject][ordered]@{
                 Index = $row.Index
                 Label = $row.Label
                 Member = $row.Member
                 Agent = $row.Agent
-                Models = @($row.Models | Sort-Object)
+                Models = @(if ($row.Models.Count -gt 0) { $row.Models | Sort-Object } else { 'unknown' })
                 ModelSources = @('host-reported')
                 PricedAsUsed = @('native credits')
                 Tier = $row.Tier
@@ -3385,7 +3555,7 @@ function Merge-ExactSessionUsageLocal {
         }
     )
     $records = [long](($rows | Measure-Object Requests -Sum).Sum)
-    $sessionRecords = [long](($Sessions | Measure-Object records -Sum).Sum)
+    $sessionRecords = [long](($Sessions | Measure-Object records -Sum).Sum) - $duplicateRequests
     if ($records -ne $sessionRecords) {
         throw "Exact session cache rows total $records requests, not the session total $sessionRecords."
     }
@@ -3393,7 +3563,7 @@ function Merge-ExactSessionUsageLocal {
     $roleRows = @($rows | Where-Object Label -ne 'orchestration')
     $baseline = $BaselineModel
     if (-not $baseline) {
-        $candidateModels = @($roleRows | ForEach-Object Models | Where-Object { (ConvertTo-RateKeyLocal $_) -ne 'hydrafusion-max' } | Select-Object -Unique)
+        $candidateModels = @($roleRows | ForEach-Object Models | Where-Object { (ConvertTo-RateKeyLocal $_) -notin @('hydrafusion-max', 'unknown') } | Select-Object -Unique)
         if ($candidateModels.Count -eq 0 -and $Rates.ByNormalized.ContainsKey('claude-sonnet-4.6')) {
             $candidateModels = @('claude-sonnet-4.6')
         }
@@ -3485,9 +3655,881 @@ function Merge-ExactSessionUsageLocal {
         SnapshotDigest = $snapshotDigest
         SnapshotTimestamp = if ($snapshotTimestamp.Count) { [string]$snapshotTimestamp[0] } else { '' }
         SessionCount = $Sessions.Count
+        DuplicateRequests = [int]$duplicateRequests
         RequestDetailStatus = if ($requestDetailsComplete) { 'complete' } else { 'partial' }
         CacheSessions = $Sessions
     }
+}
+
+# ---------------------------------------------------------------------------
+# Journal reconciliation. Native usage is authoritative; history coverage is
+# bookkeeping that proves nothing was dropped or double counted. Every gap that
+# used to force estimates is reconciled when the logs allow it and reported in
+# the ledger when they do not, never replaced by an estimate.
+# ---------------------------------------------------------------------------
+
+function ConvertTo-HistoryTimestampLocal {
+    param([AllowEmptyString()][AllowNull()][string]$Text)
+    if ([string]::IsNullOrWhiteSpace($Text)) { return $null }
+    $parsed = [DateTimeOffset]::MinValue
+    if ([DateTimeOffset]::TryParse($Text, [Globalization.CultureInfo]::InvariantCulture, [Globalization.DateTimeStyles]::AssumeUniversal, [ref]$parsed)) {
+        return $parsed
+    }
+    $null
+}
+
+function Get-HistoryEntryMapLocal {
+    param([AllowEmptyCollection()][object[]]$HistoryEntries = @())
+    $map = @{}
+    foreach ($entry in $HistoryEntries) {
+        $key = "$($entry.Agent).md`n$($entry.Identity)"
+        if (-not $map.ContainsKey($key)) { $map[$key] = $entry }
+    }
+    $map
+}
+
+function Get-HistoryEntryStampLocal {
+    param([Parameter(Mandatory)][hashtable]$EntryByKey, [Parameter(Mandatory)][string]$FileName, [Parameter(Mandatory)][string]$Identity)
+    $entry = $EntryByKey["$FileName`n$Identity"]
+    if ($entry) { return ConvertTo-HistoryTimestampLocal -Text ([string]$entry.Timestamp) }
+    $null
+}
+
+function Get-MeteredEntryCountAfterLocal {
+    <#
+    .SYNOPSIS
+        Counts the metered history entries stamped after an instant; connector entries billed elsewhere are not counted.
+    #>
+    param(
+        [Parameter(Mandatory)][Collections.IDictionary]$MeteredHistoryCoverage,
+        [Parameter(Mandatory)][hashtable]$EntryByKey,
+        [Parameter(Mandatory)][DateTimeOffset]$After
+    )
+    $count = 0
+    foreach ($fileName in $MeteredHistoryCoverage.Keys) {
+        foreach ($identity in @($MeteredHistoryCoverage[$fileName])) {
+            $entry = $EntryByKey["$fileName`n$identity"]
+            if ($entry -and [string]$entry.ExternalUnmeteredConnector) { continue }
+            $stamp = Get-HistoryEntryStampLocal -EntryByKey $EntryByKey -FileName ([string]$fileName) -Identity ([string]$identity)
+            if ($stamp -and $stamp -gt $After) { $count++ }
+        }
+    }
+    $count
+}
+
+function Get-FileDigestLocal {
+    <#
+    .SYNOPSIS
+        A SHA-256 of a file's bytes, or an empty string when it does not exist.
+    #>
+    param([Parameter(Mandatory)][string]$Path)
+    if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) { return '' }
+    [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData([IO.File]::ReadAllBytes($Path)))
+}
+
+function Resolve-ExactSessionPathLocal {
+    <#
+    .SYNOPSIS
+        The events.jsonl of an accepted session: among the repository's sessions first, otherwise by its id,
+        so a session opened one folder away is still found after it stops being the running one.
+    #>
+    param(
+        [AllowEmptyCollection()][string[]]$SessionPaths = @(),
+        [Parameter(Mandatory)][string]$SessionId,
+        [AllowEmptyString()][string]$SquadRoot = ''
+    )
+    $found = @($SessionPaths | Where-Object { (Split-Path -Leaf (Split-Path -Parent $_)) -ceq $SessionId } | Select-Object -First 1)
+    if ($found.Count -gt 0 -or -not $SquadRoot) { return $found }
+    if (-not (Get-Command Resolve-SquadSessionLogPathById -ErrorAction SilentlyContinue)) { return @() }
+    $marker = [regex]::Match($SquadRoot, '^(?<repo>.*?)[\\/]\.copilot-tracking([\\/]|$)')
+    if (-not $marker.Success) { return @() }
+    $byId = Resolve-SquadSessionLogPathById -SessionId $SessionId -RepoRoot $marker.Groups['repo'].Value
+    if ($byId) { @($byId) } else { @() }
+}
+
+function Test-SessionLogGrownLocal {
+    <#
+    .SYNOPSIS
+        True when a session log was written after its cached snapshot's last event, or when that cannot be told.
+    #>
+    param([Parameter(Mandatory)]$Cached, [Parameter(Mandatory)][string]$Path)
+    $last = ConvertTo-HistoryTimestampLocal -Text ([string]$Cached.last)
+    if (-not $last -or -not (Test-Path -LiteralPath $Path -PathType Leaf)) { return $true }
+    (Get-Item -LiteralPath $Path).LastWriteTimeUtc -gt $last.UtcDateTime.AddSeconds(2)
+}
+
+function Get-RefreshedCacheSessionLocal {
+    <#
+    .SYNOPSIS
+        Re-reads a cached session's log and returns its replacement snapshot, or the reason it cannot be replaced.
+    #>
+    param(
+        [Parameter(Mandatory)]$Cached,
+        [Parameter(Mandatory)][string]$Path,
+        [Parameter(Mandatory)][string]$SquadRoot,
+        [Parameter(Mandatory)][Collections.IDictionary]$Coverage,
+        [Parameter(Mandatory)]$Rates,
+        [Parameter(Mandatory)]$Roster,
+        [AllowEmptyCollection()][string[]]$KnownAgents = @(),
+        [AllowEmptyString()][string]$BaselineModel,
+        [Parameter(Mandatory)][AllowEmptyCollection()][Collections.Generic.List[string]]$Warnings,
+        $PreRead = $null
+    )
+    try {
+        $read = if ($PreRead) { $PreRead } else { Read-SessionUsageLocal -Path $Path -SquadRoot $SquadRoot }
+        if ([string]$read.SessionId -cne [string]$Cached.sessionId) {
+            throw "Repository session path '$Path' reports '$($read.SessionId)', not cached session '$($Cached.sessionId)'."
+        }
+        $exact = Get-ExactLedgerUsageLocal -Session $read -Rates $Rates -Roster $Roster -KnownAgentNames $KnownAgents `
+            -BaselineModel $BaselineModel -Warnings $Warnings
+        if (-not $exact) { throw 'its native usage could not be attributed' }
+        $next = ConvertTo-CacheSessionLocal -Exact $exact -HistoryCoverage $Coverage
+        Assert-ExactSessionRefreshLocal -Existing $Cached -Next $next
+        [pscustomobject]@{ Session = $next; Error = '' }
+    }
+    catch {
+        [pscustomobject]@{ Session = $null; Error = $_.Exception.Message }
+    }
+}
+
+function Get-SessionEvidenceLocal {
+    <#
+    .SYNOPSIS
+        Sorted instants (UTC ticks) at which a session's own log shows a history writer starting for this root, a
+        history writer starting for another root, or a squad agent being billed.
+    #>
+    param([Parameter(Mandatory)]$Session, [AllowEmptyCollection()][string[]]$KnownAgentNames = @())
+    $handoffs = [Collections.Generic.List[long]]::new()
+    foreach ($text in @($Session.HandoffTimes)) {
+        $stamp = ConvertTo-HistoryTimestampLocal -Text ([string]$text)
+        if ($stamp) { $handoffs.Add($stamp.UtcTicks) }
+    }
+    $others = [Collections.Generic.List[long]]::new()
+    foreach ($text in @($Session.OtherHandoffTimes)) {
+        $stamp = ConvertTo-HistoryTimestampLocal -Text ([string]$text)
+        if ($stamp) { $others.Add($stamp.UtcTicks) }
+    }
+    $usage = [Collections.Generic.List[long]]::new()
+    foreach ($run in @($Session.UsageSnapshot.agentRuns)) {
+        if ([int]$run.records -le 0) { continue }
+        $identity = Resolve-NativeAgentIdentityLocal -Run $run -ExpectedAgentNames $KnownAgentNames
+        if ($identity.Status -ne 'ok' -or [string]$identity.Name -ceq 'coordinator') { continue }
+        foreach ($request in @($run.requests)) {
+            $stamp = ConvertTo-HistoryTimestampLocal -Text ([string]$request.timestamp)
+            if ($stamp) { $usage.Add($stamp.UtcTicks) }
+        }
+    }
+    [long[]]$handoffTicks = $handoffs.ToArray()
+    [Array]::Sort($handoffTicks)
+    [long[]]$otherTicks = $others.ToArray()
+    [Array]::Sort($otherTicks)
+    [long[]]$usageTicks = $usage.ToArray()
+    [Array]::Sort($usageTicks)
+    [pscustomobject]@{ Handoffs = $handoffTicks; OtherHandoffs = $otherTicks; Usage = $usageTicks }
+}
+
+function Get-WriterDistanceLocal {
+    <#
+    .SYNOPSIS
+        Seconds between an entry's stamp and the nearest writer start that began up to $BeforeSeconds before it (or
+        $AfterSeconds after); infinity when none did.
+    #>
+    param(
+        [Parameter(Mandatory)][AllowEmptyCollection()][long[]]$Ticks,
+        [Parameter(Mandatory)][long]$AtTicks,
+        [int]$BeforeSeconds = 180,
+        [int]$AfterSeconds = 5
+    )
+    $nearest = [double]::PositiveInfinity
+    if ($Ticks.Length -eq 0) { return $nearest }
+    $low = $AtTicks - $BeforeSeconds * [TimeSpan]::TicksPerSecond
+    $limit = $AtTicks + $AfterSeconds * [TimeSpan]::TicksPerSecond
+    $from = [Array]::BinarySearch($Ticks, $low)
+    if ($from -lt 0) { $from = -bnot $from }
+    while ($from -gt 0 -and $Ticks[$from - 1] -ge $low) { $from-- }
+    for ($i = $from; $i -lt $Ticks.Length -and $Ticks[$i] -le $limit; $i++) {
+        $distance = [math]::Abs($AtTicks - $Ticks[$i]) / [double][TimeSpan]::TicksPerSecond
+        if ($distance -lt $nearest) { $nearest = $distance }
+    }
+    $nearest
+}
+
+function Get-EvidenceScoreLocal {
+    <#
+    .SYNOPSIS
+        How convincingly a session's own log shows that it wrote a history entry; lower is better, infinity is none.
+    .DESCRIPTION
+        An entry is stamped just after its writer starts, so a writer for this root that began up to 180 s
+        before (or 5 s after) the stamp is the strong evidence and scores its distance in seconds (0 to 180). A
+        squad agent billed within 300 s is weaker and scores 1000 plus its distance, so a session that merely
+        worked nearby can never outrank the one whose writer ran for the entry. A session that was starting a
+        writer for another root within those same 300 s spent its billing there, so it earns no usage credit.
+    #>
+    param([Parameter(Mandatory)]$Evidence, [Parameter(Mandatory)][DateTimeOffset]$At)
+    $atTicks = [long]$At.UtcTicks
+    $own = Get-WriterDistanceLocal -Ticks ([long[]]$Evidence.Handoffs) -AtTicks $atTicks
+    if (-not [double]::IsInfinity($own)) { return $own }
+    $other = Get-WriterDistanceLocal -Ticks ([long[]]$Evidence.OtherHandoffs) -AtTicks $atTicks -BeforeSeconds 300 -AfterSeconds 300
+    if (-not [double]::IsInfinity($other)) { return [double]::PositiveInfinity }
+    $best = [double]::PositiveInfinity
+    [long[]]$billed = $Evidence.Usage
+    if ($billed.Length -gt 0) {
+        $next = [Array]::BinarySearch($billed, $atTicks)
+        if ($next -lt 0) { $next = -bnot $next }
+        foreach ($j in @(($next - 1), $next)) {
+            if ($j -lt 0 -or $j -ge $billed.Length) { continue }
+            $distance = [math]::Abs($atTicks - $billed[$j]) / [double][TimeSpan]::TicksPerSecond
+            if ($distance -le 300 -and (1000.0 + $distance) -lt $best) { $best = 1000.0 + $distance }
+        }
+    }
+    $best
+}
+
+function Find-HistoryOwnerSessionsLocal {
+    <#
+    .SYNOPSIS
+        Repository sessions, other than the excluded ones, whose own log shows squad work at a history
+        entry's time more convincingly than the running session does.
+    .DESCRIPTION
+        EntryTimes are the stamps of the entries the journal does not cover, and ActiveScores holds, for
+        each, how convincingly the running session shows it wrote that entry (infinity when it cannot
+        have). A session qualifies when it beats the running session for at least one entry, so a session
+        that worked at the same time as the running one is still found. A session that shows neither a
+        history writer nor a billed squad agent near any entry (a plain chat in the same folder) never
+        qualifies. Each log is screened with a cheap scan for history writers first; the full usage read
+        follows only when the session can win on that evidence or the running session shows some entry
+        by usage alone or not at all.
+    #>
+    param(
+        [AllowEmptyCollection()][string[]]$SessionPaths = @(),
+        [Parameter(Mandatory)][AllowEmptyCollection()][Collections.Generic.HashSet[string]]$ExcludeSessionIds,
+        [Parameter(Mandatory)][string]$SquadRoot,
+        [AllowEmptyCollection()][DateTimeOffset[]]$EntryTimes = @(),
+        [AllowEmptyCollection()][double[]]$ActiveScores = @(),
+        [AllowEmptyCollection()][string[]]$KnownAgentNames = @()
+    )
+    $found = [Collections.Generic.List[object]]::new()
+    if ($EntryTimes.Count -eq 0) { return @() }
+    $sorted = @($EntryTimes | Sort-Object)
+    $earliest = $sorted[0]
+    $latest = $sorted[-1]
+    $activeLeavesSomeUnexplained = $false
+    # Writer evidence scores at most 180; anything above it (usage only, or none) leaves a candidate able to win.
+    foreach ($score in $ActiveScores) { if ($score -ge 1000.0) { $activeLeavesSomeUnexplained = $true; break } }
+    foreach ($path in $SessionPaths) {
+        if ($ExcludeSessionIds.Contains((Split-Path -Leaf (Split-Path -Parent $path)))) { continue }
+        if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { continue }
+        if ((Get-Item -LiteralPath $path).LastWriteTimeUtc -lt $earliest.UtcDateTime.AddHours(-1)) { continue }
+        try { $quick = Read-SessionHandoffTimesLocal -Path $path -SquadRoot $SquadRoot } catch { continue }
+        $quickStart = ConvertTo-HistoryTimestampLocal -Text ([string]$quick.First)
+        $quickEnd = ConvertTo-HistoryTimestampLocal -Text ([string]$quick.Last)
+        if (-not $quickStart -or -not $quickEnd -or $quickEnd -lt $earliest.AddMinutes(-5) -or $quickStart -gt $latest.AddMinutes(5)) { continue }
+        $writerOnly = Get-SessionEvidenceLocal -Session ([pscustomobject]@{
+                HandoffTimes = $quick.HandoffTimes
+                OtherHandoffTimes = $quick.OtherHandoffTimes
+                UsageSnapshot = [pscustomobject]@{ agentRuns = @() }
+            })
+        $canWinOnWriter = $false
+        for ($i = 0; $i -lt $EntryTimes.Count; $i++) {
+            if ((Get-EvidenceScoreLocal -Evidence $writerOnly -At $EntryTimes[$i]) -lt $ActiveScores[$i]) { $canWinOnWriter = $true; break }
+        }
+        if (-not $canWinOnWriter -and -not $activeLeavesSomeUnexplained) { continue }
+        try { $read = Read-SessionUsageLocal -Path $path -SquadRoot $SquadRoot } catch { continue }
+        if ($ExcludeSessionIds.Contains([string]$read.SessionId)) { continue }
+        if ([int]$read.UsageSnapshot.records -eq 0) { continue }
+        $start = ConvertTo-HistoryTimestampLocal -Text ([string]$read.First)
+        $end = ConvertTo-HistoryTimestampLocal -Text ([string]$read.Last)
+        if (-not $start -or -not $end -or $end -lt $earliest.AddMinutes(-5) -or $start -gt $latest.AddMinutes(5)) { continue }
+        $evidence = Get-SessionEvidenceLocal -Session $read -KnownAgentNames $KnownAgentNames
+        $wins = $false
+        for ($i = 0; $i -lt $EntryTimes.Count; $i++) {
+            if ((Get-EvidenceScoreLocal -Evidence $evidence -At $EntryTimes[$i]) -lt $ActiveScores[$i]) { $wins = $true; break }
+        }
+        if (-not $wins) { continue }
+        $found.Add([pscustomobject]@{ Session = $read; Start = $start; Evidence = $evidence })
+    }
+    @($found | Sort-Object { $_.Start.UtcDateTime }, { [string]$_.Session.SessionId })
+}
+
+function Select-ActiveSessionLocal {
+    <#
+    .SYNOPSIS
+        Keeps the newest session log unless it is a plain chat, in which case the newest log that shows squad work wins.
+    .DESCRIPTION
+        Used only when the host did not name the running session. A chat in the same folder that was
+        written more recently than the session doing the hand-off must not stand in for it. A session is
+        accepted when it is already in the journal, ran a squad hand-off or ledger script, or billed a
+        squad agent. When no candidate qualifies the newest log stays selected.
+    #>
+    param(
+        [Parameter(Mandatory)]$Session,
+        [AllowEmptyCollection()][string[]]$SessionPaths = @(),
+        [Parameter(Mandatory)][string]$SquadRoot,
+        [AllowEmptyCollection()][object[]]$CacheSessions = @(),
+        [AllowEmptyCollection()][string[]]$KnownAgents = @()
+    )
+    $journaled = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+    foreach ($cached in $CacheSessions) { $null = $journaled.Add([string]$cached.sessionId) }
+    foreach ($path in @($SessionPaths | Select-Object -First 6)) {
+        $read = $null
+        if ($path -ceq [string]$Session.Path) { $read = $Session }
+        else {
+            try { $read = Read-SessionUsageLocal -Path $path -SquadRoot $SquadRoot } catch { continue }
+        }
+        if ($journaled.Contains([string]$read.SessionId)) { return $read }
+        $evidence = Get-SessionEvidenceLocal -Session $read -KnownAgentNames $KnownAgents
+        if ($evidence.Handoffs.Count -gt 0 -or $evidence.Usage.Count -gt 0) { return $read }
+    }
+    $Session
+}
+
+function Resolve-HistoryOwnersLocal {
+    <#
+    .SYNOPSIS
+        Hands history entries the journal does not cover yet to the sessions that wrote them.
+    .DESCRIPTION
+        Each uncovered entry belongs to the session whose own log shows it most convincingly: a history
+        writer that started just before the stamp beats a squad agent merely billed nearby, and a nearer
+        writer beats a farther one. The running session keeps an entry unless another repository session
+        that never reached the journal shows it more convincingly, or the entry was stamped before the
+        running session began; then the latest cached session (whose log has since grown), or such a
+        session, holds it. The latest cached session is re-read from its completed log with its coverage
+        extended, and sessions that never reached the journal are appended in the order in which they
+        first showed an entry more convincingly than the running session. Coverage is bookkeeping: which
+        chunk holds an entry never changes whose usage counts, and a session handed no entry still counts.
+        Entries no log accounts for stay with the running session and are reported later.
+        Returns $true when the cache changed.
+    #>
+    param(
+        [Parameter(Mandatory)][AllowEmptyCollection()][Collections.Generic.List[object]]$Cache,
+        [Parameter(Mandatory)]$Active,
+        [AllowEmptyCollection()][string[]]$SessionPaths = @(),
+        [Parameter(Mandatory)][string]$SquadRoot,
+        [Parameter(Mandatory)][Collections.IDictionary]$HistoryCoverage,
+        [Parameter(Mandatory)][hashtable]$EntryByKey,
+        [AllowEmptyCollection()][string[]]$KnownAgents = @(),
+        [Parameter(Mandatory)]$Rates,
+        [Parameter(Mandatory)]$Roster,
+        [AllowEmptyString()][string]$BaselineModel,
+        [Parameter(Mandatory)][AllowEmptyCollection()][Collections.Generic.List[string]]$Warnings,
+        [Parameter(Mandatory)][AllowEmptyCollection()][Collections.Generic.List[pscustomobject]]$Notes,
+        [Parameter(Mandatory)][AllowEmptyCollection()][Collections.Generic.HashSet[string]]$Refreshed
+    )
+    $plan = Get-ExactCoveragePlanLocal -Sessions $Cache.ToArray() -CurrentSessionId '__no-active-native-session__' -CurrentHistoryCoverage $HistoryCoverage
+    $uncovered = $plan.CurrentCoverage
+    $boundary = ConvertTo-HistoryTimestampLocal -Text ([string]$Active.First)
+    $cutoff = if ($boundary) { $boundary.AddMinutes(-2) } else { $null }
+    $activeEvidence = Get-SessionEvidenceLocal -Session $Active -KnownAgentNames $KnownAgents
+
+    # Every uncovered entry, with how convincingly the running session shows that it wrote it.
+    $rows = [Collections.Generic.List[pscustomobject]]::new()
+    $rowByKey = [Collections.Generic.Dictionary[string, object]]::new([StringComparer]::Ordinal)
+    foreach ($fileName in @($uncovered.Keys | Sort-Object)) {
+        foreach ($identity in @($uncovered[$fileName])) {
+            $stamp = Get-HistoryEntryStampLocal -EntryByKey $EntryByKey -FileName ([string]$fileName) -Identity ([string]$identity)
+            if (-not $stamp) { continue }
+            $isOlder = [bool]$cutoff -and $stamp -lt $cutoff
+            $row = [pscustomobject]@{
+                Stamp = $stamp
+                Older = $isOlder
+                ActiveScore = if ($isOlder) { [double]::PositiveInfinity } else { Get-EvidenceScoreLocal -Evidence $activeEvidence -At $stamp }
+                Best = -1
+                BestScore = [double]::PositiveInfinity
+                Claimed = $isOlder
+            }
+            $rows.Add($row)
+            $rowByKey["$fileName`n$identity"] = $row
+        }
+    }
+    if ($rows.Count -eq 0) { return $false }
+
+    $exclude = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+    foreach ($cached in $Cache) { $null = $exclude.Add([string]$cached.sessionId) }
+    $null = $exclude.Add([string]$Active.SessionId)
+    $others = @(Find-HistoryOwnerSessionsLocal -SessionPaths $SessionPaths -ExcludeSessionIds $exclude -SquadRoot $SquadRoot `
+            -EntryTimes @($rows | ForEach-Object Stamp) -ActiveScores @($rows | ForEach-Object ActiveScore) -KnownAgentNames $KnownAgents)
+    $olderCount = @($rows | Where-Object Older).Count
+
+    $hasLatest = $Cache.Count -gt 0
+    $latestIndex = $Cache.Count - 1
+    $latest = if ($hasLatest) { $Cache[$latestIndex] } else { $null }
+    $latestIsActive = $hasLatest -and [string]$latest.sessionId -ceq [string]$Active.SessionId
+    # With no other session to hand entries to, only entries older than the active session go to the latest cached one.
+    if ($others.Count -eq 0 -and ($olderCount -eq 0 -or -not $hasLatest -or $latestIsActive)) { return $false }
+    $latestPath = @(if ($hasLatest -and -not $latestIsActive) { Resolve-ExactSessionPathLocal -SessionPaths $SessionPaths -SessionId ([string]$latest.sessionId) -SquadRoot $SquadRoot })
+
+    # Candidates: the latest cached session first, then each session that never reached the journal.
+    $candidates = [Collections.Generic.List[pscustomobject]]::new()
+    $latestRead = $null
+    if ($hasLatest) {
+        $latestEvidence = $null
+        if ($latestIsActive) { $latestEvidence = $activeEvidence }
+        elseif ($others.Count -gt 0 -and $latestPath.Count -eq 1) {
+            try {
+                $latestRead = Read-SessionUsageLocal -Path $latestPath[0] -SquadRoot $SquadRoot
+                $latestEvidence = Get-SessionEvidenceLocal -Session $latestRead -KnownAgentNames $KnownAgents
+            }
+            catch { $latestEvidence = $null }
+        }
+        $candidates.Add([pscustomobject]@{ Evidence = $latestEvidence; Read = $null })
+    }
+    $firstOther = $candidates.Count
+    foreach ($other in $others) { $candidates.Add([pscustomobject]@{ Evidence = $other.Evidence; Read = $other.Session }) }
+
+    # A session that never reached the journal joins when it shows an entry more convincingly than the running one, even
+    # if another session shows that entry better still; a tie stays with the running session. Such sessions join in the
+    # order in which they first beat it, so every chunk of coverage stays in history order, and one that is handed no
+    # entry of its own still adds its usage.
+    $firstBeat = @{}
+    foreach ($row in $rows) {
+        $bestOther = [double]::PositiveInfinity
+        for ($c = 0; $c -lt $candidates.Count; $c++) {
+            if (-not $candidates[$c].Evidence) { continue }
+            $score = Get-EvidenceScoreLocal -Evidence $candidates[$c].Evidence -At $row.Stamp
+            if ($score -lt $row.BestScore) { $row.BestScore = $score; $row.Best = $c }
+            if ($c -lt $firstOther -or $score -ge $row.ActiveScore) { continue }
+            if ($score -lt $bestOther) { $bestOther = $score }
+            $ticks = [long]$row.Stamp.UtcTicks
+            if (-not $firstBeat.ContainsKey($c) -or $ticks -lt $firstBeat[$c]) { $firstBeat[$c] = $ticks }
+        }
+        $row.Claimed = $row.Older -or ($bestOther -lt $row.ActiveScore)
+    }
+    if (@($rows | Where-Object Claimed).Count -eq 0) { return $false }
+
+    $chain = [Collections.Generic.List[int]]::new()
+    if ($hasLatest) { $chain.Add(0) }
+    foreach ($c in @($firstBeat.Keys | Sort-Object { $firstBeat[$_] }, { $_ })) { $chain.Add([int]$c) }
+    if ($chain.Count -eq 0) { return $false }
+    $position = @{}
+    for ($p = 0; $p -lt $chain.Count; $p++) { $position[$chain[$p]] = $p }
+    $owners = [Collections.Generic.List[pscustomobject]]::new()
+    foreach ($c in $chain) { $owners.Add([pscustomobject]@{ Evidence = $candidates[$c].Evidence; Read = $candidates[$c].Read; Coverage = [ordered]@{} }) }
+    $firstNew = if ($hasLatest) { 1 } else { 0 }
+
+    foreach ($fileName in @($uncovered.Keys | Sort-Object)) {
+        foreach ($owner in $owners) { $owner.Coverage[[string]$fileName] = [Collections.Generic.List[string]]::new() }
+        $ids = @($uncovered[$fileName])
+        # The head runs through the last entry that an earlier session, not the running one, holds.
+        $headEnd = 0
+        for ($i = 0; $i -lt $ids.Count; $i++) {
+            $row = $null
+            if ($rowByKey.TryGetValue("$fileName`n$($ids[$i])", [ref]$row) -and $row.Claimed) { $headEnd = $i + 1 }
+        }
+        $previous = 0
+        for ($i = 0; $i -lt $headEnd; $i++) {
+            $row = $null
+            $choice = 0
+            if ($rowByKey.TryGetValue("$fileName`n$($ids[$i])", [ref]$row) -and $row.Best -ge 0 -and $position.ContainsKey($row.Best)) {
+                $choice = [int]$position[$row.Best]
+            }
+            if ($choice -lt $previous) { $choice = $previous }
+            $previous = $choice
+            $owners[$choice].Coverage[[string]$fileName].Add([string]$ids[$i])
+        }
+    }
+
+    # Built before anything is applied, so a refusal part-way leaves the cache untouched.
+    $added = [Collections.Generic.List[object]]::new()
+    $localNotes = [Collections.Generic.List[pscustomobject]]::new()
+    $localWarnings = [Collections.Generic.List[string]]::new()
+    $lastUsable = if ($hasLatest) { 0 } else { -1 }
+    $waiting = [ordered]@{}
+    for ($o = $firstNew; $o -lt $owners.Count; $o++) {
+        $ownerWarnings = [Collections.Generic.List[string]]::new()
+        $exact = Get-ExactLedgerUsageLocal -Session $owners[$o].Read -Rates $Rates -Roster $Roster -KnownAgentNames $KnownAgents `
+            -BaselineModel $BaselineModel -Warnings $ownerWarnings
+        if (-not $exact) {
+            if ([int]$owners[$o].Read.UsageSnapshot.records -gt 0) {
+                $localNotes.Add([pscustomobject]@{ Kind = 'unusable'; Text = "native session '$($owners[$o].Read.SessionId)' wrote part of this history but its usage could not be attributed ($(@($ownerWarnings) -join ' ')); its usage is not in the exact totals." })
+            }
+            foreach ($fileName in $owners[$o].Coverage.Keys) {
+                foreach ($identity in @($owners[$o].Coverage[$fileName])) {
+                    if ($lastUsable -ge 0) {
+                        # Its entries stay in order by joining the closest earlier chunk.
+                        $owners[$lastUsable].Coverage[$fileName].Add([string]$identity)
+                    }
+                    else {
+                        # No earlier chunk exists, so they wait for the next session that can be added.
+                        if (-not $waiting.Contains($fileName)) { $waiting[$fileName] = [Collections.Generic.List[string]]::new() }
+                        $waiting[$fileName].Add([string]$identity)
+                    }
+                }
+            }
+            continue
+        }
+        foreach ($fileName in $waiting.Keys) { $owners[$o].Coverage[$fileName].InsertRange(0, [string[]]@($waiting[$fileName])) }
+        $waiting = [ordered]@{}
+        foreach ($text in $ownerWarnings) { $localWarnings.Add($text) }
+        $added.Add((ConvertTo-CacheSessionLocal -Exact $exact -HistoryCoverage $owners[$o].Coverage))
+        $lastUsable = $o
+    }
+
+    $replacement = $null
+    $refreshedId = ''
+    if ($hasLatest) {
+        $extended = Join-HistoryCoverageLocal -Left $latest.historyCoverage -Right $owners[0].Coverage
+        if ($latestIsActive) {
+            # The caller re-reads the active session's log next, with this coverage.
+            $latest.historyCoverage = $extended
+            $replacement = $latest
+        }
+        elseif ($latestPath.Count -eq 1) {
+            $result = Get-RefreshedCacheSessionLocal -Cached $latest -Path $latestPath[0] -SquadRoot $SquadRoot -Coverage $extended `
+                -Rates $Rates -Roster $Roster -KnownAgents $KnownAgents -BaselineModel $BaselineModel -Warnings $Warnings -PreRead $latestRead
+            if ($result.Session) { $replacement = $result.Session }
+            else {
+                $localNotes.Add([pscustomobject]@{ Kind = 'refresh'; Text = "native session '$($latest.sessionId)' could not be re-read ($($result.Error)); its last accepted snapshot is used." })
+            }
+            $refreshedId = [string]$latest.sessionId
+        }
+        if (-not $replacement) {
+            $latest.historyCoverage = $extended
+            $replacement = $latest
+        }
+        $Cache[$latestIndex] = $replacement
+    }
+    for ($i = $added.Count - 1; $i -ge 0; $i--) { $Cache.Insert($latestIndex + 1, $added[$i]) }
+    if ($refreshedId) { $null = $Refreshed.Add($refreshedId) }
+    foreach ($text in $localWarnings) { $Warnings.Add($text) }
+    foreach ($note in $localNotes) { $Notes.Add($note) }
+    $true
+}
+
+function Resolve-ExactJournalLocal {
+    <#
+    .SYNOPSIS
+        Brings the exact-session journal in line with the history and the available host logs.
+    .DESCRIPTION
+        Returns the new session list, the merged exact usage (or $null only when no native usage
+        exists to report), whether the journal changed, and notes for every place the logs could
+        not fully account for the history. Nothing in the existing journal is replaced unless the
+        replacement is a verified refresh of the same native session.
+    #>
+    param(
+        [AllowEmptyCollection()][object[]]$CacheSessions = @(),
+        [Parameter(Mandatory)][string]$SessionLog,
+        [Parameter(Mandatory)][string]$SquadRoot,
+        [AllowEmptyCollection()][string[]]$SessionPaths = @(),
+        $Session,
+        [Parameter(Mandatory)][Collections.IDictionary]$HistoryCoverage,
+        [Parameter(Mandatory)][Collections.IDictionary]$MeteredHistoryCoverage,
+        [AllowEmptyCollection()][object[]]$HistoryEntries = @(),
+        [AllowEmptyCollection()][object[]]$OrderedAggregates = @(),
+        [Parameter(Mandatory)]$Rates,
+        [Parameter(Mandatory)]$Roster,
+        [AllowEmptyString()][string]$BaselineModel,
+        [AllowEmptyString()][string]$DegradedReason = '',
+        [switch]$HostDesignated,
+        [Parameter(Mandatory)][AllowEmptyCollection()][Collections.Generic.List[string]]$Warnings
+    )
+    $auto = $SessionLog -eq 'auto'
+    $cache = [Collections.Generic.List[object]]::new()
+    # Shallow copies: coverage is reassigned on them, and a run that throws must leave the caller's snapshots as read.
+    foreach ($cached in $CacheSessions) { $cache.Add($cached.PSObject.Copy()) }
+    $changed = $false
+    $notes = [Collections.Generic.List[pscustomobject]]::new()
+    $refreshed = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+    $entryByKey = Get-HistoryEntryMapLocal -HistoryEntries $HistoryEntries
+    $knownAgents = [Collections.Generic.List[string]]::new()
+    foreach ($fileName in $HistoryCoverage.Keys) { $knownAgents.Add([IO.Path]::GetFileNameWithoutExtension([string]$fileName)) }
+    foreach ($row in @($Roster)) { foreach ($name in @($row.AgentNames)) { if ($name) { $knownAgents.Add([string]$name) } } }
+    $known = @($knownAgents | Select-Object -Unique)
+    $meteredAgents = @($OrderedAggregates | ForEach-Object AgentName)
+
+    if ($Session -and $auto -and -not $HostDesignated -and $SessionPaths.Count -gt 1) {
+        $Session = Select-ActiveSessionLocal -Session $Session -SessionPaths $SessionPaths -SquadRoot $SquadRoot `
+            -CacheSessions $cache.ToArray() -KnownAgents $known
+    }
+
+    # No session log is readable now: the cached snapshots are the only native evidence.
+    if (-not $Session) {
+        if ($cache.Count -eq 0) { return [pscustomobject]@{ Sessions = @(); ExactUsage = $null; Changed = $false; Notes = @() } }
+        $plan = Get-ExactCoveragePlanLocal -Sessions $cache.ToArray() -CurrentSessionId '__no-active-native-session__' -CurrentHistoryCoverage $HistoryCoverage
+        # After an unexpected failure the history stays uncovered, so the next healthy run can still hand it to the sessions that wrote it.
+        if (-not $plan.CacheCoversAll -and -not $DegradedReason) {
+            $latest = $cache[$cache.Count - 1]
+            $latest.historyCoverage = Join-HistoryCoverageLocal -Left $latest.historyCoverage -Right $plan.CurrentCoverage
+            $changed = $true
+        }
+        $through = @($cache | ForEach-Object through | Where-Object { $_ } | Select-Object -Last 1)
+        $throughStamp = if ($through.Count) { ConvertTo-HistoryTimestampLocal -Text ([string]$through[0]) } else { $null }
+        # Derived from the history and the snapshots alone, so a rewrite with nothing new says the same thing.
+        $newer = if ($throughStamp) {
+            Get-MeteredEntryCountAfterLocal -MeteredHistoryCoverage $MeteredHistoryCoverage -EntryByKey $entryByKey -After $throughStamp.AddSeconds(180)
+        }
+        else { 0 }
+        if ($DegradedReason) {
+            # The live reconcile failed unexpectedly, so nothing newer than the snapshots was read, whatever the history says.
+            $notes.Add([pscustomobject]@{ Kind = 'as-of'; Text = "the native session logs could not be reconciled ($DegradedReason); the totals are exact as of $(if ($through.Count) { $through[0] } else { 'the last accepted snapshot' })." })
+        }
+        elseif ($newer -gt 0) {
+            $notes.Add([pscustomobject]@{ Kind = 'as-of'; Text = "no native session log was available for the latest $newer metered history entr$(if ($newer -eq 1) { 'y' } else { 'ies' }); the totals are exact as of $($through[0])." })
+        }
+        $merged = Merge-ExactSessionUsageLocal -Sessions $cache.ToArray() -Rates $Rates -Roster $Roster -BaselineModel $BaselineModel -ActiveSession $null -Warnings $Warnings
+        return [pscustomobject]@{ Sessions = $cache.ToArray(); ExactUsage = $merged; Changed = $changed; Notes = $notes.ToArray() }
+    }
+
+    # History the journal does not cover yet is handed to the sessions that wrote it, then cached sessions are brought up to date.
+    if ($auto -and $cache.Count -gt 0) {
+        if (Resolve-HistoryOwnersLocal -Cache $cache -Active $Session -SessionPaths $SessionPaths -SquadRoot $SquadRoot `
+                -HistoryCoverage $HistoryCoverage -EntryByKey $entryByKey -KnownAgents $known -Rates $Rates -Roster $Roster `
+                -BaselineModel $BaselineModel -Warnings $Warnings -Notes $notes -Refreshed $refreshed) {
+            $changed = $true
+        }
+        for ($i = 0; $i -lt $cache.Count; $i++) {
+            $cached = $cache[$i]
+            if ([string]$cached.source -ne 'native-log' -or [string]$cached.sessionId -ceq [string]$Session.SessionId) { continue }
+            if ($refreshed.Contains([string]$cached.sessionId)) { continue }
+            $path = @(Resolve-ExactSessionPathLocal -SessionPaths $SessionPaths -SessionId ([string]$cached.sessionId) -SquadRoot $SquadRoot)
+            if ($path.Count -ne 1) { continue }
+            if ($i -ne $cache.Count - 1 -and -not (Test-SessionLogGrownLocal -Cached $cached -Path $path[0])) { continue }
+            $result = Get-RefreshedCacheSessionLocal -Cached $cached -Path $path[0] -SquadRoot $SquadRoot -Coverage $cached.historyCoverage `
+                -Rates $Rates -Roster $Roster -KnownAgents $known -BaselineModel $BaselineModel -Warnings $Warnings
+            if ($result.Session) {
+                $cache[$i] = $result.Session
+                $changed = $true
+            }
+            else {
+                $notes.Add([pscustomobject]@{ Kind = 'refresh'; Text = "native session '$($cached.sessionId)' could not be re-read ($($result.Error)); its last accepted snapshot is used." })
+            }
+        }
+    }
+
+    if ($cache.Count -eq 0 -and $auto -and $SessionPaths.Count -gt 1) {
+        try {
+            $bootstrap = Get-ExactSessionBootstrapLocal -Paths $SessionPaths -SquadRoot $SquadRoot `
+                -HistoryCoverage $HistoryCoverage -MeteredHistoryCoverage $MeteredHistoryCoverage `
+                -HistoryEntries @($HistoryEntries) -OrderedAggregates @($OrderedAggregates) -Rates $Rates -Roster $Roster `
+                -ActiveSession $Session -KnownAgents $known -BaselineModel $BaselineModel -Warnings $Warnings
+            if ($bootstrap) {
+                return [pscustomobject]@{ Sessions = @($bootstrap.Sessions); ExactUsage = $bootstrap.ExactUsage; Changed = $true; Notes = $notes.ToArray() }
+            }
+        }
+        catch {
+            $Warnings.Add("WARN: exact session-journal bootstrap was unavailable; the active session will be reconciled normally: $($_.Exception.Message)")
+        }
+        # Earlier sessions that show a hand-off or squad agent at their entries' times still join; nothing else does.
+        if (Resolve-HistoryOwnersLocal -Cache $cache -Active $Session -SessionPaths $SessionPaths -SquadRoot $SquadRoot `
+                -HistoryCoverage $HistoryCoverage -EntryByKey $entryByKey -KnownAgents $known -Rates $Rates -Roster $Roster `
+                -BaselineModel $BaselineModel -Warnings $Warnings -Notes $notes -Refreshed $refreshed) {
+            $changed = $true
+        }
+    }
+
+    $plan = Get-ExactCoveragePlanLocal -Sessions $cache.ToArray() -CurrentSessionId ([string]$Session.SessionId) -CurrentHistoryCoverage $HistoryCoverage
+    $currentCount = [int](($plan.CurrentCoverage.Values | ForEach-Object { @($_).Count } | Measure-Object -Sum).Sum)
+    $hasNativeScribeUsage = Test-NativeSessionHasScribeUsageLocal -Session $Session
+    if (-not ($plan.ExistingSession -or $currentCount -gt 0 -or $hasNativeScribeUsage)) {
+        $merged = if ($plan.CacheCoversAll) {
+            Merge-ExactSessionUsageLocal -Sessions $cache.ToArray() -Rates $Rates -Roster $Roster -BaselineModel $BaselineModel -ActiveSession $null -Warnings $Warnings
+        }
+        else { $null }
+        return [pscustomobject]@{ Sessions = $cache.ToArray(); ExactUsage = $merged; Changed = $changed; Notes = $notes.ToArray() }
+    }
+
+    $expected = Get-ExpectedNativeCoverageLocal -HistoryCoverage $plan.CurrentCoverage -MeteredHistoryCoverage $MeteredHistoryCoverage `
+        -MeteredAgents $meteredAgents -HistoryEntries @($HistoryEntries)
+    if ([int]$expected.MeteredEntryCount -eq 0 -and $cache.Count -gt 0 -and -not $hasNativeScribeUsage) {
+        # Only unmetered history arrived (script lifecycle writes): it joins the session that holds the latest coverage.
+        $target = if ($plan.ExistingIndex -ge 0 -and $plan.ActiveIsLatest) { $plan.ExistingIndex } else { $cache.Count - 1 }
+        $cache[$target].historyCoverage = if ($plan.ExistingIndex -ge 0 -and $plan.ActiveIsLatest) {
+            $plan.CurrentCoverage
+        }
+        else {
+            Join-HistoryCoverageLocal -Left $cache[$target].historyCoverage -Right $plan.CurrentCoverage
+        }
+        $merged = Merge-ExactSessionUsageLocal -Sessions $cache.ToArray() -Rates $Rates -Roster $Roster -BaselineModel $BaselineModel -ActiveSession $null -Warnings $Warnings
+        return [pscustomobject]@{ Sessions = $cache.ToArray(); ExactUsage = $merged; Changed = $true; Notes = $notes.ToArray() }
+    }
+
+    $activeWarnings = [Collections.Generic.List[string]]::new()
+    $sessionExact = Get-ExactLedgerUsageLocal -Session $Session -Rates $Rates -Roster $Roster -KnownAgentNames $known `
+        -BaselineModel $BaselineModel -Warnings $activeWarnings
+    # With accepted snapshots the totals stay exact, so the usual "estimates remain the fallback" tail would mislead.
+    $keepsSnapshots = -not $sessionExact -and $cache.Count -gt 0
+    $activeReasons = [Collections.Generic.List[string]]::new()
+    foreach ($text in $activeWarnings) {
+        $reasonText = $text -replace '^WARN:\s*', ''
+        if ($keepsSnapshots) {
+            $reasonText = ($reasonText -replace ';?\s*estimates remain the fallback\.?\s*$', '').TrimEnd('.', ' ')
+            $Warnings.Add("WARN: $reasonText; the accepted exact totals are kept.")
+        }
+        else { $Warnings.Add($text) }
+        $activeReasons.Add($reasonText)
+    }
+
+    if ($sessionExact) {
+        $ownsSuffix = $plan.ExistingIndex -lt 0 -or $plan.ActiveIsLatest
+        $coverage = if ($ownsSuffix) { $plan.CurrentCoverage } else { $plan.ExistingSession.historyCoverage }
+        $cacheSession = ConvertTo-CacheSessionLocal -Exact $sessionExact -HistoryCoverage $coverage
+        $refreshOk = $true
+        if ($plan.ExistingIndex -ge 0) {
+            try { Assert-ExactSessionRefreshLocal -Existing $plan.ExistingSession -Next $cacheSession }
+            catch {
+                $refreshOk = $false
+                $notes.Add([pscustomobject]@{ Kind = 'refresh'; Text = "native session '$($Session.SessionId)' could not be re-read ($($_.Exception.Message)); its last accepted snapshot is used." })
+            }
+        }
+        if ($refreshOk) {
+            if ($plan.ExistingIndex -ge 0) { $cache[$plan.ExistingIndex] = $cacheSession } else { $cache.Add($cacheSession) }
+        }
+        if (-not $ownsSuffix -and $currentCount -gt 0) {
+            $latest = $cache[$cache.Count - 1]
+            $latest.historyCoverage = Join-HistoryCoverageLocal -Left $latest.historyCoverage -Right $plan.CurrentCoverage
+        }
+        elseif (-not $refreshOk -and $ownsSuffix) {
+            $latest = $cache[$cache.Count - 1]
+            $latest.historyCoverage = $plan.CurrentCoverage
+        }
+        $merged = Merge-ExactSessionUsageLocal -Sessions $cache.ToArray() -Rates $Rates -Roster $Roster -BaselineModel $BaselineModel -ActiveSession $Session -Warnings $Warnings
+        return [pscustomobject]@{ Sessions = $cache.ToArray(); ExactUsage = $merged; Changed = $true; Notes = $notes.ToArray() }
+    }
+
+    # The active session's own usage cannot be attributed; earlier accepted snapshots still stand.
+    if ($cache.Count -eq 0) {
+        return [pscustomobject]@{ Sessions = @(); ExactUsage = $null; Changed = $changed; Notes = $notes.ToArray() }
+    }
+    $latest = $cache[$cache.Count - 1]
+    # The latest session's own plan already holds its accepted chunk, so only another session's plan is joined.
+    $latest.historyCoverage = if ($plan.ExistingIndex -ge 0 -and $plan.ActiveIsLatest) {
+        $plan.CurrentCoverage
+    }
+    else {
+        Join-HistoryCoverageLocal -Left $latest.historyCoverage -Right $plan.CurrentCoverage
+    }
+    $through = @($cache | ForEach-Object through | Where-Object { $_ } | Select-Object -Last 1)
+    $reason = if ($activeReasons.Count) { @($activeReasons) -join ' ' } else { 'its native usage could not be attributed' }
+    $notes.Add([pscustomobject]@{ Kind = 'unusable'; Text = "the live native session '$($Session.SessionId)' could not be added ($reason); the totals are exact as of $(if ($through.Count) { $through[0] } else { 'the last accepted snapshot' })." })
+    $merged = Merge-ExactSessionUsageLocal -Sessions $cache.ToArray() -Rates $Rates -Roster $Roster -BaselineModel $BaselineModel -ActiveSession $null -Warnings $Warnings
+    [pscustomobject]@{ Sessions = $cache.ToArray(); ExactUsage = $merged; Changed = $true; Notes = $notes.ToArray() }
+}
+
+# Notes of these kinds mean the exact total leaves out usage no native log accounted for.
+$script:ExactPartialNoteKinds = @('as-of', 'unusable', 'unaccounted', 'history-without-native', 'refresh')
+
+function Get-ExactNoteKeyLocal {
+    <#
+    .SYNOPSIS
+        A stable identity for a note's subject, so a note whose figures merely moved is not announced again.
+    #>
+    param([Parameter(Mandatory)][AllowEmptyString()][string]$Text)
+    foreach ($pattern in @(
+            @{ Kind = 'unrecorded'; Regex = "^exact usage for '(?<subject>[^']+)'" }
+            @{ Kind = 'history-without-native'; Regex = "^history for '(?<subject>[^']+)' has " }
+            @{ Kind = 'unusable'; Regex = "^(?:the live )?native session '(?<subject>[^']+)' (?:could not be added|wrote part of)" }
+            @{ Kind = 'refresh'; Regex = "^native session '(?<subject>[^']+)' could not be re-read" }
+            @{ Kind = 'unaccounted'; Regex = 'metered history entr(?:y has|ies have) no billed native request' }
+            @{ Kind = 'duplicate'; Regex = '^\d+ native requests? appears? in more than one' }
+            @{ Kind = 'as-of'; Regex = '^(?:no native session log was available|the native session logs could not be reconciled)' }
+        )) {
+        $found = [regex]::Match($Text, $pattern.Regex)
+        if ($found.Success) { return "$($pattern.Kind)|$($found.Groups['subject'].Value)" }
+    }
+    "other|$Text"
+}
+
+function Get-ExactNotesLocal {
+    <#
+    .SYNOPSIS
+        Describes, in plain words, every place the accepted native sessions do not match the history one for one.
+    #>
+    param(
+        [Parameter(Mandatory)]$Exact,
+        [Parameter(Mandatory)][Collections.IDictionary]$HistoryCoverage,
+        [Parameter(Mandatory)][Collections.IDictionary]$MeteredHistoryCoverage,
+        [Parameter(Mandatory)][hashtable]$EntryByKey
+    )
+    $inv = [Globalization.CultureInfo]::InvariantCulture
+    $notes = [Collections.Generic.List[pscustomobject]]::new()
+    $historyAgents = @($HistoryCoverage.Keys | ForEach-Object { [IO.Path]::GetFileNameWithoutExtension([string]$_) })
+    $roleRows = @($Exact.Rows | Where-Object Label -ne 'orchestration')
+
+    foreach ($row in $roleRows) {
+        if ([string]$row.Agent -cin $historyAgents) { continue }
+        $notes.Add([pscustomobject]@{
+                Kind = 'unrecorded'
+                Text = "exact usage for '$($row.Agent)' ($($row.Requests) request$(if ([int]$row.Requests -ne 1) { 's' }), $(([double]$row.Credits).ToString('F2', $inv)) credits) has no history entry; it is included from the native session log."
+            })
+    }
+
+    $rowAgents = @($roleRows | ForEach-Object { [string]$_.Agent })
+    $hasOrchestration = @($Exact.Rows | Where-Object Label -eq 'orchestration').Count -gt 0
+    foreach ($fileName in @($MeteredHistoryCoverage.Keys | Sort-Object)) {
+        $agent = [IO.Path]::GetFileNameWithoutExtension([string]$fileName)
+        $counted = 0
+        foreach ($identity in @($MeteredHistoryCoverage[$fileName])) {
+            $entry = $EntryByKey["$fileName`n$identity"]
+            if ($entry -and [string]$entry.ExternalUnmeteredConnector) { continue }
+            $counted++
+        }
+        if ($counted -eq 0) { continue }
+        if ($agent -ceq 'Squad Scribe') {
+            if (-not $hasOrchestration) {
+                $notes.Add([pscustomobject]@{ Kind = 'history-without-native'; Text = "Squad Scribe history has $counted metered entr$(if ($counted -eq 1) { 'y' } else { 'ies' }) but the accepted native sessions show no coordinator or Scribe usage; nothing is estimated for them." })
+            }
+            continue
+        }
+        if ($agent -cin $rowAgents) { continue }
+        $notes.Add([pscustomobject]@{ Kind = 'history-without-native'; Text = "history for '$agent' has $counted metered entr$(if ($counted -eq 1) { 'y' } else { 'ies' }) but the accepted native sessions show no usage by that agent; nothing is estimated for them." })
+    }
+
+    # An entry is accounted for when an accepted native session billed any request within five minutes of its stamp.
+    # Whole-session spans would hide a gap inside a long-lived or resumed session.
+    $legacy = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+    $requestTicks = [Collections.Generic.List[long]]::new()
+    foreach ($cached in @($Exact.CacheSessions)) {
+        if ([string]$cached.source -ne 'native-log') {
+            foreach ($fileName in $cached.historyCoverage.Keys) {
+                foreach ($identity in @($cached.historyCoverage[$fileName])) { $null = $legacy.Add("$fileName`n$identity") }
+            }
+            continue
+        }
+        foreach ($row in @($cached.rows)) {
+            foreach ($request in @($row.RequestDetails)) {
+                $billed = ConvertTo-HistoryTimestampLocal -Text ([string]$request.timestamp)
+                if ($billed) { $requestTicks.Add($billed.UtcTicks) }
+            }
+        }
+    }
+    [long[]]$billedTicks = $requestTicks.ToArray()
+    [Array]::Sort($billedTicks)
+    $window = 300L * [TimeSpan]::TicksPerSecond
+    $uncovered = [ordered]@{}
+    $uncoveredCount = 0
+    foreach ($fileName in @($MeteredHistoryCoverage.Keys | Sort-Object)) {
+        foreach ($identity in @($MeteredHistoryCoverage[$fileName])) {
+            if ($legacy.Contains("$fileName`n$identity")) { continue }
+            $entry = $EntryByKey["$fileName`n$identity"]
+            if ($entry -and [string]$entry.ExternalUnmeteredConnector) { continue }
+            $stamp = Get-HistoryEntryStampLocal -EntryByKey $EntryByKey -FileName ([string]$fileName) -Identity ([string]$identity)
+            if (-not $stamp) { continue }
+            $at = $stamp.UtcTicks
+            $next = [Array]::BinarySearch($billedTicks, $at)
+            if ($next -lt 0) { $next = -bnot $next }
+            $near = ($next -lt $billedTicks.Length -and $billedTicks[$next] - $at -le $window) -or
+                ($next -gt 0 -and $at - $billedTicks[$next - 1] -le $window)
+            if ($near) { continue }
+            if (-not $uncovered.Contains([string]$fileName)) { $uncovered[[string]$fileName] = 0 }
+            $uncovered[[string]$fileName]++
+            $uncoveredCount++
+        }
+    }
+    if ($uncoveredCount -gt 0) {
+        $where = @($uncovered.Keys | ForEach-Object { "$_ x$($uncovered[$_])" }) -join ', '
+        $one = $uncoveredCount -eq 1
+        $notes.Add([pscustomobject]@{
+                Kind = 'unaccounted'
+                Text = "$uncoveredCount metered history entr$(if ($one) { 'y has' } else { 'ies have' }) no billed native request within 5 minutes of $(if ($one) { 'its' } else { 'their' }) time in any accepted session ($where); usage that no accepted session recorded for $(if ($one) { 'it' } else { 'them' }) is not in the exact totals, and nothing is estimated for $(if ($one) { 'it' } else { 'them' })."
+            })
+    }
+    if ([int]$Exact.DuplicateRequests -gt 0) {
+        $repeated = [int]$Exact.DuplicateRequests
+        $notes.Add([pscustomobject]@{
+                Kind = 'duplicate'
+                Text = "$repeated native request$(if ($repeated -ne 1) { 's' }) appear$(if ($repeated -eq 1) { 's' }) in more than one accepted session log (a forked or replayed session); each is counted once."
+            })
+    }
+    $notes.ToArray()
 }
 
 function Get-ExactSessionBootstrapLocal {
@@ -3498,7 +4540,8 @@ function Get-ExactSessionBootstrapLocal {
         This recovery path is used only when `-SessionLog auto` finds current history
         spanning more than one host session and no accepted journal exists yet. Every
         metered history entry must fall inside exactly one complete, attributable
-        repository-session event window. Ambiguous or missing coverage fails closed.
+        repository-session event window. Ambiguous or missing coverage makes this strict
+        path decline, and the caller then adopts earlier sessions by evidence instead.
     #>
     param(
         [Parameter(Mandatory)][string[]]$Paths,
@@ -3510,6 +4553,7 @@ function Get-ExactSessionBootstrapLocal {
         [Parameter(Mandatory)]$Rates,
         [Parameter(Mandatory)]$Roster,
         [Parameter(Mandatory)]$ActiveSession,
+        [AllowEmptyCollection()][string[]]$KnownAgents = @(),
         [AllowEmptyString()][string]$BaselineModel,
         [Parameter(Mandatory)][AllowEmptyCollection()][System.Collections.Generic.List[string]]$Warnings
     )
@@ -3683,9 +4727,7 @@ function Get-ExactSessionBootstrapLocal {
             throw "Native session '$($selected[$i].Session.SessionId)' has no metered history coverage."
         }
         $sessionExact = Get-ExactLedgerUsageLocal -Session $selected[$i].Session -Rates $Rates -Roster $Roster `
-            -HistoryEntries @($expected.HistoryEntries) -ExpectedAgentNames @($expected.Agents) `
-            -RequireOrchestration:$expected.RequireOrchestration -EnforceExpectedSet -RequireSessionBoundary `
-            -BaselineModel $BaselineModel -Warnings $Warnings
+            -KnownAgentNames $KnownAgents -BaselineModel $BaselineModel -Warnings $Warnings
         if (-not $sessionExact) {
             throw "Native session '$($selected[$i].Session.SessionId)' did not reconcile with its history window."
         }
@@ -4141,6 +5183,12 @@ function Get-CostComparisonUpdateLocal {
     [pscustomobject]@{ Text = $result; Issues = $issues.ToArray(); Added = $added }
 }
 
+function Format-NanoAiuLocal {
+    # A journal round trip can leave a trailing ".0" on an integral amount; the ledger text must not depend on the source.
+    param([Parameter(Mandatory)][decimal]$Value)
+    $Value.ToString('0.############################', [Globalization.CultureInfo]::InvariantCulture)
+}
+
 function Get-ExactCostComparisonSectionLinesLocal {
     param([Parameter(Mandatory)]$Exact)
 
@@ -4191,6 +5239,11 @@ function Get-ExactCostComparisonSectionLinesLocal {
                 $snapshotLabel, $Exact.SnapshotRecords, $Exact.SnapshotDigest, $unavailableReason))
     }
     $lines.Add('')
+    $partialNotes = @(if ($Exact.PSObject.Properties['Notes']) { @($Exact.Notes) | Where-Object { $_.Kind -in $script:ExactPartialNoteKinds } })
+    if ($partialNotes.Count -gt 0) {
+        $lines.Add('> Lower bound: the exact total leaves out usage that no accepted native session could account for (see the `NOTE:` lines in the Derivation block). Nothing was estimated to fill the gap.')
+        $lines.Add('')
+    }
     $lines.ToArray()
 }
 
@@ -4266,7 +5319,8 @@ function Get-UnitEconomicsLocal {
         [Parameter(Mandatory)][double]$TotalCredits,
         [Parameter(Mandatory)][double]$OrchestrationCredits,
         $HostAiu,
-        [ValidateSet('estimated', 'exact-native')][string]$CostBasis = 'estimated'
+        [ValidateSet('estimated', 'exact-native')][string]$CostBasis = 'estimated',
+        [switch]$LowerBound
     )
     $sorted = @($Entries | Sort-Object -Property Timestamp, Seq)
 
@@ -4352,6 +5406,7 @@ function Get-UnitEconomicsLocal {
         reworkDispatches             = $reworkEntries.Count
         firstPassYieldPct            = if ($accepted -gt 0) { @($acceptedKeys | Where-Object { -not $reworkDeliverables.ContainsKey($_) }).Count / $accepted * 100 } else { $null }
         costBasis                    = $CostBasis
+        lowerBound                   = [bool]$LowerBound
         creditsPerAccepted           = if ($accepted -gt 0) { $TotalCredits / $accepted } else { $null }
         estCreditsPerAccepted        = if ($accepted -gt 0) { $TotalCredits / $accepted } else { $null }
         reworkCredits                = $reworkCredits
@@ -4386,9 +5441,10 @@ function Get-UnitEconomicsSectionLinesLocal {
     $lines.Add("| Rework dispatches | $(& $count $Ue.reworkDispatches) | derived |")
     $lines.Add("| First-pass yield | $(& $pct $Ue.firstPassYieldPct) | derived |")
     if ($Ue.costBasis -eq 'exact-native') {
-        $lines.Add("| Exact credits per accepted deliverable | $(& $credits $Ue.creditsPerAccepted) | measured |")
+        $measured = if ($Ue.lowerBound) { 'measured (lower bound)' } else { 'measured' }
+        $lines.Add("| Exact credits per accepted deliverable | $(& $credits $Ue.creditsPerAccepted) | $measured |")
         $lines.Add("| Rework share of exact credits | n/a | unavailable without per-history-run identity |")
-        $lines.Add("| Orchestration share of exact credits | $(& $pct $Ue.orchestrationSharePct) | measured |")
+        $lines.Add("| Orchestration share of exact credits | $(& $pct $Ue.orchestrationSharePct) | $measured |")
     }
     else {
         $lines.Add("| Est. credits per accepted deliverable | $(& $credits $Ue.estCreditsPerAccepted) | estimated |")
@@ -5085,7 +6141,7 @@ if ($Check) {
         $usageTable = @(Get-MarkdownTableLocal -Content $consumptionContent | Where-Object { ('Turns' -in $_.Header -or 'Requests' -in $_.Header) -and 'Basis' -in $_.Header })
         $totalRow = $null
         foreach ($table in $usageTable) {
-            $hit = $table.Rows | Where-Object { $_[$table.Header[0]] -match 'Total' } | Select-Object -First 1
+            $hit = $table.Rows | Where-Object { Test-LedgerTotalLabelLocal ([string]$_[$table.Header[0]]) } | Select-Object -First 1
             if ($hit) { $totalRow = $hit; break }
         }
 
@@ -5094,7 +6150,7 @@ if ($Check) {
         }
         elseif ($hasExactLedger) {
             $exactTable = @($usageTable | Where-Object { 'Requests' -in $_.Header } | Select-Object -First 1)
-            $detailRows = @($exactTable[0].Rows | Where-Object { $_[$exactTable[0].Header[0]] -notmatch 'Total' })
+            $detailRows = @($exactTable[0].Rows | Where-Object { -not (Test-LedgerTotalLabelLocal ([string]$_[$exactTable[0].Header[0]])) })
             $expectedRequests = [double](($detailRows | ForEach-Object { ConvertTo-LedgerNumberLocal $_['Requests'] } | Measure-Object -Sum).Sum)
             $expectedIn = [double](($detailRows | ForEach-Object { ConvertTo-LedgerNumberLocal $_['In Tokens'] } | Measure-Object -Sum).Sum)
             $expectedCached = [double](($detailRows | ForEach-Object { ConvertTo-LedgerNumberLocal $_['Cached'] } | Measure-Object -Sum).Sum)
@@ -5326,11 +6382,17 @@ if ($Check) {
 
 $exactUsage = $null
 $exactCacheUpdate = $null
-if ($SessionLog) {
+$exactCacheKept = $null
+$journalDigestAtRead = $null
+# A manual -Write on a root that already keeps an exact-session journal must not replace its exact totals with estimates.
+$accountingSessionLog = if ($SessionLog) { $SessionLog } elseif ($Write -and (Test-Path -LiteralPath $sessionCachePath -PathType Leaf)) { 'auto' } else { '' }
+if ($accountingSessionLog) {
     $cacheSessions = @()
     $cacheAvailable = $true
     $cacheChanged = $false
     $legacyMigrated = $false
+    $journalUnreadable = $false
+    $journalDigestAtRead = Get-FileDigestLocal -Path $sessionCachePath
     try {
         $cacheSessions = @(Read-ExactSessionCacheLocal -Path $sessionCachePath)
         $nullCoverageMigrations = @(
@@ -5352,12 +6414,19 @@ if ($SessionLog) {
         }
     }
     catch {
-        $cacheAvailable = $false
-        $warnings.Add("WARN: consumption-sessions.json is unavailable or inconsistent; it was left unchanged and estimates remain the fallback: $($_.Exception.Message)")
+        if ($_.Exception -is [System.IO.InvalidDataException]) {
+            # Not a JSON object at all, so nothing in it can be trusted: the journal is rebuilt from the native logs.
+            $journalUnreadable = $true
+            $cacheSessions = @()
+        }
+        else {
+            $cacheAvailable = $false
+            $warnings.Add("WARN: consumption-sessions.json is unavailable or inconsistent; it was left unchanged and estimates remain the fallback: $($_.Exception.Message)")
+        }
     }
 
     if ($cacheAvailable) {
-        $sessionPaths = @(Resolve-SessionLogPathsLocal -SessionLog $SessionLog -SquadRoot $SquadRoot)
+        $sessionPaths = @(Resolve-SessionLogPathsLocal -SessionLog $accountingSessionLog -SquadRoot $SquadRoot)
         $sessionPath = if ($sessionPaths.Count -gt 0) { $sessionPaths[0] } else { $null }
         $session = $null
         if ($sessionPath) {
@@ -5367,157 +6436,76 @@ if ($SessionLog) {
             }
         }
 
-        if ($session) {
-            try {
-                if ($cacheSessions.Count -gt 0 -and $SessionLog -eq 'auto') {
-                    $latestCachedIndex = $cacheSessions.Count - 1
-                    $latestCached = $cacheSessions[$latestCachedIndex]
-                    if ([string]$latestCached.source -eq 'native-log' -and
-                        [string]$latestCached.sessionId -cne [string]$session.SessionId) {
-                        $priorPath = @(
-                            $sessionPaths | Where-Object {
-                                (Split-Path -Leaf (Split-Path -Parent $_)) -ceq [string]$latestCached.sessionId
-                            } | Select-Object -First 1
-                        )
-                        if ($priorPath.Count -eq 1) {
-                            try {
-                                $priorSession = Read-SessionUsageLocal -Path $priorPath[0] -SquadRoot $SquadRoot
-                                if ([string]$priorSession.SessionId -cne [string]$latestCached.sessionId) {
-                                    throw "Repository session path '$($priorPath[0])' reports '$($priorSession.SessionId)', not cached session '$($latestCached.sessionId)'."
-                                }
-                                $priorExpected = Get-ExpectedNativeCoverageLocal -HistoryCoverage $latestCached.historyCoverage `
-                                    -MeteredHistoryCoverage $meteredHistoryIdentitiesByFile `
-                                    -MeteredAgents @($ordered | ForEach-Object AgentName) -HistoryEntries @($exactHistoryEntries)
-                                $priorRequiresOrchestration = [bool]$priorExpected.RequireOrchestration -or
-                                    (Test-NativeSessionHasScribeUsageLocal -Session $priorSession)
-                                $priorExact = Get-ExactLedgerUsageLocal -Session $priorSession -Rates $rates -Roster $roster `
-                                    -HistoryEntries @($priorExpected.HistoryEntries) -ExpectedAgentNames @($priorExpected.Agents) `
-                                    -RequireOrchestration:$priorRequiresOrchestration -EnforceExpectedSet -RequireSessionBoundary `
-                                    -BaselineModel $BaselineModel -Warnings $warnings
-                                if ($priorExact) {
-                                    $refreshedPrior = ConvertTo-CacheSessionLocal -Exact $priorExact -HistoryCoverage $latestCached.historyCoverage
-                                    Assert-ExactSessionRefreshLocal -Existing $latestCached -Next $refreshedPrior
-                                    $cacheSessions[$latestCachedIndex] = $refreshedPrior
-                                    $cacheChanged = $true
-                                }
-                                else {
-                                    $warnings.Add("WARN: the previous native session '$($latestCached.sessionId)' could not be finalized from its completed log; its last accepted exact snapshot was retained.")
-                                }
-                            }
-                            catch {
-                                $warnings.Add("WARN: the previous native session '$($latestCached.sessionId)' could not be finalized; its last accepted exact snapshot was retained: $($_.Exception.Message)")
-                            }
-                        }
-                    }
-                }
-
-                $bootstrapped = $false
-                if ($cacheSessions.Count -eq 0 -and $SessionLog -eq 'auto' -and $sessionPaths.Count -gt 1) {
-                    try {
-                        $bootstrap = Get-ExactSessionBootstrapLocal -Paths $sessionPaths -SquadRoot $SquadRoot `
-                            -HistoryCoverage $historyIdentitiesByFile -MeteredHistoryCoverage $meteredHistoryIdentitiesByFile `
-                            -HistoryEntries @($exactHistoryEntries) -OrderedAggregates @($ordered) -Rates $rates -Roster $roster `
-                            -ActiveSession $session -BaselineModel $BaselineModel -Warnings $warnings
-                        if ($bootstrap) {
-                            $cacheSessions = @($bootstrap.Sessions)
-                            $cacheChanged = $true
-                            $exactUsage = $bootstrap.ExactUsage
-                            $bootstrapped = $true
-                        }
-                    }
-                    catch {
-                        $warnings.Add("WARN: exact session-journal bootstrap was unavailable; the active session will be reconciled normally: $($_.Exception.Message)")
-                    }
-                }
-
-                if (-not $bootstrapped) {
-                    $coveragePlan = Get-ExactCoveragePlanLocal -Sessions $cacheSessions -CurrentSessionId ([string]$session.SessionId) -CurrentHistoryCoverage $historyIdentitiesByFile
-                    $currentCoverageCount = [int](($coveragePlan.CurrentCoverage.Values | ForEach-Object { @($_).Count } | Measure-Object -Sum).Sum)
-                    $hasNativeScribeUsage = Test-NativeSessionHasScribeUsageLocal -Session $session
-                    $refreshCurrentSession = $coveragePlan.ExistingSession -or $currentCoverageCount -gt 0 -or $hasNativeScribeUsage
-                    if ($refreshCurrentSession) {
-                        $expected = Get-ExpectedNativeCoverageLocal -HistoryCoverage $coveragePlan.CurrentCoverage `
-                            -MeteredHistoryCoverage $meteredHistoryIdentitiesByFile `
-                            -MeteredAgents @($ordered | ForEach-Object AgentName) -HistoryEntries @($exactHistoryEntries)
-                        if ([int]$expected.MeteredEntryCount -eq 0 -and $cacheSessions.Count -gt 0 -and -not $hasNativeScribeUsage) {
-                            if ($coveragePlan.ExistingIndex -ge 0) {
-                                $cacheSessions[$coveragePlan.ExistingIndex].historyCoverage = $coveragePlan.CurrentCoverage
-                            }
-                            else {
-                                $lastIndex = $cacheSessions.Count - 1
-                                $cacheSessions[$lastIndex].historyCoverage = Join-HistoryCoverageLocal `
-                                    -Left $cacheSessions[$lastIndex].historyCoverage -Right $coveragePlan.CurrentCoverage
-                            }
-                            $cacheChanged = $true
-                            $exactUsage = Merge-ExactSessionUsageLocal -Sessions $cacheSessions -Rates $rates -Roster $roster `
-                                -BaselineModel $BaselineModel -ActiveSession $null -Warnings $warnings
-                        }
-                        else {
-                            $requiresOrchestration = [bool]$expected.RequireOrchestration -or $hasNativeScribeUsage
-                            $sessionExact = Get-ExactLedgerUsageLocal -Session $session -Rates $rates -Roster $roster `
-                                -HistoryEntries @($expected.HistoryEntries) -ExpectedAgentNames @($expected.Agents) `
-                                -RequireOrchestration:$requiresOrchestration -EnforceExpectedSet -RequireSessionBoundary `
-                                -BaselineModel $BaselineModel -Warnings $warnings
-                            if ($sessionExact) {
-                                $cacheSession = ConvertTo-CacheSessionLocal -Exact $sessionExact -HistoryCoverage $coveragePlan.CurrentCoverage
-                                if ($coveragePlan.ExistingIndex -ge 0) {
-                                    Assert-ExactSessionRefreshLocal -Existing $cacheSessions[$coveragePlan.ExistingIndex] -Next $cacheSession
-                                    $nextSessions = [Collections.Generic.List[object]]::new()
-                                    for ($i = 0; $i -lt $cacheSessions.Count; $i++) {
-                                        $nextSessions.Add($(if ($i -eq $coveragePlan.ExistingIndex) { $cacheSession } else { $cacheSessions[$i] }))
-                                    }
-                                    $cacheSessions = $nextSessions.ToArray()
-                                }
-                                else {
-                                    $cacheSessions = @($cacheSessions) + @($cacheSession)
-                                }
-                                $cacheChanged = $true
-                                $exactUsage = Merge-ExactSessionUsageLocal -Sessions $cacheSessions -Rates $rates -Roster $roster `
-                                    -BaselineModel $BaselineModel -ActiveSession $session -Warnings $warnings
-                            }
-                            elseif ($coveragePlan.CacheCoversAll) {
-                                $exactUsage = Merge-ExactSessionUsageLocal -Sessions $cacheSessions -Rates $rates -Roster $roster `
-                                    -BaselineModel $BaselineModel -ActiveSession $null -Warnings $warnings
-                                $warnings.Add("WARN: the live native session could not refresh its cached snapshot, so the last fully reconciled cumulative exact snapshot was retained.")
-                            }
-                        }
-                    }
-                    elseif ($coveragePlan.CacheCoversAll) {
-                        $exactUsage = Merge-ExactSessionUsageLocal -Sessions $cacheSessions -Rates $rates -Roster $roster `
-                            -BaselineModel $BaselineModel -ActiveSession $null -Warnings $warnings
-                    }
-                }
-            }
-            catch {
-                $exactUsage = $null
-                $warnings.Add("WARN: exact cross-session accumulation was unavailable; estimates remain the fallback: $($_.Exception.Message)")
-            }
+        $exactNotes = @()
+        $hostSessionId = [string]$env:COPILOT_AGENT_SESSION_ID
+        $hostDesignated = [bool]($sessionPath -and $hostSessionId -and ((Split-Path -Leaf (Split-Path -Parent $sessionPath)) -ceq $hostSessionId))
+        try {
+            $journal = Resolve-ExactJournalLocal -CacheSessions $cacheSessions -SessionLog $accountingSessionLog -SquadRoot $SquadRoot `
+                -SessionPaths $sessionPaths -Session $session -HistoryCoverage $historyIdentitiesByFile `
+                -MeteredHistoryCoverage $meteredHistoryIdentitiesByFile -HistoryEntries @($exactHistoryEntries) `
+                -OrderedAggregates @($ordered) -Rates $rates -Roster $roster -BaselineModel $BaselineModel `
+                -HostDesignated:$hostDesignated -Warnings $warnings
+            $cacheSessions = @($journal.Sessions)
+            $exactUsage = $journal.ExactUsage
+            $exactNotes = @($journal.Notes)
+            if ($journal.Changed) { $cacheChanged = $true }
         }
-        elseif ($cacheSessions.Count -gt 0) {
+        catch {
+            $failure = ConvertTo-NoteTextLocal -Text $_.Exception.Message
+            $exactUsage = $null
+            $exactNotes = @()
+            # An unexpected failure while reading logs must not discard totals already accepted, so retry from the snapshots
+            # alone. An integrity guard (history-prefix drift, a non-reconciling snapshot) fails the same way again and keeps
+            # the estimator.
             try {
-                $coveragePlan = Get-ExactCoveragePlanLocal -Sessions $cacheSessions -CurrentSessionId '__no-active-native-session__' -CurrentHistoryCoverage $historyIdentitiesByFile
-                if ($coveragePlan.CacheCoversAll) {
-                    $exactUsage = Merge-ExactSessionUsageLocal -Sessions $cacheSessions -Rates $rates -Roster $roster `
-                        -BaselineModel $BaselineModel -ActiveSession $null -Warnings $warnings
-                }
-                else {
-                    $expected = Get-ExpectedNativeCoverageLocal -HistoryCoverage $coveragePlan.CurrentCoverage `
-                        -MeteredHistoryCoverage $meteredHistoryIdentitiesByFile `
-                        -MeteredAgents @($ordered | ForEach-Object AgentName) -HistoryEntries @($exactHistoryEntries)
-                    if ([int]$expected.MeteredEntryCount -ne 0) {
-                        throw 'new metered history exists without an available native session snapshot'
-                    }
-                    $lastIndex = $cacheSessions.Count - 1
-                    $cacheSessions[$lastIndex].historyCoverage = Join-HistoryCoverageLocal `
-                        -Left $cacheSessions[$lastIndex].historyCoverage -Right $coveragePlan.CurrentCoverage
-                    $cacheChanged = $true
-                    $exactUsage = Merge-ExactSessionUsageLocal -Sessions $cacheSessions -Rates $rates -Roster $roster `
-                        -BaselineModel $BaselineModel -ActiveSession $null -Warnings $warnings
-                }
+                $journal = Resolve-ExactJournalLocal -CacheSessions $cacheSessions -SessionLog $accountingSessionLog -SquadRoot $SquadRoot `
+                    -SessionPaths @() -Session $null -HistoryCoverage $historyIdentitiesByFile `
+                    -MeteredHistoryCoverage $meteredHistoryIdentitiesByFile -HistoryEntries @($exactHistoryEntries) `
+                    -OrderedAggregates @($ordered) -Rates $rates -Roster $roster -BaselineModel $BaselineModel `
+                    -DegradedReason $failure -Warnings $warnings
+                $cacheSessions = @($journal.Sessions)
+                $exactUsage = $journal.ExactUsage
+                $exactNotes = @($journal.Notes)
+                if ($journal.Changed) { $cacheChanged = $true }
             }
             catch {
                 $exactUsage = $null
-                $warnings.Add("WARN: cached exact sessions do not cover current history; estimates remain the fallback: $($_.Exception.Message)")
+                $exactNotes = @()
+            }
+            $degradedWarning = if ($exactUsage) {
+                "WARN: the native session logs could not be reconciled ($failure); the last accepted exact totals are kept."
+            }
+            else {
+                "WARN: exact cross-session accumulation was unavailable; estimates remain the fallback: $failure"
+            }
+            $warnings.Add($degradedWarning)
+        }
+        if ($exactUsage) {
+            try {
+                $comparisonNotes = @(Get-ExactNotesLocal -Exact $exactUsage -HistoryCoverage $historyIdentitiesByFile `
+                        -MeteredHistoryCoverage $meteredHistoryIdentitiesByFile `
+                        -EntryByKey (Get-HistoryEntryMapLocal -HistoryEntries @($exactHistoryEntries)))
+            }
+            catch {
+                $comparisonNotes = @([pscustomobject]@{
+                        Kind = 'unaccounted'
+                        Text = "the history could not be compared with the native sessions ($($_.Exception.Message)); the exact totals may leave out usage that no accepted session recorded, and nothing is estimated for it."
+                    })
+            }
+            # One plain line per note: a failure message must not break the Derivation block.
+            $exactNotes = @(@($exactNotes) + $comparisonNotes | ForEach-Object {
+                    [pscustomobject]@{ Kind = [string]$_.Kind; Text = ConvertTo-NoteTextLocal -Text ([string]$_.Text) }
+                })
+            $exactUsage | Add-Member -NotePropertyName Notes -NotePropertyValue @($exactNotes) -Force
+            # A note is announced once per subject; later rewrites whose figures merely moved stay quiet.
+            $announced = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+            foreach ($noteMatch in [regex]::Matches([string]$existingConsumptionContent, '(?m)^NOTE: (?<text>.+?)\s*$')) {
+                $null = $announced.Add((Get-ExactNoteKeyLocal -Text $noteMatch.Groups['text'].Value))
+            }
+            foreach ($note in $exactNotes) {
+                if ($announced.Add((Get-ExactNoteKeyLocal -Text ([string]$note.Text)))) {
+                    $warnings.Add("WARN: exact ledger note: $($note.Text)")
+                }
             }
         }
 
@@ -5537,11 +6525,33 @@ if ($SessionLog) {
                 Encoding = [Text.UTF8Encoding]::new($false)
             }
         }
+        if ($journalUnreadable) {
+            # The unreadable file is replaced only by a journal that rebuilt exact totals, and a write keeps its bytes beside it.
+            if (-not ($exactCacheUpdate -and $exactUsage)) {
+                $exactCacheUpdate = $null
+                $warnings.Add('WARN: consumption-sessions.json is not valid JSON and no native session usage could rebuild it; it was left unchanged and estimates remain the fallback.')
+            }
+            elseif (-not $Write) {
+                $warnings.Add('WARN: consumption-sessions.json is not valid JSON; these exact totals were rebuilt from the native session logs still on disk, and the file is left unchanged until -Write.')
+            }
+            else {
+                $keptClause = 'it held no data'
+                $unreadableBytes = [byte[]]::new(0)
+                try { $unreadableBytes = [IO.File]::ReadAllBytes($sessionCachePath) } catch { $unreadableBytes = [byte[]]::new(0) }
+                if ($unreadableBytes.Length -gt 0) {
+                    $keptName = "consumption-sessions.json.unreadable-$($journalDigestAtRead.Substring(0, 8))"
+                    $exactCacheKept = [pscustomobject]@{ Path = (Join-Path $SquadRoot $keptName); Bytes = $unreadableBytes }
+                    $keptClause = "the unreadable file was kept as $keptName"
+                }
+                $warnings.Add("WARN: consumption-sessions.json was not valid JSON; the exact totals were rebuilt from the native session logs still on disk, and $keptClause.")
+            }
+        }
     }
 }
 
 $ledgerBasis = if ($exactUsage) { 'exact-native' } else { 'estimated' }
 $ledgerRows = if ($exactUsage) { @($exactUsage.Rows) } else { @($roleAggregates) }
+$exactUsageNotes = @(if ($exactUsage -and $exactUsage.PSObject.Properties['Notes']) { $exactUsage.Notes })
 if ($exactUsage) {
     $totalTurns = $exactUsage.TotalRequests
     $totalInput = $exactUsage.TotalInput
@@ -5552,9 +6562,10 @@ if ($exactUsage) {
     $totalCredits = $exactUsage.TotalCredits
 }
 
+$exactIsPartial = @($exactUsageNotes | Where-Object { $_.Kind -in $script:ExactPartialNoteKinds }).Count -gt 0
 $unitEconomics = Get-UnitEconomicsLocal -Entries @($unitEntries) -Roster $roster -TotalCredits $totalCredits `
     -OrchestrationCredits $(if ($exactUsage) { $exactUsage.OrchestrationCredits } elseif ($orchestrationAggregate) { $orchestrationAggregate.Cost / 0.01 } else { 0.0 }) `
-    -HostAiu $null -CostBasis $ledgerBasis
+    -HostAiu $null -CostBasis $ledgerBasis -LowerBound:$exactIsPartial
 
 $fragmentLines = [System.Collections.Generic.List[string]]::new()
 $fragmentLines.Add('## Attribution')
@@ -5624,14 +6635,15 @@ if ($exactUsage) {
                 ([long]$agg.Cached).ToString($inv),
                 ([long]$agg.CacheWrite).ToString($inv),
                 ([long]$agg.Output).ToString($inv),
-                ([decimal]$agg.NanoAiu).ToString($inv),
+                (Format-NanoAiuLocal -Value ([decimal]$agg.NanoAiu)),
                 ([double]$agg.Credits).ToString('F2', $inv),
                 ([double]$agg.Cost).ToString('F4', $inv)))
     }
     $fragmentLines.Add(('total nano-AIU {0} = {1} credits / {2} USD' -f
-            ([decimal]$exactUsage.TotalNanoAiu).ToString($inv),
+            (Format-NanoAiuLocal -Value ([decimal]$exactUsage.TotalNanoAiu)),
             ([double]$totalCredits).ToString('F2', $inv),
             ([double]$totalCost).ToString('F4', $inv)))
+    foreach ($note in $exactUsageNotes) { $fragmentLines.Add("NOTE: $($note.Text)") }
 }
 else {
     foreach ($agg in $roleAggregates) {
@@ -5660,6 +6672,7 @@ if ($Write) {
         Get-ConsumptionFragmentUpdateLocal -ConsumptionPath $consumptionPath -FragmentLines $fragmentLines.ToArray()
         Get-StateRunTotalUpdateLocal -StatePath $statePath -CostUsd $totalCost -Credits $totalCredits
     )
+    if ($exactCacheKept) { $updates += $exactCacheKept }
     if ($exactCacheUpdate) { $updates += $exactCacheUpdate }
     $updates[0].Text = Get-ConsumptionWithSectionLocal -Text $updates[0].Text -SectionLines @() -HeadingPattern '^##\s+Observed Usage \(host-reported\)\s*$' -InsertBeforePatterns @('(?!)')
     $updates[0].Text = Get-ConsumptionWithSectionLocal -Text $updates[0].Text -SectionLines (Get-UnitEconomicsSectionLinesLocal -Ue $unitEconomics) -HeadingPattern '^##\s+Unit Economics \(value\)\s*$' -InsertBeforePatterns @('^##\s+Cost Comparison')
@@ -5670,18 +6683,24 @@ if ($Write) {
         $updates[0].Text = Get-ConsumptionWithSectionLocal -Text $updates[0].Text -SectionLines (Get-ExactCostComparisonSectionLinesLocal -Exact $exactUsage) -HeadingPattern '^##\s+Cost Comparison.*$' -InsertBeforePatterns @('(?!)')
     }
     else {
+        # A previous exact write may have left its comparison behind; it must not sit under estimated totals.
+        $updates[0].Text = Get-ConsumptionWithSectionLocal -Text $updates[0].Text -SectionLines @() -HeadingPattern '^##\s+Cost Comparison \(exact native actual\)\s*$' -InsertBeforePatterns @('(?!)')
         $comparison = Get-CostComparisonUpdateLocal -Text $updates[0].Text -CostUsd $totalCost -Credits $totalCredits -AgentCount (@($roleAggregates | Where-Object Label -ne 'orchestration').Count)
         $updates[0].Text = $comparison.Text
     }
     # Each file is written to a temp file beside it and moved into place; when a later move fails,
     # every earlier file gets its original bytes back, so the ledger, state totals, and exact-session
     # cache are one transaction.
+    if ($null -ne $journalDigestAtRead -and (Get-FileDigestLocal -Path $sessionCachePath) -cne $journalDigestAtRead) {
+        throw 'Measure-SquadLedger -Write: consumption-sessions.json changed while the ledger was being computed (another writer ran at the same time), so these figures may leave out its sessions; nothing was written. Rerun the write.'
+    }
     $applied = [System.Collections.Generic.List[hashtable]]::new()
     foreach ($u in $updates) {
         $tmp = Join-Path (Split-Path -Path $u.Path -Parent) (".$([System.IO.Path]::GetFileName($u.Path)).$([guid]::NewGuid().ToString('N')).tmp")
         try {
             $original = if (Test-Path -LiteralPath $u.Path -PathType Leaf) { [System.IO.File]::ReadAllBytes($u.Path) } else { $null }
-            [System.IO.File]::WriteAllText($tmp, $u.Text, $u.Encoding)
+            if ($u.PSObject.Properties['Bytes']) { [System.IO.File]::WriteAllBytes($tmp, [byte[]]$u.Bytes) }
+            else { [System.IO.File]::WriteAllText($tmp, $u.Text, $u.Encoding) }
             [System.IO.File]::Move($tmp, $u.Path, $true)
             $applied.Add(@{ Path = $u.Path; Bytes = $original })
         }
@@ -5798,6 +6817,8 @@ if ($Format -eq 'json') {
                 baselineCostUsd = if ($null -ne $exactUsage.BaselineCostUsd) { [math]::Round($exactUsage.BaselineCostUsd, 4) } else { $null }
                 savingsUsd = if ($null -ne $exactUsage.SavingsUsd) { [math]::Round($exactUsage.SavingsUsd, 4) } else { $null }
                 savingsPct = if ($null -ne $exactUsage.SavingsPct) { [math]::Round($exactUsage.SavingsPct, 1) } else { $null }
+                partial = @($exactUsageNotes | Where-Object { $_.Kind -in $script:ExactPartialNoteKinds }).Count -gt 0
+                notes = @($exactUsageNotes | ForEach-Object { [ordered]@{ kind = [string]$_.Kind; text = [string]$_.Text } })
             }
         }
         else { $null }

@@ -28,11 +28,14 @@ Replace semantics govern the file, not the rows. In exact mode every rewrite is 
 cumulative snapshot through the recorded timestamp and SHA-256 digest; active and
 completed top-level role runs present in its accepted session snapshots are included.
 The `history/*.md` entries still supply the append-only proof-of-dispatch identities
-and the fallback estimator. Exact mode is admitted only when every metered
-history-backed role and orchestration entry has native coverage. A rewrite that
-reflects only the current turn, silently omits a history-backed role, overlaps a
-previous native accounting identity, or cannot reconcile to the native total falls
-back rather than presenting a partial exact ledger.
+and the fallback estimator. Native usage is authoritative and history is
+bookkeeping: usage by an agent with no history entry keeps its own row, and a metered
+history entry that no accepted session billed within five minutes is never estimated.
+Each gap is a `NOTE:` in the Derivation (and a one-time `WARN:`); one that can only
+understate the total labels the exact Cost Comparison and Unit Economics a lower
+bound. A request that a forked session's log repeats counts once. The estimator is
+the fallback only when no trustworthy native usage exists: none, incomplete or
+non-reconciling credit records, history-prefix drift, or a journal this version rejects.
 
 ````markdown
 ---
@@ -109,16 +112,15 @@ human-readable ledger.
 
 When `-SessionLog auto` encounters an existing run whose history already spans
 multiple Copilot sessions but no journal exists yet, the writer can bootstrap the
-initial journal from the matching repository logs that are still present. Every
-metered history timestamp must fall inside exactly one complete, attributable native
-session window, the active session must cover current metered history, and the
-resulting per-file history partitions must remain chronological. Missing logs,
-overlapping session windows, incomplete attribution, or any other ambiguity leaves
-the estimator in place rather than guessing. The active session alone receives a
-bounded 30-second open-tail allowance: while the ledger runs inside the outer host's
-PowerShell tool call, that host cannot yet append the tool-completion event even
-though the handoff timestamp has already been written. This allowance binds the
-history entry to the selected active session; it does not invent usage records.
+initial journal from the matching repository logs that are still present. Each
+metered history timestamp goes to the one complete, attributable native session
+window that holds it, and the per-file history partitions must remain
+chronological; entries no window holds are reported in a `NOTE:`, never guessed.
+The active session alone receives a bounded 30-second open-tail allowance: while the
+ledger runs inside the outer host's PowerShell tool call, that host cannot yet
+append the tool-completion event even though the handoff timestamp has already been
+written. This allowance binds the history entry to the selected active session; it
+does not invent usage records, and a last log line still being written is ignored.
 
 The journal carries one closed-schema snapshot per native host session:
 
@@ -131,8 +133,8 @@ The journal carries one closed-schema snapshot per native host session:
 
 Repeated writes in the same host session **replace that session's snapshot**. A new
 session appends only after all prior coverage is still an ordered prefix of current
-history, and its native role set matches the newly metered history suffix. The writer
-then sums every cached session into `consumption.md`. This makes session changes
+history. The writer then sums every cached session into `consumption.md`. This makes
+session changes
 additive without double counting and keeps old exact totals available after a host log
 is rotated or no longer selected by `auto`. Journal timestamps are parsed as JSON
 strings rather than culture-formatted dates so the persisted content digest remains
@@ -142,12 +144,27 @@ cached native session from its now-completed log before it adds the new session.
 coordinator records therefore accumulate instead of being stranded in the closed
 session.
 
+History written after a session's last accepted write, or by a session that never
+reached the journal, is brought in by the next write: the latest cached session is
+re-read from its log (accepted sessions are found by id, even when opened one folder
+away), and each uncovered entry goes to the session whose log shows it most
+convincingly, a shell call running a history writer for this root just before the
+stamp outranking squad usage billed nearby, so a concurrent session is still added,
+in the order it wrote. A chat showing neither is never adopted. `COPILOT_AGENT_SESSION_ID` names the running
+session, else the newest log showing squad work is used; a resumed older session keeps
+its own snapshot. With no readable log, the last accepted totals stay exact as of
+their snapshot, in a `NOTE:`. A manual `-Write` without `-SessionLog` on a root with a
+journal acts as `auto`; a write refuses, changing nothing, if another writer changed
+the journal meanwhile.
+
 For a federation member root, coordinator usage is accepted only when the native
 session is provably exclusive to that member: every model-dispatch prompt names the
 same `members/<name>` root and no federation-root lifecycle writer ran. Mixed-member,
-unscoped, promotion, initialization, or root-handoff sessions remain estimated. This
-lets targeted member runs keep exact cumulative accounting without assigning shared
-federation orchestration to an arbitrary member.
+unscoped, promotion, initialization, or root-handoff sessions add nothing exact: a
+member with no accepted snapshot stays estimated, and one with accepted snapshots
+keeps them as of their timestamp, in a `NOTE:`. This lets targeted member runs keep
+exact cumulative accounting without assigning shared federation orchestration to an
+arbitrary member.
 
 Earlier cumulative writers could serialize a session's intentionally empty
 per-file history suffix as `[null]` after prior sessions had already covered that
@@ -163,10 +180,14 @@ cumulative exact totals, and atomically rewrites only the journal. It cannot cha
 requests, tokens, credits, `consumption.md`, or `state.json`.
 
 `consumption.md`, `state.json`, and `consumption-sessions.json` are one atomic writer
-transaction. A malformed journal, changed history prefix, duplicate native identity,
-missing native coverage, or incomplete current session leaves the journal unchanged
-and keeps the all-history estimator as the public fallback. The writer never mixes
-exact cached rows with estimated new rows under an `exact-native` label.
+transaction. A journal this version rejects, a changed history prefix, or a native
+identity repeated inside one session leaves the journal unchanged and keeps the
+all-history estimator as the public fallback; a file that is not a JSON object is
+rebuilt from the native logs, its bytes kept as
+`consumption-sessions.json.unreadable-<digest>`. An incomplete or unreadable current
+session
+instead keeps the last accepted exact totals, stated in a `NOTE:`. The writer never
+mixes exact cached rows with estimated new rows under an `exact-native` label.
 
 On upgrade, a valid existing single-session exact `consumption.md` can seed the
 journal once. Its exact historical credits and token totals are retained. Because the
@@ -342,24 +363,26 @@ When the coordinator has `pwsh` 7+, the trusted ledger invocation uses
   agent name using the raw `agentName`, `agentDisplayName`, and the final
   namespace/path segment. APM names such as `Squad Lead` and plugin-qualified
   names such as `hve-squad:squad-lead` therefore reconcile to the same row for
-  every dispatched agent; zero or multiple matches fail closed;
+  every dispatched agent; a name that matches no history-backed agent, or several,
+  keeps the host's own name as its row;
 * derives uncached input, cache read, cache write, and output from native
   `copilotUsage.tokenDetails`, requiring those charges to reproduce
   `totalNanoAiu`;
 * combines coordinator and Squad Scribe usage as `orchestration`;
-* requires every history-backed agent and orchestration row to have native
-  coverage and the role-row nano-AIU sum to equal the session total; and
-* when the journal is absent, can partition existing metered history across complete,
-  uniquely matching repository-session windows before accepting a cumulative exact
+* requires the role-row nano-AIU sum to equal the session total, so an agent with
+  no history entry still counts; and
+* when the journal is absent, can partition existing metered history across the
+  matching repository-session windows before accepting a cumulative exact
   snapshot; and
 * records the native record count, through-timestamp, and SHA-256 identity digest
   in `### Derivation`.
 
 There is no separate Observed Usage section. Exact native rows replace estimates in
 the main tables and drive state totals, unit economics, and Cost Comparison.
-Incomplete accounting, absent event-level identity, ambiguous native-name or roster
-mapping, non-exclusive member-scoped coordinator attribution, missing history
-coverage, or a reconciliation failure leaves the estimator visibly in place.
+Incomplete accounting, absent event-level identity, non-exclusive member-scoped
+coordinator attribution, or a reconciliation failure leaves the estimator visibly in
+place; an ambiguous name, a history entry with no native usage, or a missing log does
+not, and each is a `NOTE:` line in `### Derivation` (JSON `exact.notes`).
 
 Every exact ledger is explicitly **as of** its recorded native timestamp. A model
 request emitted after the helper reaches the log's then-current end appears on the

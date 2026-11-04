@@ -103,7 +103,9 @@ jobs:
     name: State contract self-check
     if: ${{ github.event_name == 'pull_request' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    # About 9 to 15 minutes on four workers. The same code has taken that long apart on two
+    # hosted runners, so the limit leaves room for the slow end.
+    timeout-minutes: 30
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -114,9 +116,12 @@ jobs:
         shell: pwsh
         run: Install-Module Pester -RequiredVersion 5.7.1 -Force -Scope CurrentUser -SkipPublisherCheck
 
+      # Every case starts child pwsh processes, so one sequential run outgrew this job.
+      # Four workers match the hosted runner's four cores. The runner discovers every case
+      # first and fails unless each ran exactly once, so this changes scheduling, not coverage.
       - name: Run the self-check
         shell: pwsh
-        run: ./tests/tier1/Invoke-Tier1Tests.ps1 -SelfCheck -Output Detailed
+        run: ./tests/tier1/Invoke-Tier1Tests.ps1 -SelfCheck -Output Detailed -Parallel 4
 
   # Derived rather than hardcoded: a matrix list drifts silently, and a scenario that
   # never runs is indistinguishable from one that passes.
