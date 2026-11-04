@@ -77,7 +77,9 @@ BeforeAll {
         foreach ($agent in @(
                 'Squad Researcher', 'Squad Lead', 'Squad Implementor', 'Squad Reviewer',
                 'Squad Scribe', 'System Architecture Reviewer', 'Squad Backlog Executor',
-                'Security Planner', 'aws-principal-architect', 'AWS Incident Triage'
+                'Security Planner', 'aws-principal-architect', 'AWS Incident Triage',
+                'Squad Power Platform Architect', 'Squad Power Platform Integrator',
+                'Squad M365 Agent Architect', 'Squad M365 Agent Integrator'
             )) {
             New-Agent -Root $agentRoot -Name $agent
         }
@@ -661,7 +663,7 @@ Describe 'All-present registered pack expansion' {
         }
 
         $plan.Result.ExitCode | Should -Be 0 -Because $plan.Result.Output
-        (@($plan.Receipt.addedRoles | Sort-Object) -join ',') | Should -BeExactly 'observability,prompt-engineer,rai'
+        (@($plan.Receipt.addedRoles | Sort-Object) -join ',') | Should -BeExactly 'data-scientist,observability,prompt-engineer,rai'
         $applied = Invoke-Expansion -Repo $repo -Plan $plan
         $applied.ExitCode | Should -Be 0 -Because $applied.Output
         $team = [IO.File]::ReadAllText((Join-Path $root 'team.md'))
@@ -669,6 +671,7 @@ Describe 'All-present registered pack expansion' {
         $team | Should -Match '\| prompt-engineer \|'
         $team | Should -Match '\| rai \|'
         $team | Should -Match '\| observability \|'
+        $team | Should -Match '\| data-scientist \|'
         [IO.File]::ReadAllText((Join-Path $root 'routing.md')) | Should -Match ([regex]::Escape($routingBefore.TrimEnd()))
         [IO.File]::ReadAllText((Join-Path $root 'decisions.md')) | Should -Match 'Provenance: azure \+foundry'
     }

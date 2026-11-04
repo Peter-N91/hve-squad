@@ -259,6 +259,12 @@ remain host-visible. `New-SquadDispatchPlan.ps1` accepts an Alternate only when
 the supplied `selectionCue` is a substring of the roster cue and the agent is
 installed and dispatchable.
 
+`foundry` Adds includes existing `data-scientist` in both pack mirrors.
+`azure +foundry` adds that owner; `full +foundry` adds zero roles.
+`foundry-iq` is reached by `data-scientist` and `appinsights-instrumentation`
+by `observability` only while `foundry` is active. Pack removal stops that
+squad selection and guidance. It does not uninstall or hide a host-installed skill.
+
 Tier 1 has one opt-in `pack-lifecycle` scenario. It is excluded from the default live matrix and
 requires `-Pack <registered-pack>`, so adding packs does not multiply paid requests. Provision it
 without model calls first:

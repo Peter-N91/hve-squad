@@ -57,3 +57,7 @@ Ask:
 Do not copy a latest-version number into this reference. Read the manifest and lockfile, then verify that baseline against official release and migration guidance at the checkpoint. A newer version is evidence to assess, not permission to upgrade.
 
 Use `microsoft-foundry` for current Foundry service and SDK workflows, `azure-aigateway` for a selected APIM configuration, `use-ai-gateway` to consume an existing gateway, and `caira` only to inspect reference components for an already selected stack.
+
+## Grounding and instrumentation
+
+Select `foundry-iq` through `data-scientist` and `appinsights-instrumentation` through `observability` only when the resolved root's `Packs:` line includes `foundry`. Pack removal stops that squad selection and this guidance. It does not uninstall or hide a host-installed skill. Identity, AgentOps, and governance remain deferred.

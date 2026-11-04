@@ -146,7 +146,8 @@ Describe 'Registered pack consistency' -Tag 'Unit' {
                 Where-Object { $_ } |
                 Sort-Object -Unique
         )
-        $blueprintSkills -join ',' | Should -BeExactly 'azure-aigateway,caira,microsoft-foundry,use-ai-gateway'
+        $foundrySkills = @('appinsights-instrumentation', 'azure-aigateway', 'caira', 'foundry-iq', 'microsoft-foundry', 'use-ai-gateway')
+        $blueprintSkills -join ',' | Should -BeExactly ($foundrySkills -join ',')
 
         $registeredSkills = @(
             Get-MarkdownTableRows `
@@ -157,8 +158,9 @@ Describe 'Registered pack consistency' -Tag 'Unit' {
                 Where-Object { $_ } |
                 Sort-Object -Unique
         )
-        foreach ($skill in $blueprintSkills) {
+        foreach ($skill in $foundrySkills) {
             $registeredSkills | Should -Contain $skill
+            $blueprintSkills | Should -Contain $skill
         }
     }
 
@@ -352,5 +354,52 @@ Describe 'Power Platform and M365 official selection' -Tag 'Unit' {
                 $prompt | Should -Not -Match ('(?m)^agent:\s*' + [regex]::Escape($name) + '\s*$')
             }
         }
+    }
+}
+
+Describe 'Foundry pack-aware selection' -Tag 'Unit' {
+    It 'adds data-scientist only when the profile lacks it and gates skill selection on the active pack' {
+        function Get-RoleSet {
+            param([string]$Body, [string]$Header, [string]$Name)
+            $rows = @(Get-MarkdownTableRows -Body $Body -HeaderCell $Header)
+            $row = @($rows | Where-Object { $_[1].Trim().Trim('`') -eq $Name })
+            $row | Should -HaveCount 1
+            @($row[0][2] -split ',' | ForEach-Object { $_.Trim().Trim('`') } | Where-Object { $_ } | Sort-Object -Unique)
+        }
+
+        $rosterAdds = Get-RoleSet -Body $script:RosterBody -Header 'Pack' -Name 'foundry'
+        $mirrorAdds = Get-RoleSet -Body $script:ProfilesBody -Header 'Pack' -Name 'foundry'
+        ($mirrorAdds -join ',') | Should -BeExactly ($rosterAdds -join ',')
+        $rosterAdds | Should -Contain 'data-scientist'
+
+        $full = Get-RoleSet -Body $script:RosterBody -Header 'Profile' -Name 'full'
+        $azure = Get-RoleSet -Body $script:RosterBody -Header 'Profile' -Name 'azure'
+        $fullAdded = @($rosterAdds | Where-Object { $_ -notin $full })
+        $azureAdded = @($rosterAdds | Where-Object { $_ -notin $azure })
+        $fullAdded | Should -BeNullOrEmpty
+        $azureAdded | Should -Contain 'data-scientist'
+
+        function Test-FoundrySelected {
+            param([string]$PacksLine)
+            return $PacksLine -match '(?m)^Packs:.*\bfoundry\b'
+        }
+        Test-FoundrySelected '' | Should -BeFalse
+        Test-FoundrySelected "Packs: aws`n" | Should -BeFalse
+        Test-FoundrySelected "Packs: foundry`n" | Should -BeTrue
+        Test-FoundrySelected (("Packs: foundry`n" -replace '(?m)^Packs: foundry\r?\n', '')) | Should -BeFalse
+        Test-FoundrySelected "Packs: foundry`n" | Should -BeTrue
+
+        $scientist = Get-Content -LiteralPath (Join-Path $SourceRoot 'squad-src/.github/agents/squad/squad-data-scientist.agent.md') -Raw
+        $observability = Get-Content -LiteralPath (Join-Path $SourceRoot 'squad-src/.github/agents/squad/squad-observability-planner.agent.md') -Raw
+        $scientist | Should -Match 'foundry-iq'
+        $scientist | Should -Match 'Packs:'
+        $scientist | Should -Match 'do not select'
+        $observability | Should -Match 'appinsights-instrumentation'
+        $observability | Should -Match 'do not select'
+        $options = Get-Content -LiteralPath (Join-Path $SourceRoot 'squad-src/.github/skills/squad/references/foundry-platform-options.md') -Raw
+        $options | Should -Match 'does not uninstall or hide'
+        $script:FoundryBlueprintBody | Should -Match 'Host visibility is not selection'
+        $script:ProfilesBody | Should -Match 'foundry-iq'
+        $script:ProfilesBody | Should -Match 'only when this pack is active'
     }
 }
