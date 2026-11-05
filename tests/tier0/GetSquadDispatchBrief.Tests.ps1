@@ -163,7 +163,7 @@ Describe 'Get-SquadDispatchBrief.ps1' {
     It 'prints the roster by column header with pins, rate rows, dispatchability, the next turn, and the procedure, and writes nothing' {
         $repo = New-BriefRepo
         $before = Get-TreeHash -Root $repo
-        $result = Invoke-Brief -Repo $repo -Extra @('-SessionModel', 'claude-sonnet-5.5')
+        $result = Invoke-Brief -Repo $repo -Extra @('-SessionModel', 'claude-sonnet-5.5', '-RequestedDepth', 'quick')
         $result.ExitCode | Should -Be 0
         $result.Output | Should -Match ([regex]::Escape('next hand-off turn: 5'))
         $result.Output | Should -Match ([regex]::Escape('updated 2026-10-03T18:00:00Z'))
@@ -182,6 +182,23 @@ Describe 'Get-SquadDispatchBrief.ps1' {
         $result.Output | Should -Match 'minimal structured JSON per `references/economy-scribe\.md`'
         $result.Output | Should -Not -Match 'not found in'
         Get-TreeHash -Root $repo | Should -Be $before
+    }
+
+    It 'keeps the bounded lane off at standard depth and turns it on only with depth=quick, under routing <Routing>' -ForEach @(
+        @{ Routing = 'economy' }
+        @{ Routing = 'ranked' }
+        @{ Routing = 'manual' }
+        @{ Routing = '' }
+    ) {
+        $repo = New-BriefRepo -Routing $Routing
+        $standard = Invoke-Brief -Repo $repo
+        $standard.ExitCode | Should -Be 0 -Because $standard.Output
+        $standard.Output | Should -Match 'coverage: NONE for the bounded lane'
+        $standard.Output | Should -Not -Match '(?m)^## Bounded Lane|(?m)^## Plan-Driven Parallelism'
+        $quick = Invoke-Brief -Repo $repo -Extra @('-RequestedDepth', 'quick')
+        $quick.ExitCode | Should -Be 0 -Because $quick.Output
+        $quick.Output | Should -Match 'depth: quick'
+        $quick.Output | Should -Match '(?m)^## Bounded Lane'
     }
 
     It 'picks no model: no bounded pick, no route helper call, and no Model column when the roster has none' {

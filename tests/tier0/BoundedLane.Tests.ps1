@@ -3,8 +3,9 @@
 # SPDX-License-Identifier: MIT
 
 # Static wording pins for the bounded lane, plan-driven parallelism, and the dispatch brief.
-# All three are economy-only (interactive mode, `Model routing: economy`), so their text lives
-# only in the cold references/economy-mode.md and never in a file a default run reads. Each
+# The lane and parallelism belong to the per-turn `depth=quick` input (interactive mode, any
+# routing mode), so their text lives only in the cold references/quick-depth.md and never in a
+# file a default run reads. The dispatch brief is described in economy-mode.md. Each
 # assertion quotes text shipped in squad-src; this proves the contract still reads the way it
 # must, never that a model turn
 # obeys it.
@@ -91,7 +92,8 @@ BeforeAll {
     $script:Gates = Get-SquadReferenceBody -Name 'gates-and-modes.md'
     $script:OperatingProcedure = Get-SquadReferenceBody -Name 'operating-procedure.md'
     $script:Economy = Get-SquadReferenceBody -Name 'economy-mode.md'
-    $script:BoundedLane = Get-Section -Body $script:Economy -Heading '## Bounded Lane'
+    $script:QuickDepth = Get-SquadReferenceBody -Name 'quick-depth.md'
+    $script:BoundedLane = Get-Section -Body $script:QuickDepth -Heading '## Bounded Lane'
     $script:HotTexts = [ordered]@{
         'squad-coordinator.agent.md'      = $script:Coordinator.Body
         'squad-implementor.agent.md'      = (Get-Agent 'squad-implementor.agent.md').Body
@@ -111,22 +113,22 @@ Describe 'Bounded lane wording pins (RTE-38 to RTE-41)' {
         $script:BoundedLane | Should -Match ([regex]::Escape('no open questions or unknowns'))
         $script:BoundedLane | Should -Match ([regex]::Escape('single owning role'))
         $script:BoundedLane | Should -Match ([regex]::Escape('disjoint write sets'))
-        $script:BoundedLane | Should -Match ([regex]::Escape('No Impactful-Action Gate or Risk Gate trigger applies'))
+        $script:BoundedLane | Should -Match ([regex]::Escape('no Impactful-Action Gate or Risk Gate trigger applies'))
         $script:BoundedLane | Should -Match ([regex]::Escape('no intake or discovery gate trigger applies'))
     }
 
     It 'uses the #144 task-fit council lenses for the council criterion' {
-        $script:BoundedLane | Should -Match ([regex]::Escape('It engages no council lens: it touches none of architecture, security, cost, product-fit, or RAI (the task-fit lenses in `gates-and-modes.md` *Council Procedure*)'))
+        $script:BoundedLane | Should -Match ([regex]::Escape('it engages no council lens (none of architecture, security, cost, product-fit, or RAI, the task-fit lenses in `gates-and-modes.md` *Council Procedure*)'))
         $script:BoundedLane | Should -Match ([regex]::Escape('A request that would need a council, an extension, or a waiver is never bounded.'))
         $script:Gates | Should -Match ([regex]::Escape('The coordinator dispatches a **task-fit** council in a single parallel batch'))
         $script:BoundedLane | Should -Not -Match '(?i)council domain is crossed'
     }
 
-    It 'waives only Research and Plan: any doubt, pipeline=full, unattended modes, and Watch keep the full pipeline' {
+    It 'waives only Research and Plan: any doubt, depth=standard, unattended modes, and Watch keep the full pipeline' {
         $script:BoundedLane | Should -Match ([regex]::Escape('Interactive mode only (no `mode=`).'))
-        $script:BoundedLane | Should -Match ([regex]::Escape('Under economy the lane waives **only** those two stages'))
+        $script:BoundedLane | Should -Match ([regex]::Escape('Under `depth=quick` the lane waives **only** those two stages'))
         $script:BoundedLane | Should -Match ([regex]::Escape('**Any doubt means the full pipeline.**'))
-        $script:BoundedLane | Should -Match ([regex]::Escape('`pipeline=full` forces it, and `mode=autonomous`, `mode=autopilot`, and Watch Mode never use the lane'))
+        $script:BoundedLane | Should -Match ([regex]::Escape('`depth=standard` (`pipeline=full`) forces it, and `mode=autonomous`, `mode=autopilot`, and Watch Mode never use the lane'))
     }
 
     It 'never lets the coordinator work inline and keeps review and Scribe recording' {
@@ -140,21 +142,29 @@ Describe 'Bounded lane wording pins (RTE-38 to RTE-41)' {
         $script:BoundedLane | Should -Not -Match '(?i)\b(gpt|claude|gemini|kimi)-[0-9a-z.-]+'
     }
 
+    It 'moves the lane, parallelism, and intake waiver out of economy-mode.md: depth=quick owns them' {
+        $script:Economy | Should -Not -Match '(?m)^## (Bounded Lane|Plan-Driven Parallelism|Intake Waiver)'
+        $script:Economy | Should -Not -Match 'pipeline=full|blocked: not bounded|deliverable-fan-out'
+        foreach ($heading in '## Bounded Lane', '## Plan-Driven Parallelism', '## Intake Waiver') {
+            $script:QuickDepth | Should -Match ('(?m)^' + [regex]::Escape($heading) + '\s*$')
+        }
+    }
+
     It 'leaves every hot file at its v0.18.0 methodology text: <_>' -ForEach @(
         'squad-coordinator.agent.md', 'squad-implementor.agent.md', 'squad-technical-writer.agent.md', 'squad-floor.instructions.md',
         'squad-routing.instructions.md', 'squad-autopilot.instructions.md', 'gates-and-modes.md', 'operating-procedure.md'
     ) {
         $text = $script:HotTexts[$_]
         $text | Should -Not -BeNullOrEmpty
-        $text | Should -Not -Match '(?i)Route: bounded|pipeline=full|Plan-Driven Parallelism|deliverable-fan-out plan|blocked: not bounded' -Because "$_ must not enable the economy lane for ordinary modes"
+        $text | Should -Not -Match '(?i)Route: bounded|pipeline=full|Plan-Driven Parallelism|deliverable-fan-out plan|blocked: not bounded' -Because "$_ must not enable the bounded lane for a standard-depth run"
         if ($text -match '(?i)bounded lane') {
-            $text | Should -Match '(?is)only.*economy|except.*economy'
-            $text | Should -Match '(?i)other modes|non-economy'
+            $text | Should -Match '(?is)only.*depth=quick|except.*depth=quick'
+            $text | Should -Match '(?i)standard depth'
         }
     }
 
     It 'no always-on text or the cold file permits the coordinator to author, edit, or work inline (lexical guard)' {
-        $texts = @($script:HotTexts.Values) + $script:Economy
+        $texts = @($script:HotTexts.Values) + $script:QuickDepth + $script:Economy
         $offending = foreach ($text in $texts) { Find-InlineWorkPermission -Text $text }
         @($offending).Count | Should -Be 0 -Because "text must never let the coordinator work inline: $(@($offending) -join ' | ')"
     }
@@ -190,7 +200,7 @@ Describe 'Dispatch brief contract (RTE-43)' {
 
 Describe 'Plan-driven parallelism wording pins (RTE-42)' {
     BeforeAll {
-        $script:Parallelism = Get-Section -Body $script:Economy -Heading '## Plan-Driven Parallelism'
+        $script:Parallelism = Get-Section -Body $script:QuickDepth -Heading '## Plan-Driven Parallelism'
     }
 
     It 'applies to a deliverable-fan-out plan or a bounded request with disjoint write sets shown by it, never by budget' {
@@ -208,9 +218,9 @@ Describe 'Plan-driven parallelism wording pins (RTE-42)' {
         $script:Parallelism | Should -Match ([regex]::Escape('Scribe single-writer, one hand-off per stage, and per-stage `history/<agent>.md` entries are unchanged'))
     }
 
-    It 'RTE-21 keeps its v0.18.0 text and RTE-42 is economy-only' {
+    It 'RTE-21 keeps its v0.18.0 text and RTE-42 belongs to depth=quick' {
         $contract = Get-Content -LiteralPath (Join-Path $PSScriptRoot '../squad-behavior-contract.md') -Raw
         [regex]::Match($contract, '(?m)^\| RTE-21 \|.*$').Value | Should -Not -Match '(?i)fan-out|bounded'
-        [regex]::Match($contract, '(?m)^\| RTE-42 \|.*$').Value | Should -Match ([regex]::Escape('**Plan-driven parallelism (economy only).**'))
+        [regex]::Match($contract, '(?m)^\| RTE-42 \|.*$').Value | Should -Match ([regex]::Escape('**Plan-driven parallelism (depth=quick).**'))
     }
 }
