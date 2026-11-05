@@ -74,12 +74,13 @@ Before child dispatch take the script snapshot with
 outside state; never author its costs/hashes. It preserves prior root overhead.
 
 Forward `profile`, `pack`, `discovery`, `tier`, `owner`, `execution`, `mode`,
-`cost-ceiling`, `routing`. Connectors are member-local; routing only narrows.
+`cost-ceiling`, `routing`, `depth`. Connectors are member-local; routing and
+depth only narrow.
 Ordinary/targeted runs use independent member ceilings. Ask qualifying discovery
 once, never unattended. Expand a confirmed member roster before its new role.
 
-Verify the producer before its consumer. Resolve paths from current roster roots,
-verify files/decision references, then forward read-only `inputs=`. Missing input
+Resolve paths from current roster roots, verify files/decision references, then
+forward read-only `inputs=`. Missing input
 means recover: one
 producer run, only the producing stage for partial/stale output, offer expansion
 when unowned, or a user-named input/explicit gap decision. Interactive recovery

@@ -127,8 +127,9 @@
 
     Economy-only warnings (never refusals): `WARN economy consent not recorded` when decisions.md has no
     `## Economy Mode Accepted` entry; a history record whose routeRationale does not start
-    with `Route: ` is prefixed with `Route: bounded` (payload route `bounded`) or
-    `Route: economy`, with a WARN; a record without routingIdentity gets a WARN.
+    with `Route: ` is prefixed with `Route: economy`, with a WARN; a record without
+    routingIdentity gets a WARN. In every routing mode, payload route `bounded` (the depth=quick
+    Bounded Lane) prefixes such a record with `Route: bounded` instead, with the same WARN.
 
     Routing selects models and admission policy, not the persistence mechanism.
     off, ranked, economy, and manual all use this writer.
@@ -1652,16 +1653,19 @@ else {
 }
 
 # economy-mode.md Route Markers: every economy history entry starts its Route rationale with Route: economy or Route: bounded.
-foreach ($record in $records | Where-Object { $routingMode -eq 'economy' }) {
+# quick-depth.md Route Markers: a Bounded Lane dispatch (payload route bounded) starts with Route: bounded in every routing mode.
+foreach ($record in $records | Where-Object { $routingMode -eq 'economy' -or $route -eq 'bounded' }) {
     if ($null -eq $record.Routing) {
-        $handoffWarnings.Add("WARN $($record.Agent): no routingIdentity; under economy every history entry carries Route: economy (or Route: bounded) in its Route rationale bullet (economy-mode.md Route Markers).")
+        if ($routingMode -eq 'economy') {
+            $handoffWarnings.Add("WARN $($record.Agent): no routingIdentity; under economy every history entry carries Route: economy (or Route: bounded) in its Route rationale bullet (economy-mode.md Route Markers).")
+        }
         continue
     }
     $rationale = $record.Routing['routeRationale']
     if ($null -ne $rationale -and $rationale -notmatch '^Route: ') {
         $marker = if ($route -eq 'bounded') { 'Route: bounded' } else { 'Route: economy' }
         $record.Routing['routeRationale'] = "$marker; $rationale"
-        $handoffWarnings.Add("WARN $($record.Agent): routeRationale did not start with a Route marker; recorded as '$marker; ...' (economy-mode.md Route Markers).")
+        $handoffWarnings.Add("WARN $($record.Agent): routeRationale did not start with a Route marker; recorded as '$marker; ...' ($(if ($route -eq 'bounded') { 'quick-depth.md' } else { 'economy-mode.md' }) Route Markers).")
     }
 }
 

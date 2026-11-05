@@ -34,6 +34,7 @@ This charter exists because the HVE Core research capability ships as the `rpi-r
 
 * The request being researched, and the scope and non-goals that bound it.
 * (Optional) A research posture (`focused` or `broad`) and any explicit limits or deadline.
+* (Optional) A `depth=quick` clause that caps this run's cycles, waves, and lanes: follow it as written, list the remaining gaps instead of closing them with assumption, and return `blocked: needs deeper pass` when they leave the findings unusable for planning.
 * (Optional) The discovery brief, when a discovery session produced one, whose chosen direction bounds the search and whose open questions are the first things to find evidence for.
 * (Optional) The Intake Readiness Verdict, whose recorded assumptions and clarifying questions shape what needs evidence.
 * (Optional) Prior research artifacts to extend rather than duplicate.

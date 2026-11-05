@@ -66,7 +66,8 @@ is an on-demand map, not a mandatory coordinator startup read.
 | [model-benchmarks.md](references/model-benchmarks.md)         | Pinned benchmark knowledge base, source versions, and provenance for `ranked`  |
 | [model-routing.md](references/model-routing.md)               | Opt-in modes, Model cells, capability-first ranking, floors, and identity bullets |
 | [model-scoring.md](references/model-scoring.md) | Cold scoring methodology: policy changes or evidence audit only |
-| [economy-mode.md](references/economy-mode.md)                 | Only under `Model routing: economy`: consent, role allowlist, economy pick, one escalation |
+| [economy-mode.md](references/economy-mode.md) | Only under `Model routing: economy`: consent, scope, economy pick, one escalation |
+| [quick-depth.md](references/quick-depth.md) | Only under `depth=quick`, any routing mode: depth plan, bounded lane, parallel owners, escape hatch |
 | [federation-templates.md](references/federation-templates.md) | Federation-root seed templates                                                 |
 
 Other skill-root files retain their existing paths.

@@ -14,7 +14,9 @@
       admissionApproved?: bool, agentTypes?: [], availableModels?: [],
       sessionModel?: string, asOf?: date, requestedModelRouting?: ranked|economy|manual,
       manualModels?: {role:model}, economyConsent?: {user,tradeAccepted,neverWeakened,timestamp?},
-      cost?: {runId, roundId, ceilingUsd, sessionLog?|usageOutputPath?,
+      requestedDepth?: quick|standard, depthEvidence?: {exactTargets?, noOpenQuestions?,
+      noCouncilLens?, noGateTrigger?, noCritiqueRequested?, discoveryExplicit?, reuse?: [{stage,path,covers}]},
+      reasoningEfforts?: [], cost?: {runId, roundId, ceilingUsd, sessionLog?|usageOutputPath?,
       baselineNanoAiu?, pendingUsd?, reserveMultiplier?, timestamp?} }.
     agentTypes is the exact host-advertised custom-agent enum. When supplied,
     native type IDs are resolved by installed filename/name, never guessed from a
@@ -25,6 +27,9 @@
     When cost is supplied, complete native usage records are authoritative consumed
     spend and only the actual next wave plus one coordinator lookup is reserved.
     The returned Cost Preflight object must be persisted before dispatch.
+    requestedDepth is the trusted per-turn depth= input. It never changes a model: it returns
+    a depth plan (stages run, shrunk, or skipped with criterion and evidence), per-endpoint
+    depth clauses and the quick-depth parallel eligibility. Omitted, the plan is unchanged.
     Native dispatch, semantic gates and exact input forwarding remain with the
     coordinator. Dependencies always override parallel eligibility.
     Unproven write independence serializes; declared overlapping parallel writes,
@@ -77,7 +82,7 @@ try {
         if (-not $inputData.Contains($key)) { throw "Missing dispatch-plan field: $key" }
     }
     foreach ($key in $inputData.Keys) {
-        if ($key -notin @('squadRoot', 'units', 'council', 'planPath', 'admissionApproved', 'agentTypes', 'availableModels', 'sessionModel', 'asOf', 'requestedModelRouting', 'manualModels', 'economyConsent', 'cost')) { throw "Unsupported dispatch-plan field: $key" }
+        if ($key -notin @('squadRoot', 'units', 'council', 'planPath', 'admissionApproved', 'agentTypes', 'availableModels', 'sessionModel', 'asOf', 'requestedModelRouting', 'manualModels', 'economyConsent', 'requestedDepth', 'depthEvidence', 'reasoningEfforts', 'cost')) { throw "Unsupported dispatch-plan field: $key" }
     }
     if ($inputData.units -isnot [array] -or $inputData.units.Count -eq 0) { throw 'units must be a nonempty array.' }
     foreach ($key in @('council', 'admissionApproved')) {
@@ -108,11 +113,50 @@ try {
     if ($manualModels -isnot [Collections.IDictionary]) { throw 'manualModels must be a role-to-model object.' }
     $economyConsent = if ($inputData.Contains('economyConsent')) { $inputData.economyConsent } else { $null }
     if ($null -ne $economyConsent -and $economyConsent -isnot [Collections.IDictionary]) { throw 'economyConsent must be an object.' }
+    $requestedDepth = if ($inputData.Contains('requestedDepth')) { [string]$inputData.requestedDepth } else { '' }
+    if ($requestedDepth -and $requestedDepth -cnotin @('quick', 'standard')) { throw 'requestedDepth must be quick or standard.' }
+    $depthEvidence = if ($inputData.Contains('depthEvidence')) { $inputData.depthEvidence } else { [ordered]@{} }
+    if ($depthEvidence -isnot [Collections.IDictionary]) { throw 'depthEvidence must be an object.' }
+    if ($depthEvidence.Count -gt 0 -and $requestedDepth -cne 'quick') { throw 'depthEvidence requires requestedDepth quick.' }
+    foreach ($key in $depthEvidence.Keys) {
+        if ($key -cnotin @('exactTargets', 'noOpenQuestions', 'noCouncilLens', 'noGateTrigger', 'noCritiqueRequested', 'discoveryExplicit', 'reuse')) { throw "Unsupported depthEvidence field: $key" }
+    }
+    foreach ($key in @('exactTargets', 'noOpenQuestions', 'noCouncilLens', 'noGateTrigger', 'noCritiqueRequested')) {
+        if ($depthEvidence.Contains($key) -and ($depthEvidence[$key] -isnot [string] -or [string]::IsNullOrWhiteSpace($depthEvidence[$key]) -or
+                $depthEvidence[$key].Length -gt 300 -or $depthEvidence[$key] -match '[\x00-\x1F\x7F\u0085\u2028\u2029]')) {
+            throw "depthEvidence.$key must be a nonempty single-line string of at most 300 characters."
+        }
+    }
+    if ($depthEvidence.Contains('discoveryExplicit') -and $depthEvidence.discoveryExplicit -isnot [bool]) { throw 'depthEvidence.discoveryExplicit must be boolean.' }
+    if ($depthEvidence.Contains('reuse')) {
+        if ($depthEvidence.reuse -isnot [array] -or $depthEvidence.reuse.Count -gt 8) { throw 'depthEvidence.reuse must be an array of at most 8 artifacts.' }
+        foreach ($item in $depthEvidence.reuse) {
+            if ($item -isnot [Collections.IDictionary]) { throw 'Each depthEvidence.reuse entry must be an object.' }
+            foreach ($key in $item.Keys) {
+                if ($key -cnotin @('stage', 'path', 'covers')) { throw "Unsupported depthEvidence.reuse field: $key" }
+            }
+            foreach ($key in @('stage', 'path', 'covers')) {
+                if (-not $item.Contains($key) -or $item[$key] -isnot [string] -or [string]::IsNullOrWhiteSpace($item[$key]) -or
+                    $item[$key].Length -gt 300 -or $item[$key] -match '[\x00-\x1F\x7F\u0085\u2028\u2029]') {
+                    throw "depthEvidence.reuse.$key must be a nonempty single-line string of at most 300 characters."
+                }
+            }
+        }
+    }
+    $reasoningEfforts = @()
+    if ($inputData.Contains('reasoningEfforts')) {
+        if ($inputData.reasoningEfforts -isnot [array] -or $inputData.reasoningEfforts.Count -gt 8 -or
+            @($inputData.reasoningEfforts | Where-Object { $_ -isnot [string] -or $_ -cnotmatch '^[a-z][a-z-]{0,23}$' }).Count) { throw 'reasoningEfforts must be the host reasoning_effort enum: at most 8 lowercase strings.' }
+        $reasoningEfforts = @($inputData.reasoningEfforts)
+    }
     $root = Resolve-SquadRepositoryPath -RepoRoot $RepoRoot -Path $inputData.squadRoot
     $federation = Test-Path -LiteralPath (Join-Path $root 'federation.md')
     $council = $inputData.Contains('council') -and $inputData.council
     $planPath = if ($inputData.Contains('planPath')) { Resolve-SquadRepositoryPath -RepoRoot $RepoRoot -Path $inputData.planPath } else { '' }
     $state = Get-Content -LiteralPath (Join-Path $root 'state.json') -Raw | ConvertFrom-Json -AsHashtable
+    $unattendedRun = $state.Contains('trigger') -and $state['trigger'] -is [Collections.IDictionary]
+    $depthQuick = $requestedDepth -ceq 'quick' -and -not $unattendedRun
+    $depthParallel = $depthQuick -and $state.mode -ceq 'interactive' -and -not $federation
     $agents = Get-SquadAgentIndex $RepoRoot
     $roster = @()
     $registry = @()
@@ -132,10 +176,10 @@ try {
     $modelRouting = if ($requestedModelRouting) { $requestedModelRouting } else { $recordedModelRouting }
     $routingModeChanged = $modelRouting -cne $recordedModelRouting
     if ($manualModels.Count -gt 0 -and $modelRouting -ne 'manual') { throw 'manualModels requires Model routing: manual.' }
-    if ($null -ne $economyConsent -and (-not $routingModeChanged -or $modelRouting -ne 'economy')) {
-        throw 'economyConsent is allowed only while switching into economy.'
+    if ($null -ne $economyConsent -and $modelRouting -ne 'economy') {
+        throw 'economyConsent is allowed only for routing=economy.'
     }
-    if ($routingModeChanged -and $modelRouting -eq 'economy') {
+    if ($modelRouting -eq 'economy' -and ($routingModeChanged -or $null -ne $economyConsent)) {
         if ($null -eq $economyConsent) { throw 'Switching into economy requires economyConsent.' }
         foreach ($key in @('user', 'tradeAccepted', 'neverWeakened')) {
             if (-not $economyConsent.Contains($key) -or $economyConsent[$key] -isnot [string] -or
@@ -187,12 +231,14 @@ try {
             Format = 'json'
         }
         if ($manualModels.Count -gt 0) { $routeArguments.ManualModels = $manualModels }
+        if ($unattendedRun) { $routeArguments.Unattended = $true }
+        if ($null -ne $economyConsent) { $routeArguments.ConsentScope = 'all-roles' }
         $routeReport = & (Join-Path $PSScriptRoot 'Resolve-SquadModelRoute.ps1') @routeArguments | ConvertFrom-Json -AsHashtable -Depth 30
         if (-not $routeReport.Contains('availabilityResolved') -or -not [bool]$routeReport.availabilityResolved) {
             throw "Active model routing could not prove host availability ($($routeReport.availability)). Pass the host availableModels enum; do not substitute the catalog or sessionModel '$sessionModel'."
         }
         if ($null -ne $economyConsent) {
-            $routeReport.warnings = @($routeReport.warnings | Where-Object { $_ -notlike 'economy consent*' })
+            $routeReport.warnings = @($routeReport.warnings | Where-Object { $_ -notlike 'economy consent*' -and $_ -notlike 'economy scope*' })
         }
         foreach ($route in @($routeReport.roles)) {
             $routeKey = [string]$route.role + "`n" + [string]$route.memberName
@@ -208,6 +254,7 @@ try {
         $state.currentRun.costPreflight.decision -eq 'approved-over-ceiling') { $MaxConcurrent = 1 }
     $seen = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
     $nodes = [Collections.Generic.List[object]]::new()
+    $depthFacts = [Collections.Generic.List[object]]::new()
     foreach ($unit in $inputData.units) {
         if ($unit -isnot [Collections.IDictionary]) { throw 'Each unit must be an object.' }
         foreach ($key in $unit.Keys) {
@@ -246,6 +293,7 @@ try {
             $matchingRoutes = @($routing | Where-Object { $_['Sub-squad'] -ceq $name })
             $eligible = @($matchingRoutes | Where-Object { $_['Parallel-Eligible'] -eq 'yes' }).Count -gt 0
             $endpoint = [ordered]@{ squad = $name; squadRoot = $memberRoot; protocol = 'scoped-single-squad'; inputsReadOnly = $true; requestedModelRouting = $requestedModelRouting }
+            if ($depthQuick) { $endpoint['requestedDepth'] = 'quick' }
         }
         else {
             if (-not $unit.Contains('role') -or $unit.Contains('squad')) { throw 'A squad unit selects role, not squad.' }
@@ -343,10 +391,12 @@ try {
                 nativeAgentTypes = $nativeTypes
             }
         }
-        $parallel = $wantsParallel -and $eligible -and ($readOnly -or $paths.Count -gt 0) -and ($federation -or $tier -ne 'escalate')
-        $reason = if (-not $wantsParallel) { 'sequential-request' } elseif (-not $eligible) { 'routing-not-parallel-eligible' }
+        $parallel = $wantsParallel -and ($eligible -or $depthParallel) -and ($readOnly -or $paths.Count -gt 0) -and ($federation -or $tier -ne 'escalate')
+        $reason = if (-not $wantsParallel) { 'sequential-request' } elseif (-not $eligible -and -not $depthParallel) { 'routing-not-parallel-eligible' }
         elseif (-not $federation -and $tier -eq 'escalate') { 'escalation-cannot-batch' }
-        elseif (-not $readOnly -and -not $paths.Count) { 'write-independence-unproven' } else { 'explicit-independent-work' }
+        elseif (-not $readOnly -and -not $paths.Count) { 'write-independence-unproven' }
+        elseif (-not $eligible) { 'depth-quick-independent-work' } else { 'explicit-independent-work' }
+        $depthFacts.Add([pscustomobject]@{ Id = $unit.id; Role = $(if ($federation) { '' } else { [string]$unit.role }); Class = $(if ($federation) { '' } else { $assignmentClass }); ReadOnly = $readOnly; WritePaths = $paths; Tier = $(if ($federation) { '' } else { $tier }) })
         $nodes.Add([pscustomobject]@{ id = $unit.id; dependsOn = $depends; parallel = $parallel; parallelReason = $reason; writePaths = $paths; endpoint = $endpoint })
     }
     foreach ($node in $nodes) {
@@ -376,8 +426,38 @@ try {
         foreach ($node in $batch) { $null = $completed.Add($node.id) }
     }
 
+    $depth = $null
+    if ($requestedDepth) {
+        $depth = Get-SquadDepthPlan -RequestedDepth $requestedDepth -StateMode ([string]$state.mode) -Unattended:$unattendedRun -Federated:$federation `
+            -Council:$council -Units $depthFacts.ToArray() -Evidence $depthEvidence -ReasoningEfforts $reasoningEfforts -AsOf $asOf -RepoRoot $RepoRoot
+        if ($depth.effective -ceq 'quick' -and -not $federation) {
+            $bounded = $depth.route -ceq 'bounded'
+            foreach ($node in $nodes) {
+                $endpoint = $node.endpoint
+                $clause = Get-SquadDepthClause -Class ([string]$endpoint['assignmentClass']) -Bounded:$bounded
+                $endpoint['depth'] = $(if ($clause) { 'quick' } else { 'standard' })
+                $endpoint['depthClause'] = $clause
+                if ($clause -and $depth.reasoningEffort.applied -and [string]$endpoint['role'] -cin @($depth.reasoningEffort.roles)) { $endpoint['reasoningEffort'] = 'low' }
+                $markers = @(if ($bounded) { 'Route: bounded' }; if ($clause) { 'Depth: quick' })
+                if ($markers.Count -gt 0 -and $endpoint['modelRationale']) { $endpoint['modelRationale'] = ($markers -join '; ') + '; ' + $endpoint['modelRationale'] }
+            }
+            $batches = [Collections.Generic.List[object]]::new()
+            foreach ($wave in $waves) {
+                $members = @($wave.units)
+                if ($members.Count -lt 2 -or -not @($nodes | Where-Object { $_.id -cin $members -and $_.parallelReason -ceq 'depth-quick-independent-work' }).Count) { continue }
+                $confirmation = @(foreach ($id in $members) {
+                        $fact = @($depthFacts | Where-Object { $_.Id -ceq $id })[0]
+                        $writes = @($fact.WritePaths | ForEach-Object { [IO.Path]::GetRelativePath($RepoRoot, $_) -replace '\\', '/' })
+                        "$id ($($fact.Role), tier $($fact.Tier)): " + $(if ($writes.Count) { "writes $($writes -join ', ')" } else { 'read-only' })
+                    })
+                $batches.Add([ordered]@{ wave = $wave.order; confirmation = $confirmation })
+            }
+            $depth.parallelism['batches'] = $batches.ToArray()
+        }
+    }
+
     $routingRefresh = [ordered]@{
-        required = $routingModeChanged -or $routingChanges.Count -gt 0
+        required = $routingModeChanged -or $routingChanges.Count -gt 0 -or $null -ne $economyConsent
         recordedMode = $recordedModelRouting
         mode = $modelRouting
         expectedTeamHash = $teamHash
@@ -595,6 +675,7 @@ try {
         reservations = $reservations.ToArray()
         stateWritten = $false
     }
+    if ($null -ne $depth) { $result['depth'] = $depth }
     if ($ApplyModelRouting -and -not $federation -and $routingRefresh.required) {
         $transport = Write-SquadTransportJson -SquadRoot $root -Value $result -Path (Join-Path ([IO.Path]::GetTempPath()) "hve-squad-model-plan-$([guid]::NewGuid().ToString('N')).json")
         try {

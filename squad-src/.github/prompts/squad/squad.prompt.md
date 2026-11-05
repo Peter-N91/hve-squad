@@ -1,7 +1,7 @@
 ---
 description: "Hands a request to the Squad Coordinator, which routes it to a cast of HVE Core agents and persists squad state"
 agent: Squad Coordinator
-argument-hint: "request=... [profile=default|full|security|design|accessibility|architecture|azure|modernization|compliance|operations|product] [pack=power-platform|m365-copilot|aws|foundry|fabric] [discovery=quick|standard|deep|skip] [tier=...] [owner=...] [execution=original|connector:<binding-id>|both] [mode=autonomous|autopilot] [cost-ceiling=<positive USD|unset>] [routing=off|ranked|economy|manual]"
+argument-hint: "request=... [profile=default|full|security|design|accessibility|architecture|azure|modernization|compliance|operations|product] [pack=power-platform|m365-copilot|aws|foundry|fabric] [discovery=quick|standard|deep|skip] [tier=...] [owner=...] [execution=original|connector:<binding-id>|both] [mode=autonomous|autopilot] [cost-ceiling=<positive USD|unset>] [routing=off|ranked|economy|manual] [depth=quick|standard]"
 ---
 
 # Squad
@@ -17,7 +17,8 @@ argument-hint: "request=... [profile=default|full|security|design|accessibility|
 * ${input:execution}: (Optional) `original`, `connector:<binding-id>`, or `both` (post-classification per `connector-role-modes.md`).
 * ${input:mode}: (Optional) The autonomy mode for this turn. `autonomous` engages the bounded `auto-validated` validator loop from `.github/instructions/squad/squad-autonomous.instructions.md`. `autopilot` runs the full research→plan→implement→review pipeline from `.github/instructions/squad/squad-autopilot.instructions.md`, stopping for the human only at impactful actions and final-outcome validation. When omitted, the coordinator uses the standard interactive `auto` and `confirm` tiers from the routing table, approving each step.
 * ${input:cost-ceiling}: (Optional) A finite positive USD model-spend ceiling or the literal `unset`. A positive value sets or replaces the ceiling for this run. Omission inherits an active ceiling only when this request continues the same run. `cost-ceiling=unset` explicitly removes it; a new run with no value starts without a ceiling.
-* ${input:routing}: (Optional) `off`, `ranked`, `economy`, or `manual`, persisted in `team.md`. Ranked is capability-first; Economy is cost-first after the existing allowlist, evidence minimum, and consent (`references/economy-mode.md`). Manual preserves explicit choices with capability-first suggestions. See `references/model-routing.md` for Model cells, minimum floors, fallbacks, and Scribe/session exceptions. Off removes the column and keeps today's behavior byte-for-byte.
+* ${input:routing}: (Optional) `off`, `ranked`, `economy`, or `manual`, persisted in `team.md`. Ranked is capability-first; Economy is cost-first for every role within its floor, after consent (`references/economy-mode.md`). Manual preserves explicit choices with capability-first suggestions. See `references/model-routing.md` for Model cells, minimum floors, fallbacks, and Scribe/session exceptions. Off removes the column and keeps today's behavior byte-for-byte.
+* ${input:depth}: (Optional) `quick` or `standard` (default). Quick cuts how much work this turn runs, never which model: bounded lane, parallel owners, skipped or shrunk optional stages, every gate intact. Pass it as `-RequestedDepth` and plan `requestedDepth`; see `references/quick-depth.md`. Per turn, never persisted; ignored when unattended.
 
 ## Requirements
 
