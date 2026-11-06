@@ -611,6 +611,10 @@ function Test-SquadWatchProfileSelection {
 
         [string[]]$InstalledExternalRoles = @(),
 
+        [hashtable]$PackSkillDependencies,
+
+        [string[]]$HostVisibleSkills = @(),
+
         [string[]]$RequiredRoles = @(),
 
         [string[]]$CanonicalProfileRoles,
@@ -638,6 +642,9 @@ function Test-SquadWatchProfileSelection {
     }
     if (-not $CanonicalPackRoles) {
         $CanonicalPackRoles = @{}
+    }
+    if (-not $PackSkillDependencies) {
+        $PackSkillDependencies = @{}
     }
 
     $failures = [System.Collections.Generic.List[string]]::new()
@@ -684,7 +691,12 @@ function Test-SquadWatchProfileSelection {
             $dependency = @($PackRoleDependencies[$name])
         }
         $missing = @($dependency | Where-Object { $_ -and $_ -notin $InstalledExternalRoles })
-        if ($name -notin $InstalledPacks -or $missing.Count -gt 0) {
+        $skillDependency = @()
+        if ($PackSkillDependencies.ContainsKey($name)) {
+            $skillDependency = @($PackSkillDependencies[$name])
+        }
+        $missingSkills = @($skillDependency | Where-Object { $_ -and $_ -notin $HostVisibleSkills })
+        if ($name -notin $InstalledPacks -or $missing.Count -gt 0 -or $missingSkills.Count -gt 0) {
             $computedDropped.Add($name)
         }
         elseif ($name -notin $retained) {
@@ -1407,10 +1419,13 @@ function Get-SquadWatchProfileCatalog {
 
     $profiles = @{}
     $packs = @{}
+    $packSkills = @{}
     $section = ''
     foreach ($line in ([string]$Markdown -split "`r?`n")) {
         if ($line -match '^## Squad Profiles') { $section = 'profile'; continue }
         if ($line -match '^## (Squad|Registered) Packs') { $section = 'pack'; continue }
+        if ($line -match '^### Pack Resource Preflight') { $section = 'pack-skill'; continue }
+        if ($line -match '^### ') { $section = ''; continue }
         if ($line -match '^## ') { $section = ''; continue }
         if ($section -and $line -match '^\|\s*`(?<name>[a-z0-9-]+)`\s*\|\s*(?<members>[^|]+)\|') {
             $catalogName = $Matches['name']
@@ -1421,10 +1436,11 @@ function Get-SquadWatchProfileCatalog {
                     Where-Object { $_ -match '^[a-z0-9-]+$' }
             )
             if ($section -eq 'profile') { $profiles[$catalogName] = @($roles) }
-            else { $packs[$catalogName] = @($roles) }
+            elseif ($section -eq 'pack') { $packs[$catalogName] = @($roles) }
+            elseif ($section -eq 'pack-skill') { $packSkills[$catalogName] = @($roles) }
         }
     }
-    [pscustomobject]@{ Profiles = $profiles; Packs = $packs }
+    [pscustomobject]@{ Profiles = $profiles; Packs = $packs; PackSkills = $packSkills }
 }
 
 function Resolve-SquadWatchCanonicalRoster {
@@ -1443,7 +1459,9 @@ function Resolve-SquadWatchCanonicalRoster {
 
         [string[]]$SelectedPacks = @(),
 
-        [string[]]$InstalledPacks = @()
+        [string[]]$InstalledPacks = @(),
+
+        [string[]]$HostVisibleSkills = @()
     )
 
     $name = ([string]$ProfileName).Trim().ToLowerInvariant()
@@ -1463,6 +1481,11 @@ function Resolve-SquadWatchCanonicalRoster {
         if (-not $packName -or $packName -eq 'none') { continue }
         if (-not $Catalog.Packs.ContainsKey($packName) -or $packName -notin $installed) {
             return [pscustomobject]@{ Ok = $false; Roles = @(); Reason = "pack-not-installed:$packName" }
+        }
+        $requiredSkills = if ($Catalog.PackSkills -and $Catalog.PackSkills.ContainsKey($packName)) { @($Catalog.PackSkills[$packName]) } else { @() }
+        $missingSkills = @($requiredSkills | Where-Object { $_ -and $_ -notin $HostVisibleSkills })
+        if ($missingSkills.Count) {
+            return [pscustomobject]@{ Ok = $false; Roles = @(); Reason = "pack-skill-not-visible:${packName}:$($missingSkills -join ',')" }
         }
         foreach ($role in @($Catalog.Packs[$packName])) {
             if ($role -and -not $roles.Contains($role)) { $roles.Add($role) }
@@ -1769,12 +1792,14 @@ function Get-SquadWatchQuestionRecompute {
     $catalog = Get-SquadWatchProfileCatalog -Markdown $catalogText
     $selectedPacks = if ($names -contains 'selectedPacks') { ConvertTo-SquadWatchNameList $Payload.selectedPacks } else { @() }
     $installedPacks = if ($names -contains 'installedPacks') { ConvertTo-SquadWatchNameList $Payload.installedPacks } else { @() }
+    $installedSkills = if ($names -contains 'installedSkills') { ConvertTo-SquadWatchNameList $Payload.installedSkills } else { @() }
     $profileName = if ($names -contains 'profileName') { [string]$Payload.profileName } else { '' }
     $resolved = Resolve-SquadWatchCanonicalRoster `
         -Catalog $catalog `
         -ProfileName $profileName `
         -SelectedPacks $selectedPacks `
-        -InstalledPacks $installedPacks
+        -InstalledPacks $installedPacks `
+        -HostVisibleSkills $installedSkills
     if (-not $resolved.Ok) {
         return [pscustomobject]@{ Ok = $false; Markdown = $generic; Reason = $resolved.Reason }
     }
@@ -1787,6 +1812,8 @@ function Get-SquadWatchQuestionRecompute {
         -CurrentRunId $(if ($names -contains 'runId') { [string]$Payload.runId } else { '' }) `
         -Roster $roster `
         -RequiredRoles $requiredRoles `
+        -PackSkillDependencies $catalog.PackSkills `
+        -HostVisibleSkills $installedSkills `
         -CanonicalProfileRoles $resolved.Roles `
         -KnownProfiles @($catalog.Profiles.Keys)
     if (-not $profileCheck.Valid) {
@@ -1971,6 +1998,8 @@ function Test-SquadWatchAppliedPublication {
 
         [string[]]$InstalledPacks = @(),
 
+        [string[]]$InstalledSkills = @(),
+
         [string]$StableRef = '',
 
         [string]$TrustedBaseSha = ''
@@ -1987,7 +2016,7 @@ function Test-SquadWatchAppliedPublication {
             $rows = @($payload.rows)
         }
     }
-    Save-SquadWatchPublicationEvidence -Repository $Repository -Member $Member -CurrentRunId $CurrentRunId -ProfileMarkdown $profileMarkdown -Rows $rows -CurrentThread $CurrentThread -CatalogMarkdown $CatalogMarkdown -InstalledPacks $InstalledPacks -StableRef $StableRef -TrustedBaseSha $TrustedBaseSha
+    Save-SquadWatchPublicationEvidence -Repository $Repository -Member $Member -CurrentRunId $CurrentRunId -ProfileMarkdown $profileMarkdown -Rows $rows -CurrentThread $CurrentThread -CatalogMarkdown $CatalogMarkdown -InstalledPacks $InstalledPacks -InstalledSkills $InstalledSkills -StableRef $StableRef -TrustedBaseSha $TrustedBaseSha
 }
 
 function Get-SquadWatchTeamRoster {
@@ -2174,6 +2203,8 @@ function Save-SquadWatchPublicationEvidence {
 
         [string[]]$InstalledPacks = @(),
 
+        [string[]]$InstalledSkills = @(),
+
         [string]$StableRef = '',
 
         [string]$TrustedBaseSha = ''
@@ -2206,7 +2237,7 @@ function Save-SquadWatchPublicationEvidence {
         $resolved = [pscustomobject]@{ Ok = $false; Roles = @(); Reason = 'profile-not-in-catalog' }
     }
     else {
-        $resolved = Resolve-SquadWatchCanonicalRoster -Catalog $catalog -ProfileName $profileName -SelectedPacks $selectedPacks -InstalledPacks $InstalledPacks
+        $resolved = Resolve-SquadWatchCanonicalRoster -Catalog $catalog -ProfileName $profileName -SelectedPacks $selectedPacks -InstalledPacks $InstalledPacks -HostVisibleSkills $InstalledSkills
     }
     $canonicalRoles = if ($resolved.Ok) { @($resolved.Roles) } else { @() }
     $profileResult = Test-SquadWatchProfileSelection `
@@ -2215,6 +2246,8 @@ function Save-SquadWatchPublicationEvidence {
         -Roster $roster `
         -RequiredRoles $requiredRoles `
         -InstalledPacks $InstalledPacks `
+        -PackSkillDependencies $catalog.PackSkills `
+        -HostVisibleSkills $InstalledSkills `
         -CanonicalProfileRoles $canonicalRoles `
         -KnownProfiles @($catalog.Profiles.Keys)
     $questionRows = @(
@@ -2253,6 +2286,7 @@ function Save-SquadWatchPublicationEvidence {
         profileName       = $profileName
         selectedPacks     = @($selectedPacks)
         installedPacks    = @($InstalledPacks)
+        installedSkills   = @($InstalledSkills)
         decisionsMarkdown = $ProfileMarkdown
         teamMarkdown      = $teamMarkdown
         profileValid      = [bool]$profileResult.Valid

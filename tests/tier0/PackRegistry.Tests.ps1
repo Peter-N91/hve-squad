@@ -21,6 +21,7 @@ BeforeAll {
     $script:CoordinatorInitPath = Join-Path $SourceRoot 'squad-src/.github/skills/squad/references/coordinator-init.md'
     $script:FederationPath = Join-Path $SourceRoot 'squad-src/.github/instructions/squad/squad-federation.instructions.md'
     $script:FoundryBlueprintPath = Join-Path $SourceRoot 'squad-src/.github/skills/squad/references/foundry-blueprint.md'
+    $script:FabricBlueprintPath = Join-Path $SourceRoot 'squad-src/.github/skills/squad/references/fabric-blueprint.md'
     $script:ReferenceRoot = Join-Path $SourceRoot 'squad-src/.github/skills/squad/references'
 
     $script:RosterBody = Get-Content -LiteralPath $script:RosterPath -Raw
@@ -32,6 +33,7 @@ BeforeAll {
     $script:CoordinatorInitBody = Get-Content -LiteralPath $script:CoordinatorInitPath -Raw
     $script:FederationBody = Get-Content -LiteralPath $script:FederationPath -Raw
     $script:FoundryBlueprintBody = Get-Content -LiteralPath $script:FoundryBlueprintPath -Raw
+    $script:FabricBlueprintBody = Get-Content -LiteralPath $script:FabricBlueprintPath -Raw
     $script:EnglishDocs = Get-Content -LiteralPath (Join-Path $SourceRoot 'docs/usage.html') -Raw
     $script:FrenchDocs = Get-Content -LiteralPath (Join-Path $SourceRoot 'docs/fr/usage.html') -Raw
 
@@ -162,6 +164,51 @@ Describe 'Registered pack consistency' -Tag 'Unit' {
             $registeredSkills | Should -Contain $skill
             $blueprintSkills | Should -Contain $skill
         }
+    }
+
+    It 'maps every Foundry and Fabric pack skill to one registered opt-in skill' {
+        $packRows = @(
+            Get-MarkdownTableRows `
+                -Body (Get-MarkdownSectionBody -Body $script:RosterCatalogBody -Heading 'Registered Pack Skills') `
+                -HeaderCell 'Pack'
+        )
+        $mapped = @{}
+        foreach ($cells in $packRows) {
+            $pack = $cells[1].Trim().Trim('`')
+            if (-not $mapped.ContainsKey($pack)) { $mapped[$pack] = @() }
+            $mapped[$pack] += $cells[2].Trim().Trim('`')
+        }
+        $expectedFoundry = @('appinsights-instrumentation', 'azure-aigateway', 'caira', 'foundry-iq', 'microsoft-foundry', 'use-ai-gateway')
+        $expectedFabric = @(
+            Get-MarkdownTableRows -Body $script:FabricBlueprintBody -HeaderCell 'Skill' |
+                ForEach-Object { $_[1].Trim().Trim('`') } |
+                Where-Object { $_ } |
+                Sort-Object -Unique
+        )
+        @($mapped.foundry | Sort-Object) -join ',' | Should -BeExactly (@($expectedFoundry | Sort-Object) -join ',')
+        @($mapped.fabric | Sort-Object) -join ',' | Should -BeExactly (@($expectedFabric | Sort-Object) -join ',')
+        $profileSkillRows = @(Get-MarkdownTableRows -Body $script:ProfilesBody -HeaderCell 'Resource pack')
+        $profileMapped = @{}
+        foreach ($cells in $profileSkillRows) {
+            $profileMapped[$cells[1].Trim().Trim('`')] = @($cells[2] -split ',' | ForEach-Object { $_.Trim().Trim('`') } | Where-Object { $_ })
+        }
+        @($profileMapped.foundry | Sort-Object) -join ',' | Should -BeExactly (@($expectedFoundry | Sort-Object) -join ',')
+        @($profileMapped.fabric | Sort-Object) -join ',' | Should -BeExactly (@($expectedFabric | Sort-Object) -join ',')
+
+        $registered = @(
+            Get-MarkdownTableRows `
+                -Body (Get-MarkdownSectionBody -Body $script:RosterCatalogBody -Heading 'Registered External Cast') `
+                -HeaderCell 'Role'
+        )
+        foreach ($resource in @($expectedFoundry + $expectedFabric)) {
+            $rows = @($registered | Where-Object { $_[3].Trim().Trim('`') -eq $resource })
+            $rows | Should -Not -BeNullOrEmpty
+            @($rows | Where-Object { $_[2].Trim() -eq 'opt-in' -and $_[4].Trim() -eq 'skill' }).Count |
+                Should -Be $rows.Count
+        }
+        $script:CoordinatorInitBody | Should -Match 'Pack Resource Preflight'
+        $script:CoordinatorInitBody | Should -Match 'displaying an install command is not installation'
+        $script:FederationBody | Should -Match 'No unattended pack installs'
     }
 
     It 'keeps origin class inline inside the ten-column registry' {

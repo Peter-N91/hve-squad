@@ -1378,6 +1378,49 @@ $Extra
         $blocked.Valid | Should -BeFalse
     }
 
+    It 'GATE-48 drops a skills-based pack until every registered skill is host-visible' {
+        $foundrySkills = @('microsoft-foundry', 'use-ai-gateway', 'azure-aigateway', 'caira', 'foundry-iq', 'appinsights-instrumentation')
+        $dependencies = @{ foundry = $foundrySkills }
+        $packRoles = @{ foundry = @('data-scientist') }
+        $dropped = Test-SquadWatchProfileSelection `
+            -Markdown (Format-WatchSelectionMarkdown -Packs 'foundry' -Dropped 'foundry') `
+            -CurrentRunId 'run-current' `
+            -SelectedProfile 'security' `
+            -SelectedPacks @('foundry') `
+            -Roster $script:WatchSpineRoles `
+            -InstalledPacks @('foundry') `
+            -PackSkillDependencies $dependencies `
+            -HostVisibleSkills @($foundrySkills | Select-Object -First 5) `
+            -CanonicalProfileRoles $script:WatchSpineRoles `
+            -CanonicalPackRoles $packRoles
+        $dropped.Valid | Should -BeTrue
+        $dropped.DroppedPacks | Should -Contain 'foundry'
+        $dropped.SelectedPacks | Should -Not -Contain 'foundry'
+
+        $kept = Test-SquadWatchProfileSelection `
+            -Markdown (Format-WatchSelectionMarkdown -Packs 'foundry') `
+            -CurrentRunId 'run-current' `
+            -SelectedProfile 'security' `
+            -SelectedPacks @('foundry') `
+            -Roster @($script:WatchSpineRoles + 'data-scientist') `
+            -InstalledPacks @('foundry') `
+            -PackSkillDependencies $dependencies `
+            -HostVisibleSkills $foundrySkills `
+            -CanonicalProfileRoles $script:WatchSpineRoles `
+            -CanonicalPackRoles $packRoles
+        $kept.Valid | Should -BeTrue
+        $kept.SelectedPacks | Should -Contain 'foundry'
+
+        $script:WatchWorkflow | Should -Match ([regex]::Escape('-InstalledPacks @()'))
+        $script:WatchWorkflow | Should -Match ([regex]::Escape('-InstalledSkills @()'))
+        $template = Get-Content -LiteralPath (Join-Path $script:SourceRootResolved 'squad-src/.github/skills/squad/squad-watch.workflow.yml') -Raw
+        $template | Should -Match ([regex]::Escape('-InstalledPacks @()'))
+        $template | Should -Match ([regex]::Escape('-InstalledSkills @()'))
+        $applied = Get-Content -LiteralPath (Join-Path $script:SourceRootResolved 'squad-src/.github/skills/squad/scripts/Invoke-SquadWatchAppliedPatch.ps1') -Raw
+        $applied | Should -Match ([regex]::Escape('-InstalledPacks @()'))
+        $applied | Should -Match ([regex]::Escape('-InstalledSkills @()'))
+    }
+
     It 'GATE-48 proves the resulting roster against canonical rows without claiming construction provenance' {
         $result = Test-SquadWatchProfileSelection -Markdown (Format-WatchSelectionMarkdown) -CurrentRunId 'run-current' -SelectedProfile 'security' -Roster $script:WatchSpineRoles -CanonicalProfileRoles $script:WatchSpineRoles
         $result.Valid | Should -BeTrue
@@ -1944,20 +1987,29 @@ $(Format-WatchSelectionMarkdown)
         $catalogText = Get-Content -LiteralPath (Join-Path $script:SourceRootResolved 'squad-src/.github/skills/squad/references/profiles-and-packs.md') -Raw
         $catalog = Get-SquadWatchProfileCatalog -Markdown $catalogText
         $catalog.Profiles['security'] | Should -Contain 'privacy'
+        $catalog.PackSkills['foundry'] | Should -HaveCount 6
+        $catalog.PackSkills['fabric'] | Should -HaveCount 8
         $cases = @(
             @{ Name = 'default'; Packs = @(); Installed = @(); Roles = @($catalog.Profiles['default']); Ok = $true }
             @{ Name = 'security'; Packs = @(); Installed = @(); Roles = @($catalog.Profiles['security']); Ok = $true }
             @{ Name = 'default'; Packs = @('power-platform'); Installed = @('power-platform'); Roles = @($catalog.Profiles['default'] + $catalog.Packs['power-platform']); Ok = $true }
+            @{ Name = 'default'; Packs = @('foundry'); Installed = @('foundry'); Skills = @(); Roles = @($catalog.Profiles['default'] + $catalog.Packs['foundry']); Ok = $false }
+            @{ Name = 'default'; Packs = @('foundry'); Installed = @('foundry'); Skills = @($catalog.PackSkills['foundry']); Roles = @($catalog.Profiles['default'] + $catalog.Packs['foundry']); Ok = $true }
             @{ Name = 'security'; Packs = @(); Installed = @(); Roles = @($catalog.Profiles['security'] | Where-Object { $_ -ne 'privacy' }); Ok = $false }
             @{ Name = 'default'; Packs = @(); Installed = @(); Roles = @($catalog.Profiles['default'] + 'hacker'); Ok = $false }
         )
         foreach ($case in $cases) {
-            $resolved = Resolve-SquadWatchCanonicalRoster -Catalog $catalog -ProfileName $case.Name -SelectedPacks $case.Packs -InstalledPacks $case.Installed
+            $skills = if ($case.ContainsKey('Skills')) { @($case.Skills) } else { @() }
+            $resolved = Resolve-SquadWatchCanonicalRoster -Catalog $catalog -ProfileName $case.Name -SelectedPacks $case.Packs -InstalledPacks $case.Installed -HostVisibleSkills $skills
             if (-not $case.Ok -and $case.Name -eq 'security' -and $case.Roles -notcontains 'privacy') {
                 $resolved.Ok | Should -BeTrue
             }
             elseif (-not $case.Ok -and $case.Roles -contains 'hacker') {
                 $resolved.Ok | Should -BeTrue
+            }
+            elseif (-not $case.Ok -and $case.Packs -contains 'foundry') {
+                $resolved.Ok | Should -BeFalse
+                $resolved.Reason | Should -Match '^pack-skill-not-visible:foundry:'
             }
             else {
                 $resolved.Ok | Should -BeTrue
@@ -1972,7 +2024,7 @@ $(Format-WatchSelectionMarkdown)
             Set-Content -LiteralPath (Join-Path $team 'team.md') -Encoding utf8NoBOM -Value ($rows -join "`n")
             $packs = if ($case.Packs.Count -eq 0) { 'none' } else { $case.Packs -join ', ' }
             $installed = @($case.Installed | Where-Object { $_ })
-            $saved = Save-SquadWatchPublicationEvidence -Repository $repo -Member $member -CurrentRunId 'run-current' -CatalogMarkdown $catalogText -InstalledPacks $installed -ProfileMarkdown (Format-WatchSelectionMarkdown -ProfileName $case.Name -Packs $packs) -CurrentThread 'owner/repo#42'
+            $saved = Save-SquadWatchPublicationEvidence -Repository $repo -Member $member -CurrentRunId 'run-current' -CatalogMarkdown $catalogText -InstalledPacks $installed -InstalledSkills $skills -ProfileMarkdown (Format-WatchSelectionMarkdown -ProfileName $case.Name -Packs $packs) -CurrentThread 'owner/repo#42'
             $saved.ProfileValid | Should -Be $case.Ok
         }
     }

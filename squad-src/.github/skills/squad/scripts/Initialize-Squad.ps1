@@ -192,8 +192,9 @@ function Get-InitUsage {
 if ($MyInvocation.InvocationName -ne '.') {
     $Stage = $null
     try {
+        Import-Module (Join-Path $PSScriptRoot 'SquadCoordinator.psm1') -Force
         $Payload = Get-Content -LiteralPath $PayloadPath -Raw | ConvertFrom-Json -AsHashtable
-        Assert-ObjectKey $Payload @('squadRoot', 'runId', 'roster', 'provenance') @('timestamp', 'usage', 'payloadType', 'turn', 'mode', 'modelRouting', 'sessionModel', 'modelOverrides', 'notify', 'stateAdvance', 'ledgerCommand')
+        Assert-ObjectKey $Payload @('squadRoot', 'runId', 'roster', 'provenance') @('timestamp', 'usage', 'payloadType', 'turn', 'mode', 'modelRouting', 'sessionModel', 'modelOverrides', 'notify', 'stateAdvance', 'ledgerCommand', 'packs', 'packResources', 'availableSkills')
         $Now = [DateTimeOffset]::UtcNow
         if (-not $Payload.Contains('timestamp')) { $Payload.timestamp = $Now.ToString('o') }
         if ($Payload.timestamp -is [DateTime]) { $Payload.timestamp = $Payload.timestamp.ToString('o') }
@@ -218,6 +219,37 @@ if ($MyInvocation.InvocationName -ne '.') {
         if ($Mode -notin @('interactive', 'autonomous', 'autopilot')) { throw 'Invalid mode.' }
         $Routing = if ($Payload.Contains('modelRouting')) { $Payload.modelRouting } else { 'off' }
         if ($Routing -notin @('off', 'ranked', 'economy', 'manual')) { throw 'Invalid modelRouting.' }
+        $Packs = @()
+        if ($Payload.Contains('packs')) {
+            if ($Payload.packs -isnot [array]) { throw 'packs must be an array.' }
+            foreach ($Pack in $Payload.packs) {
+                Assert-Text $Pack
+                if ($Pack -cnotmatch '^[a-z0-9][a-z0-9-]*$' -or $Pack -in $Packs) { throw "Invalid or duplicate pack: $Pack" }
+                $Packs += $Pack
+            }
+        }
+        $PackResources = [ordered]@{}
+        if ($Payload.Contains('packResources')) {
+            if ($Payload.packResources -isnot [Collections.IDictionary]) { throw 'packResources must be an object.' }
+            foreach ($Resource in $Payload.packResources.Keys) {
+                Assert-Text $Resource
+                $Status = [string]$Payload.packResources[$Resource]
+                if ($Resource -cnotmatch '^[a-z0-9][a-z0-9-]*$' -or $Status -notin @('available', 'declined')) {
+                    throw "Invalid pack resource result: $Resource=$Status"
+                }
+                $PackResources[$Resource] = $Status
+            }
+        }
+        $AvailableSkills = @()
+        if ($Payload.Contains('availableSkills')) {
+            if ($Payload.availableSkills -isnot [array]) { throw 'availableSkills must be an array.' }
+            $AvailableSkills = @($Payload.availableSkills)
+        }
+        if ($Packs.Count -or $PackResources.Count) {
+            $PackResources = Assert-SquadPackResourceDecisions -InitData (Get-SquadInitData -RepoRoot $Repository) `
+                -Pack $Packs -RepoRoot $Repository -Decisions $PackResources `
+                -AvailableSkill $AvailableSkills
+        }
         $State = Get-Seed 'entry-schemas.md' 'state.json' 'json' | ConvertFrom-Json -AsHashtable
         $State.updated = $Timestamp.ToString('o')
         $State.turn = 1
@@ -289,7 +321,6 @@ if ($MyInvocation.InvocationName -ne '.') {
         }
         if ('scribe' -notin $Roles -or @($Payload.roster | Where-Object { $_.Role -eq 'scribe' -and $_['Agent Name (Primary)'] -eq 'Squad Scribe' }).Count -ne 1) { throw 'Confirmed Squad Scribe roster row required.' }
         if ($Direct) {
-            Import-Module (Join-Path $PSScriptRoot 'SquadCoordinator.psm1') -Force
             $AgentRepository = (Resolve-Path -LiteralPath $AgentRepoRoot).ProviderPath
             Assert-UnlinkedPath $AgentRepository
             if ($AgentRepository -ine $Repository) {
@@ -345,7 +376,10 @@ if ($MyInvocation.InvocationName -ne '.') {
         }
         $Team = Get-Seed 'seed-templates.md' 'team.md'
         $Team = $Team.Substring(0, $Team.IndexOf('| Role'))
-        if ($Routing -ne 'off') { $Team = $Team.Replace('# Squad Roster', "# Squad Roster`nModel routing: $Routing") }
+        $RosterMetadata = @()
+        if ($Packs.Count) { $RosterMetadata += 'Packs: ' + ($Packs -join ', ') }
+        if ($Routing -ne 'off') { $RosterMetadata += "Model routing: $Routing" }
+        if ($RosterMetadata.Count) { $Team = $Team.Replace('# Squad Roster', "# Squad Roster`n$($RosterMetadata -join "`n")") }
         $Team += '| ' + ($Columns -join ' | ') + " |`n| " + (($Columns | ForEach-Object { '---' }) -join ' | ') + " |`n" + ($Rows -join "`n") + "`n"
         $Routes = (Get-Seed 'seed-templates.md' 'routing.md') -split "`n" | Where-Object {
             if ($_ -notmatch '^\| ' -or $_ -match '^\| Pattern|^\|\s*-') { return $true }
@@ -361,7 +395,11 @@ if ($MyInvocation.InvocationName -ne '.') {
         Write-Seed 'team.md' $Team
         Write-Seed 'routing.md' ($Routes -join "`n")
         Write-Seed 'state.json' ($State | ConvertTo-Json -Depth 20)
-        Write-Seed 'decisions.md' ((Get-Seed 'entry-schemas.md' 'decisions.md') + "`n## Initialization $($State.updated)`n`n* Turn: 1`n* Provenance: $($Payload.provenance)`n* Model routing: $Routing`n")
+        $PackResourceLine = if ($PackResources.Count) {
+            "`n* Pack resources: " + (@($PackResources.Keys | ForEach-Object { "$_=$($PackResources[$_])" }) -join '; ')
+        }
+        else { '' }
+        Write-Seed 'decisions.md' ((Get-Seed 'entry-schemas.md' 'decisions.md') + "`n## Initialization $($State.updated)`n`n* Turn: 1`n* Provenance: $($Payload.provenance)`n* Model routing: $Routing$PackResourceLine`n")
         Write-Seed 'notifications.md' "---`ndescription: Append-only squad notifications`n---`n`n# Squad Notifications`n"
         Write-Seed 'history/Squad Scribe.md' $History
         Write-Seed 'consumption.md' ((Get-Seed 'consumption.md' 'consumption.md').Replace('<run-id>', $Payload.runId))
