@@ -1466,11 +1466,16 @@ apm install microsoft/skills-for-fabric/skills/pipeline-migration --target copil
         role the pack would provide. Foundry reuses existing roles and points them to registered upstream
         Microsoft and Azure skills instead of copying changing product documentation into the squad.
       </p>
-      <h3 data-release-change="20261024-foundry-agent-sync-replacement">Install the Foundry pack's skills</h3>
+      <h3 data-release-change="20261106-pack-resource-installer">Install a pack's registered skills</h3>
       <p>
-        When you apply <code>foundry</code>, the coordinator reports all missing registered skills and
-        prerequisites in one message. Install only the capabilities the project needs; nothing is
-        installed automatically. The catalog remains the source of truth for these commands.
+        When you apply <code>foundry</code> or <code>fabric</code>, the coordinator inventories all
+        registered pack skills and their prerequisites in one message. If you approve installation,
+        it runs the catalog commands immediately and verifies their exit status instead of only
+        displaying them. You can install a subset or continue without them. The installer receipt
+        records what changed; after any required reload, final preflight records each skill as
+        host-visible or declined. The preflight never installs a CLI, MCP server,
+        authentication, tenant consent, or cloud resource. Whenever installation changes the skill
+        inventory, reload the host and rerun the preflight before Init or pack expansion continues.
       </p>
       <pre><code># Microsoft Foundry and APIM AI Gateway skills
 apm install microsoft/azure-skills/skills/microsoft-foundry --target copilot
@@ -1481,7 +1486,10 @@ copilot plugin marketplace add Azure/aigateway
 copilot plugin install ai-gateway@azure
 
 # Inspect selected CAIRA reference components
-npx skills add github.com/microsoft/CAIRA/skills</code></pre>
+npx skills add github.com/microsoft/CAIRA/skills
+
+# Fabric Warehouse skill example
+apm install microsoft/skills-for-fabric/skills/sqldw-cli --target copilot</code></pre>
       <p>
         The plugin path needs GitHub Copilot CLI with plugin support; CAIRA needs Node.js and
         <code>npx</code>. Foundry and gateway workflows may also need Azure CLI access, an Azure

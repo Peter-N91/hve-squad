@@ -219,6 +219,33 @@ Re-verification remains tier-driven: bundled rows when their SHA changes; opt-in
 | aws-architect | opt-in | `aws-cost-optimize` | skill        | `github/awesome-copilot` (`community`), `skills/aws-cost-optimize/SKILL.md` | `apm install github/awesome-copilot/skills/aws-cost-optimize`                             | MIT     | An authenticated AWS CLI, Cost Explorer enabled on the account, deployed AWS resources, IaC in the repository, and a configured GitHub MCP server; its issue-creation step is an impactful action and belongs behind the Impactful-Action Gate | `n/a` — skill, reached rather than dispatched | 2026-08-05  |
 | aws-diagnose | opt-in  | `aws-incident-triage` | agent     | `github/awesome-copilot` (`community`), `agents/aws-incident-triage.agent.md` | `apm install github/awesome-copilot/agents/aws-incident-triage.agent.md`                | MIT     | Authenticated read access to CloudWatch alarms, metrics, and Logs Insights, plus X-Ray where traces are sampled, through an AWS MCP server or the AWS CLI; without it the agent has nothing to read | `yes` — sets no `disable-model-invocation` and declares no `tools:` list | 2026-08-05  |
 
+#### Registered Pack Skills
+
+These are the skills offered as one pack-resource preflight when the named pack
+is accepted. Every row must resolve to one opt-in `skill` row in *Registered
+External Cast*. The coordinator installs missing rows only after explicit user
+approval. Installer receipts record attempted changes; final Init or expansion
+records each row as host-visible `available` or explicitly `declined`.
+Installation never grants permission to install prerequisites, authenticate,
+add an MCP server, consent to a tenant, or run the skill.
+
+| Pack | Skill |
+|---|---|
+| foundry | microsoft-foundry |
+| foundry | use-ai-gateway |
+| foundry | azure-aigateway |
+| foundry | caira |
+| foundry | foundry-iq |
+| foundry | appinsights-instrumentation |
+| fabric | sqldw-cli |
+| fabric | sqldb-cli |
+| fabric | eventhouse-cli |
+| fabric | eventstream-cli |
+| fabric | spark-cli |
+| fabric | dataflows-cli |
+| fabric | databricks-migration |
+| fabric | pipeline-migration |
+
 Four bundled rows, deliberately few. `azure-pricing` strengthens `cost-manager`, whose Primary already performs Azure pricing lookups, and it calls a public unauthenticated API; the `Squad Cost Manager` charter names it explicitly in its Step 2, which is the *explicit reach* path described below. `gdpr-compliant` gives `privacy` the code-level engineering rules — data models, retention jobs, logging, pseudonymization — that sit underneath the DPIA and data-map work its Primary already does. `microsoft-agent-framework` and `semantic-kernel` give `developer` the AI application build side that HVE Core covers nowhere, and they are libraries in the languages the squad already writes rather than a separate product. All four were gated against `9db369d00f121542e1c99fd9b6cd6f707bade765`, the same commit their `apm.yml` entries pin, so the recorded outcome stays checkable after upstream moves on.
 
 **The bundled test that decides most of this set is test 3, and the wave 4 harvest is what proved it.** The E-007 list of resources that strengthen existing roles turned out to be almost entirely operational Azure and GitHub skills: `az-cost-optimize` names two authenticated MCP servers in its own prerequisites, `azure-deployment-preflight` and `import-infrastructure-as-code` need an authenticated Azure CLI and a live subscription, and `codeql`, `secret-scanning`, and `dependabot` author their configuration for free but need GitHub security entitlements to operate. Each is genuinely useful and each is opt-in, which is the tier working as designed rather than a shortfall.

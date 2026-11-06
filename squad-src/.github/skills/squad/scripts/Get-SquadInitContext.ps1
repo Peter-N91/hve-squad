@@ -18,10 +18,13 @@
     Optional additive packs to include in the proposal, never silently installed.
 .PARAMETER Role
     Optional catalog role IDs for a custom proposal.
+.PARAMETER AvailableSkill
+    Optional exact host-visible skill names to merge with filesystem discovery.
 .PARAMETER ChoicesPath
     Confirmed JSON: confirmed, squadRoot, runId, profile, naming, notify; optional
-    packs, roles (custom), excludeRoles, names, modelRouting, models, mode,
-    sessionModel, modelOverrides, usage.
+    packs, roles (custom), excludeRoles, names, resourceDecisions,
+    availableSkills, modelRouting, models, mode, sessionModel, modelOverrides,
+    usage.
 .PARAMETER PayloadPath
     New transport file for the canonical legacy initializer payload.
 #>
@@ -31,6 +34,7 @@ param(
     [Alias('Profile')][string]$ProfileName,
     [string[]]$Pack = @(),
     [string[]]$Role = @(),
+    [string[]]$AvailableSkill = @(),
     [string]$ChoicesPath,
     [string]$PayloadPath
 )
@@ -61,6 +65,7 @@ try {
 
     $data = Get-SquadInitData -RepoRoot $RepoRoot
     $agents = Get-SquadAgentIndex $RepoRoot
+    $selectedPackNames = @($Pack | ForEach-Object { $_ -split ',' } | ForEach-Object { $_.Trim() } | Where-Object { $_ })
     $profiles = @(
         foreach ($row in $data.profiles) {
             [ordered]@{ profile = $row.Profile; roles = @($row['Members (roles)'] -split ',\s*') }
@@ -74,7 +79,7 @@ try {
         $selectedRoles += $selected[0].roles
     }
     $selectedRoles += @($Role | ForEach-Object { $_ -split ',' })
-    foreach ($name in @($Pack | ForEach-Object { $_ -split ',' })) {
+    foreach ($name in $selectedPackNames) {
         $packRows = @($data.packs | Where-Object { $_.Pack -ceq $name })
         if ($packRows.Count -ne 1) { throw "Unknown pack: $name" }
         $selectedRoles += @($packRows[0]['Adds (roles)'] -split ',\s*')
@@ -135,10 +140,11 @@ try {
         discovery = [ordered]@{ scope = $discoveryScope; extensions = $extensions; manifests = @($manifests | Select-Object -First 30); additionalManifestCount = [Math]::Max(0, $manifests.Count - 30); dependencies = @($dependencyNames | Sort-Object -Unique) }
         profiles = $profiles
         packs = @($data.packs | ForEach-Object { [ordered]@{ pack = $_.Pack; roles = @($_['Adds (roles)'] -split ',\s*') } })
+        packResources = @(Get-SquadPackResourceInventory -InitData $data -Pack $selectedPackNames -RepoRoot $RepoRoot -AvailableSkill $AvailableSkill)
         members = $members
         naming = @('skip', 'aliases', 'custom', 'mixed')
         aliases = $data.aliases
-        requiredAnswers = @('structure (unless scoped/inherited)', 'profile and packs', 'naming (unless inherited)', 'notify (unless inherited)')
+        requiredAnswers = @('structure (unless scoped/inherited)', 'profile and packs', 'pack resource dispositions (when listed)', 'naming (unless inherited)', 'notify (unless inherited)')
         confirmationRequired = $true
         stateWritten = $false
     } | ConvertTo-Json -Depth 8 -Compress

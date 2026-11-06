@@ -58,6 +58,36 @@ A pack is proposed, never imposed. The coordinator offers one at Init when the r
 
 Seeded Selection Cues, copied from the cast catalog: Power Pages ALM planning, model-driven app building, or Dataverse overview → Squad Power Platform Architect; broader Power Platform architecture or Copilot Studio, Power Automate, cloud flow, canvas app, DLP policy, or solution ALM → Power Platform Expert. codeful MCP tool or UI generation, or Dataverse connection → Squad Power Platform Integrator; broader connector or integration work, custom connector, or connector certification → Power Platform MCP Integration Expert. .NET Agents SDK production readiness → Squad M365 Agent Architect; declarative agent, TypeSpec, API plugin, or broader M365 architecture, Microsoft 365 Copilot agent, agent manifest, or Agents Toolkit → Declarative Agents Architect. Agents SDK OpenTelemetry or provisioning → Squad M365 Agent Integrator; broader MCP-backed M365 integration, Microsoft Graph, Graph SDK, Graph permission scope, or MCP-backed Copilot agent → MCP M365 Agent Expert. No cue match keeps the Primary. A matched Alternate that is absent or not dispatchable escalates; do not substitute. Pack absence means the role is not seeded, so installed official skills are not squad-selected. Fabric Warehouse, Eventhouse, Spark, Dataflow, or an admitted migration selects the registered Fabric skills only while `fabric` is active. Host visibility is not selection.
 
+### Pack Resource Preflight
+
+| Resource pack | Registered skills |
+|---|---|
+| `foundry` | microsoft-foundry, use-ai-gateway, azure-aigateway, caira, foundry-iq, appinsights-instrumentation |
+| `fabric` | sqldw-cli, sqldb-cli, eventhouse-cli, eventstream-cli, spark-cli, dataflows-cli, databricks-migration, pipeline-migration |
+
+After packs are selected, rerun `Get-SquadInitContext.ps1 -Pack <packs>` and
+inspect `packResources`. It reports each registered pack skill, whether the
+native host inventory exposes it, whether it exists only on disk awaiting reload,
+its exact install entry, prerequisites, origin and license.
+
+For missing skills, ask once whether to install all, install a selected subset,
+continue without them, or change the pack selection. Approval authorizes running
+`Install-SquadPackResources.ps1 -RepoRoot <repo> -Pack <packs> [-Resource <approved names>] [-AvailableSkill <host-visible names>] -ReceiptPath <new-receipt.json> -Confirmed`
+for the approved resources now; do not merely print the commands. Run it from
+the consumer repository and require receipt `status: PASS`; exit 0 with
+`status: PLANNED` is only a preview. A native plugin or
+`npx` confirmation remains visible and must succeed. Never install a prerequisite,
+CLI, MCP server, account permission, tenant consent or cloud resource from this
+step. A failed or cancelled command remains missing.
+
+The installer receipt is audit evidence, not an Init credential. Any resource
+reported as `installed` or present only on disk requires a host reload. Stop
+before Init or roster expansion, reload the host, rerun preflight, and record one
+final `resourceDecisions` entry per listed resource: host-visible `available`, or
+explicitly `declined`. Copy the relevant native host inventory into
+`availableSkills`; the deterministic planners reject missing, unknown,
+on-disk-only, or invented availability.
+
 ### Pack Discovery
 
 An explicit `pack=` hint wins; otherwise either repository signals or the request's domain is enough to propose a pack, never to apply it. Present the profile and proposed packs together for one confirmation. Offer install commands for missing registered resources instead of seeding absent roles.

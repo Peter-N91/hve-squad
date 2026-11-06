@@ -21,6 +21,11 @@ routing edits, an existing Deliverable Root change, and `routing=off` retain the
 cold refresh procedure. A missing external Primary is offered with its install
 command and is never seeded.
 
+Before confirming a pack, complete *Pack Resource Preflight* in
+`profiles-and-packs.md`. Missing registered skills are installed only after the
+user approves execution. The planner refuses a pack whose listed resources do
+not all have a host-visible `available` or explicit `declined` disposition.
+
 A confirmed registered pack whose roles are already present is still a valid
 transaction when that pack is not already listed in `Packs:`. It changes only
 the `team.md` `Packs:` line and appends one decision. `addedRoles` is empty, no
@@ -43,6 +48,7 @@ outside squad state:
   "runId": "<actual run id>",
   "packs": ["aws"],
   "roles": ["backlog-executor"],
+  "resourceDecisions": {},
   "names": {
     "backlog-executor": "Tracker"
   },
@@ -51,8 +57,11 @@ outside squad state:
 }
 ```
 
-At least one of `packs` or `roles` is required. `names`, `models`, and `rationale`
-are optional. A supplied name must be unique in the selected roster. `models`
+At least one of `packs` or `roles` is required. `resourceDecisions` is required
+when a selected pack lists registered skills; it is empty or omitted otherwise.
+`availableSkills` carries the native host-visible inventory used for
+`available`. `names`, `models`, and `rationale` are optional. A supplied name
+must be unique in the selected roster. `models`
 is accepted only when the current roster already has active
 `ranked`, `economy`, or `manual` routing; otherwise new Model cells stay empty
 and lazy routing resolves them when those roles are first selected.

@@ -1084,8 +1084,10 @@ jobs:
             -CurrentThread $env:SOURCE_THREAD `
             -StableRef $env:STABLE_REF `
             -TrustedBaseSha $env:SQUAD_WATCH_TRUSTED_SHA `
-            -CatalogMarkdown ((& git -C $trusted show "$($env:SQUAD_WATCH_TRUSTED_SHA):squad-src/.github/skills/squad/references/profiles-and-packs.md") -join "`n")
-          # A selected pack fails closed: this checkout has no trusted installed-pack inventory.
+            -CatalogMarkdown ((& git -C $trusted show "$($env:SQUAD_WATCH_TRUSTED_SHA):squad-src/.github/skills/squad/references/profiles-and-packs.md") -join "`n") `
+            -InstalledPacks @() `
+            -InstalledSkills @()
+          # A selected pack fails closed: this hosted runner has no separately attested opt-in pack inventory.
           Copy-Item -LiteralPath $gate.Path -Destination (Join-Path $env:RUNNER_TEMP 'squad-watch-publication.json') -Force
           if ($gate.BlockPublication) {
             if ($env:GITHUB_STEP_SUMMARY) {

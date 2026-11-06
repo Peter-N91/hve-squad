@@ -58,6 +58,15 @@ BeforeAll {
         }
     }
 
+    function Get-PackResourceDecisions {
+        param([string]$Repo, [string[]]$Packs, [string]$Status = 'declined')
+        $data = Get-SquadInitData -RepoRoot $Repo
+        $inventory = @(Get-SquadPackResourceInventory -InitData $data -Pack $Packs -RepoRoot $Repo)
+        $decisions = [ordered]@{}
+        foreach ($resource in $inventory.resource) { $decisions[$resource] = $Status }
+        $decisions
+    }
+
     function Get-RegisteredAgentInstallCommand {
         param([Parameter(Mandatory)][string]$AgentName)
         $catalog = Join-Path $script:References 'roster-catalog.md'
@@ -206,6 +215,197 @@ Describe 'Compact confirmed initialization (COORD-01..03)' {
         $context.profiles.Count | Should -Be 11
         [Text.Encoding]::UTF8.GetByteCount($result.Output) | Should -BeLessThan 8000
         Test-Path -LiteralPath (Join-Path $repo '.copilot-tracking') | Should -BeFalse
+    }
+
+    It 'reports Foundry and Fabric pack resources with filesystem and host availability' {
+        $repo = New-FixtureRepo
+        Write-FixtureText (Join-Path $repo '.agents/skills/microsoft-foundry/SKILL.md') "---`nname: microsoft-foundry`ndescription: Fixture.`n---`n"
+        $foundry = Invoke-Local 'Get-SquadInitContext.ps1' $repo @('-RepoRoot', $repo, '-Pack', 'foundry')
+        $foundry.ExitCode | Should -Be 0 -Because $foundry.Output
+        $foundryContext = $foundry.Output | ConvertFrom-Json
+        @($foundryContext.packResources) | Should -HaveCount 6
+        $foundryResource = @($foundryContext.packResources | Where-Object resource -eq 'microsoft-foundry')[0]
+        $foundryResource.installedOnDisk | Should -BeTrue
+        $foundryResource.hostVisible | Should -BeFalse
+        $foundryResource.installed | Should -BeFalse
+        @($foundryContext.packResources | Where-Object resource -eq 'use-ai-gateway')[0].installOrEntry | Should -Match 'copilot plugin install ai-gateway@azure'
+
+        $fabric = Invoke-Local 'Get-SquadInitContext.ps1' $repo @(
+            '-RepoRoot', $repo, '-Pack', 'fabric', '-AvailableSkill', 'sqldw-cli'
+        )
+        $fabric.ExitCode | Should -Be 0 -Because $fabric.Output
+        $fabricContext = $fabric.Output | ConvertFrom-Json
+        @($fabricContext.packResources) | Should -HaveCount 8
+        $fabricResource = @($fabricContext.packResources | Where-Object resource -eq 'sqldw-cli')[0]
+        $fabricResource.hostVisible | Should -BeTrue
+        $fabricResource.installed | Should -BeTrue
+    }
+
+    It 'requires pack resource dispositions and persists the accepted Foundry activation' {
+        $repo = New-FixtureRepo
+        $data = Get-SquadInitData -RepoRoot $repo
+        $index = 0
+        foreach ($cast in $data.cast) {
+            $primary = $cast['Primary Agent (`name:`)']
+            if ($primary -notmatch '^[A-Za-z]' -or $primary -match '[/\\:]') { continue }
+            Write-FixtureText (Join-Path $repo '.github/agents' "fixture-$index.agent.md") "---`nname: $primary`n---`n"
+            $index++
+        }
+        $choices = New-Choices
+        $choices.profile = 'full'
+        $choices.packs = @('foundry')
+        { New-SquadInitPayload -Choices $choices -RepoRoot $repo } | Should -Throw '*resourceDecisions*'
+        $choices.resourceDecisions = Get-PackResourceDecisions -Repo $repo -Packs @('foundry') -Status 'available'
+        { New-SquadInitPayload -Choices $choices -RepoRoot $repo } | Should -Throw '*not visible*'
+        $choices.resourceDecisions = Get-PackResourceDecisions -Repo $repo -Packs @('foundry') -Status 'installed'
+        { New-SquadInitPayload -Choices $choices -RepoRoot $repo } | Should -Throw '*Invalid pack resource decision*'
+        $choices.resourceDecisions = Get-PackResourceDecisions -Repo $repo -Packs @('foundry') -Status 'available'
+        $choices.availableSkills = @($choices.resourceDecisions.Keys)
+
+        $choicesPath = Join-Path $repo 'foundry-choices.json'
+        $payloadPath = Join-Path $repo 'foundry-payload.json'
+        Write-FixtureJson $choicesPath $choices
+        $prepared = Invoke-Local 'Get-SquadInitContext.ps1' $repo @(
+            '-RepoRoot', $repo, '-ChoicesPath', $choicesPath, '-PayloadPath', $payloadPath
+        )
+        $prepared.ExitCode | Should -Be 0 -Because $prepared.Output
+        $payload = Get-Content -LiteralPath $payloadPath -Raw | ConvertFrom-Json -AsHashtable
+        @($payload.packs) | Should -Be @('foundry')
+        $payload.packResources.Count | Should -Be 6
+
+        $initialized = Invoke-Local 'Initialize-Squad.ps1' $repo @(
+            '-RepoRoot', $repo, '-PayloadPath', $payloadPath, '-Direct'
+        )
+        $initialized.ExitCode | Should -Be 0 -Because $initialized.Output
+        $root = Join-Path $repo '.copilot-tracking/squad'
+        [IO.File]::ReadAllText((Join-Path $root 'team.md')) | Should -Match '(?m)^Packs: foundry$'
+        [IO.File]::ReadAllText((Join-Path $root 'decisions.md')) | Should -Match 'Pack resources: .*microsoft-foundry=available'
+    }
+
+    It 'previews every missing Foundry and Fabric installer command without changing the repository' {
+        $repo = New-FixtureRepo
+        $before = Get-FixtureHash $repo
+        $receiptPath = Join-Path $repo 'whatif-receipt.json'
+        $unconfirmed = Invoke-Local 'Install-SquadPackResources.ps1' $repo @(
+            '-RepoRoot', $repo, '-Pack', 'foundry', '-WhatIf'
+        )
+        $unconfirmed.ExitCode | Should -Be 1
+        $unconfirmed.Output | Should -Match 'requires explicit confirmation'
+
+        $foundryResult = Invoke-Local 'Install-SquadPackResources.ps1' $repo @(
+            '-RepoRoot', $repo, '-Pack', 'foundry', '-ReceiptPath', $receiptPath,
+            '-Confirmed', '-WhatIf'
+        )
+        $foundryResult.ExitCode | Should -Be 0 -Because $foundryResult.Output
+        $foundryLine = @($foundryResult.Output -split '\r?\n' | Where-Object { $_ -match '^\{"schemaVersion"' })[-1]
+        $foundryReceipt = $foundryLine | ConvertFrom-Json
+        $foundryReceipt.status | Should -BeExactly 'PLANNED'
+        @($foundryReceipt.resources) | Should -HaveCount 6
+        @($foundryReceipt.resources.commands) -join "`n" | Should -Match 'apm install microsoft/azure-skills/skills/microsoft-foundry --target copilot'
+        @($foundryReceipt.resources.commands) -join "`n" | Should -Match 'copilot plugin install ai-gateway@azure'
+        Test-Path -LiteralPath $receiptPath | Should -BeFalse
+
+        $hostResult = Invoke-Local 'Install-SquadPackResources.ps1' $repo @(
+            '-RepoRoot', $repo, '-Pack', 'foundry', '-AvailableSkill', 'microsoft-foundry',
+            '-Confirmed', '-WhatIf'
+        )
+        $hostResult.ExitCode | Should -Be 0 -Because $hostResult.Output
+        $hostLine = @($hostResult.Output -split '\r?\n' | Where-Object { $_ -match '^\{"schemaVersion"' })[-1]
+        $hostReceipt = $hostLine | ConvertFrom-Json
+        @($hostReceipt.resources | Where-Object resource -eq 'microsoft-foundry')[0].status | Should -BeExactly 'available'
+
+        $fabricResult = Invoke-Local 'Install-SquadPackResources.ps1' $repo @(
+            '-RepoRoot', $repo, '-Pack', 'fabric', '-Confirmed', '-WhatIf'
+        )
+        $fabricResult.ExitCode | Should -Be 0 -Because $fabricResult.Output
+        $fabricLine = @($fabricResult.Output -split '\r?\n' | Where-Object { $_ -match '^\{"schemaVersion"' })[-1]
+        $fabricReceipt = $fabricLine | ConvertFrom-Json
+        $fabricReceipt.status | Should -BeExactly 'PLANNED'
+        @($fabricReceipt.resources) | Should -HaveCount 8
+        @($fabricReceipt.resources.commands) -join "`n" | Should -Match 'apm install microsoft/skills-for-fabric/skills/sqldw-cli --target copilot'
+        Get-FixtureHash $repo | Should -BeExactly $before
+    }
+
+    It 'writes PASS and FAIL receipts from actual installer outcomes without installing prerequisites' {
+        $successRepo = New-FixtureRepo
+        $bin = Join-Path $successRepo 'fake-bin'
+        $null = [IO.Directory]::CreateDirectory($bin)
+        $fakeApm = Join-Path $bin 'fake-apm.ps1'
+        Write-FixtureText $fakeApm @'
+$code = [int]$env:PACK_INSTALLER_EXIT
+if ($code -eq 0) {
+    $skillRoot = Join-Path $env:PACK_INSTALLER_REPO '.agents/skills/azure-aigateway'
+    $null = [IO.Directory]::CreateDirectory($skillRoot)
+    [IO.File]::WriteAllText((Join-Path $skillRoot 'SKILL.md'), "---`nname: azure-aigateway`ndescription: Fixture.`n---`n")
+}
+elseif ($env:PACK_INSTALLER_WRITE_ON_FAILURE -eq 'true') {
+    $skillRoot = Join-Path $env:PACK_INSTALLER_REPO '.agents/skills/azure-aigateway'
+    $null = [IO.Directory]::CreateDirectory($skillRoot)
+    [IO.File]::WriteAllText((Join-Path $skillRoot 'SKILL.md'), "---`nname:")
+}
+exit $code
+'@
+        if ($IsWindows) {
+            Write-FixtureText (Join-Path $bin 'apm.cmd') "@echo off`r`npwsh -NoProfile -File `"%~dp0fake-apm.ps1`"`r`nexit /b %ERRORLEVEL%`r`n"
+        }
+        else {
+            $launcher = Join-Path $bin 'apm'
+            Write-FixtureText $launcher "#!/usr/bin/env bash`npwsh -NoProfile -File `"`$(dirname `"`$0`")/fake-apm.ps1`"`n"
+            & chmod +x $launcher
+        }
+        $originalPath = $env:PATH
+        $originalRepo = $env:PACK_INSTALLER_REPO
+        $originalExit = $env:PACK_INSTALLER_EXIT
+        $originalWriteOnFailure = $env:PACK_INSTALLER_WRITE_ON_FAILURE
+        $successReceipt = Join-Path $successRepo 'success-receipt.json'
+        try {
+            $env:PATH = $bin + [IO.Path]::PathSeparator + $originalPath
+            $env:PACK_INSTALLER_REPO = $successRepo
+            $env:PACK_INSTALLER_EXIT = '0'
+            $env:PACK_INSTALLER_WRITE_ON_FAILURE = 'false'
+            $successResult = Invoke-Local 'Install-SquadPackResources.ps1' $successRepo @(
+                '-RepoRoot', $successRepo, '-Pack', 'foundry', '-Resource', 'azure-aigateway',
+                '-ReceiptPath', $successReceipt, '-Confirmed'
+            )
+            $successResult.ExitCode | Should -Be 0 -Because $successResult.Output
+            $success = Get-Content -LiteralPath $successReceipt -Raw | ConvertFrom-Json
+            $success.status | Should -BeExactly 'PASS'
+            $success.restartRequired | Should -BeTrue
+            $success.prerequisitesInstalled | Should -BeFalse
+            $success.resources[0].status | Should -BeExactly 'installed'
+            $contextResult = Invoke-Local 'Get-SquadInitContext.ps1' $successRepo @(
+                '-RepoRoot', $successRepo, '-Pack', 'foundry'
+            )
+            $contextResult.ExitCode | Should -Be 0 -Because $contextResult.Output
+            $context = $contextResult.Output | ConvertFrom-Json
+            $installedOnDisk = @($context.packResources | Where-Object resource -eq 'azure-aigateway')[0]
+            $installedOnDisk.installedOnDisk | Should -BeTrue
+            $installedOnDisk.installed | Should -BeFalse
+
+            $failureRepo = New-FixtureRepo
+            $failureReceipt = Join-Path $failureRepo 'failure-receipt.json'
+            $env:PACK_INSTALLER_REPO = $failureRepo
+            $env:PACK_INSTALLER_EXIT = '17'
+            $env:PACK_INSTALLER_WRITE_ON_FAILURE = 'true'
+            $failureResult = Invoke-Local 'Install-SquadPackResources.ps1' $failureRepo @(
+                '-RepoRoot', $failureRepo, '-Pack', 'foundry', '-Resource', 'azure-aigateway',
+                '-ReceiptPath', $failureReceipt, '-Confirmed'
+            )
+            $failureResult.ExitCode | Should -Be 1
+            $failure = Get-Content -LiteralPath $failureReceipt -Raw | ConvertFrom-Json
+            $failure.status | Should -BeExactly 'FAIL'
+            $failure.resources[0].status | Should -BeExactly 'failed'
+            $failure.resources[0].installedOnDisk | Should -BeFalse
+            $failure.restartRequired | Should -BeTrue
+            $failure.prerequisitesInstalled | Should -BeFalse
+            Test-Path -LiteralPath (Join-Path $failureRepo '.agents/skills/azure-aigateway/SKILL.md') | Should -BeTrue
+        }
+        finally {
+            $env:PATH = $originalPath
+            $env:PACK_INSTALLER_REPO = $originalRepo
+            $env:PACK_INSTALLER_EXIT = $originalExit
+            $env:PACK_INSTALLER_WRITE_ON_FAILURE = $originalWriteOnFailure
+        }
     }
 
     It 'refuses invalid or unconfirmed <Case> choices without state' -ForEach @(

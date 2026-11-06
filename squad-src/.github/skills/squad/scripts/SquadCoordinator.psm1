@@ -93,6 +93,28 @@ function Get-SquadAgentIndex {
     return ,$index
 }
 
+function Get-SquadSkillIndex {
+    param([Parameter(Mandatory)][string]$RepoRoot, [string[]]$AvailableSkill = @())
+    $index = [Collections.Generic.Dictionary[string, object]]::new([StringComparer]::Ordinal)
+    foreach ($file in Get-SquadSkillFile -RepoRoot $RepoRoot -ScriptRoot $PSScriptRoot) {
+        $text = [IO.File]::ReadAllText($file.FullName).TrimStart([char]0xfeff) -replace "`r`n", "`n"
+        $match = [regex]::Match($text, '\A---\n(?<front>.*?)\n---(?:\n|$)', 'Singleline')
+        if (-not $match.Success) { continue }
+        $name = [regex]::Match($match.Groups['front'].Value, '(?m)^name:[ \t]*(?<value>[^\n]+)$')
+        if (-not $name.Success) { continue }
+        $identity = $name.Groups['value'].Value.Trim().Trim('"', "'")
+        if (-not $identity -or $index.ContainsKey($identity)) { continue }
+        $index.Add($identity, [pscustomobject]@{ name = $identity; path = $file.FullName; source = 'filesystem' })
+    }
+    foreach ($identity in $AvailableSkill) {
+        if ($identity -cnotmatch '^[a-z0-9][a-z0-9-]*$') { throw "Invalid available skill identity: $identity" }
+        if (-not $index.ContainsKey($identity)) {
+            $index.Add($identity, [pscustomobject]@{ name = $identity; path = ''; source = 'host-inventory' })
+        }
+    }
+    return ,$index
+}
+
 function Get-SquadRoster {
     param([Parameter(Mandatory)][string]$SquadRoot)
     $tables = @(Read-SquadTables (Join-Path $SquadRoot 'team.md'))
@@ -139,12 +161,17 @@ function Get-SquadInitData {
     $profiles = @($tables | Where-Object { 'Profile' -in $_.Header -and 'Members (roles)' -in $_.Header })
     $packs = @($tables | Where-Object { 'Pack' -in $_.Header -and 'Adds (roles)' -in $_.Header })
     $roots = @($tables | Where-Object { 'Role' -in $_.Header -and 'Deliverable Root' -in $_.Header -and $_.Header.Count -eq 2 })
-    $cast = @(Read-SquadTables (Join-Path $script:SkillRoot 'references' 'roster-catalog.md') |
-            Where-Object { 'Primary Agent (`name:`)' -in $_.Header })
+    $catalogTables = @(Read-SquadTables (Join-Path $script:SkillRoot 'references' 'roster-catalog.md'))
+    $cast = @($catalogTables | Where-Object { 'Primary Agent (`name:`)' -in $_.Header })
+    $externalResources = @($catalogTables | Where-Object {
+            'Resource' -in $_.Header -and 'Resource Kind' -in $_.Header -and 'Install or Entry' -in $_.Header
+        })
+    $packSkills = @($catalogTables | Where-Object { 'Pack' -in $_.Header -and 'Skill' -in $_.Header -and $_.Header.Count -eq 2 })
     $seeds = @(Read-SquadTables (Join-Path $script:SkillRoot 'references' 'seed-templates.md') |
             Where-Object { 'Agent Name (Primary)' -in $_.Header })
-    if ($profiles.Count -ne 1 -or $packs.Count -ne 1 -or $roots.Count -ne 1 -or $cast.Count -ne 1 -or $seeds.Count -ne 1) {
-        throw 'The selected installation has ambiguous or missing profile, pack, cast, root, or seed tables.'
+    if ($profiles.Count -ne 1 -or $packs.Count -ne 1 -or $roots.Count -ne 1 -or $cast.Count -ne 1 -or
+        $externalResources.Count -ne 1 -or $packSkills.Count -ne 1 -or $seeds.Count -ne 1) {
+        throw 'The selected installation has ambiguous or missing profile, pack, cast, resource, root, or seed tables.'
     }
     $aliasesSection = Get-SquadReferenceSection $rulesPath '#### Deterministic Alias Wordlist'
     $aliasesMatch = [regex]::Match($aliasesSection, '(?s)```text\s*\n(?<names>.*?)\n```')
@@ -153,10 +180,122 @@ function Get-SquadInitData {
         profiles = $profiles[0].Rows
         packs = $packs[0].Rows
         cast = $cast[0].Rows
+        externalResources = $externalResources[0].Rows
+        packSkills = $packSkills[0].Rows
         roots = $roots[0].Rows
         seeds = $seeds[0].Rows
         aliases = @($aliasesMatch.Groups['names'].Value -split ',\s*')
     }
+}
+
+function Get-SquadPackResourceInventory {
+    param(
+        [Parameter(Mandatory)]$InitData,
+        [AllowEmptyCollection()][string[]]$Pack = @(),
+        [Parameter(Mandatory)][string]$RepoRoot,
+        [string[]]$AvailableSkill = @()
+    )
+    $selected = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+    foreach ($name in $Pack) {
+        if ($name -cnotmatch '^[a-z0-9][a-z0-9-]*$' -or -not @($InitData.packs | Where-Object { $_.Pack -ceq $name }).Count) {
+            throw "Unknown pack: $name"
+        }
+        $null = $selected.Add($name)
+    }
+    if (-not $selected.Count) { return @() }
+    $skillIndex = Get-SquadSkillIndex -RepoRoot $RepoRoot
+    $hostVisible = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+    foreach ($identity in $AvailableSkill) {
+        if ($identity -cnotmatch '^[a-z0-9][a-z0-9-]*$') { throw "Invalid available skill identity: $identity" }
+        $null = $hostVisible.Add($identity)
+    }
+    $inventory = [ordered]@{}
+    foreach ($mapping in $InitData.packSkills) {
+        $packName = [string]$mapping.Pack
+        if (-not $selected.Contains($packName)) { continue }
+        $resourceName = ([string]$mapping.Skill).Trim().Trim('`')
+        if ($resourceName -cnotmatch '^[a-z0-9][a-z0-9-]*$') { throw "Invalid registered pack skill: $resourceName" }
+        $rows = @($InitData.externalResources | Where-Object {
+                ([string]($_['Resource'])).Trim().Trim('`') -ceq $resourceName -and
+                ([string]($_['Resource Kind'])).Trim() -ceq 'skill' -and
+                ([string]$_.Tier).Trim() -ceq 'opt-in'
+            })
+        if (-not $rows.Count) { throw "Pack '$packName' references an unregistered opt-in skill: $resourceName" }
+        $commands = @($rows | ForEach-Object { ([string]($_['Install or Entry'])).Trim() } | Sort-Object -Unique)
+        $origins = @($rows | ForEach-Object { ([string]$_.Origin).Trim() } | Sort-Object -Unique)
+        $licenses = @($rows | ForEach-Object { ([string]$_.License).Trim() } | Sort-Object -Unique)
+        if ($commands.Count -ne 1 -or $origins.Count -ne 1 -or $licenses.Count -ne 1) {
+            throw "Pack skill '$resourceName' has inconsistent registry metadata."
+        }
+        if (-not $inventory.Contains($resourceName)) {
+            $inventory[$resourceName] = [ordered]@{
+                resource = $resourceName
+                packs = [Collections.Generic.List[string]]::new()
+                roles = @($rows | ForEach-Object { ([string]$_.Role).Trim() } | Sort-Object -Unique)
+                hostVisible = $hostVisible.Contains($resourceName)
+                installed = $hostVisible.Contains($resourceName)
+                installedOnDisk = $skillIndex.ContainsKey($resourceName)
+                installOrEntry = $commands[0]
+                origin = $origins[0]
+                license = $licenses[0]
+                prerequisites = @($rows | ForEach-Object { ([string]$_.Prerequisites).Trim() } | Sort-Object -Unique)
+            }
+        }
+        if ($packName -notin $inventory[$resourceName].packs) { $inventory[$resourceName].packs.Add($packName) }
+    }
+    @(
+        foreach ($entry in $inventory.Values) {
+            [ordered]@{
+                resource = $entry.resource
+                packs = $entry.packs.ToArray()
+                roles = $entry.roles
+                hostVisible = $entry.hostVisible
+                installed = $entry.installed
+                installedOnDisk = $entry.installedOnDisk
+                installOrEntry = $entry.installOrEntry
+                origin = $entry.origin
+                license = $entry.license
+                prerequisites = $entry.prerequisites
+            }
+        }
+    )
+}
+
+function Assert-SquadPackResourceDecisions {
+    param(
+        [Parameter(Mandatory)]$InitData,
+        [AllowEmptyCollection()][string[]]$Pack = @(),
+        [Parameter(Mandatory)][string]$RepoRoot,
+        $Decisions,
+        [string[]]$AvailableSkill = @()
+    )
+    $inventory = @(Get-SquadPackResourceInventory -InitData $InitData -Pack $Pack -RepoRoot $RepoRoot -AvailableSkill $AvailableSkill)
+    if (-not $inventory.Count) {
+        if ($null -ne $Decisions -and ($Decisions -isnot [Collections.IDictionary] -or $Decisions.Count)) {
+            throw 'resourceDecisions names resources that no selected pack owns.'
+        }
+        return [ordered]@{}
+    }
+    if ($Decisions -isnot [Collections.IDictionary]) {
+        throw 'Selected packs with registered skills require resourceDecisions.'
+    }
+    $ordered = [ordered]@{}
+    foreach ($entry in $inventory) {
+        $resource = $entry.resource
+        if (-not $Decisions.Contains($resource)) { throw "Missing pack resource decision: $resource" }
+        $status = [string]$Decisions[$resource]
+        if ($status -notin @('available', 'declined')) {
+            throw "Invalid pack resource decision for '$resource': $status"
+        }
+        if ($status -eq 'available' -and -not $entry.installed) {
+            throw "Pack resource '$resource' is not visible in the supplied host or filesystem inventory."
+        }
+        $ordered[$resource] = $status
+    }
+    foreach ($resource in $Decisions.Keys) {
+        if ($resource -notin $inventory.resource) { throw "Unknown pack resource decision: $resource" }
+    }
+    $ordered
 }
 
 function New-SquadInitPayload {
@@ -165,7 +304,7 @@ function New-SquadInitPayload {
         [Parameter(Mandatory)][string]$RepoRoot
     )
     $required = @('confirmed', 'squadRoot', 'runId', 'profile', 'naming', 'notify')
-    $optional = @('packs', 'roles', 'excludeRoles', 'names', 'modelRouting', 'models', 'mode', 'sessionModel', 'modelOverrides', 'usage')
+    $optional = @('packs', 'roles', 'excludeRoles', 'names', 'modelRouting', 'models', 'mode', 'sessionModel', 'modelOverrides', 'usage', 'resourceDecisions', 'availableSkills')
     foreach ($key in $required) {
         if (-not $Choices.Contains($key)) { throw "Missing confirmed Init choice: $key" }
     }
@@ -198,6 +337,15 @@ function New-SquadInitPayload {
             $roles += @($pack[0]['Adds (roles)'] -split ',\s*')
         }
     }
+    $availableSkills = @(
+        if ($Choices.Contains('availableSkills')) {
+            if ($Choices.availableSkills -isnot [array]) { throw 'availableSkills must be an array.' }
+            $Choices.availableSkills
+        }
+    )
+    $resourceDecisions = Assert-SquadPackResourceDecisions -InitData $data -Pack $packNames -RepoRoot $RepoRoot `
+        -Decisions $(if ($Choices.Contains('resourceDecisions')) { $Choices.resourceDecisions } else { $null }) `
+        -AvailableSkill $availableSkills
     $roles = @($roles | Select-Object -Unique)
     if ($Choices.Contains('excludeRoles')) {
         if ($Choices.excludeRoles -isnot [array]) { throw 'excludeRoles must be an array.' }
@@ -273,6 +421,9 @@ function New-SquadInitPayload {
         modelRouting = $routing
         notify = $Choices.notify
     }
+    if ($packNames.Count) { $payload.packs = $packNames }
+    if ($resourceDecisions.Count) { $payload.packResources = $resourceDecisions }
+    if ($availableSkills.Count) { $payload.availableSkills = $availableSkills }
     foreach ($key in @('mode', 'sessionModel', 'modelOverrides', 'usage')) {
         if ($Choices.Contains($key)) { $payload[$key] = $Choices[$key] }
     }
@@ -951,4 +1102,4 @@ function Get-SquadDepthPlan {
     $result
 }
 
-Export-ModuleMember -Function Read-SquadTables, Get-SquadReferenceSection, Get-SquadRulePath, Resolve-SquadRepositoryPath, Get-SquadAgentIndex, Get-SquadRoster, Invoke-SquadLocalScript, Get-SquadInitData, New-SquadInitPayload, Resolve-SquadConnectorExecution, Write-SquadTransportJson, Get-SquadFederationSnapshot, New-SquadOrchestrationConsumption, ConvertTo-SquadModelKey, Get-SquadRoleClassMap, Get-SquadDispatchReservation, Get-SquadDecision, Get-SquadPendingConnectors, Get-SquadDepthPlan, Get-SquadDepthStagePolicy, Get-SquadDepthClause, Get-SquadEconomyConsentScope, Test-SquadDeliverableFanOutPlan, Get-SquadDepthStageForUnit
+Export-ModuleMember -Function Read-SquadTables, Get-SquadReferenceSection, Get-SquadRulePath, Resolve-SquadRepositoryPath, Get-SquadAgentIndex, Get-SquadSkillIndex, Get-SquadRoster, Invoke-SquadLocalScript, Get-SquadInitData, Get-SquadPackResourceInventory, Assert-SquadPackResourceDecisions, New-SquadInitPayload, Resolve-SquadConnectorExecution, Write-SquadTransportJson, Get-SquadFederationSnapshot, New-SquadOrchestrationConsumption, ConvertTo-SquadModelKey, Get-SquadRoleClassMap, Get-SquadDispatchReservation, Get-SquadDecision, Get-SquadPendingConnectors, Get-SquadDepthPlan, Get-SquadDepthStagePolicy, Get-SquadDepthClause, Get-SquadEconomyConsentScope, Test-SquadDeliverableFanOutPlan, Get-SquadDepthStageForUnit

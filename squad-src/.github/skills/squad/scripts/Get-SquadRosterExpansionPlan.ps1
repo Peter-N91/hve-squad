@@ -313,7 +313,7 @@ function Assert-Baseline {
 try {
     $RepoRoot = (Resolve-Path -LiteralPath $RepoRoot).ProviderPath
     $choices = Get-Content -LiteralPath $ChoicesPath -Raw | ConvertFrom-Json -AsHashtable
-    Assert-FieldSet $choices @('confirmed', 'runId') @('packs', 'roles', 'names', 'models', 'rationale')
+    Assert-FieldSet $choices @('confirmed', 'runId') @('packs', 'roles', 'names', 'models', 'rationale', 'resourceDecisions', 'availableSkills')
     if ($choices.confirmed -isnot [bool] -or -not $choices.confirmed) {
         throw 'Roster expansion requires explicit user confirmation.'
     }
@@ -385,6 +385,15 @@ try {
             foreach ($role in $packRoles) { $null = $requestedRoles.Add($role) }
         }
     }
+    $availableSkills = @(
+        if ($choices.Contains('availableSkills')) {
+            if ($choices.availableSkills -isnot [array]) { throw 'availableSkills must be an array.' }
+            $choices.availableSkills
+        }
+    )
+    $resourceDecisions = Assert-SquadPackResourceDecisions -InitData $data -Pack $requestedPacks.ToArray() -RepoRoot $RepoRoot `
+        -Decisions $(if ($choices.Contains('resourceDecisions')) { $choices.resourceDecisions } else { $null }) `
+        -AvailableSkill $availableSkills
     if ($choices.Contains('roles')) {
         foreach ($role in $choices.roles) {
             Assert-Line $role
@@ -526,6 +535,7 @@ try {
         "* Already present: $(if ($alreadyPresent.Count) { $alreadyPresent -join ', ' } else { '(none)' })"
         "* Previous provenance: $provenance"
         "* Provenance: $nextProvenance"
+        "* Pack resources: $(if ($resourceDecisions.Count) { @($resourceDecisions.Keys | ForEach-Object { "$_=$($resourceDecisions[$_])" }) -join '; ' } else { '(none)' })"
         "* Rationale: $rationale"
         '* Accounting: no model or Scribe dispatch; consumption.md, consumption-sessions.json when present, state.json, rates, notifications, and history are preserved byte-for-byte.'
     ) -join "`n"
@@ -577,6 +587,7 @@ try {
         addedRoles = $plan.addedRoles
         alreadyPresentRoles = $plan.alreadyPresentRoles
         routingRowsAdded = $plan.routingRowsAdded
+        packResources = $resourceDecisions
         accountingPreserved = $true
         confirmationRequired = $true
         stateWritten = $false

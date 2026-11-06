@@ -159,6 +159,22 @@ BeforeAll {
                 names = @{ architect = 'Atlas' }
             }
         )
+        if ($Choices.Contains('packs') -and -not $Choices.Contains('resourceDecisions')) {
+            $decisions = [ordered]@{}
+            foreach ($pack in $Choices.packs) {
+                if ($pack -eq 'foundry') {
+                    foreach ($resource in @('microsoft-foundry', 'use-ai-gateway', 'azure-aigateway', 'caira', 'foundry-iq', 'appinsights-instrumentation')) {
+                        $decisions[$resource] = 'declined'
+                    }
+                }
+                elseif ($pack -eq 'fabric') {
+                    foreach ($resource in @('sqldw-cli', 'sqldb-cli', 'eventhouse-cli', 'eventstream-cli', 'spark-cli', 'dataflows-cli', 'databricks-migration', 'pipeline-migration')) {
+                        $decisions[$resource] = 'declined'
+                    }
+                }
+            }
+            if ($decisions.Count) { $Choices.resourceDecisions = $decisions }
+        }
         $choicesPath = Join-Path $Repo ("expand-choices-$([guid]::NewGuid().ToString('N')).json")
         $payloadPath = Join-Path $Repo ("expand-plan-$([guid]::NewGuid().ToString('N')).json")
         Write-Json $choicesPath $Choices
@@ -653,6 +669,19 @@ Describe 'Deterministic additive roster expansion' {
 }
 
 Describe 'All-present registered pack expansion' {
+    It 'rejects a pack when its registered skill dispositions are incomplete' {
+        $repo = New-RepoFixture
+        $null = Initialize-PlainSquad $repo
+        $plan = New-ExpansionPlan -Repo $repo -Choices @{
+            confirmed = $true
+            runId = 'foundry-missing-resources'
+            packs = @('foundry')
+            resourceDecisions = @{}
+        }
+        $plan.Result.ExitCode | Should -Be 1
+        $plan.Result.Output | Should -Match 'Missing pack resource decision'
+    }
+
     It 'applies full +foundry as metadata and provenance only' {
         $repo = New-RepoFixture
         $root = Initialize-ProfileSquad -Repo $repo -Profile 'full'
