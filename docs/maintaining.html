@@ -672,6 +672,21 @@ pwsh -File scripts/Invoke-ReleasePrep.ps1 -Version 1.0.0        # exact number, 
         GitHub Release, and retires the pre-release.
       </p>
       <p>
+        <strong>Plugin publication is a second manual decision.</strong> Dispatch
+        <strong>Publish Plugin</strong> with channel <code>stable</code> after the release is verified;
+        leaving <code>ref</code> blank selects the highest stable tag and updates this repository's
+        <code>plugin</code> branch. Use channel <code>preview</code> to publish the rolling pre-release
+        into <code>plugin-preview</code>. The workflow checks out the HVE Core commit pinned by the
+        selected ref, bundles its declared components, removes MCP configuration, and refuses changed
+        content with an unchanged plugin version.
+      </p>
+      <p>
+        <strong>Plugin Conformance</strong> builds the real pinned payload on Windows, macOS, and
+        Linux and checks the VS Code, CLI, and App package contracts. Before stable publication,
+        also perform one current-client smoke test in each host: the workflow proves portable
+        packaging, not authenticated desktop UI behavior.
+      </p>
+      <p>
         That makes releasing a judgement about readiness rather than a date. A quick fix ships as soon
         as you have verified it in the preview; a larger change sits in preview until it is ready, and
         anything merged in the meantime rides along with it.

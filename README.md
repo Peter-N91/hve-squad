@@ -5,14 +5,15 @@
 <h1 align="center">hve-squad</h1>
 
 <p align="center">
-  APM package that assembles HVE Core agents, prompts, instructions, and skills into one
-  installable bundle for Copilot target environments, and ships a Squad Coordinator that routes
-  your request to a cast of agents in parallel.
+  A GitHub Copilot plugin that bundles the pinned HVE Core cast with Squad agents, skills, rules,
+  and hooks, and ships a Squad Coordinator that routes your request to agents in parallel.
+  The APM package remains available as a repository-local fallback.
 </p>
 
 <!-- markdownlint-disable MD013 MD033 -->
 <p align="center">
   <a href="https://github.com/Peter-N91/hve-squad/actions/workflows/pr-validation.yml"><img src="https://github.com/Peter-N91/hve-squad/actions/workflows/pr-validation.yml/badge.svg" alt="PR Validation" /></a>
+  <a href="https://github.com/Peter-N91/hve-squad/actions/workflows/plugin-conformance.yml"><img src="https://github.com/Peter-N91/hve-squad/actions/workflows/plugin-conformance.yml/badge.svg" alt="Plugin Conformance" /></a>
   <a href="https://github.com/Peter-N91/hve-squad/actions/workflows/codeql.yml"><img src="https://github.com/Peter-N91/hve-squad/actions/workflows/codeql.yml/badge.svg" alt="CodeQL" /></a>
   <a href="https://github.com/Peter-N91/hve-squad/actions/workflows/zizmor.yml"><img src="https://github.com/Peter-N91/hve-squad/actions/workflows/zizmor.yml/badge.svg" alt="Zizmor" /></a>
   <a href="https://github.com/Peter-N91/hve-squad/actions/workflows/checkov.yml"><img src="https://github.com/Peter-N91/hve-squad/actions/workflows/checkov.yml/badge.svg" alt="Checkov" /></a>
@@ -76,9 +77,9 @@ Full documentation lives on the project site:
 | Page                                                                          | What it covers                                                           |
 |-------------------------------------------------------------------------------|--------------------------------------------------------------------------|
 | [Concepts](https://peter-n91.github.io/hve-squad/concepts.html)               | The vocabulary in one place: teams, federations, profiles, packs, `init`, `promote`, autopilot, and where state lives |
-| [Getting Started](https://peter-n91.github.io/hve-squad/getting-started.html) | Prerequisites, installing the package with the correct target, first run |
+| [Getting Started](https://peter-n91.github.io/hve-squad/getting-started.html) | Plugin install and updates, preview testing, APM fallback, first run       |
 | [Usage](https://peter-n91.github.io/hve-squad/usage.html)                     | Profiles, autonomy modes, cost ceilings, remote approval, and Init Mode  |
-| [Ecosystem](https://peter-n91.github.io/hve-squad/ecosystem.html)             | The MCP server and the Copilot CLI plugin, and which surface to use      |
+| [Ecosystem](https://peter-n91.github.io/hve-squad/ecosystem.html)             | The plugin, APM fallback, MCP server, MAF host, and which surface to use |
 | [Maintaining](https://peter-n91.github.io/hve-squad/maintaining.html)         | Dependency generation, author workflow, customization, release process   |
 | [Troubleshooting](https://peter-n91.github.io/hve-squad/troubleshooting.html) | Known install errors with fixes, versioning, and repository notes        |
 
@@ -114,19 +115,17 @@ for actual results and the [benchmark guide](benchmarks/efficiency/README.md) fo
 
 ## Related repositories
 
-This repository is the source of truth. The squad also ships through two sibling repositories,
-each generated from a tagged `hve-squad` release rather than maintained as a fork:
+This repository is the source of truth and now publishes the installable plugin from its own
+`plugin` and `plugin-preview` branches. Two host integrations remain separate repositories:
 
 - **[hve-squad-mcp](https://github.com/Peter-N91/hve-squad-mcp)** — an outbound MCP server that
   publishes the squad as model-invocable tools, so hosts such as Copilot Studio can call it.
   Docs: [peter-n91.github.io/hve-squad-mcp](https://peter-n91.github.io/hve-squad-mcp/)
-- **[hve-squad-plugin](https://github.com/Peter-N91/hve-squad-plugin)** — a generated,
-  release-gated mirror of the squad's GitHub Copilot CLI plugin tree, published as a plugin
-  marketplace. Docs: [peter-n91.github.io/hve-squad-plugin](https://peter-n91.github.io/hve-squad-plugin/)
+- **[hve-squad-maf](https://github.com/Peter-N91/hve-squad-maf)** — the Microsoft Agent Framework
+  host for running Squad through MAF without changing the plugin distribution.
 
-Use this package when you want the Squad agents in VS Code Copilot Chat with the full cast installed in your
-repository, the plugin when you want the squad in the Copilot CLI or desktop app with no `apm install`,
-and the MCP server when another host should call the squad as tools. See
+Use the plugin for VS Code, Copilot CLI, and the Copilot app. Use APM only when the customization
+must be copied into a repository, and use the MCP or MAF repository for those host models. See
 [Ecosystem](https://peter-n91.github.io/hve-squad/ecosystem.html) for the full comparison.
 
 ## Quick start
@@ -138,19 +137,26 @@ hand-derived ledgers. Install it with `winget install --id Microsoft.PowerShell 
 `brew install --cask powershell` (macOS) or your distribution's
 [package](https://learn.microsoft.com/powershell/scripting/install/installing-powershell) (Linux).
 
-The APM installation path currently requires **APM CLI 0.29.0**. A regression in APM
-0.29.1 and 0.30.0 causes 11 HVE Squad dependencies to fail, so do not use an unversioned
-latest installation for now. Confirm the CLI version before installing the package:
+Install the stable plugin marketplace and its single plugin:
+
+```text
+copilot plugin marketplace add Peter-N91/hve-squad#plugin
+copilot plugin install hve-squad@hve-squad
+```
+
+In VS Code or the Copilot app, add `Peter-N91/hve-squad#plugin` from **Customize → Plugins**
+and install `hve-squad`. The one plugin already contains the exact HVE Core commit validated
+with that release and contains no MCP server registration.
+
+The APM fallback currently requires **APM CLI 0.29.0**:
 
 ```powershell
 apm --version  # must report 0.29.0
 apm install "Peter-N91/hve-squad#vX.Y.z" --target copilot
 ```
 
-See [Getting Started](https://peter-n91.github.io/hve-squad/getting-started.html) for pinned
-APM installation commands for Windows and macOS, and
-[Troubleshooting](https://peter-n91.github.io/hve-squad/troubleshooting.html) if an earlier
-attempt left a partial installation.
+See [Getting Started](https://peter-n91.github.io/hve-squad/getting-started.html) for updates,
+the `plugin-preview` test channel, APM fallback commands, and troubleshooting.
 
 Then open the agents dropdown in VS Code Copilot Chat, select **Squad Coordinator**, and initialize the squad:
 

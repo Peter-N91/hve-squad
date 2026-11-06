@@ -77,6 +77,7 @@ BeforeAll {
     $script:SourceRootResolved = (Resolve-Path -LiteralPath $SourceRoot).Path
     $script:BuildScript = Join-Path $script:SourceRootResolved 'scripts/Build-SquadPlugin.ps1'
     $script:PluginOutputRoot = Join-Path $TestDrive 'd7-plugin-output'
+    $script:HveCoreRoot = Join-Path $TestDrive 'd7-hve-core'
 
     # Re-derived rather than trusted from BeforeDiscovery: Discovery and Run execute
     # in independent script scopes when multiple Pester containers run together, so a
@@ -84,26 +85,31 @@ BeforeAll {
     $script:KnowledgeDocsRoot = Join-Path $script:SourceRootResolved 'knowledge-docs'
     $script:HasKnowledgeDocs = Test-Path -LiteralPath $script:KnowledgeDocsRoot -PathType Container
 
-    # Build-SquadPlugin.ps1 writes hooks.json referencing pre-existing hook scripts
-    # under OutputRoot/hooks/scripts/ but does not generate them itself, so a realistic
-    # build needs them seeded first -- same convention as Build-SquadPlugin.Tests.ps1.
-    $hookScriptRoot = Join-Path $script:PluginOutputRoot 'hooks/scripts'
-    New-Item -ItemType Directory -Path $hookScriptRoot -Force | Out-Null
-    foreach ($name in @(
-            'autonomous-escalation-check', 'dispatch-guards', 'impactful-action-gate',
-            'notification-audit', 'prompt-injection-note', 'session-start-check', 'state-write-guard'
-        )) {
-        foreach ($extension in @('ps1', 'sh')) {
-            Set-Content -LiteralPath (Join-Path $hookScriptRoot "$name.$extension") -Value '' -Encoding utf8NoBOM
-        }
+    $hveAgent = Join-Path $script:HveCoreRoot '.github/agents/security/security-planner.agent.md'
+    $hveSkill = Join-Path $script:HveCoreRoot '.github/skills/security/secure-by-design/SKILL.md'
+    foreach ($path in @($hveAgent, $hveSkill)) {
+        New-Item -ItemType Directory -Path (Split-Path -Parent $path) -Force | Out-Null
     }
+    Set-Content -LiteralPath $hveAgent -Value "---`nname: Security Planner`n---`n# Security Planner`n" -Encoding utf8NoBOM
+    Set-Content -LiteralPath $hveSkill -Value "---`nname: secure-by-design`ndescription: Fixture skill`n---`n# Skill`n" -Encoding utf8NoBOM
+    Set-Content -LiteralPath (Join-Path $script:HveCoreRoot 'LICENSE') -Value 'MIT fixture' -Encoding utf8NoBOM
+    $hveManifest = [ordered]@{
+        name = 'hve-core'; version = '0.0.0-test'
+        agents = @('.github/agents/security/security-planner.agent.md')
+        commands = @(); rules = @()
+        skills = @('.github/skills/security/secure-by-design')
+        extensions = @()
+    }
+    Set-Content -LiteralPath (Join-Path $script:HveCoreRoot 'plugin.json') `
+        -Value (($hveManifest | ConvertTo-Json -Depth 6) + "`n") -Encoding utf8NoBOM
 
     $pwsh = (Get-Process -Id $PID).Path
     $buildOutput = @(
         & $pwsh -NoProfile -File $script:BuildScript `
             -SourceRoot $script:SourceRootResolved `
             -OutputRoot $script:PluginOutputRoot `
-            -McpVersion '0.0.0-test' 2>&1
+            -HveCoreRoot $script:HveCoreRoot `
+            -AllowUnverifiedHveCoreSource 2>&1
     )
     $script:BuildExitCode = $LASTEXITCODE
     $script:BuildOutputText = $buildOutput -join "`n"

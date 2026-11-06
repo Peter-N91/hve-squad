@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Ecosystem — hve-squad</title>
-  <meta name="description" content="The three hve-squad repositories — the APM package, the MCP server, and the Copilot CLI plugin — what each one is for and where its documentation lives." />
+  <meta name="description" content="The hve-squad plugin, APM fallback, MCP server, and MAF host — what each surface is for and where it lives." />
   <link rel="icon" type="image/svg+xml" href="assets/logo.svg" />
   <script src="assets/theme.js"></script>
   <link rel="stylesheet" href="assets/style.css" />
@@ -36,15 +36,15 @@
       <div class="eyebrow">Reference</div>
       <h1>Ecosystem</h1>
       <p class="lead">
-        The squad ships through three repositories. This one is the source of truth; the other two
-        are distribution surfaces that carry the same cast to hosts an APM install cannot reach.
+        This repository owns the Copilot plugin and APM fallback. The MCP and MAF repositories carry
+        the same squad model into their respective host runtimes.
       </p>
     </div>
   </header>
 
   <main class="content">
     <div class="container">
-      <h2>The three repositories</h2>
+      <h2>The plugin and related repositories</h2>
 
       <table>
         <thead>
@@ -57,7 +57,7 @@
         <tbody>
           <tr>
             <td><a href="https://github.com/Peter-N91/hve-squad"><code>hve-squad</code></a></td>
-            <td>This repository. The APM package and the authored squad source (<code>squad-src/</code>) that both other repositories are built from.</td>
+            <td>This repository. It owns the authored squad source, the APM fallback, and the generated stable and preview plugin branches.</td>
             <td><a href="index.html">peter-n91.github.io/hve-squad</a></td>
           </tr>
           <tr>
@@ -66,19 +66,18 @@
             <td><a href="https://peter-n91.github.io/hve-squad-mcp/">peter-n91.github.io/hve-squad-mcp</a></td>
           </tr>
           <tr>
-            <td><a href="https://github.com/Peter-N91/hve-squad-plugin"><code>hve-squad-plugin</code></a></td>
-            <td>A generated, release-gated mirror of the squad's GitHub Copilot CLI plugin tree, published as a plugin marketplace.</td>
-            <td><a href="https://peter-n91.github.io/hve-squad-plugin/">peter-n91.github.io/hve-squad-plugin</a></td>
+            <td><a href="https://github.com/Peter-N91/hve-squad-maf"><code>hve-squad-maf</code></a></td>
+            <td>The Microsoft Agent Framework host for running the squad through MAF.</td>
+            <td><a href="https://github.com/Peter-N91/hve-squad-maf">Repository documentation</a></td>
           </tr>
         </tbody>
       </table>
 
       <div class="callout">
         <p>
-          <strong>One cast, three doors.</strong> The roster, routing tables, and gates are authored
-          once here. The MCP server and the plugin do not fork that behavior &mdash; each is built
-          from a tagged <code>hve-squad</code> release, so a given version of any surface corresponds
-          to a known version of this package.
+          <strong>One cast, multiple hosts.</strong> The roster, routing tables, and gates are authored
+          once here. The plugin bundles the exact HVE Core commit pinned by its source release.
+          The MCP and MAF repositories remain separate host integrations rather than plugin dependencies.
         </p>
       </div>
 
@@ -94,19 +93,24 @@
         </thead>
         <tbody>
           <tr>
-            <td>Select the <strong>Squad Coordinator</strong> agent in VS Code Copilot Chat with the full cast in your repository</td>
-            <td>This APM package</td>
-            <td><code>apm install</code> &mdash; see <a href="getting-started.html">Getting Started</a></td>
+            <td>Run the squad from VS Code, Copilot CLI, or the Copilot app</td>
+            <td>The <code>hve-squad</code> plugin in this repository</td>
+            <td>Add <code>Peter-N91/hve-squad#plugin</code> and install <code>hve-squad</code></td>
           </tr>
           <tr>
-            <td>Run the squad from the GitHub Copilot CLI or the desktop app, with no APM install</td>
-            <td><code>hve-squad-plugin</code></td>
-            <td><code>copilot plugin marketplace add</code></td>
+            <td>Copy the full customization set into one repository</td>
+            <td>The APM fallback</td>
+            <td><code>apm install</code> &mdash; see <a href="getting-started.html">Getting Started</a></td>
           </tr>
           <tr>
             <td>Call the squad as tools from an MCP host such as Copilot Studio</td>
             <td><code>hve-squad-mcp</code></td>
             <td>stdio server locally, or a deployed HTTP endpoint</td>
+          </tr>
+          <tr>
+            <td>Run the squad through Microsoft Agent Framework</td>
+            <td><code>hve-squad-maf</code></td>
+            <td>Follow that repository's host setup</td>
           </tr>
         </tbody>
       </table>
@@ -158,59 +162,43 @@
         <a href="https://peter-n91.github.io/hve-squad-mcp/deploy.html">Deploy</a>.
       </p>
 
-      <h2>hve-squad-plugin — the Copilot CLI plugin</h2>
+      <h2>hve-squad — the Copilot plugin</h2>
 
       <p>
-        <a href="https://github.com/Peter-N91/hve-squad-plugin">github.com/Peter-N91/hve-squad-plugin</a>
-        &middot;
-        <a href="https://peter-n91.github.io/hve-squad-plugin/">docs site</a>
+        The plugin is generated from this repository by
+        <a href="https://github.com/Peter-N91/hve-squad/blob/main/scripts/Build-SquadPlugin.ps1"><code>scripts/Build-SquadPlugin.ps1</code></a>.
+        Manual publication writes stable output to the <code>plugin</code> branch and test output to
+        <code>plugin-preview</code>. Each branch contains one marketplace entry and one plugin.
       </p>
 
-      <p>
-        That repository is generated output, never hand-edited. Its <code>agents/</code>,
-        <code>skills/</code>, and <code>.github/plugin/plugin.json</code> are regenerated by
-        <a href="https://github.com/Peter-N91/hve-squad/blob/main/scripts/Build-SquadPlugin.ps1"><code>scripts/Build-SquadPlugin.ps1</code></a>
-        only when this repository cuts a release, extracted from that release's immutable git tag.
-        It exists so the distribution tree lives outside this working tree, mirroring the
-        <code>hve-squad-mcp</code> sibling-repo pattern.
-      </p>
-
-      <p>The marketplace publishes <strong>two entries, installed as a pair</strong>:</p>
-
-      <pre><code>copilot plugin marketplace add Peter-N91/hve-squad-plugin
-copilot plugin install hve-squad@hve-squad-plugin
-copilot plugin install hve-squad-hve-core@hve-squad-plugin</code></pre>
+      <pre><code>copilot plugin marketplace add Peter-N91/hve-squad#plugin
+copilot plugin install hve-squad@hve-squad</code></pre>
 
       <div class="callout warn">
         <p>
-          <strong>Two rules govern every later update.</strong> <code>hve-squad-hve-core</code> must be
-          uninstalled and reinstalled rather than updated &mdash; <code>copilot plugin update</code>
-          compares upstream hve-core's own version, so a moved pin reports <code>already at latest</code>
-          and the files never change. And do not <em>also</em> install the official <code>hve-core</code>
-          plugin next to it, or a dispatch can land on an unpinned second copy of every hve-core agent.
-          Both rules are explained in full on
-          <a href="https://peter-n91.github.io/hve-squad-plugin/install-cli.html">Install: Copilot CLI</a>.
+          <strong>HVE Core is bundled, not discovered beside the plugin.</strong> The generated tree
+          copies every component declared by the exact HVE Core commit pinned in <code>apm.yml</code>
+          and records that commit in <code>.github/plugin/hve-core-source.json</code>. A normal plugin
+          update therefore refreshes Squad and HVE Core together. Do not install a second
+          <code>hve-core</code> plugin.
         </p>
       </div>
 
       <p>
-        Useful entry points on its site:
-        <a href="https://peter-n91.github.io/hve-squad-plugin/install-cli.html">Install: Copilot CLI</a>,
-        <a href="https://peter-n91.github.io/hve-squad-plugin/install-desktop.html">Install: Desktop app</a>,
-        <a href="https://peter-n91.github.io/hve-squad-plugin/install-vscode.html">Install: VS Code notes</a>,
-        <a href="https://peter-n91.github.io/hve-squad-plugin/architecture.html">Architecture</a>, and
-        <a href="https://peter-n91.github.io/hve-squad-plugin/enterprise-push.html">Enterprise Push</a>.
+        The plugin has no <code>mcp.json</code> or <code>.mcp.json</code>. Install
+        <code>hve-squad-mcp</code> separately only when an MCP host needs the outbound tools.
+        Stable, preview, update, and fallback instructions live in
+        <a href="getting-started.html">Getting Started</a>.
       </p>
 
       <h2>How releases stay aligned</h2>
 
       <p>
-        Neither sibling repository is a fork. Both are produced from a tagged
-        <code>hve-squad</code> release, and each records the tag it was built from &mdash; the plugin
-        repository states its source tag and extraction date in its README, and each MCP release is
-        pinned to a matching package version. When this repository cuts a release, the downstream
-        surfaces are regenerated from it rather than drifting on their own schedule. See
-        <a href="maintaining.html">Maintaining</a> for the release process on this side.
+        Plugin publication remains manual. The workflow selects an immutable stable or rolling
+        preview ref, checks out the HVE Core commit pinned by that ref, builds the self-contained
+        plugin, and updates the matching branch in this repository. A content change without a
+        plugin-version change is rejected so installed clients can detect updates. MCP and MAF keep
+        their own release processes. See <a href="maintaining.html">Maintaining</a>.
       </p>
 
       <div class="pager">

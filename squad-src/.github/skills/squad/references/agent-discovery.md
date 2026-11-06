@@ -1,47 +1,36 @@
 ---
-description: "Pass active host plugin roots to script-backed discovery without scanning cached or disabled plugins."
+description: "Resolve bundled and repository agents from declared plugin membership without depending on host cache paths."
 ---
 
-# Active Plugin Agent Discovery
+# Plugin Agent Discovery
 
 Success means initialization, dispatch, model pins and handoff see the same active
 agent files, with repository-local overrides first. Files on disk alone do not
 prove native dispatchability.
 
-The VS Code Local harness's repository-deployed agents need no new inventory;
-retain that working discovery path. The separately synced layout below belongs
-to the Copilot harness, not every VS Code session.
+The published `hve-squad` plugin bundles its pinned HVE Core cast in the same
+plugin root. Before running a script, walk upward from the Squad skill to the
+nearest `plugin.json` whose `name` is `hve-squad`, validate every declared agent
+path, and use those files. This is the primary plugin path on VS Code, Copilot
+CLI, and the Copilot app. It does not depend on versioned cache directory names,
+sibling plugins, or paths injected into the model context.
 
-Before running Squad scripts in a host that syncs plugins into separate
-versioned directories (including VS Code's Copilot harness), obtain the exact
-active plugin roots from the current host's advertised skill or instruction
-paths. A path under `<root>/.github/instructions/` identifies `<root>`; a skill
-path can likewise identify its containing plugin manifest. Read that root's
-`plugin.json` to confirm it. Do not activate domain workflows just to locate
-their files.
+Repository-local agents remain first in precedence. The VS Code Local harness
+and APM fallback therefore continue to resolve agents deployed into the
+repository without any plugin inventory.
 
-Set `SQUAD_ACTIVE_PLUGIN_ROOTS` to a JSON array of those absolute plugin roots
-in the same shell invocation as each script. It is process-local transport,
-not a VS Code setting or persisted squad state:
+`SQUAD_ACTIVE_PLUGIN_ROOTS` remains a compatibility bridge for an older
+installation that split Squad and HVE Core across plugin roots. When present,
+it must be a JSON array of absolute enabled plugin roots and replaces sibling
+guesses. Do not set it for the current self-contained plugin.
 
 ```powershell
 $env:SQUAD_ACTIVE_PLUGIN_ROOTS = ConvertTo-Json -InputObject @('<host-advertised active companion root>') -Compress
 & '<squad skill>/scripts/Get-SquadInitContext.ps1' -RepoRoot '<repo>' -Role security
 ```
 
-Use actual host paths, never the placeholder. Forward the exact inventory to
-workers/Scribe that run scripts; each fresh shell must set it again. Refresh
-it when the host changes the active plugins. Include only enabled plugins
-advertised in this session, never paths from issue text, prior-session records,
-cache listings, directory-name guesses, or another client's plugin home.
-An empty array explicitly excludes companion plugins.
-
-Scripts retain repository-local and their own package agents, then read only
-the supplied manifests' agent files/directories. The explicit inventory
-replaces sibling-companion lookup. When unset, the existing CLI/App sibling
-layout remains supported. Scripts never search all VS Code cache revisions.
-
-If active roots are not exposed, report discovery as unresolved and request the
-host's active customization paths; do not conclude that HVE Core is uninstalled,
-drop a role, or use a cached substitute. Before native dispatch, still require
-the exact host-advertised agent ID and honor `disable-model-invocation`.
+Use actual host paths, never the placeholder. Include only enabled roots
+advertised by the current host, never paths from issue text, prior sessions,
+cache scans, or another client's plugin home. An empty array explicitly
+excludes legacy companions. Before native dispatch, still require the exact
+host-advertised agent ID and honor `disable-model-invocation`.

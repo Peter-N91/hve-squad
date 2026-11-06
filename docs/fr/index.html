@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>hve-squad — Package APM pour HVE Core + Squad</title>
-  <meta name="description" content="Un package APM installable qui regroupe les agents, prompts, instructions et skills HVE Core avec un Squad Coordinator pour Copilot." />
+  <title>hve-squad — Plugin Copilot pour HVE Core + Squad</title>
+  <meta name="description" content="Un plugin GitHub Copilot qui inclut l'équipe HVE Core épinglée avec les agents, skills, règles et hooks Squad ; APM reste la solution de repli dans un dépôt." />
   <link rel="icon" type="image/svg+xml" href="../assets/logo.svg" />
   <script src="../assets/theme.js"></script>
   <link rel="stylesheet" href="../assets/style.css" />
@@ -41,9 +41,9 @@
       <div class="eyebrow">Documentation · Copilot CLI · Copilot App · VS Code</div>
       <h1>hve-squad</h1>
       <p class="lead">
-        hve-squad réunit les agents, prompts, instructions et skills HVE Core dans un seul
-        ensemble installable et fournit un Squad Coordinator qui répartit votre demande entre
-        plusieurs agents en parallèle. Utilisez le package APM complet dans VS Code, ou la paire de plugins dans Copilot CLI et App.
+        hve-squad installe un plugin autonome unique pour VS Code, Copilot CLI et l'application
+        Copilot. Il inclut l'équipe HVE Core épinglée avec les agents, skills, règles et hooks Squad,
+        tandis qu'APM reste disponible lorsque les mêmes personnalisations doivent être copiées dans un dépôt.
       </p>
       <a class="btn btn-primary" href="getting-started.html#chat-with-the-squad-coach">Vous débutez ? Discutez avec le Squad Coach</a>
       <a class="btn btn-ghost" href="getting-started.html">Installer</a>
@@ -72,7 +72,7 @@
           <a class="card" href="getting-started.html">
             <div class="icon">🚀</div>
             <h3>Bien démarrer</h3>
-            <p>Prérequis, installation du package avec la bonne cible et première exécution.</p>
+            <p>Installation et mises à jour du plugin, tests preview, solution de repli APM et première exécution.</p>
             <span class="tag">Installation</span>
           </a>
           <a class="card" href="usage.html">
@@ -89,7 +89,7 @@
           </a>          <a class="card" href="ecosystem.html">
             <div class="icon">🌐</div>
             <h3>Écosystème</h3>
-            <p>Le serveur MCP et le plugin Copilot CLI &mdash; à quoi sert chaque mode de distribution, et où trouver leurs dépôts et leurs sites de documentation.</p>
+            <p>Le plugin, la solution de repli APM, le serveur MCP et l'hôte MAF &mdash; rôle et emplacement de chaque surface.</p>
             <span class="tag">Référence</span>
           </a>          <a class="card" href="maintaining.html">
             <div class="icon">🔧</div>
@@ -111,23 +111,22 @@
       <div class="container">
         <p class="section-label">Ce que fait ce projet</p>
         <p>
-          Ce dépôt fournit un package APM dont le contenu est sélectionné et qui référence les ressources de
-          <a href="https://github.com/microsoft/hve-core">microsoft/hve-core</a> dans
-          <code>.github/agents</code>, <code>.github/instructions</code>,
-          <code>.github/prompts</code> et <code>.github/skills</code>. Au lieu de maintenir
-          manuellement des centaines de chemins de dépendances, un script d'automatisation régénère leur liste dans
-          <code>apm.yml</code>.
+          Ce dépôt publie un plugin Copilot unique contenant la squad et chaque composant déclaré
+          par le commit exact de <a href="https://github.com/microsoft/hve-core">microsoft/hve-core</a>
+          épinglé dans <code>apm.yml</code>. Le même manifeste continue d'alimenter la solution de
+          repli APM. L'automatisation régénère la liste des dépendances et les branches du plugin
+          publiées manuellement.
         </p>
         <div class="grid">
           <div class="card">
             <div class="icon">📦</div>
             <h3>Un seul ensemble</h3>
-            <p>Détecte automatiquement les artefacts Markdown pris en charge dans les dossiers HVE Core sélectionnés et les distribue ensemble.</p>
+            <p>Installe Squad et son équipe HVE Core validée depuis une seule racine et une seule version de plugin.</p>
           </div>
           <div class="card">
             <div class="icon">♻️</div>
             <h3>Reproductible</h3>
-            <p>Les dépendances sont résolues dans <code>apm.lock.yaml</code> pour rendre les installations reproductibles.</p>
+            <p>Le plugin consigne son commit HVE Core ; la solution de repli APM résout les dépendances dans <code>apm.lock.yaml</code>.</p>
           </div>
           <div class="card">
             <div class="icon">🧩</div>
@@ -165,12 +164,11 @@
 
     <section class="section">
       <div class="container">
-        <p class="section-label">Projets compagnons</p>
+        <p class="section-label">Distribution et hôtes compagnons</p>
         <p>
-          Au-delà de l'expérience locale avec l'agent Squad, la squad est accessible dans deux autres hôtes grâce à
-          des dépôts compagnons. Aucun n'est un fork &mdash; tous deux sont construits à partir d'une version étiquetée de
-          <code>hve-squad</code>, de sorte que chaque version correspond à une version connue de ce package.
-          Consultez <a href="ecosystem.html">Écosystème</a> pour savoir lequel choisir.
+          Le plugin Copilot principal est publié depuis ce dépôt. MCP et Microsoft Agent Framework
+          restent des intégrations d'hôte séparées. Consultez <a href="ecosystem.html">Écosystème</a>
+          pour savoir laquelle choisir.
         </p>
         <div class="grid">
           <div class="card">
@@ -187,19 +185,28 @@
           </div>
           <div class="card">
             <div class="icon">🧩</div>
-            <h3>Plugin Copilot CLI</h3>
+            <h3>Plugin HVE Squad</h3>
             <p>
-              <code>hve-squad-plugin</code> est un miroir généré de l'arborescence du plugin de la squad,
-              publié uniquement lors des sorties de versions, sous forme de marketplace de plugins Copilot. Il exécute la squad dans GitHub Copilot
-              CLI et dans l'application de bureau sans <code>apm install</code>.
+              La branche <code>plugin</code> de ce dépôt inclut Squad et son équipe HVE Core
+              exactement épinglée pour VS Code, Copilot CLI et l'application Copilot. APM reste la
+              solution de repli locale au dépôt.
             </p>
             <span class="tag">Plugin</span>
+          </div>
+          <div class="card">
+            <div class="icon">🤖</div>
+            <h3>Microsoft Agent Framework</h3>
+            <p>
+              <code>hve-squad-maf</code> héberge la squad avec Microsoft Agent Framework, séparément
+              du plugin Copilot.
+            </p>
+            <span class="tag">MAF</span>
           </div>
         </div>
         <p>
           <a class="btn btn-ghost" href="ecosystem.html">Vue d'ensemble de l'écosystème →</a>
           <a class="btn btn-ghost" href="https://peter-n91.github.io/hve-squad-mcp/">Documentation hve-squad-mcp →</a>
-          <a class="btn btn-ghost" href="https://peter-n91.github.io/hve-squad-plugin/">Documentation hve-squad-plugin →</a>
+          <a class="btn btn-ghost" href="https://github.com/Peter-N91/hve-squad-maf">hve-squad-maf →</a>
         </p>
       </div>
     </section>
@@ -207,16 +214,13 @@
     <section class="section">
       <div class="container">
         <p class="section-label">Installation rapide</p>
-        <pre><code># APM CLI must report 0.29.0:
-apm --version
-# In the project you want the squad in:
-apm install "Peter-N91/hve-squad#vX.Y.z" --target copilot</code></pre>
+        <pre><code>copilot plugin marketplace add Peter-N91/hve-squad#plugin
+copilot plugin install hve-squad@hve-squad</code></pre>
         <p>
-          APM 0.29.1 et 0.30.0 présentent une régression qui empêche l'installation des dépendances
-          de ce package. Utilisez APM CLI 0.29.0 jusqu'à la résolution du problème. Sélectionnez ensuite
-          <strong>Squad Coordinator</strong> dans le sélecteur d'agents de Copilot Chat. Consultez
-          <a href="getting-started.html">Bien démarrer</a> pour les commandes d'installation à version épinglée
-          sous Windows et macOS et pour la procédure complète.
+          Dans VS Code ou l'application Copilot, ajoutez le même marketplace depuis l'interface de
+          personnalisation des plugins. Sélectionnez ensuite <strong>Squad Coordinator</strong>.
+          Consultez <a href="getting-started.html">Bien démarrer</a> pour les mises à jour,
+          l'installation preview et la solution de repli APM dans un dépôt.
         </p>
       </div>
     </section>

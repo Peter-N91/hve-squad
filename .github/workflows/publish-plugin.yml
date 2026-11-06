@@ -1,32 +1,32 @@
 name: Publish Plugin
 
-# Triggers:
-#   workflow_dispatch — builds the GitHub Copilot plugin distribution tree from
-#                       a resolved hve-squad tag (scripts/Build-SquadPlugin.ps1)
-#                       and pushes the result into the separate sibling
-#                       repository Peter-N91/hve-squad-plugin (ADR-0006).
+# Manual only. Stable and preview distributions are generated into branches in
+# this repository:
+#   plugin          - latest manually published stable release
+#   plugin-preview  - latest manually published preview
 #
-# Manual-trigger only, deliberately: this workflow writes to a *different*
-# repository, which needs a cross-repo credential (HVE_SQUAD_PLUGIN_PUSH_TOKEN)
-# that this workflow does not provision — provisioning it is a user setup step
-# (see ADR-0006 and the Phase 2 changes record). Until that secret exists, the
-# manual fallback is to run scripts/Build-SquadPlugin.ps1 locally and push the
-# result to hve-squad-plugin yourself, exactly as the Phase 2 build dispatch did.
+# Each branch is a self-contained marketplace with one hve-squad plugin. The
+# plugin bundles the exact microsoft/hve-core commit pinned by the selected
+# hve-squad ref and contains no MCP server configuration.
 on:
   workflow_dispatch:
-    # checkov:skip=CKV_GHA_7:Manual dispatch (write access required); the ref is validated with git rev-parse against an existing tag before the build step ever runs.
+    # checkov:skip=CKV_GHA_7:Manual publication intentionally writes a generated distribution branch after validating the selected ref.
     inputs:
+      channel:
+        description: Distribution channel to publish
+        required: true
+        default: stable
+        type: choice
+        options:
+          - stable
+          - preview
       ref:
-        description: 'hve-squad tag to build from. Leave blank to use the highest released version tag (vX.Y.Z, pre-releases excluded).'
-        required: false
-        type: string
-      mcp-version:
-        description: 'Optional: exact @hve-squad/mcp version to pin (e.g. 0.7.1). Leave blank to keep the pin already in hve-squad-plugin''s .mcp.json.'
+        description: 'Source ref. Blank selects the highest stable tag or rolling preview tag for the chosen channel.'
         required: false
         type: string
 
 concurrency:
-  group: ${{ github.workflow }}
+  group: publish-plugin-${{ inputs.channel }}
   cancel-in-progress: false
 
 permissions:
@@ -34,105 +34,188 @@ permissions:
 
 jobs:
   publish:
-    name: Build and publish the plugin tree
+    name: Publish ${{ inputs.channel }} plugin
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      contents: write
     steps:
-      - name: Checkout hve-squad
+      - name: Checkout hve-squad source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
           fetch-depth: 0
 
-      # ── Fail closed ───────────────────────────────────────────────────────
-      #    A partial run that silently skipped the push would look successful
-      #    while leaving hve-squad-plugin stale. Refuse outright instead.
-      - name: Require the cross-repo push credential
+      - name: Resolve source and channel identity
+        id: release
+        shell: bash
         env:
-          PUSH_TOKEN: ${{ secrets.HVE_SQUAD_PLUGIN_PUSH_TOKEN }}
-        run: |
-          if [[ -z "$PUSH_TOKEN" ]]; then
-            echo "::error::HVE_SQUAD_PLUGIN_PUSH_TOKEN is not set. This workflow needs a PAT or GitHub App installation token with write access to Peter-N91/hve-squad-plugin. Provisioning this secret is a user setup step (ADR-0006 / P02-T09) — this workflow does not create or store it, and refuses to run rather than silently skipping the push."
-            exit 1
-          fi
-
-      # ── Why not `git describe --tags --abbrev=0` ─────────────────────────
-      #    Release tags here are cut on a "pin squad self-references" commit
-      #    one step past main (see release.yml) and never merged back, so the
-      #    latest release tag is NOT an ancestor of main's tip. `git describe`
-      #    only walks ancestors, so it silently resolves to some older tag
-      #    that does happen to sit in main's history — not the actual latest
-      #    release. Resolve by version-sorting release tag names instead,
-      #    which does not depend on ancestry at all.
-      - name: Resolve the tag to build
-        id: tag
-        env:
+          CHANNEL: ${{ inputs.channel }}
           REF_INPUT: ${{ inputs.ref }}
         run: |
+          set -euo pipefail
+
           REF="$REF_INPUT"
           if [[ -z "$REF" ]]; then
-            REF=$(git tag -l 'v*' | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n1)
-            if [[ -z "$REF" ]]; then
-              echo "::error::No release tag (vX.Y.Z) found in this repository."
-              exit 1
+            if [[ "$CHANNEL" == "stable" ]]; then
+              REF=$(git tag -l 'v*' | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n1)
+              [[ -n "$REF" ]] || { echo "::error::No stable release tag exists."; exit 1; }
+            else
+              REF=$(git tag -l 'v*-pre' | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+-pre$' | sort -V | tail -n1)
+              [[ -n "$REF" ]] || { echo "::error::No rolling preview tag exists."; exit 1; }
             fi
           fi
-          if ! git rev-parse "refs/tags/$REF" >/dev/null 2>&1; then
-            echo "::error::Tag '$REF' does not exist in this repository."
+
+          if [[ ! "$REF" =~ ^[0-9A-Za-z][0-9A-Za-z._/-]*$ || "$REF" == *..* || "$REF" == *//* || "$REF" == */ || "$REF" == *. ]]; then
+            echo "::error::Invalid git ref '$REF'."
             exit 1
           fi
-          echo "ref=$REF" >> "$GITHUB_OUTPUT"
+          git rev-parse --verify "${REF}^{commit}" >/dev/null
+          SOURCE_SHA=$(git rev-parse "${REF}^{commit}")
+          APM=$(git show "${REF}:apm.yml")
+          HVE_CORE_SHA=$(printf '%s\n' "$APM" \
+            | grep -E 'microsoft/hve-core/[^#[:space:]]+#[0-9a-f]{40}' \
+            | sed -E 's/.*#([0-9a-f]{40}).*/\1/' \
+            | sort -u)
+          if [[ $(printf '%s\n' "$HVE_CORE_SHA" | sed '/^$/d' | wc -l) -ne 1 ]]; then
+            echo "::error::The selected apm.yml must pin every HVE Core dependency to one commit."
+            exit 1
+          fi
 
-      - name: Checkout hve-squad-plugin
+          if [[ "$REF" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([-.+][0-9A-Za-z.-]+)?$ ]]; then
+            BASE_VERSION="${REF#v}"
+          else
+            BASE_VERSION=$(printf '%s\n' "$APM" | sed -nE 's/^version:[[:space:]]*//p' | head -n1)
+          fi
+          if [[ "$CHANNEL" == "preview" ]]; then
+            if [[ "$BASE_VERSION" == *-* ]]; then
+              VERSION="${BASE_VERSION}.run.${GITHUB_RUN_NUMBER}"
+            else
+              VERSION="${BASE_VERSION}-preview.run.${GITHUB_RUN_NUMBER}"
+            fi
+            TARGET_BRANCH=plugin-preview
+            MARKETPLACE_NAME=hve-squad-preview
+          else
+            VERSION="$BASE_VERSION"
+            TARGET_BRANCH=plugin
+            MARKETPLACE_NAME=hve-squad
+          fi
+
+          echo "source_ref=$REF" >> "$GITHUB_OUTPUT"
+          echo "source_sha=$SOURCE_SHA" >> "$GITHUB_OUTPUT"
+          echo "hve_core_sha=$HVE_CORE_SHA" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "target_branch=$TARGET_BRANCH" >> "$GITHUB_OUTPUT"
+          echo "marketplace_name=$MARKETPLACE_NAME" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout pinned HVE Core
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          repository: Peter-N91/hve-squad-plugin
-          token: ${{ secrets.HVE_SQUAD_PLUGIN_PUSH_TOKEN }}
-          path: hve-squad-plugin
-          fetch-depth: 0
+          repository: microsoft/hve-core
+          ref: ${{ steps.release.outputs.hve_core_sha }}
+          path: hve-core-source
+          persist-credentials: false
 
-      # The generator re-derives the marketplace's hve-core pin from this tag's
-      # own apm.yml, so a release that moved the pin publishes the matching
-      # hve-squad-hve-core entry without anyone editing the manifest by hand.
-      # -McpVersion is the one axis that stays deliberate: omitted, the existing
-      # .mcp.json pin is reused rather than silently advanced.
-      - name: Build the plugin tree
+      - name: Prepare distribution branch
+        id: distribution
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TARGET_BRANCH: ${{ steps.release.outputs.target_branch }}
+        run: |
+          set -euo pipefail
+          ROOT="$RUNNER_TEMP/hve-squad-plugin-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          mkdir -p "$ROOT"
+          git -C "$ROOT" init --quiet
+          git -C "$ROOT" remote add origin \
+            "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+
+          OLD_VERSION=
+          if git ls-remote --exit-code --heads origin "$TARGET_BRANCH" >/dev/null 2>&1; then
+            git -C "$ROOT" fetch --depth=1 origin "refs/heads/$TARGET_BRANCH"
+            git -C "$ROOT" checkout --quiet -B "$TARGET_BRANCH" FETCH_HEAD
+            if [[ -f "$ROOT/plugin.json" ]]; then
+              OLD_VERSION=$(jq -r '.version // empty' "$ROOT/plugin.json")
+            fi
+            git -C "$ROOT" rm -r --quiet --ignore-unmatch .
+          else
+            git -C "$ROOT" checkout --quiet --orphan "$TARGET_BRANCH"
+          fi
+
+          echo "root=$ROOT" >> "$GITHUB_OUTPUT"
+          echo "old_version=$OLD_VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Validate channel version
         shell: pwsh
         env:
-          TAG: ${{ steps.tag.outputs.ref }}
-          MCP_VERSION: ${{ inputs.mcp-version }}
+          CHANNEL: ${{ inputs.channel }}
+          OLD_VERSION: ${{ steps.distribution.outputs.old_version }}
+          NEW_VERSION: ${{ steps.release.outputs.version }}
         run: |
-          $buildArgs = @{
-              Ref        = $env:TAG
-              OutputRoot = "${{ github.workspace }}/hve-squad-plugin"
+          $versionArgs = @{
+            Channel    = $env:CHANNEL
+            NewVersion = $env:NEW_VERSION
           }
-          if ($env:MCP_VERSION) { $buildArgs.McpVersion = $env:MCP_VERSION }
-          ./scripts/Build-SquadPlugin.ps1 @buildArgs
+          if ($env:OLD_VERSION) { $versionArgs['OldVersion'] = $env:OLD_VERSION }
+          ./scripts/Assert-SquadPluginVersion.ps1 @versionArgs
 
-      # ── Commit, tag, and push into hve-squad-plugin ───────────────────────
-      #    Re-running against a tag that produced no change is a no-op commit,
-      #    not a failure — the build is idempotent (Build-SquadPlugin.ps1).
-      - name: Commit, tag, and push hve-squad-plugin
-        working-directory: hve-squad-plugin
+      - name: Build self-contained plugin
+        shell: pwsh
         env:
-          TAG: ${{ steps.tag.outputs.ref }}
+          SOURCE_REF: ${{ steps.release.outputs.source_ref }}
+          PLUGIN_VERSION: ${{ steps.release.outputs.version }}
+          MARKETPLACE_NAME: ${{ steps.release.outputs.marketplace_name }}
+          OUTPUT_ROOT: ${{ steps.distribution.outputs.root }}
         run: |
-          git config user.name  "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
+          ./scripts/Build-SquadPlugin.ps1 `
+            -RepoRoot . `
+            -Ref $env:SOURCE_REF `
+            -HveCoreRoot ./hve-core-source `
+            -OutputRoot $env:OUTPUT_ROOT `
+            -PluginVersion $env:PLUGIN_VERSION `
+            -MarketplaceName $env:MARKETPLACE_NAME
 
-          if [[ -z "$(git status --porcelain)" ]]; then
-            echo "::notice::No changes to commit — hve-squad-plugin already matches $TAG."
-          else
-            git add -A
-            git commit -m "chore(build): regenerate plugin tree from hve-squad $TAG"
+      - name: Commit and publish distribution branch
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ROOT: ${{ steps.distribution.outputs.root }}
+          OLD_VERSION: ${{ steps.distribution.outputs.old_version }}
+          NEW_VERSION: ${{ steps.release.outputs.version }}
+          SOURCE_REF: ${{ steps.release.outputs.source_ref }}
+          TARGET_BRANCH: ${{ steps.release.outputs.target_branch }}
+        run: |
+          set -euo pipefail
+          git -C "$ROOT" add -A
+          if git -C "$ROOT" diff --cached --quiet; then
+            echo "::notice::$TARGET_BRANCH already matches $SOURCE_REF."
+            exit 0
           fi
-
-          if git rev-parse "refs/tags/$TAG" >/dev/null 2>&1; then
-            echo "::notice::Tag $TAG already exists in hve-squad-plugin — skipping tag creation."
-          else
-            git tag "$TAG"
+          if [[ -n "$OLD_VERSION" && "$OLD_VERSION" == "$NEW_VERSION" ]]; then
+            echo "::error::Plugin content changed without a version change ($NEW_VERSION)."
+            exit 1
           fi
+          git -C "$ROOT" config user.name "github-actions[bot]"
+          git -C "$ROOT" config user.email "github-actions[bot]@users.noreply.github.com"
+          git -C "$ROOT" commit -m "chore(plugin): publish $NEW_VERSION from $SOURCE_REF"
+          git -C "$ROOT" push origin "HEAD:refs/heads/$TARGET_BRANCH"
 
-          git push origin HEAD:refs/heads/main
-          git push origin "refs/tags/$TAG"
+      - name: Write installation summary
+        shell: bash
+        env:
+          MARKETPLACE_NAME: ${{ steps.release.outputs.marketplace_name }}
+          TARGET_BRANCH: ${{ steps.release.outputs.target_branch }}
+          VERSION: ${{ steps.release.outputs.version }}
+          HVE_CORE_SHA: ${{ steps.release.outputs.hve_core_sha }}
+        run: |
+          {
+            echo "## Published hve-squad plugin"
+            echo
+            echo "- Branch: \`$TARGET_BRANCH\`"
+            echo "- Plugin version: \`$VERSION\`"
+            echo "- Bundled HVE Core: \`$HVE_CORE_SHA\`"
+            echo
+            echo '```text'
+            echo "copilot plugin marketplace add Peter-N91/hve-squad#$TARGET_BRANCH"
+            echo "copilot plugin install hve-squad@$MARKETPLACE_NAME"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
