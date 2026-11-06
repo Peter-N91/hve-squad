@@ -5,7 +5,7 @@ license: MIT
 metadata:
   authors: "Peter-N91/hve-squad"
   spec_version: "1.0"
-  last_updated: "2026-10-24"
+  last_updated: "2026-10-30"
 ---
 
 # Scribe Payload Template
@@ -44,6 +44,8 @@ When a routing policy resolved this dispatch's model, also supply its `routingId
 ### 1.5 Decision Entries (When Payload Type Is `decision` or a Verdict)
 
 Supply the decision's rationale and, when architecturally significant, a note that an ADR should be captured. For a verdict payload, supply the exact schema fields the matching instruction file requires (`squad-council.instructions.md`, `squad-intake-gate.instructions.md`, or `squad-discovery-gate.instructions.md`) — never a partial schema; an incomplete verdict schema is returned as a failure note rather than written partially.
+
+For supplied benefit claims, follow [business-value-measurement.md](business-value-measurement.md): keep metadata in schema-defined text, never new keys, and never infer outcome, value, or approval from delivery.
 
 ### 1.6 State Advance (Every Payload)
 

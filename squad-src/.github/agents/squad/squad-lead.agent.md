@@ -51,6 +51,17 @@ List every deliverable the request asks for. For each, name the owning role from
 
 When two or more artifact-owning roles appear in this list — roster rows whose `Deliverable Root` names a real path, other than `researcher`, `lead`, and `tester` — state that explicitly so the coordinator selects the fan-out shape rather than a single build.
 
+For each intake claim, plan instrumentation and outcome validation tied to its ID,
+value category, hypothesis, beneficiary, baseline, target metric, measurement and
+decision owners, and observation/window. Preserve supplied evidence, benefit
+status and source references in the plan and return; flag missing fields as gaps,
+never invent actuals or financial value. Follow [Business Value Measurement](../../skills/squad/references/business-value-measurement.md)
+status definitions: keep outcomes `pending` while the observation window is open
+or evidence collection is incomplete; after both finish, use `supported` only when
+evidence supports the target, otherwise `gap`.
+Delivery acceptance and accepted-delivery economics do not establish
+realized business benefit or business approval.
+
 ### Step 4: Surface What the Plan Depends On
 
 State the assumptions the plan rests on, the decisions still open, and anything that would invalidate the plan if it turns out to be false. These belong in the returned outcome, not buried in the artifact.
@@ -63,5 +74,9 @@ Return to the coordinator:
 * **Phases** — the numbered phases with a one-line outcome each.
 * **Deliverables** — a table of deliverable, owning role, expected artifact path, and dependencies, in execution order.
 * **Implement Shape** — `single-build` or `deliverable-fan-out`, with the reason.
+* **Benefit Claims** — when supplied, the preserved claim metadata, evidence and
+  references above, planned validation and unresolved gaps; unsupported outcomes
+  remain `pending` while the observation window is open or evidence collection is
+  incomplete; after both finish, classify them per the measurement reference.
 * **Assumptions and Open Decisions** — what the plan rests on, or `none`.
 * **Gaps in Research** — anything the research did not answer, or `none`.
