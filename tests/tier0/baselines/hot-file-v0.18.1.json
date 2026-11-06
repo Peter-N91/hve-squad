@@ -53,8 +53,16 @@
       "reason": "Benchmark-backed ranking and provenance attribution (#166) apply to routing=ranked and manual suggestions across non-economy runs: the Ranking Algorithm and Identity Bullets sections document reading model-benchmarks.md first, ignoring self-reported scores, and falling back to model-catalog.md on missing or stale evidence."
     },
     "squad-src/.github/skills/squad/SKILL.md": {
-      "bytes": 210,
-      "reason": "The model-benchmarks.md reference row (#166) ships in the skill reference table for ranked and manual model routing across all modes."
+      "bytes": 320,
+      "reason": "The model-benchmarks.md reference row (#166) ships in the skill reference table for ranked and manual model routing across all modes, and the quick-depth.md row (#224) ships there for the per-turn depth=quick input, which applies under off, ranked, manual, and economy alike."
+    },
+    "squad-src/.github/prompts/squad/squad.prompt.md": {
+      "bytes": 256,
+      "reason": "The per-turn depth input (#224) is independent of routing and works under off, ranked, manual, and economy, so its argument-hint entry and input bullet ship in the default prompt every run reads."
+    },
+    "squad-src/.github/prompts/squad/squad-federation.prompt.md": {
+      "bytes": 128,
+      "reason": "The per-turn depth input (#224) is forwarded to every selected sub-squad like tier in every routing mode, so its argument-hint entry and input bullet ship in the default federation prompt every run reads."
     },
     "squad-src/.github/instructions/squad/squad-state.instructions.md": {
       "bytes": 256,

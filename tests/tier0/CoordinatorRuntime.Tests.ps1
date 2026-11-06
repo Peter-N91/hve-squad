@@ -563,6 +563,13 @@ Describe 'Universal compact metadata and deterministic scheduling (COORD-04..06)
             units = @(@{ id = 'work'; role = 'developer' })
         }
         if ($Mode -eq 'manual') { $input.manualModels = @{ developer = 'gpt-5.6-sol' } }
+        if ($Mode -eq 'economy') {
+            $input.economyConsent = @{
+                user = 'fixture-user'
+                tradeAccepted = 'Every routed role uses the cheapest known-price model inside its floor.'
+                neverWeakened = 'Floors and gates remain unchanged.'
+            }
+        }
         Write-FixtureJson $path $input
         $result = Invoke-Local 'New-SquadDispatchPlan.ps1' $repo @('-RepoRoot', $repo, '-InputPath', $path)
         $result.ExitCode | Should -Be 0 -Because $result.Output
@@ -693,6 +700,36 @@ Describe 'Universal compact metadata and deterministic scheduling (COORD-04..06)
         $plan.routingReady | Should -BeTrue
         $plan.routingReceipt.status | Should -Be 'written'
         [IO.File]::ReadAllText((Join-Path $fixture.Root 'team.md')) | Should -Match "(?m)^Model routing: $Mode$"
+    }
+
+    It 'blocks legacy Economy consent before dispatch instead of mixing Economy and Ranked roles' {
+        $repo = New-FixtureRepo
+        $fixture = Initialize-Fixture $repo -ModelRouting economy
+        $decisionsPath = Join-Path $fixture.Root 'decisions.md'
+        $decisions = [IO.File]::ReadAllText($decisionsPath).TrimEnd() + @"
+
+
+## Economy Mode Accepted 2026-11-06T00:00:00Z
+
+* User: fixture-user
+* Previous mode: ranked
+* Trade accepted: legacy five-role economy
+* Never weakened: floors and gates
+"@
+        Write-FixtureText $decisionsPath $decisions
+        $path = Join-Path $repo 'legacy-economy.json'
+        Write-FixtureJson $path @{
+            squadRoot = $fixture.Root
+            sessionModel = 'gpt-5.6-sol'
+            availableModels = @('gpt-5.6-sol', 'gpt-5.4', 'claude-haiku-5.5')
+            units = @(@{ id = 'review'; role = 'tester'; readOnly = $true })
+        }
+        $before = Get-FixtureHash $fixture.Root
+        $result = Invoke-Local 'New-SquadDispatchPlan.ps1' $repo @('-RepoRoot', $repo, '-InputPath', $path, '-ApplyModelRouting')
+        $result.ExitCode | Should -Be 1
+        $result.Output | Should -Match 'Economy dispatch requires recorded Scope: all-roles consent'
+        $result.Output | Should -Not -Match '"routingReady":true'
+        Get-FixtureHash $fixture.Root | Should -BeExactly $before
     }
 
     It 'never reports readiness or edits state after <Failure> during preparation' -ForEach @(

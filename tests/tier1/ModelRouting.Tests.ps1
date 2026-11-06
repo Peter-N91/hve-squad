@@ -811,12 +811,19 @@ Describe 'Resolve-SquadModelRoute.ps1 economy mode (case n)' {
         foreach ($entry in $defaults) { $script:CapabilityOf[$entry.suggested] | Should -Not -Be 'fast-lightweight' -Because "$($entry.role) floors at default" }
     }
 
-    It 'keeps every review-class and other non-implementation role on its ranked pick' {
+    It 'routes every review-class and other non-implementation role through Economy' {
         $others = @($script:EconomyRun.roles | Where-Object { $_.class -ne 'implementation' })
         @($others | Where-Object class -eq 'review').Count | Should -BeGreaterThan 0
         foreach ($entry in $others) {
-            $entry.suggested | Should -Be $script:RankedOf[$entry.role] -Because "$($entry.role) is $($entry.class)-class"
-            $entry.escalation | Should -BeNullOrEmpty
+            $entry.suggested | Should -Not -BeNullOrEmpty
+            if ($entry.selectionException) {
+                $entry.economyHold | Should -Be 'exception'
+                $entry.selectionObjective | Should -Match 'exception'
+            }
+            else {
+                $entry.selectionObjective | Should -Be 'cost-first'
+                $entry.economyHold | Should -BeNullOrEmpty
+            }
         }
     }
 
@@ -848,7 +855,7 @@ Describe 'Resolve-SquadModelRoute.ps1 economy mode (case n)' {
         $entry.escalation | Should -BeNullOrEmpty
     }
 
-    It 'keeps <Role> off the economy allowlist, on its ranked pick with no escalation' -ForEach @(
+    It 'routes live-resource role <Role> through the same cost-first Economy rule' -ForEach @(
         @{ Role = 'product-owner' }
         @{ Role = 'deployer' }
         @{ Role = 'iac-author' }
@@ -867,9 +874,12 @@ Describe 'Resolve-SquadModelRoute.ps1 economy mode (case n)' {
         $ranked = (Invoke-EconomyResolver -Root $root -Extra @{ Mode = 'ranked' }).roles[0]
         $economy.class | Should -Be 'implementation'
         $economy.classSource | Should -Be 'mapped'
-        $economy.suggested | Should -Be $ranked.suggested
-        $economy.rationale | Should -Not -Match '^economy'
-        $economy.escalation | Should -BeNullOrEmpty
+        $economy.suggested | Should -Not -BeNullOrEmpty
+        $economy.selectionObjective | Should -Be 'cost-first'
+        $economy.rationale | Should -Match '^economy pick:'
+        $economy.economyHold | Should -BeNullOrEmpty
+        if ($economy.suggested -eq $ranked.suggested) { $economy.escalation | Should -BeNullOrEmpty }
+        else { $economy.escalation | Should -Be $ranked.suggested }
     }
 
     It 'ignores routing=economy written as text into a roster that records no mode (Watch Mode, G4)' {
@@ -887,7 +897,7 @@ Describe 'Resolve-SquadModelRoute.ps1 economy mode (case n)' {
         $run.roles[0].rationale | Should -Not -Match '^economy'
     }
 
-    It 'keeps an unmapped role (implementation only by fallback) on its ranked pick' {
+    It 'routes an unmapped role through Economy using the disclosed fallback class' {
         $root = New-EconomyRoot -Content (@(
                 '# Squad Roster', '', 'Model routing: economy', '', '## Members', ''
                 '| Role | Member Name | Agent Name (Primary) | Model Tier | Model | Deliverable Root |'
@@ -898,8 +908,12 @@ Describe 'Resolve-SquadModelRoute.ps1 economy mode (case n)' {
         $ranked = Invoke-EconomyResolver -Root $root -Extra @{ Mode = 'ranked' }
         $economy.recordedMode | Should -Be 'economy'
         $economy.roles[0].classSource | Should -Be 'fallback: implementation'
-        $economy.roles[0].suggested | Should -Be $ranked.roles[0].suggested
-        $economy.roles[0].escalation | Should -BeNullOrEmpty
+        $economy.roles[0].selectionObjective | Should -Be 'cost-first'
+        $economy.roles[0].economyHold | Should -BeNullOrEmpty
+        if ($economy.roles[0].suggested -eq $ranked.roles[0].suggested) {
+            $economy.roles[0].escalation | Should -BeNullOrEmpty
+        }
+        else { $economy.roles[0].escalation | Should -Be $ranked.roles[0].suggested }
     }
 
     It 'keeps Economy fields opt-in and never applies a preview suggestion under Off' {
@@ -1047,7 +1061,7 @@ Describe 'Resolve-SquadModelRoute.ps1 economy mode (case n)' {
             ) -join "`n"
             $script:Accepted = @(
                 '# Squad Decisions', '', '## Economy Mode Accepted 2026-10-08T10:00:00Z', ''
-                '* User: Fixture User', '* Previous mode: ranked', '* Trade accepted: cheaper allowlisted picks', '* Never weakened: every gate'
+                '* User: Fixture User', '* Previous mode: ranked', '* Trade accepted: cheaper all-role picks', '* Never weakened: every gate', '* Scope: all-roles'
             ) -join "`n"
         }
 
@@ -1071,6 +1085,19 @@ Describe 'Resolve-SquadModelRoute.ps1 economy mode (case n)' {
             $run = Invoke-EconomyResolver -Root $root
             $run.consent | Should -Be 'recorded'
             @($run.warnings | Where-Object { $_ -like 'economy consent*' }).Count | Should -Be 0
+            $run.economyScope | Should -Be 'all-roles'
+        }
+
+        It 'reports legacy consent as an upgrade requirement without changing the all-role preview to Ranked' {
+            $root = New-EconomyRoot -Content $script:ConsentTeam
+            $legacy = $script:Accepted -replace '(?m)^\* Scope: all-roles\r?\n?', ''
+            Set-Content -LiteralPath (Join-Path $root 'decisions.md') -Value $legacy -Encoding utf8NoBOM
+            $run = Invoke-EconomyResolver -Root $root
+            $run.consent | Should -Be 'recorded'
+            $run.economyScope | Should -Be 'legacy'
+            @($run.warnings | Where-Object { $_ -like 'economy consent upgrade required*' }).Count | Should -Be 1
+            $run.roles[0].selectionObjective | Should -Be 'cost-first'
+            $run.roles[0].economyHold | Should -BeNullOrEmpty
         }
 
         It 'prints the consent line in the table output' {
@@ -1939,7 +1966,7 @@ Describe 'Capability-first Ranked and qualified cost-first Economy (SQ-33b..d, S
         }
 
         function Invoke-PolicyRoute {
-            param($Fixture, [string]$Mode = 'ranked', [datetime]$AsOf = [datetime]'2026-10-19', [string[]]$Available)
+            param($Fixture, [string]$Mode = 'ranked', [datetime]$AsOf = [datetime]'2026-10-19', [string[]]$Available, [switch]$Unattended)
             $parameters = @{
                 SquadRoot = $Fixture.Root
                 AvailableModels = if ($Available) { $Available } else { $Fixture.Available }
@@ -1948,6 +1975,7 @@ Describe 'Capability-first Ranked and qualified cost-first Economy (SQ-33b..d, S
                 SessionModel = 'gpt-6.1-sol'
             }
             if ($Mode -ne 'off') { $parameters.Mode = $Mode }
+            if ($Unattended) { $parameters.Unattended = $true }
             & $Fixture.Resolver @parameters | ConvertFrom-Json
         }
 
@@ -2043,7 +2071,7 @@ Describe 'Capability-first Ranked and qualified cost-first Economy (SQ-33b..d, S
         }
     }
 
-    It 'uses an explicit conservative fallback when no primary panel can be supported' {
+    It 'uses declared-fit Economy when no primary panel can be supported' {
         $fixture = New-PolicyRoster
         foreach ($id in 'gpt-5.4', 'gpt-5.6-sol', 'gpt-5-mini', 'gpt-5.4-nano') {
             Set-PolicyRow $fixture -Id $id -Evaluation Terminal-Bench -Drop
@@ -2054,8 +2082,11 @@ Describe 'Capability-first Ranked and qualified cost-first Economy (SQ-33b..d, S
         $ranked.roles[0].capability | Should -BeNullOrEmpty
         $ranked.roles[0].comparisonOutcome | Should -Be 'declared-fit fallback'
         $ranked.warnings.Count | Should -Be 1
-        $economy.roles[0].suggested | Should -Be $ranked.roles[0].suggested
-        $economy.roles[0].rationale | Should -Match 'explicit Ranked fallback'
+        $economy.roles[0].suggested | Should -Not -BeNullOrEmpty
+        $economy.roles[0].selectionObjective | Should -Be 'cost-first'
+        $economy.roles[0].economyQualification | Should -Be 'declared-fit'
+        $economy.roles[0].rationale | Should -Match 'declared-fit-minimum-2-v1'
+        $economy.roles[0].rationale | Should -Not -Match 'Ranked fallback'
     }
 
     It 'never pools incomparable source versions into a numerical ranking' {
@@ -2097,16 +2128,27 @@ Describe 'Capability-first Ranked and qualified cost-first Economy (SQ-33b..d, S
         }
         $role = (Invoke-PolicyRoute $fixture -Mode $Mode -Available @($Available)).roles[0]
         $role.suggested | Should -BeNullOrEmpty
-        $role.rationale | Should -Match 'floor exhausted'
+        $role.rationale | Should -Match $(if ($Mode -eq 'economy') { 'no host-available model inside the .* floor' } else { 'floor exhausted' })
     }
 
-    It 'keeps a non-allowlisted deployment role on its Ranked selection' {
+    It 'routes a deployment role through Economy instead of holding it on Ranked' {
         $fixture = New-PolicyRoster -Role deployer
         $ranked = (Invoke-PolicyRoute $fixture).roles[0]
         $economy = (Invoke-PolicyRoute $fixture -Mode economy).roles[0]
-        $economy.suggested | Should -Be $ranked.suggested
-        $economy.selectionObjective | Should -Be 'capability-first'
-        $economy.escalation | Should -BeNullOrEmpty
+        $economy.suggested | Should -Not -BeNullOrEmpty
+        $economy.selectionObjective | Should -Be 'cost-first'
+        $economy.economyHold | Should -BeNullOrEmpty
+        if ($economy.suggested -eq $ranked.suggested) { $economy.escalation | Should -BeNullOrEmpty }
+        else { $economy.escalation | Should -Be $ranked.suggested }
+    }
+
+    It 'keeps the same all-role Economy objective for an unattended reviewer' {
+        $fixture = New-PolicyRoster -Role tester -Tier fast
+        $attended = (Invoke-PolicyRoute $fixture -Mode economy).roles[0]
+        $unattended = (Invoke-PolicyRoute $fixture -Mode economy -Unattended).roles[0]
+        $unattended.suggested | Should -Be $attended.suggested
+        $unattended.selectionObjective | Should -Be 'cost-first'
+        $unattended.economyHold | Should -BeNullOrEmpty
     }
 
     It 'does not treat a missing Blended price as zero or admit it to Economy' {
@@ -2121,6 +2163,19 @@ Describe 'Capability-first Ranked and qualified cost-first Economy (SQ-33b..d, S
         $unpriced = @($role.candidates | Where-Object id -eq 'gpt-5.4')[0]
         $unpriced.blended | Should -BeNullOrEmpty
         $unpriced.economyQualified | Should -BeFalse
+    }
+
+    It 'stops Economy instead of falling back to Ranked when every floor candidate is unpriced' {
+        $fixture = New-PolicyRoster -Available @('gpt-5.4')
+        $catalog = Copy-PolicySkill $fixture
+        $raw = Get-Content -LiteralPath $catalog -Raw
+        $raw = $raw -replace '(?m)^(\| `gpt-5\.4` \|.*\|) 1\.000 \|\r?$', '$1 unpriced |'
+        Set-Content -LiteralPath $catalog -Value $raw -Encoding utf8NoBOM
+        $role = (Invoke-PolicyRoute $fixture -Mode economy).roles[0]
+        $role.suggested | Should -BeNullOrEmpty
+        $role.economyHold | Should -Be 'unavailable'
+        $role.economyQualification | Should -Be 'unavailable'
+        $role.rationale | Should -Match 'no Ranked fallback is permitted'
     }
 
     It 'reports that no higher-ranked escalation exists when both objectives select the same model' {
@@ -2391,6 +2446,19 @@ Describe 'Capability-first Ranked and qualified cost-first Economy (SQ-33b..d, S
         $cheap.capability | Should -BeLessThan 0.75
         $cheap.economyQualified | Should -BeFalse
         $role.suggested | Should -Be 'gpt-5.6-sol'
+    }
+
+    It 'uses the cheapest priced floor candidate instead of Ranked when no model meets Economy qualification' {
+        $fixture = New-PolicyRoster -Available @('gpt-5.4')
+        foreach ($evaluation in 'SciCode', 'Terminal-Bench') {
+            Set-PolicyRow $fixture -Id gpt-5.4 -Evaluation $evaluation -Score 0.010
+        }
+        $economy = (Invoke-PolicyRoute $fixture -Mode economy).roles[0]
+        $economy.suggested | Should -Be 'gpt-5.4'
+        $economy.economyQualification | Should -Be 'floor-only'
+        $economy.qualificationRule | Should -Be 'floor-only-known-price-v1'
+        $economy.comparisonOutcome | Should -Be 'economy floor-only'
+        $economy.rationale | Should -Match 'instead of falling back to Ranked'
     }
 
     It 'keeps Ranked capability-first and Economy price-first on a qualified common reduced panel (SQ-35b)' {

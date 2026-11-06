@@ -1,0 +1,128 @@
+name: Plugin Conformance
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/plugin-conformance.yml'
+      - '.github/workflows/publish-plugin.yml'
+      - 'apm.yml'
+      - 'scripts/Build-SquadPlugin.ps1'
+      - 'scripts/Test-SquadPluginHostContract.ps1'
+      - 'scripts/plugin-hooks/**'
+      - 'squad-src/.github/**'
+      - 'tests/tier0/AgentDiscovery.Tests.ps1'
+      - 'tests/tier0/Build-SquadPlugin.Tests.ps1'
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/plugin-conformance.yml'
+      - '.github/workflows/publish-plugin.yml'
+      - 'apm.yml'
+      - 'scripts/Build-SquadPlugin.ps1'
+      - 'scripts/Test-SquadPluginHostContract.ps1'
+      - 'scripts/plugin-hooks/**'
+      - 'squad-src/.github/**'
+      - 'tests/tier0/AgentDiscovery.Tests.ps1'
+      - 'tests/tier0/Build-SquadPlugin.Tests.ps1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: ${{ matrix.os }} · VS Code, CLI, App
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - windows-latest
+          - macos-latest
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout hve-squad
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Resolve HVE Core pin
+        id: hve-core
+        shell: pwsh
+        run: |
+          $content = Get-Content -LiteralPath apm.yml -Raw
+          $pins = @(
+            [regex]::Matches($content, 'microsoft/hve-core/[^\s#]+#([0-9a-f]{40})') |
+              ForEach-Object { $_.Groups[1].Value } |
+              Sort-Object -Unique
+          )
+          if ($pins.Count -ne 1) { throw "Expected one HVE Core pin, found $($pins.Count)." }
+          "sha=$($pins[0])" >> $env:GITHUB_OUTPUT
+
+      - name: Checkout pinned HVE Core
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: microsoft/hve-core
+          ref: ${{ steps.hve-core.outputs.sha }}
+          path: hve-core-source
+          persist-credentials: false
+
+      - name: Build plugin
+        id: build
+        shell: pwsh
+        run: |
+          $output = Join-Path $env:RUNNER_TEMP 'hve-squad-plugin'
+          ./scripts/Build-SquadPlugin.ps1 `
+            -SourceRoot . `
+            -HveCoreRoot ./hve-core-source `
+            -OutputRoot $output
+          "root=$output" >> $env:GITHUB_OUTPUT
+
+      - name: Validate host contracts
+        shell: pwsh
+        env:
+          PLUGIN_ROOT: ${{ steps.build.outputs.root }}
+        run: |
+          foreach ($hostName in @('vscode', 'cli', 'app')) {
+            ./scripts/Test-SquadPluginHostContract.ps1 `
+              -PluginRoot $env:PLUGIN_ROOT `
+              -HostName $hostName
+          }
+
+      - name: Exercise session-start hook through its manifest
+        shell: pwsh
+        env:
+          PLUGIN_ROOT: ${{ steps.build.outputs.root }}
+        run: |
+          $manifest = Get-Content -LiteralPath (Join-Path $env:PLUGIN_ROOT 'hooks.json') -Raw |
+            ConvertFrom-Json
+          $entry = $manifest.hooks.sessionStart[0]
+          if ($entry.cwd -ne '${PLUGIN_ROOT}') {
+            throw 'The generated hook does not declare the plugin-root working directory.'
+          }
+          $inputData = @{ cwd = $env:RUNNER_TEMP } | ConvertTo-Json -Compress
+          Push-Location $entry.cwd.Replace('${PLUGIN_ROOT}', $env:PLUGIN_ROOT)
+          try {
+            if ($IsWindows) {
+              $command = [regex]::Match(
+                $entry.powershell,
+                '^(?<exe>powershell\.exe|pwsh) -NoProfile -ExecutionPolicy Bypass -File "(?<path>[^"]+)"$'
+              )
+              if (-not $command.Success) { throw "Unexpected PowerShell hook command: $($entry.powershell)" }
+              $executable = $command.Groups['exe'].Value
+              $scriptPath = $command.Groups['path'].Value
+              $output = $inputData |
+                & $executable -NoProfile -ExecutionPolicy Bypass -File $scriptPath |
+                ConvertFrom-Json
+            }
+            else {
+              $output = $inputData | & bash -c $entry.bash | ConvertFrom-Json
+            }
+            if ($output.additionalContext -notmatch 'No squad state detected') {
+              throw 'The generated session-start hook did not return the expected context.'
+            }
+          }
+          finally {
+            Pop-Location
+          }

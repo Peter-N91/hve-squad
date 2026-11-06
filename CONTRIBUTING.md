@@ -28,7 +28,7 @@ Two things do not belong in a public issue:
 
 ## How contributions reach the package
 
-hve-squad gets better when a durable fix found in one environment reaches every other consumer hitting the same scenario. hve-squad ships through APM as one-directional package content: consumers pull the package, and the package never reads from consumer environments. The only route for a change to reach the published package is a fork and pull request against this repository.
+hve-squad gets better when a durable fix found in one environment reaches every other consumer hitting the same scenario. The Copilot plugin is the primary distribution and APM remains a one-directional repository fallback: consumers pull either distribution, and neither reads from consumer environments. The only route for a change to reach a published distribution is a fork and pull request against this repository.
 
 1. Fork the repository.
 2. Create a branch for your change.
@@ -36,7 +36,7 @@ hve-squad gets better when a durable fix found in one environment reaches every 
 4. Open a pull request against the default branch.
 5. A maintainer reviews, requests changes when needed, and merges.
 
-Merging publishes the change to the rolling pre-release within minutes, so it can be installed and tested straight away (see [Testing before a release](#testing-before-a-release)). When the pull request documents unreleased package behavior, mark the smallest affected element in both the English and French guides with that change fragment's `data-release-change` value. Pages renders the current pre-release badge only on those explicit markers while the fragment remains pending. It reaches consumers pinned to a released version when a maintainer cuts the next release, which happens when the pending work is judged ready rather than on a schedule.
+Merging publishes the rolling GitHub pre-release within minutes. Maintainers can then publish the same ref manually to the `plugin-preview` branch for plugin testing (see [Testing before a release](#testing-before-a-release)). When the pull request documents unreleased behavior, mark the smallest affected element in both the English and French guides with that change fragment's `data-release-change` value. Pages renders the current pre-release badge only on those explicit markers while the fragment remains pending. It reaches stable plugin and APM consumers when a maintainer cuts the next release and manually publishes the stable plugin.
 
 ## Recording your change
 
@@ -191,20 +191,23 @@ records the cases and known gaps.
 Releases are cut by hand when the pending work is judged ready, so merging is no longer the moment a change reaches consumers. What merging does reach is the **rolling pre-release**: one GitHub pre-release, rebuilt on every merge to the default branch, tagged with the version the pending fragments currently resolve to.
 
 Use [Install and test the pre-release](https://peter-n91.github.io/hve-squad/getting-started.html#testing-the-pre-release)
-for the current stable and pre-release numbers, exact install command, testing steps,
-and return-to-stable command. Install into a scratch project to try the merged batch
-before it ships. In this example, replace `vX.Y.z-pre` with the current rolling tag:
+for the exact plugin and APM fallback commands, testing steps, and return-to-stable
+instructions. After a maintainer dispatches **Publish Plugin** with channel
+`preview`, install the preview marketplace in a scratch environment:
 
-```powershell
-apm install "Peter-N91/hve-squad#vX.Y.z-pre" --target copilot
+```text
+copilot plugin marketplace add Peter-N91/hve-squad#plugin-preview
+copilot plugin install hve-squad@hve-squad-preview
 ```
 
-The exact tag is on the [Releases page](https://github.com/Peter-N91/hve-squad/releases), marked as a pre-release. Two things follow from how it is built:
+Use the rolling tag from the [Releases page](https://github.com/Peter-N91/hve-squad/releases)
+with APM CLI 0.29.0 only when repository-deployed customizations are the behavior
+under test. Two things follow from how the preview is built:
 
 * **The tag moves.** Re-run the install to pick up the newest build. It is a channel, not a fixed point, so it is for testing rather than for anything you depend on.
 * **The name can change.** The tag tracks the resolved version, so a `minor` fragment landing midweek renames the pre-release from `v0.13.4-pre` to `v0.14.0-pre` and the old one is deleted.
 
-Nothing about the preview consumes a fragment or writes to `CHANGELOG.md`. The documentation build uses those same pending fragments to badge sections changed by unreleased merge commits; documentation-only pull requests with `skip-changelog` are not badged. Release Prep consumes the fragments, so the next Pages build removes their badges automatically. The release is assembled from the same fragments the preview rendered, so what you tested is what ships.
+Nothing about either preview consumes a fragment or writes to `CHANGELOG.md`. The documentation build uses those same pending fragments to badge sections changed by unreleased merge commits; documentation-only pull requests with `skip-changelog` are not badged. Release Prep consumes the fragments, so the next Pages build removes their badges automatically. The plugin preview is generated from the same ref and pinned HVE Core commit.
 
 ## Shipping a fix without shipping everything else
 
@@ -212,7 +215,7 @@ A release ships a **commit**, not a selection of fragments. The tag is cut from 
 
 That leaves two cases, and only the second one needs anything unusual.
 
-**The default branch is shippable.** Dispatch Release Prep. Your fix goes out along with everything else pending, as one version. If a pending fragment asked for `minor`, that version is a minor — and it still contains your patch, so consumers get the fix. This is almost always the right answer, and the version number is not worth optimising.
+**The default branch is shippable.** Dispatch Release Prep. After the GitHub Release passes its gates, dispatch **Publish Plugin** with channel `stable`. Your fix goes out along with everything else pending, as one version. If a pending fragment asked for `minor`, that version is a minor — and it still contains your patch, so consumers get the fix. This is almost always the right answer, and the version number is not worth optimising.
 
 **The default branch holds something that must not ship yet.** Then a release from it would carry that work out with your fix, so the fix has to come from somewhere that does not contain it: a hotfix branch cut off the last release tag.
 

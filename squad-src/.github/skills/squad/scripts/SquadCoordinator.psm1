@@ -734,4 +734,372 @@ function Get-SquadPendingConnectors {
     $tasks.ToArray()
 }
 
-Export-ModuleMember -Function Read-SquadTables, Get-SquadReferenceSection, Get-SquadRulePath, Resolve-SquadRepositoryPath, Get-SquadAgentIndex, Get-SquadSkillIndex, Get-SquadRoster, Invoke-SquadLocalScript, Get-SquadInitData, Get-SquadPackResourceInventory, Assert-SquadPackResourceDecisions, New-SquadInitPayload, Resolve-SquadConnectorExecution, Write-SquadTransportJson, Get-SquadFederationSnapshot, New-SquadOrchestrationConsumption, ConvertTo-SquadModelKey, Get-SquadRoleClassMap, Get-SquadDispatchReservation, Get-SquadDecision, Get-SquadPendingConnectors
+function Get-SquadEconomyConsentScope {
+    <#
+    .SYNOPSIS
+        The scope of the economy consent recorded in decisions.md text (references/economy-mode.md Consent): `all-roles` when an
+        `## Economy Mode Accepted` entry carries a `Scope: all-roles` bullet, otherwise `legacy` and dispatch must re-consent
+        before Economy can apply. The resolver never mixes Economy and Ranked by role.
+    #>
+    param([AllowEmptyString()][string]$DecisionsText = '')
+    foreach ($section in ($DecisionsText -split '(?m)^(?=## )')) {
+        if ($section -match '(?m)^## Economy Mode Accepted\b' -and $section -match '(?m)^\s*[*-]\s+Scope:\s*all-roles\b') { return 'all-roles' }
+    }
+    'legacy'
+}
+
+function Test-SquadPathSetOverlap {
+    param([string[]]$Left = @(), [string[]]$Right = @())
+    foreach ($first in $Left) {
+        foreach ($second in $Right) {
+            $forward = [IO.Path]::GetRelativePath($first, $second)
+            $reverse = [IO.Path]::GetRelativePath($second, $first)
+            if (($forward -eq '.' -or $forward -notmatch '^\.\.(?:[\\/]|$)') -or
+                ($reverse -eq '.' -or $reverse -notmatch '^\.\.(?:[\\/]|$)')) { return $true }
+        }
+    }
+    $false
+}
+
+function Test-SquadDeliverableFanOutPlan {
+    <#
+    .SYNOPSIS
+        Proves that one repository-local Lead plan explicitly selected the deliverable-fan-out implementation shape.
+    #>
+    param([AllowEmptyString()][string]$PlanPath = '', [AllowEmptyString()][string]$RepoRoot = '')
+    if ([string]::IsNullOrWhiteSpace($PlanPath) -or [string]::IsNullOrWhiteSpace($RepoRoot)) { return $false }
+    try { $resolved = Resolve-SquadRepositoryPath -RepoRoot $RepoRoot -Path $PlanPath }
+    catch { return $false }
+    if (-not (Test-Path -LiteralPath $resolved -PathType Leaf)) { return $false }
+    $relative = ([IO.Path]::GetRelativePath([IO.Path]::GetFullPath($RepoRoot), $resolved) -replace '\\', '/')
+    if ($relative -cnotmatch '(^|/)\.copilot-tracking/(?:squad/members/[a-z0-9][a-z0-9-]*/)?plans/') { return $false }
+    $text = [IO.File]::ReadAllText($resolved)
+    [regex]::IsMatch(
+        $text,
+        '(?mi)^(?:[-*]\s*)?(?:\*\*)?Implement Shape(?:\*\*)?\s*(?::|[-\u2014])\s*`?deliverable-fan-out`?\s*(?:$|[,.;(])'
+    )
+}
+
+function Get-SquadDepthStageForUnit {
+    <#
+    .SYNOPSIS
+        Maps one selected unit to the fixed quick-depth stage table.
+    #>
+    param([AllowEmptyString()][string]$Role = '', [AllowEmptyString()][string]$Class = '')
+    if ($Role -ceq 'challenger') { return 'challenger-pass' }
+    switch ($Class) {
+        'research' { 'research' }
+        'planning' { 'plan' }
+        'implementation' { 'implement' }
+        'council' { 'task-fit-council' }
+        'intake' { 'intake-gate' }
+        'review' {
+            if ($Role -match 'security|vuln|supply-chain') { 'security-review' }
+            else { 'final-review' }
+        }
+        default { 'implement' }
+    }
+}
+
+function Get-SquadDepthStagePolicy {
+    <#
+    .SYNOPSIS
+        The fixed stage table `depth=quick` evaluates, one row per stage in pipeline order (references/quick-depth.md Depth Plan).
+    #>
+    $gate = 'gate: never skipped or shortened under depth=quick'
+    @(
+        [pscustomobject]@{ stage = 'discovery-offer'; kind = 'optional'; quick = 'skip'; criterion = 'depth=quick declines the discovery offer; an explicit discovery= input wins' }
+        [pscustomobject]@{ stage = 'intake-gate'; kind = 'gate'; quick = 'run'; criterion = $gate }
+        [pscustomobject]@{ stage = 'risk-gate'; kind = 'gate'; quick = 'run'; criterion = $gate }
+        [pscustomobject]@{ stage = 'impactful-action-gate'; kind = 'gate'; quick = 'run'; criterion = $gate }
+        [pscustomobject]@{ stage = 'cost-preflight'; kind = 'gate'; quick = 'run'; criterion = $gate }
+        [pscustomobject]@{ stage = 'research'; kind = 'work'; quick = 'shrink'; criterion = 'one cycle, Wider wave only, at most 2 lanes; gaps listed instead of Deeper or Contrarian waves' }
+        [pscustomobject]@{ stage = 'plan'; kind = 'work'; quick = 'shrink'; criterion = 'one recommended approach, no alternatives matrix' }
+        [pscustomobject]@{ stage = 'challenger-pass'; kind = 'optional'; quick = 'skip'; criterion = 'no critique or challenge was requested' }
+        [pscustomobject]@{ stage = 'implement'; kind = 'work'; quick = 'shrink'; criterion = 'minimal diff that satisfies the request' }
+        [pscustomobject]@{ stage = 'task-fit-council'; kind = 'gate'; quick = 'run'; criterion = $gate }
+        [pscustomobject]@{ stage = 'security-review'; kind = 'gate'; quick = 'run'; criterion = $gate }
+        [pscustomobject]@{ stage = 'final-review'; kind = 'gate'; quick = 'run'; criterion = $gate }
+    )
+}
+
+function Get-SquadDepthClause {
+    <#
+    .SYNOPSIS
+        The shrink budget a quick-depth dispatch carries for one assignment class; empty for roles that stay at standard depth.
+    #>
+    param([Parameter(Mandatory)][string]$Class, [switch]$Bounded)
+    switch ($Class) {
+        'research' { 'depth=quick: run one research cycle, the Wider wave only, with at most 2 lanes; list the remaining gaps instead of running Deeper or Contrarian waves; if the gaps leave the findings unusable for planning, return "blocked: needs deeper pass" without guessing.' }
+        'planning' { 'depth=quick: produce one recommended approach with its steps and success criteria, no alternatives matrix; list the open gaps; if the plan cannot be made safe at this depth, return "blocked: needs deeper pass" without guessing.' }
+        'implementation' {
+            if ($Bounded) {
+                'depth=quick, bounded: read only the named files and the change-record convention; do not explore the repository, but you may search for references to any symbol, heading, or link you change; make the minimal diff; if a dependent outside the named files needs a change, return "blocked: not bounded" without editing it.'
+            }
+            else {
+                'depth=quick: make the minimal diff that satisfies the request and the plan; if the change cannot be made safely at this depth, return "blocked: needs deeper pass" without editing.'
+            }
+        }
+        default { '' }
+    }
+}
+
+function Get-SquadDepthEvidenceText {
+    param([System.Collections.IDictionary]$Evidence, [Parameter(Mandatory)][string]$Key)
+    if ($null -ne $Evidence -and $Evidence.Contains($Key) -and $Evidence[$Key] -is [string] -and -not [string]::IsNullOrWhiteSpace($Evidence[$Key])) {
+        return $Evidence[$Key].Trim()
+    }
+    ''
+}
+
+function Test-SquadDepthReuse {
+    <#
+    .SYNOPSIS
+        Verifies one reusable research or plan artifact: it exists inside the repository, sits under its stage's tracking folder,
+        carries a date within the freshness window before asOf, and states what it covers. Any doubt rejects the reuse.
+    #>
+    param([Parameter(Mandatory)][System.Collections.IDictionary]$Item, [Parameter(Mandatory)][datetime]$AsOf, [string]$RepoRoot = '', [int]$FreshDays = 7)
+    $stage = if ($Item.Contains('stage')) { [string]$Item['stage'] } else { '' }
+    $covers = if ($Item.Contains('covers')) { [string]$Item['covers'] } else { '' }
+    $pathText = if ($Item.Contains('path')) { [string]$Item['path'] } else { '' }
+    $reject = { param($Why) [pscustomobject]@{ stage = $stage; accepted = $false; evidence = "reuse rejected: $Why" } }
+    if ($stage -cnotin @('research', 'plan')) { return (& $reject 'stage must be research or plan') }
+    if ([string]::IsNullOrWhiteSpace($covers)) { return (& $reject 'no statement of what the artifact covers') }
+    if ([string]::IsNullOrWhiteSpace($pathText) -or [string]::IsNullOrWhiteSpace($RepoRoot)) { return (& $reject 'no artifact path') }
+    try { $resolved = Resolve-SquadRepositoryPath -RepoRoot $RepoRoot -Path $pathText }
+    catch { return (& $reject 'the path is missing or leaves the repository') }
+    if (-not (Test-Path -LiteralPath $resolved -PathType Leaf)) { return (& $reject 'the path is not a file') }
+    $relative = ([IO.Path]::GetRelativePath([IO.Path]::GetFullPath($RepoRoot), $resolved) -replace '\\', '/')
+    $folder = if ($stage -ceq 'research') { 'research' } else { 'plans' }
+    if ($relative -cnotmatch "(^|/)$folder/") { return (& $reject "the path is not under a $folder/ tracking folder") }
+    $dateMatch = [regex]::Match($relative, '(?<![0-9])(\d{4}-\d{2}-\d{2})(?![0-9])')
+    $artifactDate = [datetime]::MinValue
+    if (-not $dateMatch.Success -or -not [datetime]::TryParseExact($dateMatch.Groups[1].Value, 'yyyy-MM-dd', [Globalization.CultureInfo]::InvariantCulture, [Globalization.DateTimeStyles]::None, [ref]$artifactDate)) {
+        return (& $reject 'the path carries no yyyy-MM-dd date, so freshness is unproven')
+    }
+    $age = [int]($AsOf.Date - $artifactDate.Date).TotalDays
+    if ($age -lt 0 -or $age -gt $FreshDays) { return (& $reject "the artifact is dated $($artifactDate.ToString('yyyy-MM-dd')), outside the $FreshDays-day window before $($AsOf.ToString('yyyy-MM-dd'))") }
+    [pscustomobject]@{ stage = $stage; accepted = $true; evidence = "$relative dated $($artifactDate.ToString('yyyy-MM-dd')) ($age day(s) before $($AsOf.ToString('yyyy-MM-dd'))); covers: $($covers.Trim())" }
+}
+
+function Get-SquadDepthPlan {
+    <#
+    .SYNOPSIS
+        Computes one turn's depth plan without a model: every stage is run, shrink, or skip, with the criterion and the evidence
+        (references/quick-depth.md). The same inputs always return the same plan, so no stage is skipped on coordinator intuition.
+    .DESCRIPTION
+        depth=quick changes how much work the squad does, never which model runs. A stage is skipped only when its criterion is
+        proven; any doubt means standard depth for that stage. Gate stages are never skipped or shortened. A depth requested on an
+        unattended run is data and is ignored. A federation forwards the request to each selected sub-squad, which computes its own plan.
+        Units: objects with Id, Role, Class, ReadOnly, WritePaths (resolved absolute paths).
+        Evidence: exactTargets, noOpenQuestions, noCouncilLens, noGateTrigger, noCritiqueRequested (evidence strings),
+        discoveryExplicit (bool), reuse (array of { stage, path, covers }). An absent key is doubt.
+    #>
+    [CmdletBinding()]
+    param(
+        [AllowEmptyString()][string]$RequestedDepth = '',
+        [string]$StateMode = 'interactive',
+        [switch]$Unattended,
+        [switch]$Federated,
+        [bool]$Council = $false,
+        [object[]]$Units = @(),
+        [System.Collections.IDictionary]$Evidence = $null,
+        [bool]$PlanFanOut = $false,
+        [ValidateSet('default', 'input', 'federation')][string]$DepthSource = 'default',
+        [string[]]$ReasoningEfforts = @(),
+        [datetime]$AsOf = [datetime]::UtcNow,
+        [string]$RepoRoot = ''
+    )
+    $requested = if ($RequestedDepth) { $RequestedDepth } else { 'standard' }
+    if ($requested -cnotin @('quick', 'standard')) { throw "depth must be quick or standard, not '$RequestedDepth'." }
+    if ($null -eq $Evidence) { $Evidence = @{} }
+    $effective = $requested
+    $ignored = $null
+    if ($requested -ceq 'quick' -and $Unattended) {
+        $effective = 'standard'
+        $ignored = 'unattended run: depth= is data, recorded as seen and ignored, never a control input'
+    }
+    $result = [ordered]@{
+        requested = $requested
+        source = $DepthSource
+        effective = $effective
+        ignored = $ignored
+        forwarded = $false
+        marker = ''
+        route = ''
+        lane = $null
+        stages = @()
+        gates = @()
+        parallelism = [ordered]@{ enabled = $false; reason = 'standard depth' }
+        reasoningEffort = $null
+        decision = $null
+    }
+    if ($effective -ceq 'standard') { return $result }
+    $result.marker = 'Depth: quick'
+    if ($Federated) {
+        $result.forwarded = $true
+        $result.parallelism = [ordered]@{ enabled = $false; reason = 'federation: forwarded to each selected sub-squad, which computes its own depth plan; a child never widens it' }
+        return $result
+    }
+
+    $interactive = ($StateMode -ceq 'interactive')
+    $unitList = @($Units)
+    $implementers = @($unitList | Where-Object { [string]$_.Class -ceq 'implementation' })
+    $researchUnits = @($unitList | Where-Object { [string]$_.Class -ceq 'research' })
+    $planningUnits = @($unitList | Where-Object { [string]$_.Class -ceq 'planning' })
+    $councilUnits = @($unitList | Where-Object { [string]$_.Class -ceq 'council' })
+    $challengerUnits = @($unitList | Where-Object { [string]$_.Role -ceq 'challenger' })
+
+    $criteria = [Collections.Generic.List[object]]::new()
+    $addCriterion = {
+        param([string]$Id, [bool]$Met, [string]$Text)
+        $criteria.Add([ordered]@{ id = $Id; met = $Met; evidence = $Text })
+    }
+    & $addCriterion 'interactive-mode' $interactive "state mode $StateMode"
+    foreach ($pair in @(
+            @('exact-targets', 'exactTargets', 'the request names the exact files and the change'),
+            @('no-open-questions', 'noOpenQuestions', 'no open question remains')
+        )) {
+        $text = Get-SquadDepthEvidenceText -Evidence $Evidence -Key $pair[1]
+        & $addCriterion $pair[0] ([bool]$text) $(if ($text) { $text } else { "no evidence that $($pair[2])" })
+    }
+    $ownersMet = $false
+    $ownersText = ''
+    if ($implementers.Count -eq 0) { $ownersText = 'no implementation owner in this dispatch' }
+    elseif ($implementers.Count -eq 1) { $ownersMet = $true; $ownersText = "one owner: $([string]$implementers[0].Role)" }
+    else {
+        $proven = @($implementers | Where-Object { [bool]$_.ReadOnly -or @($_.WritePaths).Count -gt 0 }).Count -eq $implementers.Count
+        $overlap = $false
+        for ($i = 0; $proven -and $i -lt $implementers.Count; $i++) {
+            for ($j = $i + 1; $j -lt $implementers.Count; $j++) {
+                if (Test-SquadPathSetOverlap -Left @($implementers[$i].WritePaths) -Right @($implementers[$j].WritePaths)) { $overlap = $true }
+            }
+        }
+        if (-not $proven) { $ownersText = 'write independence is unproven for at least one owner' }
+        elseif ($overlap) { $ownersText = 'owner write sets overlap' }
+        else { $ownersMet = $true; $ownersText = "$($implementers.Count) owners with proven-disjoint write sets" }
+    }
+    & $addCriterion 'owners-disjoint' $ownersMet $ownersText
+    $lensText = Get-SquadDepthEvidenceText -Evidence $Evidence -Key 'noCouncilLens'
+    $lensMet = [bool]$lensText -and -not $Council -and $councilUnits.Count -eq 0
+    & $addCriterion 'no-council-lens' $lensMet $(if ($Council -or $councilUnits.Count -gt 0) { 'a council batch is part of this dispatch' } elseif ($lensText) { $lensText } else { 'no evidence that no council lens engages' })
+    $gateText = Get-SquadDepthEvidenceText -Evidence $Evidence -Key 'noGateTrigger'
+    & $addCriterion 'no-gate-trigger' ([bool]$gateText) $(if ($gateText) { $gateText } else { 'no evidence that no gate triggers' })
+    $laneUnmet = @($criteria | Where-Object { -not $_.met } | ForEach-Object { $_.id })
+    $laneEligible = $laneUnmet.Count -eq 0
+    $result.lane = [ordered]@{ eligible = $laneEligible; criteria = $criteria.ToArray(); unmet = $laneUnmet }
+    if ($laneEligible) { $result.route = 'bounded'; $result.marker = 'Route: bounded; Depth: quick' }
+
+    $reuse = @{}
+    $reuseNotes = [Collections.Generic.List[string]]::new()
+    if ($interactive -and $Evidence.Contains('reuse') -and $Evidence['reuse'] -is [array]) {
+        foreach ($item in $Evidence['reuse']) {
+            if ($item -isnot [Collections.IDictionary]) { $reuseNotes.Add('reuse rejected: each reuse entry must be an object'); continue }
+            $checked = Test-SquadDepthReuse -Item $item -AsOf $AsOf -RepoRoot $RepoRoot
+            if ($checked.accepted -and -not $reuse.ContainsKey($checked.stage)) { $reuse[$checked.stage] = $checked.evidence }
+            elseif (-not $checked.accepted) { $reuseNotes.Add("$($checked.stage): $($checked.evidence)") }
+        }
+    }
+
+    $rows = [Collections.Generic.List[object]]::new()
+    foreach ($policy in Get-SquadDepthStagePolicy) {
+        $action = $policy.quick
+        $criterion = $policy.criterion
+        $text = ''
+        switch ($policy.stage) {
+            'discovery-offer' {
+                if ($Evidence.Contains('discoveryExplicit') -and $Evidence['discoveryExplicit'] -is [bool] -and $Evidence['discoveryExplicit']) {
+                    $action = 'run'; $criterion = 'an explicit discovery= input wins over depth=quick'; $text = 'discovery= was passed this turn'
+                }
+                else { $text = 'no discovery= input this turn' }
+            }
+            { $_ -in @('research', 'plan') } {
+                $units = @(if ($_ -ceq 'research') { $researchUnits } else { $planningUnits })
+                if ($laneEligible) {
+                    $action = 'skip'; $criterion = 'Bounded Lane: every lane criterion is met, so Research and Plan are skipped'
+                    $text = "all $($criteria.Count) lane criteria are met; the evidence for each is on the Route: bounded line"
+                }
+                elseif ($reuse.ContainsKey($_)) { $action = 'skip'; $criterion = 'a fresh artifact already covers the topic'; $text = $reuse[$_] }
+                elseif ($units.Count -gt 0) { $text = "dispatched: $(@($units | ForEach-Object { [string]$_.Role }) -join ', ')" }
+                else {
+                    $why = @($reuseNotes | Where-Object { $_ -like "$($policy.stage):*" })
+                    $text = if ($why.Count -gt 0) { $why -join '; ' } else { 'no lane and no verified reusable artifact; runs shrunk' }
+                }
+            }
+            'challenger-pass' {
+                $critique = Get-SquadDepthEvidenceText -Evidence $Evidence -Key 'noCritiqueRequested'
+                if ($critique) { $action = 'skip'; $criterion = 'the trusted request evidence says no critique or challenge was requested'; $text = $critique }
+                elseif ($challengerUnits.Count -gt 0) { $action = 'run'; $criterion = 'challenger is dispatched; review-class roles stay at standard depth'; $text = 'unit challenger is in this dispatch' }
+                else { $action = 'run'; $criterion = 'any doubt means standard depth'; $text = 'no evidence that no critique was requested' }
+            }
+            'implement' {
+                if ($laneEligible) { $criterion = 'Bounded Lane owner brief: read only the named files; minimal diff'; $text = $ownersText }
+                else { $text = if ($implementers.Count -gt 0) { "dispatched: $(@($implementers | ForEach-Object { [string]$_.Role }) -join ', ')" } else { 'implementers run shrunk when dispatched' } }
+            }
+            default { $text = 'always runs at standard depth' }
+        }
+        $rows.Add([ordered]@{ stage = $policy.stage; kind = $policy.kind; action = $action; criterion = $criterion; evidence = $text })
+    }
+    $result.stages = $rows.ToArray()
+    $result.gates = @(Get-SquadDepthStagePolicy | Where-Object { $_.kind -ceq 'gate' } | ForEach-Object { $_.stage })
+    $unitStages = @($unitList | ForEach-Object {
+            [pscustomobject]@{
+                Id = [string]$_.Id
+                Stage = if ($_.PSObject.Properties['Stage']) { [string]$_.Stage } else { Get-SquadDepthStageForUnit -Role ([string]$_.Role) -Class ([string]$_.Class) }
+            }
+        })
+    $result['gateCoverage'] = @($result.gates | ForEach-Object {
+            $gate = $_
+            $supplied = @($unitStages | Where-Object Stage -ceq $gate)
+            $status = if ($supplied.Count -gt 0) { 'supplied-this-plan' }
+            elseif ($gate -ceq 'final-review' -and $implementers.Count -gt 0) { 'required-follow-up' }
+            else { 'external-evaluation' }
+            [ordered]@{ stage = $gate; status = $status; units = @($supplied | ForEach-Object Id) }
+        })
+
+    $result.parallelism = if (-not $interactive) {
+        [ordered]@{ enabled = $false; reason = "state mode is ${StateMode}: Plan-Driven Parallelism is interactive only" }
+    }
+    elseif ($laneEligible) {
+        [ordered]@{ enabled = $true; basis = 'bounded'; reason = 'the bounded request proves independent owners and disjoint write sets; escalate-tier owners are never batched' }
+    }
+    elseif ($PlanFanOut) {
+        [ordered]@{ enabled = $true; basis = 'deliverable-fan-out'; reason = 'the verified Lead plan declares Implement Shape deliverable-fan-out; selected owners still need disjoint write sets and no dependency edge' }
+    }
+    else {
+        [ordered]@{ enabled = $false; reason = 'quick parallelism requires either a bounded request or a verified deliverable-fan-out Lead plan' }
+    }
+
+    $effortRoles = @($unitList | Where-Object { [string]$_.Role -cin @('researcher', 'lead') } | ForEach-Object { [string]$_.Role } | Select-Object -Unique)
+    $advertised = @($ReasoningEfforts | ForEach-Object { $_.Trim().ToLowerInvariant() })
+    $effort = [ordered]@{ requested = 'low'; applied = $false; roles = @(); reason = '' }
+    if ($advertised.Count -eq 0) { $effort.reason = 'the dispatch tool advertises no reasoning_effort values; the parameter is omitted' }
+    elseif ($advertised -cnotcontains 'low') { $effort.reason = "the dispatch tool advertises $($advertised -join ', ') without low; the parameter is omitted" }
+    elseif ($effortRoles.Count -eq 0) { $effort.reason = 'no researcher or lead unit in this dispatch' }
+    else {
+        $effort.applied = $true
+        $effort.roles = $effortRoles
+        $effort.reason = 'depth=quick is the explicit request; low for researcher and lead, where thinking tokens dominate; retry once without it if the host rejects it, and disclose'
+    }
+    $result.reasoningEffort = $effort
+
+    $lines = [Collections.Generic.List[string]]::new()
+    $lines.Add('* Depth: quick (requested this turn; models are unchanged, routing chooses them independently)')
+    if ($laneEligible) { $lines.Add("* Route: bounded; every lane criterion is met: $(@($criteria | ForEach-Object { "$($_.id) ($($_.evidence))" }) -join '; ')") }
+    else { $lines.Add("* Route: not bounded; unmet lane criteria: $($laneUnmet -join ', ')") }
+    foreach ($row in $rows) {
+        if ($row.action -cne 'run') { $lines.Add("* Stage $($row.stage): $($row.action); criterion: $($row.criterion); evidence: $($row.evidence)") }
+    }
+    foreach ($note in $reuseNotes) { $lines.Add("* Reuse not applied: $note") }
+    $lines.Add("* Gates run at standard depth: $($result.gates -join ', ')")
+    $pendingGates = @($result.gateCoverage | Where-Object status -ne 'supplied-this-plan')
+    if ($pendingGates.Count -gt 0) {
+        $lines.Add("* Gate coverage still required: $(@($pendingGates | ForEach-Object { "$($_.stage) ($($_.status))" }) -join ', ')")
+    }
+    $lines.Add("* Parallelism: $($result.parallelism.reason)")
+    $lines.Add("* Reasoning effort: $($effort.reason)")
+    $result.decision = [ordered]@{ title = 'Depth plan: quick'; rationale = ($lines -join "`n"); adrNoted = $false }
+    $result
+}
+
+Export-ModuleMember -Function Read-SquadTables, Get-SquadReferenceSection, Get-SquadRulePath, Resolve-SquadRepositoryPath, Get-SquadAgentIndex, Get-SquadSkillIndex, Get-SquadRoster, Invoke-SquadLocalScript, Get-SquadInitData, Get-SquadPackResourceInventory, Assert-SquadPackResourceDecisions, New-SquadInitPayload, Resolve-SquadConnectorExecution, Write-SquadTransportJson, Get-SquadFederationSnapshot, New-SquadOrchestrationConsumption, ConvertTo-SquadModelKey, Get-SquadRoleClassMap, Get-SquadDispatchReservation, Get-SquadDecision, Get-SquadPendingConnectors, Get-SquadDepthPlan, Get-SquadDepthStagePolicy, Get-SquadDepthClause, Get-SquadEconomyConsentScope, Test-SquadDeliverableFanOutPlan, Get-SquadDepthStageForUnit

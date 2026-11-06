@@ -44,11 +44,17 @@
     <div class="container">
       <h2>Common issues</h2>
       <h3>CLI or App cannot find the coordinator or a specialist</h3>
-      <p>Confirm that both <code>hve-squad</code> and <code>hve-squad-hve-core</code> are installed in the current client's plugin home. Select the coordinator agent, not a skill, then ask for <code>squad-doctor</code>. Follow the <a href="https://peter-n91.github.io/hve-squad-plugin/install-cli.html">plugin guide</a> for missing domains and companion reinstalls. A terminal update does not update an app using another <code>COPILOT_HOME</code>.</p>
+      <p>Confirm that the single <code>hve-squad</code> plugin is installed and enabled in the client you are using. Select the coordinator agent, not a similarly named skill, then ask for <code>squad-doctor</code>. Refresh the <code>hve-squad</code> marketplace, update or reinstall the plugin, and start a fresh session. A terminal update does not update an app using another <code>COPILOT_HOME</code>.</p>
 
-      <h3>VS Code reports HVE Core agents missing even though both plugins are enabled</h3>
-      <p data-release-change="20261029-synced-plugin-agent-discovery">VS Code's Copilot harness can copy plugins into separate versioned directories. Squad's coordinator passes the active plugin roots advertised by that host to its scripts through the process-local <code>SQUAD_ACTIVE_PLUGIN_ROOTS</code> JSON array. This is not a VS Code setting; no manual configuration change is needed when the host exposes those paths. Repository-local agents keep priority, and CLI/App sibling-plugin discovery remains available when this inventory is unset.</p>
-      <p>The Local harness's repository-deployed agents use the existing discovery path without this inventory. For the Copilot harness, update the Squad plugin and start a fresh chat. If the host does not expose active customization paths, discovery remains unresolved: provide those paths from the current host's enabled customizations rather than reinstalling HVE Core, dropping a role, or scanning old plugin caches. An installed file is not proof that its agent is available for native dispatch.</p>
+      <h3>VS Code reports bundled HVE Core agents missing</h3>
+      <p>The current plugin reads every Squad and HVE Core agent from its own <code>plugin.json</code>; it does not depend on VS Code exposing sibling cache paths. Open the installed plugin details and confirm that <code>.github/plugin/hve-core-source.json</code> exists, then update or reinstall <code>hve-squad</code> from <code>Peter-N91/hve-squad#plugin</code> and start a fresh Copilot session.</p>
+      <p>If both the stable and preview marketplaces are configured, uninstall one copy. They expose the same agent names and must not be enabled together. Do not repair this condition by installing the official <code>hve-core</code> plugin separately.</p>
+
+      <h3>VS Code reports <code>npx: No such file or directory</code> for <code>hve-squad</code></h3>
+      <p>This identifies an old plugin build that bundled the separate MCP server. The current plugin contains no <code>mcp.json</code> or <code>.mcp.json</code>. Remove the old marketplace/plugin installation and install the single plugin from <code>Peter-N91/hve-squad#plugin</code>. Configure <code>hve-squad-mcp</code> separately only when you need that product.</p>
+
+      <h3>Copilot CLI lists the plugin hooks but does not execute them</h3>
+      <p>Plugin hook execution is a current CLI runtime limitation, not evidence that the agent rules are absent. Run <code>squad-init-hooks</code> once in the consuming repository to write the same cross-platform backstops under <code>.github/hooks/</code>. Local CLI sessions can use the generated files immediately; commit them for Copilot cloud agent and Watch Mode.</p>
 
       <h3>Exactly 11 dependencies fail during <code>apm install</code></h3>
       <p>

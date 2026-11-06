@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>hve-squad — APM package for HVE Core + Squad</title>
-  <meta name="description" content="An installable APM package that bundles HVE Core agents, prompts, instructions, and skills with a Squad Coordinator for Copilot." />
+  <title>hve-squad — Copilot plugin for HVE Core + Squad</title>
+  <meta name="description" content="A GitHub Copilot plugin that bundles the pinned HVE Core cast with Squad agents, skills, rules, and hooks; APM remains the repository fallback." />
   <link rel="icon" type="image/svg+xml" href="assets/logo.svg" />
   <script src="assets/theme.js"></script>
   <link rel="stylesheet" href="assets/style.css" />
@@ -41,9 +41,9 @@
       <div class="eyebrow">Documentation · Copilot CLI · Copilot App · VS Code</div>
       <h1>hve-squad</h1>
       <p class="lead">
-        hve-squad assembles HVE Core agents, prompts, instructions, and skills into a single
-        installable bundle, and ships a Squad Coordinator that routes your request to a cast of
-        agents in parallel. Use the full APM package in VS Code, or the paired plugins in Copilot CLI and App.
+        hve-squad installs one self-contained plugin for VS Code, Copilot CLI, and the Copilot app.
+        It bundles the pinned HVE Core cast with Squad agents, skills, rules, and hooks, while APM
+        remains available when the same customizations must be copied into a repository.
       </p>
       <a class="btn btn-primary" href="getting-started.html#chat-with-the-squad-coach">New here? Chat with the Squad Coach</a>
       <a class="btn btn-ghost" href="getting-started.html">Install</a>
@@ -72,7 +72,7 @@
           <a class="card" href="getting-started.html">
             <div class="icon">🚀</div>
             <h3>Getting Started</h3>
-            <p>Prerequisites, installing the package with the correct target, and your first run.</p>
+            <p>Plugin installation and updates, preview testing, APM fallback, and your first run.</p>
             <span class="tag">Install</span>
           </a>
           <a class="card" href="usage.html">
@@ -89,7 +89,7 @@
           </a>          <a class="card" href="ecosystem.html">
             <div class="icon">🌐</div>
             <h3>Ecosystem</h3>
-            <p>The MCP server and the Copilot CLI plugin &mdash; what each surface is for, and where their repositories and documentation sites live.</p>
+            <p>The plugin, APM fallback, MCP server, and MAF host &mdash; what each surface is for and where it lives.</p>
             <span class="tag">Reference</span>
           </a>          <a class="card" href="maintaining.html">
             <div class="icon">🔧</div>
@@ -111,23 +111,21 @@
       <div class="container">
         <p class="section-label">What this project does</p>
         <p>
-          This repository provides a curated APM package that references content from
-          <a href="https://github.com/microsoft/hve-core">microsoft/hve-core</a> under
-          <code>.github/agents</code>, <code>.github/instructions</code>,
-          <code>.github/prompts</code>, and <code>.github/skills</code>. Instead of hand-maintaining
-          hundreds of dependency paths, an automation script regenerates the dependency list in
-          <code>apm.yml</code>.
+          This repository publishes one Copilot plugin that contains the Squad and every component
+          declared by the exact <a href="https://github.com/microsoft/hve-core">microsoft/hve-core</a>
+          commit pinned in <code>apm.yml</code>. The same manifest continues to drive the APM fallback.
+          Automation regenerates the dependency list and the manually published plugin branches.
         </p>
         <div class="grid">
           <div class="card">
             <div class="icon">📦</div>
             <h3>One bundle</h3>
-            <p>Auto-discovers supported markdown artifacts from selected HVE Core folders and ships them together.</p>
+            <p>Installs Squad and its validated HVE Core cast from one plugin root and one version.</p>
           </div>
           <div class="card">
             <div class="icon">♻️</div>
             <h3>Reproducible</h3>
-            <p>Dependencies are resolved into <code>apm.lock.yaml</code> so installs are repeatable.</p>
+            <p>The plugin records its HVE Core commit; the APM fallback resolves dependencies into <code>apm.lock.yaml</code>.</p>
           </div>
           <div class="card">
             <div class="icon">🧩</div>
@@ -165,12 +163,11 @@
 
     <section class="section">
       <div class="container">
-        <p class="section-label">Companion projects</p>
+        <p class="section-label">Distribution and companion hosts</p>
         <p>
-          Beyond the local Squad agent experience, the squad reaches two other hosts through
-          sibling repositories. Neither is a fork &mdash; both are built from a tagged
-          <code>hve-squad</code> release, so each version maps back to a known version of this package.
-          See <a href="ecosystem.html">Ecosystem</a> for how to choose between them.
+          The primary Copilot plugin is published from this repository. MCP and Microsoft Agent
+          Framework remain separate host integrations. See <a href="ecosystem.html">Ecosystem</a>
+          for how to choose between them.
         </p>
         <div class="grid">
           <div class="card">
@@ -187,19 +184,28 @@
           </div>
           <div class="card">
             <div class="icon">🧩</div>
-            <h3>Copilot CLI plugin</h3>
+            <h3>HVE Squad plugin</h3>
             <p>
-              <code>hve-squad-plugin</code> is a generated, release-gated mirror of the squad's plugin
-              tree, published as a Copilot plugin marketplace. It runs the squad in the GitHub Copilot
-              CLI and the desktop app with no <code>apm install</code>.
+              The <code>plugin</code> branch in this repository bundles Squad with its exact pinned
+              HVE Core cast for VS Code, Copilot CLI, and the Copilot app. APM is the repository-local
+              fallback.
             </p>
             <span class="tag">Plugin</span>
+          </div>
+          <div class="card">
+            <div class="icon">🤖</div>
+            <h3>Microsoft Agent Framework</h3>
+            <p>
+              <code>hve-squad-maf</code> hosts the squad through Microsoft Agent Framework while the
+              Copilot plugin remains independent.
+            </p>
+            <span class="tag">MAF</span>
           </div>
         </div>
         <p>
           <a class="btn btn-ghost" href="ecosystem.html">Ecosystem overview →</a>
           <a class="btn btn-ghost" href="https://peter-n91.github.io/hve-squad-mcp/">hve-squad-mcp docs →</a>
-          <a class="btn btn-ghost" href="https://peter-n91.github.io/hve-squad-plugin/">hve-squad-plugin docs →</a>
+          <a class="btn btn-ghost" href="https://github.com/Peter-N91/hve-squad-maf">hve-squad-maf →</a>
         </p>
       </div>
     </section>
@@ -207,16 +213,13 @@
     <section class="section">
       <div class="container">
         <p class="section-label">Quick install</p>
-        <pre><code># APM CLI must report 0.29.0:
-apm --version
-# In the project you want the squad in:
-apm install "Peter-N91/hve-squad#vX.Y.z" --target copilot</code></pre>
+        <pre><code>copilot plugin marketplace add Peter-N91/hve-squad#plugin
+copilot plugin install hve-squad@hve-squad</code></pre>
         <p>
-          APM 0.29.1 and 0.30.0 have a regression that breaks this package's dependency
-          installation. Use APM CLI 0.29.0 until that issue is resolved. Then select the
-          <strong>Squad Coordinator</strong> from the agents dropdown in Copilot Chat. See
-          <a href="getting-started.html">Getting Started</a> for the pinned Windows and macOS
-          installation commands and the full flow.
+          In VS Code or the Copilot app, add the same marketplace from the plugin customization
+          UI. Then select <strong>Squad Coordinator</strong>. See
+          <a href="getting-started.html">Getting Started</a> for updates, preview installation,
+          and the APM repository fallback.
         </p>
       </div>
     </section>

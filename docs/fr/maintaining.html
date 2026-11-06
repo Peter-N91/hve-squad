@@ -651,6 +651,23 @@ pwsh -File scripts/Invoke-ReleasePrep.ps1 -Version 1.0.0        # exact number, 
         GitHub Release, puis retire la préversion.
       </p>
       <p>
+        <strong>La publication du plugin constitue une seconde décision manuelle.</strong> Après
+        validation de la version, lancez <strong>Publish Plugin</strong> avec le canal
+        <code>stable</code> ; si <code>ref</code> reste vide, le workflow sélectionne le tag stable le
+        plus élevé et actualise la branche <code>plugin</code> de ce dépôt. Utilisez le canal
+        <code>preview</code> pour publier la préversion glissante dans <code>plugin-preview</code>.
+        Le workflow récupère le commit HVE Core épinglé par la référence choisie, inclut ses composants
+        déclarés, retire toute configuration MCP et refuse une modification du contenu sans changement
+        de version du plugin.
+      </p>
+      <p>
+        <strong>Plugin Conformance</strong> construit le contenu réellement épinglé sous Windows,
+        macOS et Linux et vérifie les contrats de package pour VS Code, CLI et App. Avant une
+        publication stable, effectuez aussi un test rapide avec la version actuelle de chaque client :
+        le workflow prouve la portabilité du package, pas le comportement authentifié des interfaces
+        de bureau.
+      </p>
+      <p>
         La publication devient ainsi une décision sur l’état de préparation plutôt qu’une date. Un correctif rapide est livré dès
         que vous l’avez vérifié dans la préversion ; un changement plus important y reste jusqu’à ce qu’il soit prêt, et
         tout ce qui est fusionné entre-temps est livré avec lui.

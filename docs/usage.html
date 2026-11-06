@@ -1896,10 +1896,10 @@ layouts:
           work, among the models your host offers, and shows each pick in a <code>Model</code> column
           under a <code>Model routing: ranked</code> line.
         </li>
-        <li data-release-change="20261005-routing-economy">
-          <strong><code>economy</code></strong> — as <code>ranked</code>, except that five low-impact
-          implementation roles get the cheapest model that fits their work well enough; shown under a
-          <code>Model routing: economy</code> line. Opt-in, and only after you accept the trade. See
+        <li data-release-change="20261106-economy-all-role-routing">
+          <strong><code>economy</code></strong> — every routed role gets the cheapest known-price model
+          inside its own floor; qualification is preferred and disclosed, with a floor-only pick when
+          none qualifies. Shown under a <code>Model routing: economy</code> line. Opt-in, and only after you accept the trade. See
           <a href="#routing-economy">Economy mode</a> below.
         </li>
         <li>
@@ -1936,35 +1936,33 @@ layouts:
         pick, you are asked again with the list VS Code reports.
       </p>
       <p id="routing-economy" data-release-change="20261005-routing-economy">
-        <strong>Economy mode (<code>routing=economy</code>).</strong> Only these five roles change
-        model: <code>developer</code>, <code>technical-writer</code>, <code>presenter</code>,
-        <code>prompt-engineer</code>, and <code>data-scientist</code>. Each gets the cheapest catalog
-        model with sufficient verified independent evidence: at least <code>0.50</code> on
-        each full-panel primary, or <code>0.75</code> on the explicitly reduced SciCode
-        panel, under distinct versioned qualification rules and within the role's own
-        <code>Model Tier</code> floor. This is a policy minimum, not a guarantee of task success:
-        once it is met, extra capability or confidence never overrides a lower known Blended
-        price. Equal prices use capability first; missing prices are never free. With no
-        qualified candidate, the helper explains its Ranked fallback. Every other role, including <code>product-owner</code>,
-        <code>deployer</code>, <code>iac-author</code>, <code>release-engineer</code>,
-        <code>backlog-executor</code>, and every review, council, intake, research, planning, and
-        bookkeeping role, keeps its <code>ranked</code> pick. After a <code>Fail</code> verdict, a
-        Critical or High finding, or a blocked owner, that owner is re-dispatched once on its
-        capability-first <code>ranked</code> pick, then reviewed again. The Scribe persists that
-        Model cell before redispatch; a costlier pick under a ceiling needs a new Cost Preflight.
-        If both picks coincide, no higher-ranked escalation target exists.
+        <strong>Economy mode (<code>routing=economy</code>).</strong>
+        <span data-release-change="20261106-economy-all-role-routing">Every routed role uses the same
+        cost-first rule, including research, planning, review, council, intake, live-resource, fallback-class,
+        and unattended roles. Inside the role's <code>Model Tier</code> floor, Economy prefers models
+        meeting the class rule: at least <code>0.50</code> on each full-panel primary,
+        <code>0.75</code> on the reduced SciCode panel, or declared fit at least 2 where no verified
+        panel exists. It then chooses the lowest known Blended price. If no model meets that preference,
+        <code>floor-only-known-price-v1</code> chooses the cheapest priced model still inside the floor;
+        the role is not left on Ranked. Missing prices are never free, and no priced floor candidate stops
+        the dispatch. The coordinator keeps your session model and the Scribe keeps its explicit pin; neither
+        is a Ranked hold. After a <code>Fail</code> verdict, a Critical or High finding, or a blocked owner,
+        that owner may be re-dispatched once on its capability-first <code>ranked</code> pick, then reviewed
+        again. A costlier retry under a ceiling needs a new Cost Preflight.</span>
       </p>
       <p>
         <strong>Consent.</strong> The first time you switch to <code>economy</code>, before any
         dispatch, the coordinator tells you once what changes and what does not, and the Scribe
         records a <code>## Economy Mode Accepted</code> decision with your name, the previous mode,
-        the trade you accepted, and the list of things that are never weakened. If that decision is
-        missing, the helper script reports <code>consent: missing</code> as a warning, and the
-        coordinator states the trade and records it before the next dispatch. A Watch Mode or other unattended run
-        never switches into <code>economy</code> from issue, PR, or comment text.
+        the trade you accepted, the list of things that are never weakened, and
+        <code>Scope: all-roles</code>. An older consent without that scope blocks dispatch until you
+        accept the wider trade; it never creates a mixed run where five roles use Economy and the rest
+        stay Ranked. A Watch Mode or other unattended run never switches into <code>economy</code>
+        from issue, pull-request, or comment text, but a previously consented all-role Economy mode
+        continues to apply to every routed role.
       </p>
       <p>
-        <strong>Never weakened.</strong> Economy never skips, shortens, or relaxes the Risk Gate,
+        <strong>Never weakened.</strong> Economy only changes model choice. It never skips, shortens, or relaxes the Risk Gate,
         the Impactful-Action Gate, the security review, the final tester review, the task-fit council
         with its extension and waiver, or any other gate, and it never lowers a floor. Under
         <code>off</code>, <code>ranked</code>, and <code>manual</code> the squad behaves exactly as
@@ -2031,6 +2029,29 @@ layouts:
 
 # Switch the product sub-squad to manual selection; each sub-squad keeps its own picks.
 /squad-federation squad=product routing=manual</code></pre>
+
+      <h3 id="work-depth" data-release-change="20261106-quick-depth">Work depth (<code>depth=</code>)</h3>
+      <p>
+        <code>routing=</code> chooses models; <code>depth=</code> independently chooses how much work
+        runs on this turn. Omit it for <code>depth=standard</code>, which preserves the full
+        Research &rarr; Plan &rarr; Implement &rarr; Review pipeline. <code>depth=quick</code> may
+        skip Research and Plan only when the deterministic bounded-lane or fresh-artifact criteria
+        prove that safe, skip an unrequested challenger pass, and shrink eligible work stages.
+        Every gate and final review stays at standard depth.
+      </p>
+      <p>
+        Quick depth may add concurrency only for a bounded request or a verified repository-local
+        Lead plan whose <code>Implement Shape</code> is <code>deliverable-fan-out</code>, with
+        disjoint write sets and no dependency edge. It never changes a model, floor, team setting,
+        or later turn. Omission always means standard; the coordinator never infers quick from
+        <code>routing=economy</code>, a small request, or exact file names. Issue, pull-request, and
+        comment text cannot activate it on an unattended run.
+      </p>
+      <pre><code># Keep Ranked models, but request the bounded/shrunk quick workflow for this turn.
+/squad request="update the named files and run their focused tests" routing=ranked depth=quick
+
+# Use cheap models without shortening the normal pipeline.
+/squad request="implement the approved plan" routing=economy</code></pre>
 
       <h3>Ledger validation</h3>
       <p>

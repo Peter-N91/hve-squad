@@ -51,7 +51,7 @@ paths, never placeholders. Federation tracking roots rebase to the member;
 and read-only.
 
 Substantive delivery follows Research -> Plan -> Implement -> Review. Only the
-existing economy Bounded Lane may omit its documented stages; other modes do
+`depth=quick` Bounded Lane may omit its documented stages; standard depth does
 not inherit it. Intake, discovery, council, security, closing review and human
 gates retain their triggers and exceptions. Before impactful actions (deploy,
 push/force-push, merge, migrations, deletion, secret rotation, live tracker writes

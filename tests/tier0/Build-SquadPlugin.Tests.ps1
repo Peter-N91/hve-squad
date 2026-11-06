@@ -13,9 +13,11 @@ BeforeAll {
     $script:SourceRootResolved = $SourceRoot
     Import-Module (Join-Path $PSScriptRoot 'SquadPackage.psm1') -Force
     $script:BuildScript = Join-Path $SourceRoot 'scripts/Build-SquadPlugin.ps1'
+    $script:VersionGateScript = Join-Path $SourceRoot 'scripts/Assert-SquadPluginVersion.ps1'
     $script:PackRosterBody = Get-Content -LiteralPath (Join-Path $SourceRoot 'squad-src/.github/instructions/squad/squad-roster.instructions.md') -Raw
     $script:ProgressSourcePath = Join-Path $SourceRoot 'squad-src/.github/skills/squad/references/operating-procedure.md'
     $script:OutputRoot = Join-Path $TestDrive 'plugin-output'
+    $script:HveCoreRoot = Join-Path $TestDrive 'hve-core'
     $script:HookScriptNames = @(
         'autonomous-escalation-check'
         'dispatch-guards'
@@ -26,21 +28,60 @@ BeforeAll {
         'state-write-guard'
     )
 
-    $hookScriptRoot = Join-Path $script:OutputRoot 'hooks/scripts'
-    New-Item -ItemType Directory -Path $hookScriptRoot -Force | Out-Null
-    foreach ($name in $script:HookScriptNames) {
-        foreach ($extension in @('ps1', 'sh')) {
-            $content = if ($name -eq 'session-start-check' -and $extension -eq 'ps1') {
-                'Set-Content -LiteralPath $env:HOOK_SENTINEL -Value powershell -Encoding UTF8'
-            }
-            elseif ($name -eq 'session-start-check' -and $extension -eq 'sh') {
-                '#!/usr/bin/env bash' + "`n" + 'printf bash > "$HOOK_SENTINEL"'
-            }
-            else {
-                ''
-            }
-            Set-Content -LiteralPath (Join-Path $hookScriptRoot "$name.$extension") -Value $content -Encoding utf8NoBOM
+    $hveAgent = Join-Path $script:HveCoreRoot '.github/agents/security/security-planner.agent.md'
+    $hveRule = Join-Path $script:HveCoreRoot '.github/instructions/security/identity.instructions.md'
+    $hveSkill = Join-Path $script:HveCoreRoot '.github/skills/security/secure-by-design/SKILL.md'
+    $hveExtension = Join-Path $script:HveCoreRoot '.github/extensions/hve-core/extension.json'
+    foreach ($path in @($hveAgent, $hveRule, $hveSkill, $hveExtension)) {
+        New-Item -ItemType Directory -Path (Split-Path -Parent $path) -Force | Out-Null
+    }
+    Set-Content -LiteralPath $hveAgent -Value "---`nname: Security Planner`nmodel: claude-sonnet-5.5`n---`n# Security Planner`n" -Encoding utf8NoBOM
+    Set-Content -LiteralPath $hveRule -Value "---`ndescription: Fixture rule`napplyTo: '**'`n---`n# Security rule`n" -Encoding utf8NoBOM
+    Set-Content -LiteralPath $hveSkill -Value "---`nname: secure-by-design`ndescription: Fixture skill`n---`n# Secure by design`n" -Encoding utf8NoBOM
+    Set-Content -LiteralPath $hveExtension -Value '{"name":"hve-core-fixture"}' -Encoding utf8NoBOM
+    Set-Content -LiteralPath (Join-Path $script:HveCoreRoot 'LICENSE') -Value 'MIT fixture' -Encoding utf8NoBOM
+    $hveManifest = [ordered]@{
+        name = 'hve-core'; version = '0.0.0-test'
+        agents = @('.github/agents/security/security-planner.agent.md')
+        commands = @()
+        rules = @('.github/instructions/security/identity.instructions.md')
+        skills = @('.github/skills/security/secure-by-design')
+        extensions = @('.github/extensions/hve-core')
+    }
+    Set-Content -LiteralPath (Join-Path $script:HveCoreRoot 'plugin.json') `
+        -Value (($hveManifest | ConvertTo-Json -Depth 6) + "`n") -Encoding utf8NoBOM
+
+    function New-HveCoreGitFixture {
+        param([Parameter(Mandatory)][string]$Name)
+        $gitRoot = Join-Path $TestDrive $Name
+        Copy-Item -LiteralPath $script:HveCoreRoot -Destination $gitRoot -Recurse
+        & git -C $gitRoot init --quiet
+        & git -C $gitRoot add -- .
+        & git -C $gitRoot -c user.name=Fixture -c user.email=fixture@example.invalid commit --quiet -m fixture
+        [pscustomobject]@{
+            Root   = $gitRoot
+            Commit = (& git -C $gitRoot rev-parse HEAD).Trim()
         }
+    }
+
+    function Invoke-PluginHookEntry {
+        param(
+            [Parameter(Mandatory)]$Entry,
+            [Parameter(Mandatory)][string]$InputText
+        )
+        if ($IsWindows) {
+            $command = [regex]::Match(
+                $Entry.powershell,
+                '^(?<exe>powershell\.exe|pwsh) -NoProfile -ExecutionPolicy Bypass -File "(?<path>[^"]+)"$'
+            )
+            if (-not $command.Success) { throw "Unexpected PowerShell hook command: $($Entry.powershell)" }
+            $executable = $command.Groups['exe'].Value
+            $scriptPath = $command.Groups['path'].Value
+            return $InputText |
+                & $executable -NoProfile -ExecutionPolicy Bypass -File $scriptPath |
+                Out-String
+        }
+        return $InputText | & bash -c $Entry.bash | Out-String
     }
 
     $pwsh = (Get-Process -Id $PID).Path
@@ -48,12 +89,15 @@ BeforeAll {
         & $pwsh -NoProfile -File $script:BuildScript `
             -SourceRoot $SourceRoot `
             -OutputRoot $script:OutputRoot `
-            -McpVersion '0.0.0-test' 2>&1
+            -HveCoreRoot $script:HveCoreRoot `
+            -AllowUnverifiedHveCoreSource 2>&1
     )
     $script:BuildExitCode = $LASTEXITCODE
 
     $script:RootManifestPath = Join-Path $script:OutputRoot 'plugin.json'
     $script:NestedManifestPath = Join-Path $script:OutputRoot '.github/plugin/plugin.json'
+    $script:MarketplaceManifestPath = Join-Path $script:OutputRoot '.github/plugin/marketplace.json'
+    $script:HveCoreSourcePath = Join-Path $script:OutputRoot '.github/plugin/hve-core-source.json'
     $script:HookManifestPath = Join-Path $script:OutputRoot 'hooks.json'
     . $script:BuildScript
 }
@@ -63,10 +107,10 @@ Describe 'PKG-14 Plugin host discovery and hook commands' -Tag 'Unit' {
         $script:BuildExitCode | Should -Be 0 -Because ($script:BuildOutput -join "`n")
     }
 
-    It 'ships shared active-plugin discovery and both coordinator entry contracts' {
+    It 'ships bundled-plugin discovery and both coordinator entry contracts' {
         Test-Path -LiteralPath (Join-Path $script:OutputRoot 'skills/squad/scripts/SquadAgentDiscovery.ps1') | Should -BeTrue
         Get-Content -LiteralPath (Join-Path $script:OutputRoot 'skills/squad/references/agent-discovery.md') -Raw |
-            Should -Match 'SQUAD_ACTIVE_PLUGIN_ROOTS'
+            Should -Match 'bundles its pinned HVE Core cast in the same'
         foreach ($name in @('coordinator-runtime', 'federation-runtime')) {
             Get-Content -LiteralPath (Join-Path $script:OutputRoot "skills/squad/references/$name.md") -Raw |
                 Should -Match 'agent-discovery.md'
@@ -136,6 +180,9 @@ Describe 'PKG-14 Plugin host discovery and hook commands' -Tag 'Unit' {
         New-Item -ItemType Directory -Path $historicalRoot -Force | Out-Null
         Copy-Item -LiteralPath (Join-Path $script:SourceRootResolved 'squad-src') -Destination $historicalRoot -Recurse
         Copy-Item -LiteralPath (Join-Path $script:SourceRootResolved 'apm.yml') -Destination $historicalRoot
+        foreach ($legalFile in @('LICENSE', 'NOTICE')) {
+            Copy-Item -LiteralPath (Join-Path $script:SourceRootResolved $legalFile) -Destination $historicalRoot
+        }
         $coachPaths = @(
             'squad-src/.github/agents/squad/squad-coach.agent.md'
             'squad-src/.github/prompts/squad/squad-coach.prompt.md'
@@ -143,7 +190,7 @@ Describe 'PKG-14 Plugin host discovery and hook commands' -Tag 'Unit' {
         foreach ($path in $coachPaths) { Remove-Item -LiteralPath (Join-Path $historicalRoot $path) }
         & git -C $historicalRoot init --quiet
         if ($LASTEXITCODE -ne 0) { throw 'Cannot initialize historical-source fixture.' }
-        & git -C $historicalRoot add -- apm.yml squad-src
+        & git -C $historicalRoot add -- apm.yml LICENSE NOTICE squad-src
         if ($LASTEXITCODE -ne 0) { throw 'Cannot stage historical-source fixture.' }
         & git -C $historicalRoot -c user.name=Fixture -c user.email=fixture@example.invalid commit --quiet -m 'Before Coach'
         if ($LASTEXITCODE -ne 0) { throw 'Cannot commit historical-source fixture.' }
@@ -155,7 +202,7 @@ Describe 'PKG-14 Plugin host discovery and hook commands' -Tag 'Unit' {
         $pwsh = (Get-Process -Id $PID).Path
         $output = @(& $pwsh -NoProfile -File $script:BuildScript -RepoRoot $historicalRoot `
             -Ref fixture-before-coach -OutputRoot (Join-Path $TestDrive 'historical-output') `
-            -McpVersion '0.0.0-test' -DryRun 2>&1)
+            -HveCoreRoot $script:HveCoreRoot -AllowUnverifiedHveCoreSource -DryRun 2>&1)
         $LASTEXITCODE | Should -Be 0 -Because ($output -join "`n")
         ($output -join "`n") | Should -Not -Match 'invocations[\\/]squad-coach[\\/]SKILL\.md'
         $source = [pscustomobject]@{ Mode = 'Ref'; Ref = 'fixture-before-coach' }
@@ -168,6 +215,120 @@ Describe 'PKG-14 Plugin host discovery and hook commands' -Tag 'Unit' {
         Test-Path -LiteralPath $script:NestedManifestPath -PathType Leaf | Should -BeTrue
         Get-Content -LiteralPath $script:RootManifestPath -Raw |
             Should -BeExactly (Get-Content -LiteralPath $script:NestedManifestPath -Raw)
+    }
+
+    It 'publishes one self-contained plugin with the bundled HVE Core components' {
+        $manifest = Get-Content -LiteralPath $script:RootManifestPath -Raw | ConvertFrom-Json
+        $manifest.name | Should -BeExactly 'hve-squad'
+        @($manifest.agents) | Should -Contain 'agents/squad/'
+        @($manifest.agents) | Should -Contain '.github/agents/security/security-planner.agent.md'
+        @($manifest.rules) | Should -Contain '.github/instructions/security/identity.instructions.md'
+        @($manifest.skills) | Should -Contain '.github/skills/security/secure-by-design'
+        @($manifest.extensions) | Should -Contain '.github/extensions/hve-core'
+        Test-Path -LiteralPath (Join-Path $script:OutputRoot '.github/agents/security/security-planner.agent.md') | Should -BeTrue
+        Test-Path -LiteralPath (Join-Path $script:OutputRoot '.github/skills/security/secure-by-design/SKILL.md') | Should -BeTrue
+    }
+
+    It 'records the exact HVE Core pin from apm.yml' {
+        $expected = [regex]::Match(
+            (Get-Content -LiteralPath (Join-Path $script:SourceRootResolved 'apm.yml') -Raw),
+            'microsoft/hve-core/[^\s#]+#([0-9a-f]{40})'
+        ).Groups[1].Value
+        $source = Get-Content -LiteralPath $script:HveCoreSourcePath -Raw | ConvertFrom-Json
+        $source.repository | Should -BeExactly 'microsoft/hve-core'
+        $source.commit | Should -BeExactly $expected
+        $source.version | Should -BeExactly '0.0.0-test'
+        @($source.files).source | Should -Contain '.github/agents/security/security-planner.agent.md'
+    }
+
+    It 'exposes one relative marketplace entry and no bundled MCP connection' {
+        $marketplace = Get-Content -LiteralPath $script:MarketplaceManifestPath -Raw | ConvertFrom-Json
+        @($marketplace.plugins) | Should -HaveCount 1
+        $marketplace.name | Should -BeExactly 'hve-squad'
+        $marketplace.plugins[0].name | Should -BeExactly 'hve-squad'
+        $marketplace.plugins[0].source | Should -BeExactly '.'
+
+        $manifest = Get-Content -LiteralPath $script:RootManifestPath -Raw | ConvertFrom-Json -AsHashtable
+        $manifest.ContainsKey('$schema') | Should -BeFalse
+        $manifest.ContainsKey('mcpServers') | Should -BeFalse
+        Test-Path -LiteralPath (Join-Path $script:OutputRoot '.mcp.json') | Should -BeFalse
+        Test-Path -LiteralPath (Join-Path $script:OutputRoot 'mcp.json') | Should -BeFalse
+    }
+
+    It 'publishes stable and preview plugins manually from this repository' {
+        $workflow = Get-Content -LiteralPath (Join-Path $script:SourceRootResolved '.github/workflows/publish-plugin.yml') -Raw
+        $workflow | Should -Match '(?m)^\s*workflow_dispatch:\s*$'
+        $workflow | Should -Match 'TARGET_BRANCH=plugin-preview'
+        $workflow | Should -Match 'TARGET_BRANCH=plugin'
+        $workflow | Should -Match 'GITHUB_REPOSITORY'
+        $workflow | Should -Match 'Assert-SquadPluginVersion\.ps1'
+        $workflow | Should -Not -Match 'Peter-N91/hve-squad-plugin|HVE_SQUAD_PLUGIN_PUSH_TOKEN|mcp-version'
+    }
+
+    It 'rejects prerelease content on the stable channel' {
+        $output = @(& pwsh -NoProfile -File $script:VersionGateScript `
+                -Channel stable -NewVersion '0.19.3-pre' -OldVersion '0.19.3' 2>&1)
+        $LASTEXITCODE | Should -Be 1
+        $output -join "`n" | Should -Match 'Stable plugin publication requires'
+    }
+
+    It 'uses SemVer ordering to reject a stable rollback' {
+        $output = @(& pwsh -NoProfile -File $script:VersionGateScript `
+                -Channel stable -NewVersion '0.19.2' -OldVersion '0.19.3' 2>&1)
+        $LASTEXITCODE | Should -Be 1
+        $outputText = ($output -join "`n") -replace '\x1B\[[0-9;]*m', ''
+        $outputText = $outputText -replace '\r?\n\s*(?:\|\s*)?', ' '
+        $outputText | Should -Match 'backwards from 0\.19\.3 to 0\.19\.2'
+    }
+
+    It 'accepts forward stable and preview publication versions' -ForEach @(
+        @{ Channel = 'stable'; Old = '0.19.3'; New = '0.19.4' }
+        @{ Channel = 'preview'; Old = '0.20.0-pre.run.1'; New = '0.20.0-pre.run.2' }
+        @{ Channel = 'preview'; Old = '0.20.0-pre.run.9'; New = '0.20.0-pre.run.10' }
+        @{ Channel = 'preview'; Old = '0.20.0-pre.run.99'; New = '0.20.0-pre.run.100' }
+    ) {
+        $output = @(& pwsh -NoProfile -File $script:VersionGateScript `
+                -Channel $Channel -NewVersion $New -OldVersion $Old 2>&1)
+        $LASTEXITCODE | Should -Be 0 -Because ($output -join "`n")
+    }
+
+    It 'declares Windows macOS and Linux plugin conformance' {
+        $workflow = Get-Content -LiteralPath (Join-Path $script:SourceRootResolved '.github/workflows/plugin-conformance.yml') -Raw
+        foreach ($runner in @('windows-latest', 'macos-latest', 'ubuntu-latest')) {
+            $workflow | Should -Match ([regex]::Escape($runner))
+        }
+        foreach ($hostName in @('vscode', 'cli', 'app')) {
+            $workflow | Should -Match "'$hostName'"
+        }
+    }
+
+    It 'rejects an HVE Core checkout whose commit differs from apm.yml' {
+        $fixture = New-HveCoreGitFixture -Name 'hve-core-wrong-commit'
+        {
+            Copy-HveCorePluginContent -HveCoreRoot $fixture.Root `
+                -ExpectedCommit ('0' * 40) `
+                -OutputRoot (Join-Path $TestDrive 'wrong-pin-output')
+        } | Should -Throw '*apm.yml pins*'
+    }
+
+    It 'rejects modified or untracked HVE Core content before copying <Kind>' -ForEach @(
+        @{ Kind = 'tracked' }
+        @{ Kind = 'untracked' }
+    ) {
+        $fixture = New-HveCoreGitFixture -Name "hve-core-dirty-$Kind"
+        if ($Kind -eq 'tracked') {
+            Add-Content -LiteralPath (Join-Path $fixture.Root '.github/agents/security/security-planner.agent.md') `
+                -Value '# dirty'
+        }
+        else {
+            Set-Content -LiteralPath (Join-Path $fixture.Root '.github/agents/security/untracked.agent.md') `
+                -Value '# untracked'
+        }
+        {
+            Copy-HveCorePluginContent -HveCoreRoot $fixture.Root `
+                -ExpectedCommit $fixture.Commit `
+                -OutputRoot (Join-Path $TestDrive "dirty-output-$Kind")
+        } | Should -Throw '*must be clean before publication*'
     }
 
     It 'offers exactly the registered packs in the generated invocation' {
@@ -216,10 +377,24 @@ Describe 'PKG-14 Plugin host discovery and hook commands' -Tag 'Unit' {
 
         $entries | Should -HaveCount $script:HookScriptNames.Count
         foreach ($entry in $entries) {
-            $entry.bash | Should -Match '^bash "\$\{CLAUDE_PLUGIN_ROOT\}/hooks/scripts/[a-z-]+\.sh"$'
-            $entry.powershell | Should -Match '^(powershell\.exe|pwsh) -NoProfile -ExecutionPolicy Bypass -File "\$env:CLAUDE_PLUGIN_ROOT/hooks/scripts/[a-z-]+\.ps1"$'
+            $entry.cwd | Should -BeExactly '${PLUGIN_ROOT}'
+            $entry.bash | Should -Match '^bash "hooks/scripts/[a-z-]+\.sh"$'
+            $entry.powershell | Should -Match '^(powershell\.exe|pwsh) -NoProfile -ExecutionPolicy Bypass -File "hooks/scripts/[a-z-]+\.ps1"$'
         }
         $manifest.hooks.preToolUse[2].powershell | Should -Match '^pwsh '
+    }
+
+    It 'publishes every hook script from this repository without a distribution-only source' {
+        foreach ($name in $script:HookScriptNames) {
+            foreach ($extension in @('ps1', 'sh')) {
+                $source = Join-Path $script:SourceRootResolved "scripts/plugin-hooks/$name.$extension"
+                $generated = Join-Path $script:OutputRoot "hooks/scripts/$name.$extension"
+                Test-Path -LiteralPath $source -PathType Leaf | Should -BeTrue
+                Test-Path -LiteralPath $generated -PathType Leaf | Should -BeTrue
+                (Get-FileHash -LiteralPath $generated).Hash |
+                    Should -BeExactly (Get-FileHash -LiteralPath $source).Hash
+            }
+        }
     }
 
     It 'generates the canonical routing preparation and guard for the plugin as well as APM' {
@@ -233,6 +408,8 @@ Describe 'PKG-14 Plugin host discovery and hook commands' -Tag 'Unit' {
         }
         $dropSkill = [IO.File]::ReadAllText((Join-Path $script:OutputRoot 'skills/squad/invocations/squad-init-hooks/SKILL.md'))
         $dropSkill | Should -Match 'PowerShell 7\.4\+'
+        $dropSkill | Should -Match 'can be listed yet not fire'
+        $dropSkill | Should -Match 'Copy both script variants'
         $dropSkill | Should -Match 'dispatch-guards\.ps1'
         $dropSkill | Should -Match 'scripts/SquadCoordinator\.psm1'
         $dropSkill | Should -Match 'scripts/Resolve-SquadConnectorDispatch\.ps1'
@@ -362,49 +539,76 @@ Describe 'PKG-14 Plugin host discovery and hook commands' -Tag 'Unit' {
         }
     }
 
-    It 'executes a generated Bash hook from outside the plugin directory' -Skip:($IsWindows -or -not (Get-Command bash -ErrorAction SilentlyContinue)) {
+    It 'executes a generated Bash hook through the plugin-root working directory' -Skip:($IsWindows -or -not (Get-Command bash -ErrorAction SilentlyContinue)) {
         $manifest = Get-Content -LiteralPath $script:HookManifestPath -Raw | ConvertFrom-Json
         $foreignWorkingDirectory = Join-Path $TestDrive 'consumer-repository'
-        $sentinelPath = Join-Path $TestDrive 'bash-hook-ran'
         New-Item -ItemType Directory -Path $foreignWorkingDirectory -Force | Out-Null
-        $previousPluginRoot = $env:CLAUDE_PLUGIN_ROOT
-        $previousSentinel = $env:HOOK_SENTINEL
 
         try {
-            $env:CLAUDE_PLUGIN_ROOT = $script:OutputRoot
-            $env:HOOK_SENTINEL = $sentinelPath
-            Push-Location $foreignWorkingDirectory
-            & bash -c $manifest.hooks.sessionStart[0].bash
+            Push-Location $manifest.hooks.sessionStart[0].cwd.Replace('${PLUGIN_ROOT}', $script:OutputRoot)
+            $inputData = @{ cwd = $foreignWorkingDirectory } | ConvertTo-Json -Compress
+            $output = $inputData | & bash -c $manifest.hooks.sessionStart[0].bash | Out-String
             $LASTEXITCODE | Should -Be 0
-            Get-Content -LiteralPath $sentinelPath -Raw | Should -BeExactly 'bash'
+            ($output | ConvertFrom-Json).additionalContext | Should -Match 'No squad state detected'
         }
         finally {
             Pop-Location
-            $env:CLAUDE_PLUGIN_ROOT = $previousPluginRoot
-            $env:HOOK_SENTINEL = $previousSentinel
         }
     }
 
-    It 'executes a PowerShell hook from outside the plugin directory' -Skip:(-not $IsWindows) {
+    It 'executes a PowerShell hook through the plugin-root working directory' -Skip:(-not $IsWindows) {
         $manifest = Get-Content -LiteralPath $script:HookManifestPath -Raw | ConvertFrom-Json
         $foreignWorkingDirectory = Join-Path $TestDrive 'consumer-repository'
-        $sentinelPath = Join-Path $TestDrive 'powershell-hook-ran'
         New-Item -ItemType Directory -Path $foreignWorkingDirectory -Force | Out-Null
-        $previousPluginRoot = $env:CLAUDE_PLUGIN_ROOT
-        $previousSentinel = $env:HOOK_SENTINEL
 
         try {
-            $env:CLAUDE_PLUGIN_ROOT = $script:OutputRoot
-            $env:HOOK_SENTINEL = $sentinelPath
-            Push-Location $foreignWorkingDirectory
-            & ([scriptblock]::Create($manifest.hooks.sessionStart[0].powershell))
+            Push-Location $manifest.hooks.sessionStart[0].cwd.Replace('${PLUGIN_ROOT}', $script:OutputRoot)
+            $inputData = @{ cwd = $foreignWorkingDirectory } | ConvertTo-Json -Compress
+            $output = Invoke-PluginHookEntry -Entry $manifest.hooks.sessionStart[0] -InputText $inputData
             $LASTEXITCODE | Should -Be 0
-            (Get-Content -LiteralPath $sentinelPath -Raw).Trim() | Should -BeExactly 'powershell'
+            ($output | ConvertFrom-Json).additionalContext | Should -Match 'No squad state detected'
         }
         finally {
             Pop-Location
-            $env:CLAUDE_PLUGIN_ROOT = $previousPluginRoot
-            $env:HOOK_SENTINEL = $previousSentinel
+        }
+    }
+
+    It 'installs the plugin with Copilot CLI and validates a blocking hook command from the installed root' -Skip:(-not (Get-Command copilot -ErrorAction SilentlyContinue)) {
+        $copilotHome = Join-Path $TestDrive 'copilot-hook-smoke'
+        $previousCopilotHome = $env:COPILOT_HOME
+        $locationPushed = $false
+        try {
+            $env:COPILOT_HOME = $copilotHome
+            $installOutput = @(& copilot plugin install $script:OutputRoot 2>&1)
+            $LASTEXITCODE | Should -Be 0 -Because ($installOutput -join "`n")
+
+            $installedRoot = @(
+                Get-ChildItem -LiteralPath $copilotHome -Recurse -File -Filter plugin.json |
+                    Where-Object {
+                        (Get-Content -LiteralPath $_.FullName -Raw | ConvertFrom-Json).name -eq 'hve-squad' -and
+                        (Test-Path -LiteralPath (Join-Path $_.DirectoryName 'hooks.json') -PathType Leaf)
+                    } |
+                    ForEach-Object { Split-Path -Parent $_.FullName }
+            ) | Select-Object -First 1
+            $installedRoot | Should -Not -BeNullOrEmpty
+
+            $hooks = Get-Content -LiteralPath (Join-Path $installedRoot 'hooks.json') -Raw | ConvertFrom-Json
+            $entry = @($hooks.hooks.preToolUse)[0]
+            $entry.matcher | Should -BeExactly 'bash|powershell'
+            $entry.cwd | Should -BeExactly '${PLUGIN_ROOT}'
+            Push-Location $entry.cwd.Replace('${PLUGIN_ROOT}', $installedRoot)
+            $locationPushed = $true
+            $payload = @{
+                toolName = 'powershell'
+                toolArgs = @{ command = "Write-Output 'git push'" }
+            } | ConvertTo-Json -Depth 5 -Compress
+            $output = Invoke-PluginHookEntry -Entry $entry -InputText $payload
+            $LASTEXITCODE | Should -Be 0 -Because $output
+            ($output | ConvertFrom-Json).permissionDecision | Should -BeExactly 'ask'
+        }
+        finally {
+            if ($locationPushed) { Pop-Location }
+            $env:COPILOT_HOME = $previousCopilotHome
         }
     }
 

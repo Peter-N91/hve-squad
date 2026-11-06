@@ -8,7 +8,7 @@
     Blind-judges every run's deliverable, one judge session per difficulty level. The judge step spends credits.
 .DESCRIPTION
     For each level: anonymises each run's out/deliverable.diff (arm labels, run ids, paths,
-    model ids and routing tokens redacted; squad tracking and install trees were already
+    model ids and routing/depth tokens redacted; squad tracking and install trees were already
     excluded when the diff was taken), shuffles the samples with a seeded RNG, and writes
     them to a judge directory OUTSIDE -ResultRoot. The key (sample id -> run id) stays in
     -ResultRoot/judge/keys, which the judge cannot read: the CLI only grants file access to

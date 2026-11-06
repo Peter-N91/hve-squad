@@ -1117,7 +1117,14 @@ function ConvertTo-EfficiencyRunSummary {
     #>
     [CmdletBinding()]
     param([Parameter(Mandatory)][Collections.IDictionary]$Run)
-    $Summary = [ordered]@{ runId = $Run['metadata']['runId']; arm = $Run['metadata']['arm']; pair = $Run['metadata']['pair']; completed = [bool]$Run['completed']; checksPassed = Test-EfficiencyRun $Run -ObservationOnly:($Run['metadata']['compatibility']['evaluationPolicy'] -eq 'baseline-observation-v1') }
+    $Summary = [ordered]@{
+        runId = $Run['metadata']['runId']
+        arm = $Run['metadata']['arm']
+        pair = $Run['metadata']['pair']
+        depth = if ($Run['metadata'].ContainsKey('depth')) { $Run['metadata']['depth'] } else { 'standard' }
+        completed = [bool]$Run['completed']
+        checksPassed = Test-EfficiencyRun $Run -ObservationOnly:($Run['metadata']['compatibility']['evaluationPolicy'] -eq 'baseline-observation-v1')
+    }
     $Summary['functional'] = $Run['acceptance']
     $Summary['stateHistory'] = if ($Run['workflow']) { $Run['workflow']['checks'] } else { $null }
     $Summary['metrics'] = $Run['metrics']
