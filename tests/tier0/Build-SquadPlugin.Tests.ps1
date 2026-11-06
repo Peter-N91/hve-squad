@@ -276,7 +276,8 @@ Describe 'PKG-14 Plugin host discovery and hook commands' -Tag 'Unit' {
         $output = @(& pwsh -NoProfile -File $script:VersionGateScript `
                 -Channel stable -NewVersion '0.19.2' -OldVersion '0.19.3' 2>&1)
         $LASTEXITCODE | Should -Be 1
-        $output -join "`n" | Should -Match 'backwards from 0\.19\.3 to 0\.19\.2'
+        (($output -join "`n") -replace '\r?\n\s*\|?\s*', ' ') |
+            Should -Match 'backwards from 0\.19\.3 to 0\.19\.2'
     }
 
     It 'accepts forward stable and preview publication versions' -ForEach @(
