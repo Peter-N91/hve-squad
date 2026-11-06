@@ -966,3 +966,17 @@ Triage aid: a difference in this list is expected and is **not** a regression.
 7. Add an autopilot scenario. It is the most expensive case in the suite and the only one that would see the failure class `0.16.0` shipped: a run that claims ten stages and leaves no `history/<agent>.md` behind any of them. This is also the only place that can exercise Scribe hand-off pipelining as a live dispatch — a host that can issue parallel subagent dispatches, running through the barrier list at GATE-22 to GATE-28 — rather than as Tier 0's static wording pins.
 8. Capture the Tier 2 golden baselines from a release known to be good. Until a baseline exists per scenario, Tier 2 reports `unbaselined` and scores nothing, which is the state every release up to and including `v0.16.0` shipped in.
 9. Reconsider wiring paid behavioral execution into the release workflow, against the conditions in *Why paid behavioral runs are not release gates*. Not before them.
+## Squad Doctor
+
+Source: `squad-src/.github/agents/squad/squad-doctor.agent.md`,
+`squad-src/.github/skills/squad/references/doctor.md`, and
+`squad-src/.github/skills/squad/scripts/Invoke-SquadDoctor.ps1`.
+
+| ID | Contract | Tier |
+|---|---|---|
+| DOC-01 | Doctor is selectable and coordinator-dispatchable in plugin and APM, with a bound prompt and no roster prerequisite. | 0 |
+| DOC-02 | Check mode writes nothing, works before Init, and reports seven exact-match domains; missing host inventory is unverified. | 0 |
+| DOC-03 | Only confirmed allowlisted rate repairs write; backups, seeder preservation rules, rechecks, and idempotence apply. | 0 |
+| DOC-04 | Escaping/linked paths, malformed inventory, unsafe federation locations, missing runtime, and writer contention fail closed. | 0 |
+| DOC-05 | Federation checks stay on registered members; explicit member scope never repairs siblings. Partial state and unsupported faults remain blockers. | 0 |
+| DOC-06 | Coordinators stop affected work, invoke Doctor once, retain approvals/gates, and retry the original failing check only after verified repair. | 0 |

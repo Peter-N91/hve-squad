@@ -131,6 +131,19 @@ Describe 'PKG-14 Plugin host discovery and hook commands' -Tag 'Unit' {
         Get-Content -LiteralPath $agentPath -Raw | Should -Match 'disable-model-invocation: true'
     }
 
+    It 'ships the selectable and dispatchable Doctor with its scripted invocation (DOC-01)' {
+        $agent = Get-Content -LiteralPath (Join-Path $script:OutputRoot 'agents/squad/squad-doctor.agent.md') -Raw
+        $agent | Should -Match '(?m)^user-invocable: true\r?$'
+        $agent | Should -Not -Match '(?m)^disable-model-invocation: true\r?$'
+        $skill = Get-Content -LiteralPath (Join-Path $script:OutputRoot 'skills/squad/invocations/squad-doctor/SKILL.md') -Raw
+        $skill | Should -Match 'Dispatch to \*\*Squad Doctor\*\*'
+        $skill | Should -Not -Match 'perform it directly'
+        Test-Path -LiteralPath (Join-Path $script:OutputRoot 'skills/squad/scripts/Invoke-SquadDoctor.ps1') | Should -BeTrue
+        $source = [pscustomobject]@{ Mode = 'Source'; SourceRoot = (Join-Path $TestDrive 'no-doctor') }
+        $skills = New-InvocationSkillContent -Source $source -RepoRoot $script:SourceRootResolved
+        $skills.Contains('squad-doctor') | Should -BeFalse
+    }
+
     It 'ships both user-invocable builders with their invocation and deterministic runtime' {
         $expected = @(
             @{
