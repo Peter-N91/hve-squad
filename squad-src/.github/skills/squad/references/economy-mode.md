@@ -1,54 +1,61 @@
 ---
 name: squad-economy-mode
-description: "Opt-in routing=economy procedure, read only while team.md records Model routing: economy: consent, the role allowlist, the cheaper pick, the one escalation, Route markers, the bounded lane, plan-driven parallelism, the dispatch brief, the scripted hand-off, rate seeding and Cost Preflight writes, the intake waiver, and what never changes."
+description: "Opt-in routing=economy procedure, read only while team.md records Model routing: economy: all-role consent, the cheapest known-price pick for every routed role within its floor, qualification disclosure, the one escalation, Route markers, the dispatch brief, the scripted hand-off, rate seeding and Cost Preflight writes, and what never changes. Workflow depth is the separate depth=quick input (quick-depth.md)."
 license: MIT
 metadata:
   authors: "Peter-N91/hve-squad"
   spec_version: "1.0"
-  last_updated: "2026-10-23"
+  last_updated: "2026-11-06"
 ---
 
 # Economy Mode
 
 Read this file only while `team.md` records `Model routing: economy`, or on the turn a user passes `routing=economy`. Under `off`, `ranked`, or `manual` nothing here applies, and the squad behaves exactly as it does without this file.
 
-`routing=economy` is `ranked` (see `model-routing.md`) with one change: roles on the *Role Allowlist* are ordered cost first. It is opt-in; `off` stays the default.
+`routing=economy` uses one rule for **every routed role**: the cheapest host-available model with a known nonnegative price inside that role's floor. Class qualification is preferred and disclosed; when no candidate meets it, Economy uses the cheapest floor-eligible model and labels the choice `floor-only` instead of keeping that role on Ranked. It decides only which model a role runs on. How much work the squad does (the bounded lane, parallel owners, skipped optional passes) is the separate per-turn input `depth=quick` ([quick-depth.md](quick-depth.md)); either input works alone or with the other. Economy at standard depth runs Research, Plan, Implement, and Review with no lane and no extra quick-depth parallelism. It is opt-in; `off` stays the default.
 
 ## Consent
 
-The first time a user switches to `economy`, before any dispatch under it, the coordinator says once, plainly, what changes: allowlisted implementation roles run on the cheapest model that fits their work well enough within their floor, and each moves once to its `ranked` pick after a failed review; in interactive mode a fully specified, low-risk request may skip Research and Plan (*Bounded Lane*) and owners with disjoint write sets may run concurrently (*Plan-Driven Parallelism*); and a missing intake verdict may be waived with a recorded decision (*Intake Waiver*). Deterministic handoffs, Cost Preflight, rate seeding, and routing refresh are universal, not an economy consent trade. Pass the stated trade as `economyConsent`; `Set-SquadModelRouting.ps1` writes the mode, selected cells, refresh decision, and this exact entry atomically:
+The first time a user switches to `economy`, before any dispatch under it, the coordinator says once, plainly, what changes: every routed role (research, planning, implementation, review, council, intake, and live-resource roles included) runs on the cheapest known-price model inside its own floor; qualification is disclosed and preferred, but when no candidate meets it the role uses the cheapest floor-eligible model rather than Ranked; each role may move once to its `ranked` pick only after a failed review; the floors are the model-quality guard, so a role seeded at the `fast` floor (such as `tester`) may run on a cheaper model than its Ranked pick until its `team.md` Model Tier is raised; and every gate still runs, but a cheaper model may run it. Deterministic handoffs, Cost Preflight, rate seeding, and routing refresh are universal, not an economy consent trade. Pass the stated trade as `economyConsent`; `Set-SquadModelRouting.ps1` writes the mode, selected cells, refresh decision, and this exact entry atomically:
 
 ```markdown
 ## Economy Mode Accepted <timestamp>
 
 * User: <the user who accepted, as the coordinator knows them>
-* Previous mode: <off, ranked, or manual>
+* Previous mode: <off, ranked, or manual; economy when widening a legacy entry>
 * Trade accepted: <the list of changes the coordinator stated, in the words it used>
 * Never weakened: <the *Never Weakened* list the coordinator stated>
+* Scope: all-roles
 ```
 
-`<timestamp>` is the consent's UTC timestamp. The writer records it once per switch; a later turn still in economy needs no new one. Switching away and back records another. Missing consent fails a scripted switch before dispatch.
+`<timestamp>` is the consent's UTC timestamp. The writer records it once per switch; a later turn still in economy needs no new one, and a second one while an all-roles entry exists is refused. Switching away and back records another. Missing consent fails a scripted switch before dispatch.
+
+**Existing economy teams.** An entry without the `Scope: all-roles` bullet predates all-role economy. The resolver reports `economy scope: legacy` for migration, but the dispatch planner stops before every role until the user accepts the wider trade; it never creates a mixed run where five roles use Economy and the rest stay Ranked. The coordinator states the all-roles trade once, passes `economyConsent` in the plan with the same `requestedModelRouting: economy`, and the writer records a new entry that carries the Scope bullet.
 
 An unattended run never accepts economy for the user: see *Watch and Unattended Runs*.
 
-## Role Allowlist
+## Scope
 
-Economy changes the model of these roles only: `developer`, `technical-writer`, `presenter`, `prompt-engineer`, `data-scientist`. Every other role keeps its ranked pick, including:
+Every routed role resolves the same way; no list exempts research, planning, review, council, intake, live-resource, fallback-class, or unattended roles. Nothing stays on Ranked because of its role. The report uses `economyHold` only when no Economy dispatch can occur:
 
-* `product-owner`, which also sits on the council when dispatched in a council batch;
-* `deployer`, `iac-author`, `release-engineer`, and `backlog-executor`, which touch live resources or a live backlog;
-* every review, council, intake, research, planning, and bookkeeping role, so the review that checks the cheaper work is never weakened;
-* a role whose class is only the fallback guess.
+* `exception`: the coordinator keeps the user-selected session model, or an explicitly pinned agent (notably the `scribe`) keeps that pin. Neither is a Ranked hold.
+* `unavailable`: no host-available model inside the role's floor has a known nonnegative price, so dispatch stops instead of falling back to Ranked.
+
+Roles that touch live resources or a live backlog (`deployer`, `iac-author`, `release-engineer`, `backlog-executor`) are in scope: their floors, the Impactful-Action Gate, and the Risk Gate are the guard, and the consent says so.
 
 ## Pick
 
-For an allowlisted role, build `model-routing.md` *Ranking Algorithm* step 2's eligible set under the role's own floor. Apply [model-scoring.md](model-scoring.md)'s versioned selected-panel minimum: under `implementation-full-midpoint-v1`, each primary percentile must be at least `0.50`; under the explicitly reduced `implementation-scicode-upper-quartile-v1`, SciCode must reach `0.75`. Every selected primary needs verified, comparable independent evidence, and Blended price must be known and nonnegative. Publication age alone never expires a result; genuine verification expires after 90 days. This is a declared policy qualification, not a validated success guarantee or the old "fit 2" assumption.
+For every routed role, build `model-routing.md` *Ranking Algorithm* step 2's eligible set under the role's own floor and remove unpriced candidates. Prefer the subset qualified by what its class has:
 
-Among qualified candidates take the lowest **Blended** rate first, then higher granular capability, then secondary coverage, primary verification freshness, newer generation within a family, and catalog order. Extra capability or confidence above the minimum never overrides a lower price. An unpriced model is never free. With no qualified candidate, the role explicitly falls back to its capability-first Ranked pick and reports the panel, qualification and actual rejection reasons.
+* **Verified evidence.** When any catalog row has verified, comparable independent evidence for the class (today the implementation class), apply [model-scoring.md](model-scoring.md)'s versioned selected-panel minimum: under `implementation-full-midpoint-v1`, each primary percentile must be at least `0.50`; under the explicitly reduced `implementation-scicode-upper-quartile-v1`, SciCode must reach `0.75`. Every selected primary needs verified, comparable independent evidence. Publication age alone never expires a result; genuine verification expires after 90 days.
+* **Declared fit.** When no row has verified evidence for the class, the candidate needs a declared `Assignment Fit` of 2 or more on the catalog's 0..3 scale (`declared-fit-minimum-2-v1`). The Route rationale says `declared-fit`; a class moves to verified evidence on its own once its benchmark panel is verified, with no policy change.
+* **Price.** In both cases Blended price must be known and nonnegative. An unpriced model is never free.
 
-For example, B meets both primary minimums and costs less than A: Economy selects B even if A is substantially stronger. Ranked may select A on that same evidence. The modes can also select the same model; neither price nor a model name guarantees a different winner.
+Among qualified candidates take the lowest **Blended** rate first, then higher granular capability (declared fit where the class has no evidence), then secondary coverage, primary verification freshness, newer generation within a family, and catalog order. Extra capability or confidence above the minimum never overrides a lower price. With no qualified candidate, apply `floor-only-known-price-v1`: take the cheapest known-price candidate that still meets the role's floor, report why qualification was unavailable, and do not fall back to Ranked. With no priced floor-eligible candidate, stop the dispatch.
 
-* **Floors hold.** The pick never leaves `model-routing.md` *Consequence Floors*; running a `default`-floor role on a `fast-lightweight` model takes a `team.md` Model Tier edit, never a routing input.
+For example, B meets the minimum and costs less than A: Economy selects B even if A is substantially stronger. Ranked may select A on that same evidence. The modes can also select the same model; neither price nor a model name guarantees a different winner.
+
+* **Floors hold.** A floor is a minimum, never a ceiling, and the pick never leaves `model-routing.md` *Consequence Floors*; running a `default`-floor role on a `fast-lightweight` model takes a `team.md` Model Tier edit, never a routing input.
 * **Model cell.** As under `ranked`: the actual dispatch plan computes each selected role's pick, `Set-SquadModelRouting.ps1` applies changed cells through an exact hash check, and every dispatch copies the cell.
 
 ## One Escalation
@@ -57,33 +64,15 @@ After a `Fail` verdict, a Critical or High finding, or a `blocked` owner, re-dis
 
 ## Route Markers
 
-Every history entry produced under economy starts its **Route rationale** identity bullet (`model-routing.md` *Identity Bullets*) with `Route: economy`, or `Route: bounded` for a dispatch on the *Bounded Lane*, followed by the existing rationale (`economy pick`, `economy escalation`, or the ranked rationale of a role off the allowlist). The coordinator writes the marker into the payload; the Scribe copies it as it copies every other identity bullet.
-
-## Bounded Lane
-
-Interactive mode only (no `mode=`). A fully specified, low-risk request does not need Research and Plan to be safe. Under economy the lane waives **only** those two stages, and only when **all** of these hold:
-
-* The request names the exact target files or artifacts and the exact change.
-* There are no open questions or unknowns.
-* A single owning role does the work, or independent items each have one owner and disjoint write sets.
-* It engages no council lens: it touches none of architecture, security, cost, product-fit, or RAI (the task-fit lenses in `gates-and-modes.md` *Council Procedure*), and the user asked for no council, validation, cross-check, or pre-implementation review. A request that would need a council, an extension, or a waiver is never bounded.
-* No Impactful-Action Gate or Risk Gate trigger applies, and no intake or discovery gate trigger applies.
-
-**Any doubt means the full pipeline.** `pipeline=full` forces it, and `mode=autonomous`, `mode=autopilot`, and Watch Mode never use the lane. The lane changes how many stages run, never who runs them: the coordinator still dispatches the owning role through `runSubagent` or `task`, never inline, still dispatches `tester` as the closing stage under `gates-and-modes.md` *Review Follow-Through*, and records every stage through the validated ordinary writer or cold Scribe. The decision entry records `Route: bounded` and each criterion with the request evidence that met it. The lane never changes which model a dispatch runs on.
-
-**Bounded owner brief.** The dispatch to each bounded owner carries its full write set (every file and directory it may touch), the exact change, the validation command, the change-record path, and the line `bounded: read only the named files and the change-record convention; do not explore the repository, but you may search for references to any symbol, heading, or link you change; if a dependent outside the named files needs a change, return "blocked: not bounded" without editing it`. A `blocked: not bounded` return leaves the lane for the full pipeline. The owner still follows the repository coding-standards instructions, runs the validation, and writes the change record last, ending with `Status: complete`. The closing review runs only after every owner's final message and is checked by *Review saw the final files* below.
-
-## Plan-Driven Parallelism
-
-Interactive mode only (no `mode=`). Besides the `Parallel-Eligible` flag, owners may run concurrently when the Lead plan's `Implement Shape` is `deliverable-fan-out`, or a bounded request lists independent items, and their write sets are disjoint (no shared file, and no deliverable that consumes another's output). The plan or the request must show the disjointness; budget is never a reason. Obtain the routing tier's confirmation once for the batch, listing every owner, its tier, and its write set; an `escalate`-tier owner is never batched. Scribe single-writer, one hand-off per stage, and per-stage `history/<agent>.md` entries are unchanged. When disjointness is unproven, dispatch sequentially in dependency order. Autopilot's own fan-out is unchanged.
+Every history entry produced under economy starts its **Route rationale** identity bullet (`model-routing.md` *Identity Bullets*) with `Route: economy`, or `Route: bounded` for a bounded owner under `depth=quick` ([quick-depth.md](quick-depth.md) *Route Markers*), followed by the existing rationale (`economy pick` or `economy escalation`). The coordinator writes the marker into the payload; the Scribe copies it as it copies every other identity bullet.
 
 ## Dispatch Brief
 
-With `pwsh` 7+, `scripts/Get-SquadDispatchBrief.ps1 -SquadRoot <root> -SessionModel <id>` prints in one read-only call the next hand-off `turn`, federation, cost-ceiling and ledger status, roster, ready consumption objects, the direct ordinary-writer command, and the *Bounded Lane*, *Plan-Driven Parallelism*, and *Scripted Writes* sections. JSON discovery defers model scoring; `New-SquadDispatchPlan.ps1` receives the actual selected roles and host model enum, then returns Route rationales and any hash-bound refresh. It reports host execution as unreported. When its `coverage:` line covers the request, the coordinator reads no further reference, agent file, or rate table that turn; otherwise it reads its references as its charter lists them.
+With `pwsh` 7+, `scripts/Get-SquadDispatchBrief.ps1 -SquadRoot <root> -SessionModel <id>` prints in one read-only call the next hand-off `turn`, federation, cost-ceiling and ledger status, roster, ready consumption objects, the direct ordinary-writer command, and the *Scripted Writes* section; with `-RequestedDepth quick` it also prints the stage policy and the applicable sections of `quick-depth.md`. JSON discovery defers model scoring; `New-SquadDispatchPlan.ps1` receives the actual selected roles and host model enum, then returns Route rationales and any hash-bound refresh. It reports host execution as unreported. When its `coverage:` line covers the request, the coordinator reads no further reference, agent file, or rate table that turn; otherwise it reads its references as its charter lists them.
 
 ## Never Weakened
 
-Economy changes allowlisted model picks and, on the *Bounded Lane*, whether Research and Plan run; deterministic ordinary bookkeeping is universal. It never skips, shortens, or relaxes the Risk Gate, the Impactful-Action Gate, the security review, the final tester review, the task-fit council with its extension and waiver, or any other gate, and it never lowers a floor. A gate that cannot run is waived only by a recorded decision (*Intake Waiver*), never silently.
+Economy changes which model runs a role, never whether a stage runs. It never skips, shortens, or relaxes the Risk Gate, the Impactful-Action Gate, the security review, the final tester review, the task-fit council with its extension and waiver, the intake gate, Cost Preflight admission, or any other gate, and it never lowers a floor. A gate that cannot run is waived only by a recorded decision, never silently.
 
 ## Scripted Writes
 
@@ -94,20 +83,16 @@ Ordinary handoffs, Cost Preflight, rate seeding, and routine active-policy Model
 * **Cost Preflight.** The coordinator persists the actual-plan proposal with `scripts/Set-SquadCostPreflight.ps1 -SquadRoot <squadRoot> -ExpectedUpdated <updated read> -PreflightJson <object> [-DecisionText <entry>]` in every routing mode. Never dispatch on a failed or missing admission.
 * **Model refresh.** Save the successful dispatch-plan JSON outside squad state and run `scripts/Set-SquadModelRouting.ps1 -RepoRoot <repo> -PlanPath <plan.json>` when `routingRefresh.required=true`.
 
-**Status and warnings.** `-Quiet` emits one compact JSON success status with turn, dispatch count, per-agent history counts, and `ledgerCheck` (`PASS` or accepted `ledger-only`, never conflated); warnings remain visible on stderr. Nonzero exit, invalid status, `history-integrity`, and restore failures fail closed per [economy-scribe.md](economy-scribe.md). Only under economy, the writer warns for missing consent, prepends the economy/bounded Route marker when needed, and warns for absent `routingIdentity`; these rules do not apply to other modes.
+**Status and warnings.** `-Quiet` emits one compact JSON success status with turn, dispatch count, per-agent history counts, and `ledgerCheck` (`PASS` or accepted `ledger-only`, never conflated); warnings remain visible on stderr. Nonzero exit, invalid status, `history-integrity`, and restore failures fail closed per [economy-scribe.md](economy-scribe.md). Only under economy, the writer warns for missing consent, prepends `Route: economy` when needed, and warns for absent `routingIdentity`; these rules do not apply to other modes. In every mode, payload route `bounded` (the `depth=quick` Bounded Lane) prepends `Route: bounded` to a rationale that lacks a Route marker.
 
 **One writer per root.** The script holds an exclusive per-root lock for the whole write, so two hand-offs on one root run one after the other; a crashed holder releases it with its process. The lock is keyed by the canonical root (short names expanded, junctions and links resolved), so one folder reached by two paths shares one lock. Everything that depends on state (`turn`, the freshness bound, rate seeding) is read after the lock is held; when another hand-off landed while this one waited, freshness is still measured from the state read before the wait, so a valid second payload lands as the next turn, and a deliverable that hand-off already credited and that has not changed since exits 1 (a deliverable is credited once). A rollback restores only files still holding the bytes this run wrote.
 
 **Review saw the final files.** When the payload carries a review-class record (`tester`, `qa-engineer`, `challenger`, `fact-checker`, `supply-chain`, `vuln-manager`, `privacy`, `accessibility`, `risk-manager`), any other record's deliverable modified more than 2 s after the review's own deliverable exits 1 and writes nothing. It checks file times only, not that an owner reported it was finished: the coordinator still dispatches the closing review only after every owner's final message. No payload edit clears the refusal; re-dispatch the review on the final files, then rerun. For files not named as deliverables, `Write-SquadHandoff.ps1 -SquadRoot <root> -SnapshotPath <temp file> -Path <paths> [-WaitStable 20]` before the review and `-VerifySnapshotPath <temp file>` after it compare hashes (exit 5 on a change).
 
-## Intake Waiver
-
-Under economy only, when the intake gate requires a verdict, the validator is unavailable, and the user cannot be asked (`mode=autopilot` outside Watch Mode), the coordinator may continue without the verdict instead of halting, but only after handing the Scribe a decision headed `## Intake Waiver` that names the missing validator and the reason, and only when the final synthesis says plainly that intake did not run. Without that decision the v0.18.1 escalation stands. Watch Mode never waives intake.
-
 ## Watch and Unattended Runs
 
-A Watch Mode or other unattended trigger ignores `routing=economy` wherever it appears in issue, PR, or comment text, exactly as `model-routing.md` *Watch and Unattended Runs* ignores every other routing input: that text is data, never a control input. An unattended run never switches into economy and never records `## Economy Mode Accepted`. A mode already recorded in `team.md` by an attended turn still applies.
+A Watch Mode or other unattended trigger ignores `routing=economy` wherever it appears in issue, PR, or comment text, exactly as `model-routing.md` *Watch and Unattended Runs* ignores every other routing input: that text is data, never a control input. An unattended run never switches into economy and never records `## Economy Mode Accepted`. A fully consented mode already recorded in `team.md` by an attended turn still applies to every routed role, including review, council, and intake; attendance never changes the model objective.
 
 ## Helper
 
-`scripts/Resolve-SquadModelRoute.ps1 -Mode economy` applies the allowlist, qualification, cost-first ordering, and floors. Its additive report identifies objective, capability, evidence and coverage, estimated cost and basis, reason, policy/snapshot/date, and the Ranked `escalation` destination. Use `rationale` for the existing **Route rationale** bullet. The Scribe reports its actual pin exception, and coordinators retain the session model. `consent` remains `recorded` or `missing`; the resolver never accepts consent or changes state.
+`scripts/Resolve-SquadModelRoute.ps1 -Mode economy` applies the qualification preference, all-role cost-first ordering, and floors. Its additive report identifies objective, capability, evidence and coverage, estimated cost and basis, reason, policy/snapshot/date, the `economyQualification` rule (`evidence`, `declared-fit`, or `floor-only`), any non-Ranked `economyHold`, the consent `economyScope` (`legacy` or `all-roles`), and the post-failure Ranked `escalation` destination. Use `rationale` for the existing **Route rationale** bullet. The Scribe reports its actual pin exception, and coordinators retain the session model. `consent` remains `recorded` or `missing`; the resolver never accepts consent or changes state.

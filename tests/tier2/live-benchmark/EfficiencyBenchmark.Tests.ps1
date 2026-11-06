@@ -1083,9 +1083,23 @@ exit 37
                 Should -Be ($Rule.Name -eq 'squad-floor.instructions.md')
         }
         $Coordinator = Get-Content -LiteralPath (Join-Path $Workspace '.github/agents/squad-coordinator.agent.md') -Raw
-        $Coordinator | Should -Match '\.agents/skills/squad/references/rules/squad-roster\.md'
-        $Coordinator | Should -Match 'unconditional floor still auto-applies'
+        $Coordinator | Should -Match 'references/coordinator-runtime\.md'
         $Coordinator | Should -Not -Match '\.agents/\.agents/'
+        $Runtime = Get-Content -LiteralPath (Join-Path $Workspace '.agents/skills/squad/references/coordinator-runtime.md') -Raw
+        $Runtime | Should -Match '\.agents/skills/squad/references/rules/squad-notifications\.md'
+        Test-Path -LiteralPath (Join-Path $Workspace '.github/instructions/squad-floor.instructions.md') -PathType Leaf | Should -BeTrue
+    }
+
+    It 'supports a paired standard-versus-quick efficiency series on one source' {
+        $script = Get-Content -LiteralPath (Join-Path $PSScriptRoot 'Invoke-EfficiencyExercise.ps1') -Raw
+        $script | Should -Match '\[switch\]\$CompareDepth'
+        $script | Should -Match 'if \(\$CompareDepth -and \$TrialArm -eq ''candidate''\) \{ ''quick'' \}'
+        $script | Should -Match 'elseif \(\$CompareDepth\) \{ ''standard'' \}'
+        $script | Should -Match 'Depth comparison evidence is not baseline=standard and candidate=quick'
+        $script | Should -Match 'if \(\$Depth -eq ''quick''\)'
+        $script | Should -Match '\$Prompts\[\$StageName\] \+= '' depth=quick'''
+        $script | Should -Match 'depth = \$Depth'
+        Get-Content -LiteralPath (Join-Path $PSScriptRoot 'README.md') -Raw | Should -Match '-CompareDepth'
     }
 }
 

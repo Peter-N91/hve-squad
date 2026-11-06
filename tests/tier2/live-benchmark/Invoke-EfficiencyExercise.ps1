@@ -15,6 +15,11 @@
     A new evidence directory, never an existing workspace.
 .PARAMETER MaxCredits
     Required positive total ceiling for live execution, divided across stages and judge.
+.PARAMETER Depth
+    Standard (default) or quick. Quick appends only `depth=quick` to each stage prompt.
+.PARAMETER CompareDepth
+    Series only: baseline trials use standard and candidate trials use quick, with the
+    same source accepted so depth is the treatment.
 .EXAMPLE
     ./Invoke-EfficiencyExercise.ps1 -Mode Analyze -EventsPath ./events.jsonl -OutputPath ./analysis
 #>
@@ -31,6 +36,8 @@ param(
     [string]$InstallRoot,
     [ValidateSet('baseline', 'candidate')][string]$Arm = 'baseline',
     [ValidateRange(1, 3)][int]$Pair = 1,
+    [ValidateSet('standard', 'quick')][string]$Depth = 'standard',
+    [switch]$CompareDepth,
     [string]$Model = 'claude-sonnet-5.5',
     [string]$CliPath = '',
     [double]$MaxCredits = 0,
@@ -50,6 +57,7 @@ if ($MyInvocation.InvocationName -ne '.') {
     $Out = $null
     $ProgressStep = $null; $ProgressLabel = ''
     try {
+        if ($CompareDepth -and $Mode -ne 'Series') { throw 'CompareDepth is valid only with Mode Series.' }
         if ($Mode -eq 'Analyze') {
             if (-not $EventsPath -or -not $OutputPath) { throw 'Analyze requires EventsPath and a new OutputPath directory.' }
             if (Test-Path -LiteralPath $OutputPath) { throw 'OutputPath must not exist.' }
@@ -99,6 +107,15 @@ if ($MyInvocation.InvocationName -ne '.') {
             $CliPath = (Resolve-Path -LiteralPath $CliPath).Path
             $InstallRoot = (Resolve-Path -LiteralPath $InstallRoot).Path
             $Saved = if ($BaselineEvidencePath) { Get-Content -LiteralPath $BaselineEvidencePath -Raw | ConvertFrom-Json -AsHashtable } else { $null }
+            if ($Saved) {
+                $savedDepths = @($Saved['runs'] | ForEach-Object {
+                        if ($_['metadata'].ContainsKey('depth')) { [string]$_['metadata']['depth'] } else { 'standard' }
+                    } | Sort-Object -Unique)
+                $expectedControlDepth = if ($CompareDepth) { 'standard' } else { $Depth }
+                if ($savedDepths.Count -ne 1 -or $savedDepths[0] -cne $expectedControlDepth) {
+                    throw "Saved controls use depth '$($savedDepths -join ',')', expected '$expectedControlDepth'."
+                }
+            }
             $IdentitySource = if ($Mode -eq 'Establish') { $BaselineSourceRoot } else { $CandidateSourceRoot }
             $Expected = Get-EfficiencyCompatibility -SourceRoot $IdentitySource -InstallRoot $InstallRoot -CliPath $CliPath -Model $Model -MaxCredits $MaxCredits -ObservationOnly:$ObservationOnly
             if ($Mode -eq 'Series' -and $BaselineSourceRoot) {
@@ -116,7 +133,8 @@ if ($MyInvocation.InvocationName -ne '.') {
             $TrialRunner = {
                 param($TrialArm, $TrialPair, [double]$CreditCeiling)
                 $TrialPath = Join-Path $Trials "$TrialArm-$TrialPair"
-                $Arguments = @('-NoProfile', '-File', $EntryScript, '-Mode', 'Run', '-TrialRoot', $TrialPath, '-SourceRoot', $SourcePaths[$TrialArm], '-InstallRoot', $InstallRoot, '-Arm', $TrialArm, '-Pair', [string]$TrialPair, '-Model', $Model, '-CliPath', $CliPath, '-MaxCredits', $CreditCeiling.ToString('R', [Globalization.CultureInfo]::InvariantCulture), '-Live', '-IsolatedEnvironment')
+                $TrialDepth = if ($CompareDepth -and $TrialArm -eq 'candidate') { 'quick' } elseif ($CompareDepth) { 'standard' } else { $Depth }
+                $Arguments = @('-NoProfile', '-File', $EntryScript, '-Mode', 'Run', '-TrialRoot', $TrialPath, '-SourceRoot', $SourcePaths[$TrialArm], '-InstallRoot', $InstallRoot, '-Arm', $TrialArm, '-Pair', [string]$TrialPair, '-Depth', $TrialDepth, '-Model', $Model, '-CliPath', $CliPath, '-MaxCredits', $CreditCeiling.ToString('R', [Globalization.CultureInfo]::InvariantCulture), '-Live', '-IsolatedEnvironment')
                 if ($ObservationOnly) { $Arguments += '-ObservationOnly' }
                 $LaunchPath = Join-Path $Out "$TrialArm-$TrialPair-launch.jsonl"
                 try {
@@ -139,6 +157,14 @@ if ($MyInvocation.InvocationName -ne '.') {
                 }
             }.GetNewClosure()
             $Series = Invoke-EfficiencySeries -Kind $Mode -RunTrial $TrialRunner -PerRunCredits $MaxCredits -SeriesCredits $MaxSeriesCredits -BaselineEvidence $Saved -ExpectedCompatibility $Expected -ObservationOnly:$ObservationOnly
+            if ($CompareDepth) {
+                $wrongDepth = @($Series.runs | Where-Object {
+                        $expectedDepth = if ($_['metadata']['arm'] -eq 'candidate') { 'quick' } else { 'standard' }
+                        $actualDepth = if ($_['metadata'].ContainsKey('depth')) { $_['metadata']['depth'] } else { 'standard' }
+                        $actualDepth -cne $expectedDepth
+                    })
+                if ($wrongDepth.Count -gt 0) { throw 'Depth comparison evidence is not baseline=standard and candidate=quick.' }
+            }
             foreach ($Slot in $Series.report.slots) {
                 if ($Slot.status -ne 'failed') { continue }
                 $Prefix = "$($Slot.arm)-$($Slot.pair)"
@@ -149,7 +175,9 @@ if ($MyInvocation.InvocationName -ne '.') {
             $Series.report | ConvertTo-Json -Depth 60 | Set-Content -LiteralPath (Join-Path $Out 'report.json') -Encoding utf8NoBOM
             @{ runs = $Series.runs } | ConvertTo-Json -Depth 60 | Set-Content -LiteralPath (Join-Path $Out 'series-evidence.json') -Encoding utf8NoBOM
             if ($Series.controls) { $Series.controls | ConvertTo-Json -Depth 60 | Set-Content -LiteralPath (Join-Path $Out 'control-series.json') -Encoding utf8NoBOM }
-            $Lines = @('# Squad efficiency series', '', $Series.report.message, '', "Outcome: $($Series.report.outcome)", "Regression verdict: $($Series.report.regressionVerdict)", '', '## Quality', '', '| Arm | Pair | Quality /100 |', '|---|---:|---:|')
+            $Lines = @('# Squad efficiency series', '', $Series.report.message, '', "Outcome: $($Series.report.outcome)", "Regression verdict: $($Series.report.regressionVerdict)")
+            if ($CompareDepth) { $Lines += 'Treatment: baseline `depth=standard`; candidate `depth=quick`; source and routing are unchanged.' }
+            $Lines += @('', '## Quality', '', '| Arm | Pair | Quality /100 |', '|---|---:|---:|')
             foreach ($Score in $Series.report.quality.scores) { $Lines += "| $($Score.arm) | $($Score.pair) | $($Score.total) |" }
             $Lines += @('', '## Efficiency', '')
             if ($Series.report.comparison) {
@@ -265,8 +293,11 @@ if ($MyInvocation.InvocationName -ne '.') {
             $Prompts.requirements = "$Common Using the initialized squad and mapped requirements roles, produce a BRD and PRD for EXERCISE.txt and collect independent domain and closing reviews. Preserve unresolved findings as measured quality results; do not repeatedly rewrite merely to reach a quality threshold. Keep roster-root deliverables and copy available drafts byte-for-byte to docs/requirements/brd.md and docs/requirements/prd.md for independent measurement, clearly identifying them as unapproved baseline artifacts. Missing or failed review is a recorded outcome, not permission to claim approval."
             $Prompts.build = "$Common Implement the frozen EXERCISE.txt CLI contract using available requirements, mapped roles and a Research, Plan, Implement, Review cycle. Produce src/task.ps1, tests and a short README. Run your own tests and closing review; record actual failures, unresolved findings and missing evidence rather than inventing success. This stage must still attempt feasible work if the preceding stage had quality or bookkeeping failures."
         }
+        if ($Depth -eq 'quick') {
+            foreach ($StageName in @($Prompts.Keys)) { $Prompts[$StageName] += ' depth=quick' }
+        }
         $Compatibility = Get-EfficiencyCompatibility -SourceRoot $SourceRoot -InstallRoot $InstallRoot -CliPath $CliPath -Model $Model -MaxCredits $MaxCredits -ObservationOnly:$ObservationOnly
-        $Metadata = @{ runId = [guid]::NewGuid().ToString(); pair = $Pair; arm = $Arm; revision = $Revision; sourceHash = Get-EfficiencyTreeHash (Join-Path $SourceRoot 'squad-src'); hostProfile = $Compatibility.hostProfile; compatibility = $Compatibility; sessionId = $Session; started = [datetime]::UtcNow.ToString('o') }
+        $Metadata = @{ runId = [guid]::NewGuid().ToString(); pair = $Pair; arm = $Arm; depth = $Depth; revision = $Revision; sourceHash = Get-EfficiencyTreeHash (Join-Path $SourceRoot 'squad-src'); hostProfile = $Compatibility.hostProfile; compatibility = $Compatibility; sessionId = $Session; started = [datetime]::UtcNow.ToString('o') }
         $Metadata | ConvertTo-Json -Depth 15 | Set-Content -LiteralPath (Join-Path $Out 'metadata.json') -Encoding utf8NoBOM
         $Stages = [Collections.Generic.List[object]]::new()
         $AllPassed = $true; $StartLine = 0; $Metrics = $null

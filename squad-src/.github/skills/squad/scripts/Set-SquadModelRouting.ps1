@@ -68,12 +68,13 @@ try {
     if ($refresh.mode -notin @('ranked', 'economy', 'manual')) { throw 'Routing refresh requires ranked, economy, or manual mode.' }
     if ($refresh.recordedMode -notin @('off', 'ranked', 'economy', 'manual')) { throw 'routingRefresh.recordedMode is invalid.' }
     $changes = @($refresh.changes)
-    if ($changes.Count -eq 0 -and $refresh.recordedMode -ceq $refresh.mode) { throw 'A required routing refresh has no changes.' }
     $consent = $refresh.economyConsent
-    if ($refresh.recordedMode -cne $refresh.mode -and $refresh.mode -eq 'economy') {
-        if ($consent -isnot [Collections.IDictionary]) { throw 'Switching into economy requires economyConsent.' }
+    if ($changes.Count -eq 0 -and $refresh.recordedMode -ceq $refresh.mode -and $null -eq $consent) { throw 'A required routing refresh has no changes.' }
+    if ($null -ne $consent -and $consent -isnot [Collections.IDictionary]) { throw 'economyConsent must be an object.' }
+    if ($refresh.mode -ne 'economy') {
+        if ($null -ne $consent) { throw 'economyConsent is allowed only for routing=economy.' }
     }
-    elseif ($null -ne $consent) { throw 'economyConsent is allowed only while switching into economy.' }
+    elseif ($refresh.recordedMode -cne 'economy' -and $null -eq $consent) { throw 'Switching into economy requires economyConsent.' }
 
     $root = Resolve-SquadRepositoryPath -RepoRoot $RepoRoot -Path ([string]$plan.units[0].endpoint.squadRoot)
     $teamPath = Join-Path $root 'team.md'
@@ -188,6 +189,9 @@ try {
     if (-not $hadFinalNewline) { $newTeam = $newTeam.TrimEnd("`r", "`n") }
     $decisionsText = [IO.File]::ReadAllText($decisionsPath)
     $decisionNewline = if ($decisionsText.Contains("`r`n")) { "`r`n" } else { "`n" }
+    if ($null -ne $consent -and $refresh.recordedMode -ceq 'economy' -and (Get-SquadEconomyConsentScope -DecisionsText $decisionsText) -ceq 'all-roles') {
+        throw 'Economy is already accepted for all roles; a later turn in economy needs no new consent.'
+    }
     $timestamp = [DateTimeOffset]::UtcNow.ToString('o')
     $entry = [Collections.Generic.List[string]]::new()
     $entry.Add("## Model Routing Refresh $timestamp")
@@ -220,6 +224,7 @@ try {
                     "* Previous mode: $($refresh.recordedMode)"
                     "* Trade accepted: $($consent.tradeAccepted)"
                     "* Never weakened: $($consent.neverWeakened)"
+                    '* Scope: all-roles'
                 ) -join $decisionNewline))
     }
     $decisionEntries.Add($entryText)

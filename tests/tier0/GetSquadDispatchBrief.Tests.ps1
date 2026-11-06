@@ -163,7 +163,7 @@ Describe 'Get-SquadDispatchBrief.ps1' {
     It 'prints the roster by column header with pins, rate rows, dispatchability, the next turn, and the procedure, and writes nothing' {
         $repo = New-BriefRepo
         $before = Get-TreeHash -Root $repo
-        $result = Invoke-Brief -Repo $repo -Extra @('-SessionModel', 'claude-sonnet-5.5')
+        $result = Invoke-Brief -Repo $repo -Extra @('-SessionModel', 'claude-sonnet-5.5', '-RequestedDepth', 'quick')
         $result.ExitCode | Should -Be 0
         $result.Output | Should -Match ([regex]::Escape('next hand-off turn: 5'))
         $result.Output | Should -Match ([regex]::Escape('updated 2026-10-03T18:00:00Z'))
@@ -182,6 +182,23 @@ Describe 'Get-SquadDispatchBrief.ps1' {
         $result.Output | Should -Match 'minimal structured JSON per `references/economy-scribe\.md`'
         $result.Output | Should -Not -Match 'not found in'
         Get-TreeHash -Root $repo | Should -Be $before
+    }
+
+    It 'keeps the bounded lane off at standard depth and turns it on only with depth=quick, under routing <Routing>' -ForEach @(
+        @{ Routing = 'economy' }
+        @{ Routing = 'ranked' }
+        @{ Routing = 'manual' }
+        @{ Routing = '' }
+    ) {
+        $repo = New-BriefRepo -Routing $Routing
+        $standard = Invoke-Brief -Repo $repo
+        $standard.ExitCode | Should -Be 0 -Because $standard.Output
+        $standard.Output | Should -Match 'coverage: NONE for the bounded lane'
+        $standard.Output | Should -Not -Match '(?m)^## Bounded Lane|(?m)^## Plan-Driven Parallelism'
+        $quick = Invoke-Brief -Repo $repo -Extra @('-RequestedDepth', 'quick')
+        $quick.ExitCode | Should -Be 0 -Because $quick.Output
+        $quick.Output | Should -Match 'depth: quick'
+        $quick.Output | Should -Match '(?m)^## Bounded Lane'
     }
 
     It 'picks no model: no bounded pick, no route helper call, and no Model column when the roster has none' {
@@ -234,14 +251,14 @@ Describe 'Get-SquadDispatchBrief.ps1' {
         $snapshot = Get-Content -LiteralPath (Join-Path $PackageRoot '.agents/skills/squad/references/model-benchmarks.md') -Raw
         $asOf = [regex]::Match($snapshot, '\*\*Generated:\s*(?<date>\d{4}-\d{2}-\d{2})\*\*').Groups['date'].Value
         $available = 'gpt-5.3-codex,claude-sonnet-5.5,gpt-6.1-sol'
-        $result = Invoke-Brief -Repo $repo -Extra @('-SessionModel', 'gpt-6.1-sol', '-AvailableModels', $available, '-AsOf', $asOf)
+        $result = Invoke-Brief -Repo $repo -Extra @('-SessionModel', 'gpt-6.1-sol', '-AvailableModels', $available, '-AsOf', $asOf, '-RequestedModelRouting', 'ranked')
         $result.ExitCode | Should -Be 0 -Because $result.Output
         $result.Output | Should -Match 'availability host-advertised'
         $result.Output | Should -Match 'panel implementation-(full|scicode) v1'
         $result.Output | Should -Match 'evidence dates:.*result (unknown|\d{4}-\d{2}-\d{2}), retrieved \d{4}-\d{2}-\d{2}, verified \d{4}-\d{2}-\d{2}'
         $resolver = Join-Path $PackageRoot '.agents/skills/squad/scripts/Resolve-SquadModelRoute.ps1'
         $expected = & $resolver -SquadRoot (Join-Path $repo '.copilot-tracking/squad') -AvailableModels $available `
-            -SessionModel gpt-6.1-sol -AsOf ([datetime]$asOf) | ConvertFrom-Json
+            -SessionModel gpt-6.1-sol -Mode ranked -AsOf ([datetime]$asOf) | ConvertFrom-Json
         $classes = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::Ordinal)
         foreach ($role in $expected.roles) {
             if (-not $classes.Add($role.class)) { continue }

@@ -187,10 +187,10 @@ only untargeted federation autopilot uses one aggregate federation ceiling.
 |------|---------------------------------|----------------------|
 | `off` (default) | Not chosen; the agent's own pin or the session model runs | No `Model` column |
 | `ranked` | The squad picks the model that best fits the role's work, among the models your host offers | `Model routing: ranked` and a `Model` column listing each pick |
-| [`economy` (release availability)](https://peter-n91.github.io/hve-squad/usage.html#routing-economy) | Five implementation roles (developer, technical-writer, presenter, prompt-engineer, data-scientist) choose the cheapest model meeting the documented independent capability minimum within their floor, then move once to their capability-first Ranked pick after a failed review. Consent is recorded first; protected roles and gates never change | `Model routing: economy` and a `Model` column listing each pick |
+| [`economy` (release availability)](https://peter-n91.github.io/hve-squad/usage.html#routing-economy) | Every routed role chooses the cheapest known-price model inside its floor. Qualification is preferred and disclosed; if none qualifies, the cheapest priced floor candidate is used instead of Ranked. Consent is recorded first; gates never change | `Model routing: economy` and a `Model` column listing each pick |
 | `manual` | You pick, once, with suggestions pre-filled | `Model routing: manual` and a `Model` column holding your picks |
 
-**Ranked is capability-first; Economy is cost-first after qualification.** Policy `squad-capability-v3` uses a common versioned comparison panel, selected by independent snapshot-wide coverage, never scores, prices or host availability (`references/model-scoring.md`). Implementation retains SciCode/Terminal-Bench and a visibly reduced SciCode panel. Economy requires each full-panel percentile to reach `0.50`, or reduced SciCode to reach `0.75`, then selects the lowest known Blended price. Confidence and cost only break genuine Ranked capability ties. The 90-day safeguard applies to genuine verification, not publication age; result, acquisition, verification and generation dates stay distinct, and legacy unknowns are not silently refreshed. Reports expose panels and precise exclusions; unsupported comparisons fall back explicitly. Modes may agree. A `fast` floor is a minimum, not a frontier ceiling. Coordinators keep the selected session model, and the Scribe keeps its pin.
+**Ranked is capability-first; Economy is price-first for every routed role.** Policy `squad-capability-v3` uses a common versioned comparison panel, selected by independent snapshot-wide coverage, never scores, prices or host availability (`references/model-scoring.md`). Implementation retains SciCode/Terminal-Bench and a visibly reduced SciCode panel. Economy prefers candidates whose full-panel percentiles reach `0.50`, whose reduced SciCode percentile reaches `0.75`, or whose class without evidence has declared fit at least 2, then selects the lowest known Blended price. If no candidate meets that preference, `floor-only-known-price-v1` selects the cheapest priced model still inside the role's floor; it never silently leaves a role on Ranked. Confidence and cost only break genuine Ranked capability ties. The 90-day safeguard applies to genuine verification, not publication age. A `fast` floor is a minimum, not a frontier ceiling. Coordinators keep the selected session model, and the Scribe keeps its pin.
 
 The compact discovery brief no longer ranks the whole roster. `New-SquadDispatchPlan.ps1` receives the real selected units and host model list, resolves only those roles, and returns the active-mode transition or changed cells. `Set-SquadModelRouting.ps1` applies it through an exact `team.md` hash check, so first activation and refresh of ranked, economy, or manual routing do not spend a Scribe model turn. On `task` hosts, `sessionModel: auto` is metadata rather than an availability list: active routing now fails before changing `team.md` unless the coordinator supplies the tool's advertised model enum. This prevents catalog-only IDs from being persisted and then silently losing to an agent's default pin.
 
@@ -222,6 +222,11 @@ request="..." routing=ranked
 Switch to ranked selection; `team.md` gains a `Model` column showing each role's pick.
 
 ```text
+request="..." routing=economy
+```
+Switch every routed role to cost-first model selection after the all-role trade is accepted.
+
+```text
 request="..." routing=manual
 ```
 Switch to manual selection; you are asked for the models before the request runs, and later requests reuse your picks.
@@ -237,6 +242,14 @@ For a federation request, select **Squad Federation Coordinator** instead:
 squad=product routing=manual
 ```
 Switch the `product` sub-squad to manual selection; each sub-squad keeps its own picks.
+
+### Choosing work depth (`depth=`)
+
+`routing=` chooses models; `depth=` independently chooses how much work runs on this turn. Omit it for `depth=standard`, which keeps the full Research -> Plan -> Implement -> Review pipeline. `depth=quick` may skip Research and Plan only through the recorded bounded-lane or fresh-artifact rules, shrink eligible work stages, and add concurrency only for a bounded request or a verified `deliverable-fan-out` plan. It never changes a model, floor, gate, or later turn, and an unattended trigger cannot activate it from issue, pull-request, or comment text.
+
+```text
+request="update the named files and run their focused tests" depth=quick
+```
 
 The former `models=<key>:<id>,...` input is retired. If you pass it, it is not applied, and the coordinator points you to `routing=manual`.
 

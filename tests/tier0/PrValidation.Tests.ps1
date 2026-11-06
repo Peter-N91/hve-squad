@@ -16,6 +16,7 @@ BeforeAll {
     $script:Tier0Workflow = Get-Content -LiteralPath (Join-Path $SourceRoot '.github/workflows/tier0-conformance.yml') -Raw
     $script:ReleaseWorkflow = Get-Content -LiteralPath (Join-Path $SourceRoot '.github/workflows/release.yml') -Raw
     $script:ReleasePrepWorkflow = Get-Content -LiteralPath (Join-Path $SourceRoot '.github/workflows/release-prep.yml') -Raw
+    $script:LintWorkflow = Get-Content -LiteralPath (Join-Path $SourceRoot '.github/workflows/lint-powershell.yml') -Raw
     function Get-WorkflowStepScript([string]$Name) {
         $step = [regex]::Match($workflow, "(?ms)^      - name: $([regex]::Escape($Name))\r?`n.*?(?=^      - name:|\z)").Value
         $body = [regex]::Match($step, '(?ms)^        run: \|\r?\n(?<body>.*?)(?=^ {0,9}\S|\z)').Groups['body'].Value
@@ -173,6 +174,21 @@ Describe 'CI-02 hve-core sync validates before publication' {
             $script:ReleaseWorkflow | Should -Match '(?s)Checkout verified tag.*?ref: \$\{\{ needs.tag.outputs.sha \}\}'
             @([regex]::Matches($script:ReleaseWorkflow, 'uses: \./\.github/workflows/tier0-conformance\.yml')).Count | Should -Be 2
             $script:ReleaseWorkflow | Should -Not -Match 'run: \./tests/tier0/Invoke-Tier0Tests\.ps1'
+        }
+    }
+
+    Describe 'CI-05 PowerShell lint installation is reproducible and resilient' {
+        It 'uses the checksummed pinned GitHub release instead of the transient gallery index' {
+            $script:LintWorkflow | Should -Match 'PSSCRIPTANALYZER_VERSION: ''1\.25\.0'''
+            $script:LintWorkflow | Should -Match "PSSCRIPTANALYZER_SHA256: '[A-F0-9]{64}'"
+            $script:LintWorkflow | Should -Match 'github\.com/PowerShell/PSScriptAnalyzer/releases/download/\$version/PSScriptAnalyzer\.\$version\.nupkg'
+            $script:LintWorkflow | Should -Match 'Get-FileHash -LiteralPath \$package -Algorithm SHA256'
+            $script:LintWorkflow | Should -Match 'Import-Module PSScriptAnalyzer -RequiredVersion \$version'
+            $script:LintWorkflow | Should -Not -Match 'Install-Module PSScriptAnalyzer'
+        }
+
+        It 'uploads SARIF only when the analyzer actually produced it' {
+            @([regex]::Matches($script:LintWorkflow, "hashFiles\('results\.sarif'\) != ''")).Count | Should -Be 2
         }
     }
 }
