@@ -22,7 +22,8 @@ The runtime comprises `Resolve-SquadConnectorDispatch.ps1`,
 `Get-SquadRosterExpansionPlan.ps1`, `Expand-SquadRoster.ps1`,
 `Write-SquadHandoff.ps1`, `Write-SquadVerdict.ps1`, `Measure-SquadLedger.ps1`,
 the shared `SquadUsage.psm1`, `Set-SquadCostPreflight.ps1`,
-`Initialize-SquadConsumptionRates.ps1`, and the read-only governance report
+`Initialize-SquadConsumptionRates.ps1`, the allowlisted maintenance entrypoint
+`Invoke-SquadDoctor.ps1`, and the read-only governance report
 renderer `New-SquadGovernanceReport.ps1` with its `SquadGovernanceReport.*` modules.
 The two buckets below cover configuration/dispatch and file exchange/persistence.
 Each enumerates all six STRIDE categories. Agent instructions are procedural
@@ -64,6 +65,13 @@ Different filesystem permissions or unattended policies change the risk.
 ### Components
 
 * The coordinator classifies work and retains governance and admission.
+* Doctor checks local runtime/state and explicitly supplied host agent inventory.
+  Its only repair calls the existing rate seeder with confirmed approval under
+  the shared handoff lock, preserving a content-hash backup and rechecking the
+  result. Paths reject repository escapes and links. Unknown faults remain
+  blockers; no commands are derived from issue text, and no installation,
+  history, roster, or gate repair is attempted. Host inventory is an
+  operator-supplied observation, not authenticated evidence of execution.
 * Connector/model resolvers and the dispatch brief read roster, manifests,
   packaged model metadata, and local availability information.
 * The dispatch planner resolves only selected role units. Its routing writer may
@@ -343,6 +351,11 @@ routing, decisions, state, accounting, rates, notifications, history, and
 optional federation registry hashes. It refuses stale baselines and restores
 only files still matching its planned output, so it cannot silently overwrite a
 concurrent writer or reprice an exact ledger.
+Doctor uses the same root lock for its allowlisted rate-seeder call and checks
+repository containment and links for every target/backup. Content-hash backups
+retain the original bytes; malformed operator rows are not dropped. It cannot
+repair history or approvals. A filesystem writer outside the locking protocol
+can still race these checks; host permissions remain the security boundary.
 
 ### Repudiation
 
@@ -362,6 +375,9 @@ rejects incomplete records without rewriting history, ledger or state. Appending
 a correction note does not supersede an invalid record. Scribe append-only and
 native-model attribution rules are procedural controls, not host-enforced
 immutability or proof of which model executed.
+Doctor returns explicit repair receipts and backup paths without appending
+fictional worker history. Those receipts and local backups are operator-editable,
+not an immutable audit log.
 
 ### Information Disclosure
 
@@ -395,6 +411,7 @@ least-privilege worktrees and isolation outside the prompt layer.
 | Sensitive report/log disclosure | Deployment-dependent | High | Medium | Data minimization, content checks, and host ACLs required |
 | Stale or tampered federation promotion plan | Low | High | Low | Exact plan SHA-256, full-tree digests, explicit candidate partition, linked-path refusal, locked revalidation and staged publish |
 | Partial or conflicting federation initialization/expansion | Low | High | Low | Exact payload SHA-256, fresh/existing root snapshot, isolated parallel member staging, all-member receipt gate, root CAS lock, additive publish and owned-hash rollback |
+| Unapproved or conflicting Doctor repair | Low | Medium | Low | Explicit confirmation, fixed seeder allowlist, shared writer lock, content-hash backup and post-repair checks; out-of-protocol filesystem races remain possible |
 
 ## Enterprise Readiness Gaps
 
