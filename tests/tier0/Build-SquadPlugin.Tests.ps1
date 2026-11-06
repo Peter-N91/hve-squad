@@ -131,7 +131,7 @@ Describe 'PKG-14 Plugin host discovery and hook commands' -Tag 'Unit' {
         Get-Content -LiteralPath $agentPath -Raw | Should -Match 'disable-model-invocation: true'
     }
 
-    It 'ships the selectable and dispatchable Doctor with its scripted invocation (DOC-01)' {
+    It 'ships the selectable and dispatchable Doctor with its scripted invocation (SDOC-01)' {
         $agent = Get-Content -LiteralPath (Join-Path $script:OutputRoot 'agents/squad/squad-doctor.agent.md') -Raw
         $agent | Should -Match '(?m)^user-invocable: true\r?$'
         $agent | Should -Not -Match '(?m)^disable-model-invocation: true\r?$'

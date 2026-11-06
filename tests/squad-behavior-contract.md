@@ -974,9 +974,9 @@ Source: `squad-src/.github/agents/squad/squad-doctor.agent.md`,
 
 | ID | Contract | Tier |
 |---|---|---|
-| DOC-01 | Doctor is selectable and coordinator-dispatchable in plugin and APM, with a bound prompt and no roster prerequisite. | 0 |
-| DOC-02 | Check mode writes nothing, works before Init, and reports seven exact-match domains; missing host inventory is unverified. | 0 |
-| DOC-03 | Only confirmed allowlisted rate repairs write; backups, seeder preservation rules, rechecks, and idempotence apply. | 0 |
-| DOC-04 | Escaping/linked paths, malformed inventory, unsafe federation locations, missing runtime, and writer contention fail closed. | 0 |
-| DOC-05 | Federation checks stay on registered members; explicit member scope never repairs siblings. Partial state and unsupported faults remain blockers. | 0 |
-| DOC-06 | Coordinators stop affected work, invoke Doctor once, retain approvals/gates, and retry the original failing check only after verified repair. | 0 |
+| SDOC-01 | Doctor is selectable and coordinator-dispatchable in plugin and APM, with a bound prompt and no roster prerequisite. | 0 |
+| SDOC-02 | Check mode writes nothing, works before Init, and reports seven exact-match domains; missing host inventory is unverified. | 0 |
+| SDOC-03 | Only confirmed allowlisted rate repairs write; backups, seeder preservation rules, rechecks, and idempotence apply. | 0 |
+| SDOC-04 | Escaping/linked paths, malformed inventory, unsafe federation locations, missing runtime, and writer contention fail closed. | 0 |
+| SDOC-05 | Federation checks stay on registered members; explicit member scope never repairs siblings. Partial state and unsupported faults remain blockers. | 0 |
+| SDOC-06 | Coordinators stop affected work, invoke Doctor once, retain approvals/gates, and retry the original failing check only after verified repair. | 0 |

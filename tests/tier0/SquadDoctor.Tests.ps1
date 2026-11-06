@@ -57,7 +57,7 @@ BeforeAll {
 
 AfterAll { $env:COPILOT_HOME = $script:OriginalCopilotHome }
 
-Describe 'Squad Doctor entrypoints and recovery (DOC-01, DOC-06)' {
+Describe 'Squad Doctor entrypoints and recovery (SDOC-01, SDOC-06)' {
     It 'ships a user-selectable dispatchable agent and bound prompt' {
         $agent = @($script:Model.SquadAgents | Where-Object Name -eq 'squad-doctor.agent.md')
         $prompt = @($script:Model.Prompts | Where-Object Name -eq 'squad-doctor.prompt.md')
@@ -88,7 +88,7 @@ Describe 'Squad Doctor entrypoints and recovery (DOC-01, DOC-06)' {
     }
 }
 
-Describe 'Squad Doctor deterministic checks (DOC-02)' {
+Describe 'Squad Doctor deterministic checks (SDOC-02)' {
     It 'checks all seven host domains without initializing or writing files' {
         $f = New-DoctorFixture
         $before = Get-DoctorSnapshot $f.Repo
@@ -132,7 +132,7 @@ Describe 'Squad Doctor deterministic checks (DOC-02)' {
     }
 }
 
-Describe 'Squad Doctor allowlisted repairs (DOC-03)' {
+Describe 'Squad Doctor allowlisted repairs (SDOC-03)' {
     It 'returns repaired then healthy against a real initialized squad and ledger' {
         $f = New-DoctorFixture
         $null = New-Item -ItemType Directory -Path (Join-Path $f.Repo '.github') -Force
@@ -235,7 +235,7 @@ Describe 'Squad Doctor allowlisted repairs (DOC-03)' {
     }
 }
 
-Describe 'Squad Doctor safety and federation scope (DOC-04, DOC-05)' {
+Describe 'Squad Doctor safety and federation scope (SDOC-04, SDOC-05)' {
     It 'rejects repository escape and malformed host inventory' {
         $f = New-DoctorFixture
         (Invoke-Doctor $f -Extra @('-SquadRoot', '..\outside')).Code | Should -Be 1
