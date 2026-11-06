@@ -23,11 +23,12 @@
     class, `default` admits balanced, code-specialized, and frontier-reasoning, and
     `extended` admits frontier-reasoning only.
 
-    Under `economy` the same candidates are ordered cost first (economy-mode.md), for
-    every role with a mapped class: each takes the lowest known Blended price that
-    qualifies within its own floor. A class with verified evidence qualifies by that
-    evidence's selected-panel minimum; a class without any qualifies by declared fit
-    >= 2, labelled as such. A role with no qualified candidate keeps its ranked pick.
+    Under `economy` the same floor-eligible candidates are ordered cost first
+    (economy-mode.md) for every routed role. A class with verified evidence first
+    prefers candidates meeting that evidence's selected-panel minimum; a class without
+    any first prefers declared fit >= 2. If none meets that preference, Economy still
+    takes the cheapest known-price candidate inside the floor and labels it floor-only.
+    It never keeps a role on Ranked because of role, class, consent scope, or attendance.
     Under `economy` every role also reports `escalation` (for an economy pick cheaper
     than its ranked pick, that ranked pick: the one re-dispatch target; otherwise
     empty) and `pin` (its agent's frontmatter `model:`, using the shared
@@ -35,10 +36,10 @@
     Under `economy` the report also carries `consent`: `recorded` when `decisions.md`
     beside `team.md` holds a `## Economy Mode Accepted` entry, else `missing` with a
     warning. Missing consent never refuses. Other modes carry no `consent` field. The
-    entry's `Scope: all-roles` bullet extends economy past the five legacy roles
-    (`economyScope`); an entry without it, or no entry, keeps every other role on its
-    ranked pick until the user accepts the wider trade. An unattended run keeps review,
-    council, and intake roles on their ranked pick.
+    entry's `Scope: all-roles` bullet authorizes dispatch (`economyScope`). An entry
+    without it remains `legacy`: callers must collect the wider consent before dispatch
+    instead of mixing Economy and Ranked roles. A recorded all-role Economy mode applies
+    to review, council, and intake roles on unattended runs too.
 
     The script is read-only. It never writes `team.md` or any other squad-state file:
     the Squad Scribe remains the single writer, and this script only computes what the
@@ -66,10 +67,11 @@
 .PARAMETER ConsentScope
     Economy only: the scope of the consent the caller is recording this turn
     (`all-roles` or `legacy`). It stands in for the not yet written
-    `## Economy Mode Accepted` entry; without it the entry in `decisions.md` decides.
+    `## Economy Mode Accepted` entry; only all-roles authorizes dispatch.
 .PARAMETER Unattended
-    Economy only: the run is unattended (`mode=autonomous`, `mode=autopilot`, Watch
-    Mode), so review, council, and intake roles keep their ranked pick.
+    Compatibility context for an unattended (`mode=autonomous`, `mode=autopilot`,
+    Watch Mode) call. A recorded all-role Economy mode uses the same cost-first
+    objective for every role; untrusted trigger text is filtered before this resolver.
 .PARAMETER AsOf
     The date the catalog's staleness is measured against. Defaults to today.
 .PARAMETER Format
@@ -120,19 +122,13 @@ if (-not $BenchmarksPath) {
 $Classes = @('research', 'planning', 'implementation', 'review', 'council', 'intake', 'bookkeeping')
 $MetacharacterPattern = '[\s;|&$<>`''"(){}\[\]]'
 $StaleAfterDays = 90
-# economy-mode.md *Consent*: an entry without `Scope: all-roles` predates economy for every role and
-# covers only these five, so every other role keeps its ranked pick until the user accepts the wider trade.
-$LegacyEconomyRoles = @('developer', 'technical-writer', 'presenter', 'prompt-engineer', 'data-scientist')
-# economy-mode.md *Watch and Unattended Runs*: gate classes keep their ranked pick without a user present.
-$GateClasses = @('review', 'council', 'intake')
 # economy-mode.md *Pick*: the qualification of a class that has no verified evidence.
 $EconomyDeclaredMinimumFit = 2
 $EconomyDeclaredRule = 'declared-fit-minimum-2-v1'
+$EconomyFloorOnlyRule = 'floor-only-known-price-v1'
 $EconomyHoldReason = @{
-    'legacy-consent'  = 'economy consent covers only the legacy roles; accept economy for all roles to extend it, until then this role keeps its Ranked pick'
-    'unattended-gate' = 'unattended run: review, council, and intake roles keep their Ranked pick'
-    'unmapped-class'  = 'role class is only the fallback guess, so the role keeps its Ranked pick'
-    'exception'       = 'role has an explicit pin or session-model exception'
+    'exception'   = 'role has an explicit pin or session-model exception; it is not held on Ranked'
+    'unavailable' = 'no host-available model inside the role floor has a known nonnegative price; dispatch must stop rather than fall back to Ranked'
 }
 
 function Get-MarkdownTableLocal {
@@ -550,7 +546,9 @@ function Get-RankedCandidatesLocal {
     <#
     .SYNOPSIS
         Orders one class's eligible rows by comparable capability, using declared
-        fit only as fallback, or by known price after Economy qualification.
+        fit only as fallback, or by known price after Economy qualification. Economy
+        can request the complete known-price floor set when no candidate meets the
+        preferred qualification; it never falls back to Ranked ordering.
     #>
     param(
         [Parameter(Mandatory)]$Catalog,
@@ -559,11 +557,12 @@ function Get-RankedCandidatesLocal {
         [AllowNull()][System.Collections.Generic.HashSet[string]]$Available,
         [ValidateSet('fit', 'cost')][string]$Order = 'fit',
         [int]$MinFit = 1,
-        [bool]$ClassHasEvidence = $true
+        [bool]$ClassHasEvidence = $true,
+        [switch]$AllowUnqualifiedEconomy
     )
 
     $eligible = @($Catalog.Fit | Where-Object {
-            $_.Scores[$Class] -ge $MinFit -and
+            $(if ($Order -eq 'cost' -and $AllowUnqualifiedEconomy) { $_.DeclaredScores[$Class] } else { $_.Scores[$Class] }) -ge $MinFit -and
             $Catalog.Capability.ContainsKey($_.Id) -and
             $Catalog.Capability[$_.Id] -in $Admitted -and
             ($null -eq $Available -or $Available.Contains($_.Id))
@@ -571,7 +570,10 @@ function Get-RankedCandidatesLocal {
     if ($eligible.Count -eq 0) { return }
 
     if ($Order -eq 'cost') {
-        $eligible = @($eligible | Where-Object { (Get-EconomyQualificationLocal -Entry $_ -Class $Class -ClassHasEvidence $ClassHasEvidence).Qualified })
+        $eligible = @($eligible | Where-Object { $null -ne $_.Blended -and $_.Blended -ge 0 })
+        if (-not $AllowUnqualifiedEconomy) {
+            $eligible = @($eligible | Where-Object { (Get-EconomyQualificationLocal -Entry $_ -Class $Class -ClassHasEvidence $ClassHasEvidence).Qualified })
+        }
     }
     if ($eligible.Count -eq 0) { return }
 
@@ -779,8 +781,8 @@ else {
     $warnings.Add('Host model availability is unresolved: pass the host availableModels enum, or a concrete priced session model only on a host that advertises no model list.')
 }
 
-# economy-mode.md *Consent*: report a missing ## Economy Mode Accepted entry; never refuse on it. An entry's
-# `Scope: all-roles` bullet extends Economy past the legacy five roles; without it those roles alone qualify.
+# economy-mode.md *Consent*: report a missing or legacy ## Economy Mode Accepted entry. The resolver still previews
+# one all-role cost-first answer, while the dispatch planner refuses to run until `Scope: all-roles` is recorded.
 $consent = $null
 $economyScope = $null
 if ($effectiveMode -eq 'economy') {
@@ -795,6 +797,9 @@ if ($effectiveMode -eq 'economy') {
         if ($section -match '(?m)^## Economy Mode Accepted\b' -and $section -match '(?m)^\s*[*-]\s+Scope:\s*all-roles\b') { $economyScope = 'all-roles' }
     }
     if ($ConsentScope) { $economyScope = $ConsentScope }
+    if ($economyScope -ne 'all-roles') {
+        $warnings.Add('economy consent upgrade required: dispatch must record Scope: all-roles before any role runs; the resolver reports the all-role preview and never mixes Economy with Ranked.')
+    }
 }
 $results = foreach ($row in $roster.Rows) {
     $roleId = $row['Role']
@@ -854,25 +859,39 @@ $results = foreach ($row in $roster.Rows) {
     }
     else { "Ranked: selected $suggestedCatalogId by declared fit $($selectedEntry.Scores[$class]), known Blended cost, then deterministic tie-breaks (declared-fit fallback); insufficient comparable primary evidence, not proof of superiority; floor $tier" }
 
-    # Economy picks the cheapest qualified model for every role with an explicit class (an unmapped role's class is a
-    # guess), unless its consent predates all-roles scope or an unattended run keeps a gate class on its ranked pick.
+    # Economy applies one cost-first rule to every routed role. Consent scope is a dispatch gate, never a reason
+    # to leave selected roles on Ranked, and unattended execution does not exempt review, council, or intake.
     $economyHold = $null
-    if ($effectiveMode -eq 'economy') {
-        $economyHold = if ($classSource -like 'fallback:*') { 'unmapped-class' }
-        elseif ($economyScope -ne 'all-roles' -and $roleId -notin $LegacyEconomyRoles) { 'legacy-consent' }
-        elseif ($Unattended -and $class -in $GateClasses) { 'unattended-gate' }
-    }
-    $economyApplies = $effectiveMode -eq 'economy' -and -not $economyHold
+    $economyApplies = $effectiveMode -eq 'economy'
     $economyQualification = $null
-    if ($economyApplies -and $suggestedCatalogId) {
+    if ($economyApplies -and -not $stale -and $rankedAdmitted.Count -gt 0) {
         $hasEvidence = [bool]$classHasEvidence[$class]
         $economyQualification = if ($hasEvidence) { 'evidence' } else { 'declared-fit' }
         $economy = @(Get-RankedCandidatesLocal -Catalog $catalog -Class $class -Admitted $rankedAdmitted -Available $available -Order cost -ClassHasEvidence $hasEvidence)
+        if ($economy.Count -eq 0) {
+            $economyQualification = 'floor-only'
+            $economy = @(Get-RankedCandidatesLocal -Catalog $catalog -Class $class -Admitted $rankedAdmitted -Available $available -Order cost -ClassHasEvidence $hasEvidence -AllowUnqualifiedEconomy)
+        }
         if ($economy.Count -gt 0) {
             $objective = 'cost-first'
             $selectedEntry = $economy[0]
             $suggestedCatalogId = $economy[0].Id
-            if ($hasEvidence) {
+            if ($economyQualification -eq 'floor-only') {
+                $combined = [Collections.Generic.List[object]]::new()
+                $combinedIds = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+                foreach ($candidate in @($economy) + @($offered)) {
+                    if ($combinedIds.Add([string]$candidate.Id)) { $combined.Add($candidate) }
+                }
+                $offered = $combined.ToArray()
+                $qualification = Get-EconomyQualificationLocal -Entry $selectedEntry -Class $class -ClassHasEvidence $hasEvidence
+                $rationale = "economy pick: selected $suggestedCatalogId under $EconomyFloorOnlyRule; no candidate met $(if ($hasEvidence) { $selectedEntry.Capabilities[$class].panel.qualificationRule } else { $EconomyDeclaredRule }), so Economy used the cheapest known-price host model inside the $tier floor instead of falling back to Ranked; selected candidate qualification: $($qualification.Reason)"
+                if ($economy.Count -gt 1) {
+                    $other = $economy[1]
+                    $rationale += "; next floor-eligible alternative $($other.Id) costs $($other.Blended); extra capability or confidence never overrides lower cost"
+                }
+                $rationale += "; class source $classSource"
+            }
+            elseif ($hasEvidence) {
                 $qualification = $selectedEntry.Capabilities[$class].panel
                 $rationale = "economy pick: selected $suggestedCatalogId under $($qualification.qualificationRule), each selected primary percentile >= $($qualification.minimumPercentile); its known Blended $($selectedEntry.Blended) USD/1M is lowest among $($economy.Count) qualified candidates"
                 if ($economy.Count -gt 1) {
@@ -890,12 +909,13 @@ $results = foreach ($row in $roster.Rows) {
                 $rationale += " (declared-fit fallback, not a measured capability winner), floor $tier"
             }
         }
-        elseif ($hasEvidence) {
-            $qualification = $selectedEntry.Capabilities[$class].panel
-            $rationale = "economy: no candidate meets $($qualification.qualificationRule) (each selected primary percentile >= $($qualification.minimumPercentile), sufficient verified panel and known price); explicit Ranked fallback; $rationale"
-        }
         else {
-            $rationale = "economy: no candidate meets $EconomyDeclaredRule (declared fit >= $EconomyDeclaredMinimumFit within the $tier floor and a known price; no verified $class evidence exists); explicit Ranked fallback; $rationale"
+            $objective = 'cost-first'
+            $selectedEntry = $null
+            $suggestedCatalogId = $null
+            $economyQualification = 'unavailable'
+            $economyHold = 'unavailable'
+            $rationale = "economy unavailable: no host-available model inside the $tier floor has a known nonnegative price; no Ranked fallback is permitted"
         }
     }
     $suggested = Get-AdvertisedModelIdLocal -CatalogId $suggestedCatalogId -AdvertisedIdByCanonical $advertisedIdByCanonical
@@ -1000,8 +1020,13 @@ $results = foreach ($row in $roster.Rows) {
         evidenceStatus = if ($stale) { 'stale-catalog' } else { $capabilityResult.status }
         comparisonPanel = $capabilityResult.panel
         evidenceLevel = $capabilityResult.panel.evidenceLevel
-        qualificationRule = if ($economyQualification -eq 'declared-fit') { $EconomyDeclaredRule } else { $capabilityResult.panel.qualificationRule }
-        comparisonOutcome = if ($exception) { $exception } elseif ($fallback) { 'declared-fit fallback' } else { $capabilityResult.status }
+        qualificationRule = if ($economyQualification -eq 'declared-fit') { $EconomyDeclaredRule }
+        elseif ($economyQualification -eq 'floor-only') { $EconomyFloorOnlyRule }
+        else { $capabilityResult.panel.qualificationRule }
+        comparisonOutcome = if ($exception) { $exception }
+        elseif ($economyQualification -eq 'floor-only') { 'economy floor-only' }
+        elseif ($fallback) { 'declared-fit fallback' }
+        else { $capabilityResult.status }
         coverage = [ordered]@{
             achieved = $capabilityResult.primaryCoverage
             required = $capabilityResult.requiredCoverage
@@ -1059,7 +1084,7 @@ $results = foreach ($row in $roster.Rows) {
                     economyQualified = $economyFit.Qualified
                     estimatedCost = $_.Blended
                     suitabilityFit = $_.Scores[$class]
-                    routingEligible = $_.Scores[$class] -ge 1
+                    routingEligible = $(if ($effectiveMode -eq 'economy') { $_.DeclaredScores[$class] -ge 1 } else { $_.Scores[$class] -ge 1 })
                     qualificationReason = $economyFit.Reason
                     selectedCoverage = "$($_.Capabilities[$class].primaryCoverage)/$($_.Capabilities[$class].requiredCoverage)"
                     fullProfileCoverage = "$($_.Capabilities[$class].fullProfileCoverage)/$($_.Capabilities[$class].fullProfileRequired)"
@@ -1070,7 +1095,8 @@ $results = foreach ($row in $roster.Rows) {
     }
     if ($effectiveMode -eq 'economy') {
         if ($exception) { $economyHold = 'exception' }
-        $applied = $economyApplies -and -not $exception
+        elseif (-not $suggested) { $economyHold = 'unavailable' }
+        $applied = $economyApplies -and -not $exception -and [bool]$suggested
         $target = if ($applied) {
             Get-AdvertisedModelIdLocal -CatalogId (Get-EscalationTarget -Ranked $ranked) -AdvertisedIdByCanonical $advertisedIdByCanonical
         }
@@ -1079,16 +1105,11 @@ $results = foreach ($row in $roster.Rows) {
         $entry['escalationReason'] = if ($entry['escalation']) { 'one retry on capability-first Ranked; persist Model cell and rerun required Cost Preflight before redispatch' }
         elseif ($applied) { 'no higher-ranked escalation target exists' }
         else { $EconomyHoldReason[$economyHold] }
-        $entry['economyQualification'] = if ($applied) { $economyQualification } else { $null }
+        $entry['economyQualification'] = if ($exception) { $null } else { $economyQualification }
         $entry['economyHold'] = $economyHold
         $entry['pin'] = $pin
     }
     [pscustomobject]$entry
-}
-
-$legacyHeld = @($results | Where-Object { $_.PSObject.Properties['economyHold'] -and $_.economyHold -eq 'legacy-consent' })
-if ($legacyHeld.Count -gt 0) {
-    $warnings.Add("economy scope: the recorded consent covers only the legacy roles ($($LegacyEconomyRoles -join ', ')); $($legacyHeld.Count) other role(s) stay on their Ranked pick until the user accepts economy for all roles (economy-mode.md Consent).")
 }
 
 $report = [pscustomobject][ordered]@{
@@ -1104,6 +1125,7 @@ $report = [pscustomobject][ordered]@{
     snapshotIdentity    = $benchmarks.Digest
     evaluationDate      = $AsOf.ToString('yyyy-MM-dd')
     executionEvidence   = 'selection only; host execution unreported'
+    unattended          = [bool]$Unattended
     availability        = $availability
     availabilityResolved = $availabilityResolved
     unevaluated         = $unevaluated

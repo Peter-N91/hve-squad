@@ -43,6 +43,7 @@ BeforeAll {
     $script:WatchInstructions = Get-EconomyFileText (@($script:Model.Instructions | Where-Object Name -eq 'squad-watch-mode.instructions.md')[0]).Path
     $script:OperatingProcedure = Get-EconomyFileText (Join-Path $skill 'references/operating-procedure.md')
     $script:Resolver = Get-EconomyFileText (Join-Path $skill 'scripts/Resolve-SquadModelRoute.ps1')
+    $script:DispatchPlan = Get-EconomyFileText (Join-Path $skill 'scripts/New-SquadDispatchPlan.ps1')
     $script:Scoring = Get-EconomyFileText (Join-Path $skill 'scripts/ModelBenchmarkScoring.ps1')
     $script:ScoringPolicy = Get-EconomyFileText (Join-Path $skill 'references/model-scoring.md')
     $script:Coordinator = @($script:Model.SquadAgents | Where-Object Name -eq 'squad-coordinator.agent.md')[0]
@@ -105,19 +106,19 @@ Describe 'Economy Mode keeps its scope, floors, and one escalation (SQ-35)' {
         $script:Routing | Should -Not -Match '(?i)fit 2 or better|lowest \*\*Blended\*\* rate'
     }
 
-    It 'picks the lowest known price for every role after class qualification, within its floor' {
-        $script:EconomySection | Should -Match '`ranked` \(see `model-routing.md`\) with one change: \*\*every role\*\* is ordered cost first within its own floor'
+    It 'picks the lowest known price for every routed role within its floor without a Ranked hold' {
+        $script:EconomySection | Should -Match ([regex]::Escape('the cheapest host-available model with a known nonnegative price inside that role''s floor'))
         $script:EconomySection | Should -Match ([regex]::Escape('each primary percentile must be at least `0.50`'))
         $script:EconomySection | Should -Match ([regex]::Escape('the candidate needs a declared `Assignment Fit` of 2 or more on the catalog''s 0..3 scale (`declared-fit-minimum-2-v1`)'))
         $script:EconomySection | Should -Match ([regex]::Escape('Extra capability or confidence above the minimum never overrides a lower price.'))
         $script:EconomySection | Should -Match ([regex]::Escape('An unpriced model is never free.'))
-        $script:EconomySection | Should -Match ([regex]::Escape('the floors are the only model-quality guard'))
-        $script:EconomySection | Should -Match ([regex]::Escape('the role explicitly falls back to its capability-first Ranked pick and reports the qualification and the actual rejection reasons'))
+        $script:EconomySection | Should -Match ([regex]::Escape('apply `floor-only-known-price-v1`'))
+        $script:EconomySection | Should -Match ([regex]::Escape('do not fall back to Ranked'))
     }
 
     It 'routing decides only the model: economy at standard depth keeps the full pipeline and depth=quick owns the workflow' {
         $script:EconomySection | Should -Match ([regex]::Escape('It decides only which model a role runs on.'))
-        $script:EconomySection | Should -Match ([regex]::Escape('Economy at standard depth runs Research, Plan, Implement, and Review with no lane and no parallelism.'))
+        $script:EconomySection | Should -Match ([regex]::Escape('Economy at standard depth runs Research, Plan, Implement, and Review with no lane and no extra quick-depth parallelism.'))
         $script:EconomySection | Should -Match ([regex]::Escape('either input works alone or with the other'))
         $script:Routing | Should -Match ([regex]::Escape('Routing only chooses models; how much work runs is the separate per-turn `depth=` input'))
     }
@@ -140,29 +141,33 @@ Describe 'Economy Mode keeps its scope, floors, and one escalation (SQ-35)' {
         $script:Resolver | Should -Match ([regex]::Escape("'fast' { return @('fast-lightweight', 'balanced', 'code-specialized', 'frontier-reasoning') }"))
     }
 
-    It 'has no role allowlist: every role resolves the same way, and the only holds are named' {
+    It 'has no role or unattended allowlist and never keeps a selected role on Ranked' {
         $script:EconomySection | Should -Not -Match '(?m)^## Role Allowlist'
         $script:EconomySection | Should -Not -Match 'Economy changes the model of these roles only'
-        $script:EconomySection | Should -Match ([regex]::Escape('Every role resolves the same way; no list exempts a role.'))
-        foreach ($hold in 'legacy-consent', 'unattended-gate', 'unmapped-class', 'exception') {
+        $script:EconomySection | Should -Match ([regex]::Escape('Every routed role resolves the same way'))
+        foreach ($hold in 'exception', 'unavailable') {
             $script:EconomySection | Should -Match ([regex]::Escape("``$hold``")) -Because "$hold must be a named hold reason"
+        }
+        foreach ($retired in 'legacy-consent', 'unattended-gate', 'unmapped-class') {
+            $script:EconomySection | Should -Not -Match ([regex]::Escape("``$retired``"))
+            $script:Resolver | Should -Not -Match ([regex]::Escape("'$retired'"))
         }
         foreach ($live in 'deployer', 'iac-author', 'release-engineer', 'backlog-executor') {
             $script:EconomySection | Should -Match ([regex]::Escape("``$live``")) -Because "$live is in scope and must be named with its guards"
         }
         $script:Resolver | Should -Not -Match '\$EconomyRoles\b'
-        $script:Resolver | Should -Match ([regex]::Escape("`$LegacyEconomyRoles = @('developer', 'technical-writer', 'presenter', 'prompt-engineer', 'data-scientist')"))
+        $script:Resolver | Should -Not -Match '\$LegacyEconomyRoles|\$GateClasses'
     }
 
-    It 'keeps existing five-role consents on the legacy scope until the user accepts the wider trade' {
-        $script:EconomySection | Should -Match ([regex]::Escape('An entry without the `Scope: all-roles` bullet predates all-role economy and covers only the five legacy roles'))
-        $script:EconomySection | Should -Match ([regex]::Escape('Until the user accepts the wider trade, every other role stays on its Ranked pick and the resolver reports `economy scope: legacy`.'))
-        $script:Resolver | Should -Match ([regex]::Escape("elseif (`$economyScope -ne 'all-roles' -and `$roleId -notin `$LegacyEconomyRoles) { 'legacy-consent' }"))
+    It 'blocks legacy consent before dispatch instead of mixing Economy and Ranked roles' {
+        $script:EconomySection | Should -Match ([regex]::Escape('The resolver reports `economy scope: legacy` for migration, but the dispatch planner stops before every role until the user accepts the wider trade'))
+        $script:EconomySection | Should -Match ([regex]::Escape('it never creates a mixed run where five roles use Economy and the rest stay Ranked'))
+        $script:DispatchPlan | Should -Match ([regex]::Escape('Economy dispatch requires recorded Scope: all-roles consent.'))
     }
 
-    It 'keeps review, council, and intake roles on Ranked while no user is present' {
-        $script:EconomySection | Should -Match ([regex]::Escape('review, council, and intake roles keep their Ranked pick while no user is present (`unattended-gate`)'))
-        $script:Resolver | Should -Match ([regex]::Escape("elseif (`$Unattended -and `$class -in `$GateClasses) { 'unattended-gate' }"))
+    It 'applies a recorded all-role Economy mode to review, council, and intake while unattended' {
+        $script:EconomySection | Should -Match ([regex]::Escape('A fully consented mode already recorded in `team.md` by an attended turn still applies to every routed role, including review, council, and intake'))
+        $script:Resolver | Should -Not -Match '\$Unattended\s+-and'
     }
 
     It 'never relaxes a floor through a routing input' {

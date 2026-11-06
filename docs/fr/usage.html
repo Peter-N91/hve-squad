@@ -1887,9 +1887,10 @@ layouts:
           de chaque rôle parmi ceux proposés par votre hôte, et affiche chaque choix dans une colonne <code>Model</code>
           sous une ligne <code>Model routing: ranked</code>.
         </li>
-        <li data-release-change="20261005-routing-economy">
-          <strong><code>economy</code></strong> — comme <code>ranked</code>, sauf que cinq rôles d'implémentation
-          à faible impact reçoivent le modèle le moins cher suffisamment adapté à leur travail ; affiché sous une ligne
+        <li data-release-change="20261106-economy-all-role-routing">
+          <strong><code>economy</code></strong> — chaque rôle routé reçoit le modèle au prix connu le
+          plus bas dans son propre seuil ; la qualification est préférée et explicitée, avec un choix
+          fondé uniquement sur le seuil lorsqu'aucun modèle ne se qualifie. Affiché sous une ligne
           <code>Model routing: economy</code>. Sur option, et seulement après que vous avez accepté le compromis. Voir
           <a href="#routing-economy">Mode economy</a> ci-dessous.
         </li>
@@ -1928,37 +1929,36 @@ layouts:
         choix, la question vous est reposée avec la liste signalée par VS Code.
       </p>
       <p id="routing-economy" data-release-change="20261005-routing-economy">
-        <strong>Mode economy (<code>routing=economy</code>).</strong> Seuls ces cinq rôles changent de
-        modèle : <code>developer</code>, <code>technical-writer</code>, <code>presenter</code>,
-        <code>prompt-engineer</code> et <code>data-scientist</code>. Chacun reçoit le modèle du catalogue le
-        moins cher disposant de preuves indépendantes vérifiées suffisantes : un percentile
-        d'au moins <code>0.50</code> sur chaque évaluation du panel complet, ou <code>0.75</code>
-        sur le panel SciCode explicitement réduit, selon des règles de qualification versionnées
-        distinctes et dans le respect du seuil minimal <code>Model Tier</code> du rôle. Ce minimum de politique
-        ne garantit pas la réussite : une capacité ou une confiance supérieure ne justifie
-        jamais un prix Blended connu plus élevé. À prix égal, la capacité prime ; un prix absent
-        ne signifie jamais gratuit. Sans candidat qualifié, le script explique son repli sur
-        Ranked. Tous les autres rôles, dont <code>product-owner</code>,
-        <code>deployer</code>, <code>iac-author</code>, <code>release-engineer</code>,
-        <code>backlog-executor</code> et tous les rôles de revue, de conseil, d'intake, de recherche, de planification et
-        de tenue des registres, gardent leur choix <code>ranked</code>. Après un verdict <code>Fail</code>, une
-        observation critique ou élevée, ou un responsable bloqué, ce responsable est relancé une seule fois sur son choix
-        <code>ranked</code> fondé sur la capacité, puis la revue est refaite. Le Scribe enregistre
-        cette cellule Model avant le nouveau lancement ; un choix plus cher sous plafond exige
-        un nouveau Cost Preflight. Si les deux choix sont identiques, aucune escalade vers un
-        modèle mieux classé n'est possible.
+        <strong>Mode economy (<code>routing=economy</code>).</strong>
+        <span data-release-change="20261106-economy-all-role-routing">Chaque rôle routé applique la
+        même règle fondée d'abord sur le coût, y compris les rôles de recherche, planification, revue,
+        conseil, intake, ressources actives, classe de repli et exécution sans surveillance. Dans le
+        seuil <code>Model Tier</code> du rôle, Economy préfère les modèles qui respectent la règle de
+        classe : au moins <code>0.50</code> sur chaque évaluation primaire du panel complet,
+        <code>0.75</code> sur le panel SciCode réduit, ou une adéquation déclarée d'au moins 2 lorsqu'il
+        n'existe pas de panel vérifié. Il choisit ensuite le prix Blended connu le plus bas. Si aucun
+        modèle ne respecte cette préférence, <code>floor-only-known-price-v1</code> choisit le modèle
+        tarifé le moins cher qui reste dans le seuil ; le rôle n'est pas laissé sur Ranked. Un prix
+        absent ne signifie jamais gratuit, et l'absence de candidat tarifé dans le seuil bloque le
+        lancement. Le coordinateur conserve votre modèle de session et le Scribe son modèle fixé ;
+        aucun des deux n'est un maintien sur Ranked. Après un verdict <code>Fail</code>, une observation
+        critique ou élevée, ou un responsable bloqué, ce responsable peut être relancé une fois sur
+        son choix <code>ranked</code> fondé sur la capacité, puis la revue est refaite.</span>
       </p>
       <p>
         <strong>Accord.</strong> La première fois que vous passez à <code>economy</code>, avant tout
         lancement, le coordinateur vous dit une fois ce qui change et ce qui ne change pas, et le Scribe
         consigne une décision <code>## Economy Mode Accepted</code> avec votre nom, le mode précédent,
-        le compromis accepté et la liste de ce qui n'est jamais affaibli. Si cette décision manque, le
-        script d'aide signale <code>consent: missing</code> comme avertissement, et le coordinateur
-        énonce le compromis et le fait consigner avant le lancement suivant. Une exécution Watch Mode ou autre
-        exécution sans surveillance ne passe jamais en <code>economy</code> à partir du texte d'une issue, d'une PR ou d'un commentaire.
+        le compromis accepté, la liste de ce qui n'est jamais affaibli et
+        <code>Scope: all-roles</code>. Un ancien accord sans cette portée bloque le lancement jusqu'à
+        ce que vous acceptiez le compromis élargi ; il ne crée jamais une exécution mixte où cinq
+        rôles utilisent Economy et les autres restent sur Ranked. Une exécution Watch Mode ou autre
+        exécution sans surveillance ne passe jamais en <code>economy</code> à partir du texte d'une
+        issue, d'une pull request ou d'un commentaire, mais un mode Economy tous rôles déjà accepté
+        continue de s'appliquer à chaque rôle routé.
       </p>
       <p>
-        <strong>Jamais affaibli.</strong> Le mode economy ne saute, n'abrège ni n'assouplit jamais le Risk Gate,
+        <strong>Jamais affaibli.</strong> Le mode economy ne change que le choix du modèle. Il ne saute, n'abrège ni n'assouplit jamais le Risk Gate,
         l'Impactful-Action Gate, la revue de sécurité, la revue finale du testeur, le conseil d'adéquation à la tâche
         avec son extension et sa dérogation, ni aucun autre contrôle, et il n'abaisse jamais un seuil minimal. En
         <code>off</code>, <code>ranked</code> et <code>manual</code>, la squad se comporte exactement comme
@@ -2025,6 +2025,31 @@ layouts:
 
 # Switch the product sub-squad to manual selection; each sub-squad keeps its own picks.
 /squad-federation squad=product routing=manual</code></pre>
+
+      <h3 id="work-depth" data-release-change="20261106-quick-depth">Profondeur du travail (<code>depth=</code>)</h3>
+      <p>
+        <code>routing=</code> choisit les modèles ; <code>depth=</code> choisit indépendamment la
+        quantité de travail exécutée pendant ce tour. Omettez-le pour <code>depth=standard</code>,
+        qui conserve le pipeline complet Recherche &rarr; Plan &rarr; Implémentation &rarr; Revue.
+        <code>depth=quick</code> ne peut ignorer Recherche et Plan que lorsque les critères
+        déterministes de la voie bornée ou d'un artefact récent le prouvent sans risque ; il peut
+        ignorer un passage challenger non demandé et réduire les étapes de travail admissibles.
+        Chaque contrôle et la revue finale restent à profondeur standard.
+      </p>
+      <p>
+        La profondeur rapide ne peut ajouter du parallélisme que pour une demande bornée ou un plan
+        Lead local au dépôt et vérifié dont <code>Implement Shape</code> vaut
+        <code>deliverable-fan-out</code>, avec des ensembles d'écriture disjoints et sans dépendance.
+        Elle ne change jamais un modèle, un seuil, la configuration de l'équipe ni un tour ultérieur.
+        L'omission signifie toujours standard ; le coordinateur ne déduit jamais quick de
+        <code>routing=economy</code>, d'une petite demande ou de noms de fichiers précis. Le texte
+        d'une issue, d'une pull request ou d'un commentaire ne peut pas l'activer sans surveillance.
+      </p>
+      <pre><code># Keep Ranked models, but request the bounded/shrunk quick workflow for this turn.
+/squad request="update the named files and run their focused tests" routing=ranked depth=quick
+
+# Use cheap models without shortening the normal pipeline.
+/squad request="implement the approved plan" routing=economy</code></pre>
 
       <h3>Validation du registre</h3>
       <p>

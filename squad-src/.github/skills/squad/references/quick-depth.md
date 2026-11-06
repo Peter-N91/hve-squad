@@ -5,7 +5,7 @@ license: MIT
 metadata:
   authors: "Peter-N91/hve-squad"
   spec_version: "1.0"
-  last_updated: "2026-11-05"
+  last_updated: "2026-11-06"
 ---
 
 # Quick Depth
@@ -23,11 +23,11 @@ Read this file only on a turn whose trusted input is `depth=quick`. Under the de
 * **Federation.** The federation coordinator forwards `depth` to each selected sub-squad as it forwards `tier`; a child never widens it.
 * **`pipeline=full`.** Kept for one release as an alias of `depth=standard`.
 
-Pass the input to `New-SquadDispatchPlan.ps1` as `requestedDepth`, with the request evidence as `depthEvidence`. The script computes the depth plan, the lane decision, the parallel batches, each endpoint's `depth`, `depthClause`, and `reasoningEffort`, and the Route rationale markers. The coordinator never recomputes or edits them.
+Pass an explicit prompt value to `New-SquadDispatchPlan.ps1` as `requestedDepth` with `depthSource: input`; a federation child receives `depthSource: federation`. Omission is `standard`, and `quick` without one of those trusted sources is refused. Pass request evidence as `depthEvidence`. The script computes the depth plan, removes units whose stages are skipped, then computes dependency waves, parallel batches, each endpoint's `depth`, `depthClause`, and `reasoningEffort`, and the Route rationale markers. The coordinator never infers, recomputes, or edits them.
 
 ## Depth Plan
 
-Before any dispatch the plan returns a recorded *depth plan*: every stage of the fixed table (`Get-SquadDepthStagePolicy`, printed by the dispatch brief) is `run`, `shrink`, or `skip`, with its criterion and the evidence that met it. **Any doubt, or any evidence the plan cannot verify, means standard depth for that stage.** In v1 only these skip: Research and Plan on the *Bounded Lane* or when a fresh artifact already covers the topic, the challenger or critique pass when none was requested, and the discovery offer (an explicit `discovery=` wins). Stages that run shrink (*Shrink Budgets*); gates never change (*Never Skipped*).
+Before any dispatch the plan returns a recorded *depth plan*: every stage of the fixed table (`Get-SquadDepthStagePolicy`, printed by the dispatch brief) is `run`, `shrink`, or `skip`, with its criterion and the evidence that met it. The plan is computed before model validation and dependency waves; a supplied Research, Plan, or challenger unit is removed when its stage is `skip`, and dependencies on that skipped stage are satisfied by the recorded skip. Because the runtime prepares actual-role plans per worker, `gateCoverage` distinguishes a gate unit supplied in this plan from `required-follow-up` (notably the closing review after implementation) and external gate evaluation; `run` never claims that an absent gate already executed. **Any doubt, or any evidence the plan cannot verify, means standard depth for that stage.** In v1 only these skip: Research and Plan on the *Bounded Lane* or when a fresh artifact already covers the topic, the challenger or critique pass when none was requested, and the discovery offer (an explicit `discovery=` wins). Stages that run shrink (*Shrink Budgets*); gates never change (*Never Skipped*).
 
 `depthEvidence` holds one nonempty single-line string per fact the request actually shows, quoted from the request: `exactTargets` (the exact files or artifacts and the exact change), `noOpenQuestions`, `noCouncilLens`, `noGateTrigger`, and `noCritiqueRequested`; `discoveryExplicit` (boolean); and `reuse`, up to eight `{stage, path, covers}` artifacts. A reused artifact passes only when it exists in the repository under a `research/` or `plans/` folder, carries a `yyyy-MM-dd` date in its path no more than 7 days before the plan date, and states in `covers` what it covers; reuse is interactive mode only. A rejected artifact is reported as `Reuse not applied` and the stage stays at standard depth.
 
@@ -42,15 +42,13 @@ Interactive mode only (no `mode=`). A fully specified, low-risk request does not
 * `owners-disjoint`: a single owning role does the work, or independent items each have one owner and disjoint write sets.
 * `no-council-lens`: it engages no council lens (none of architecture, security, cost, product-fit, or RAI, the task-fit lenses in `gates-and-modes.md` *Council Procedure*), and the user asked for no council, validation, cross-check, or pre-implementation review. A request that would need a council, an extension, or a waiver is never bounded.
 * `no-gate-trigger`: no Impactful-Action Gate or Risk Gate trigger applies, and no intake or discovery gate trigger applies.
-* `no-research-or-plan-unit`: the dispatch selects no `researcher` or `lead` unit.
-
 **Any doubt means the full pipeline.** `depth=standard` (`pipeline=full`) forces it, and `mode=autonomous`, `mode=autopilot`, and Watch Mode never use the lane. The lane changes how many stages run, never who runs them: the coordinator still dispatches the owning role through `runSubagent` or `task`, never inline, still dispatches `tester` as the closing stage under `gates-and-modes.md` *Review Follow-Through*, and records every stage through the validated ordinary writer or cold Scribe. The decision entry records `Route: bounded` and each criterion with the request evidence that met it. The lane never changes which model a dispatch runs on.
 
 **Bounded owner brief.** The dispatch to each bounded owner carries its full write set (every file and directory it may touch), the exact change, the validation command, the change-record path, and the plan's `depthClause`: `bounded: read only the named files and the change-record convention; do not explore the repository, but you may search for references to any symbol, heading, or link you change; if a dependent outside the named files needs a change, return "blocked: not bounded" without editing it`. A `blocked: not bounded` return leaves the lane for the full pipeline. The owner still follows the repository coding-standards instructions, runs the validation, and writes the change record last, ending with `Status: complete`. The closing review runs only after every owner's final message, and the ordinary writer checks that it saw the final files (`economy-mode.md` *Scripted Writes*).
 
 ## Plan-Driven Parallelism
 
-Interactive mode only (no `mode=`). Besides the `Parallel-Eligible` flag, owners may run concurrently when the Lead plan's `Implement Shape` is `deliverable-fan-out`, or a bounded request lists independent items, and their write sets are disjoint (no shared file, and no deliverable that consumes another's output). The plan or the request must show the disjointness; budget is never a reason, and overlapping write sets fail the plan. Obtain the routing tier's confirmation once for the batch, listing every owner, its tier, and its write set; an `escalate`-tier owner is never batched (the plan returns the confirmation as `depth.parallelism.batches[].confirmation`). Scribe single-writer, one hand-off per stage, and per-stage `history/<agent>.md` entries are unchanged. When disjointness is unproven, dispatch sequentially in dependency order. Autopilot's own fan-out is unchanged.
+Interactive mode only (no `mode=`). Besides the `Parallel-Eligible` flag, quick depth may add concurrency only when the verified repository-local Lead plan's `Implement Shape` is `deliverable-fan-out`, or a bounded request lists independent items, and their write sets are disjoint (no shared file, and no deliverable that consumes another's output). A mere `planPath`, `parallel: true`, budget pressure, or the word "independent" is not proof. The plan or the request must show the disjointness; budget is never a reason, and overlapping write sets fail the plan. Obtain the routing tier's confirmation once for the batch, listing every owner, its tier, and its write set; an `escalate`-tier owner is never batched (the plan returns the confirmation as `depth.parallelism.batches[].confirmation`). Scribe single-writer, one hand-off per stage, and per-stage `history/<agent>.md` entries are unchanged. Without bounded or fan-out proof, quick depth adds no concurrency. When disjointness is unproven, dispatch sequentially in dependency order. Autopilot's own fan-out is unchanged.
 
 ## Shrink Budgets
 
@@ -75,7 +73,7 @@ Under `depth=quick` only, when the intake gate requires a verdict, the validator
 
 ## Route Markers
 
-The plan prefixes each endpoint's `modelRationale`: `Route: bounded` on a lane dispatch, then `Depth: quick` on a dispatch whose stage shrank. Review, council, and intake dispatches carry no depth marker. Copy `modelRationale` unchanged into the payload's `routingIdentity.routeRationale`; under `routing=economy` the writer puts `Route: economy` first when the rationale does not already start with `Route: `. Under `routing=off` there is no Route rationale, and the decision entry alone records the depth.
+The plan prefixes each shrunk work endpoint's `modelRationale`: `Route: bounded` on a bounded owner, then `Depth: quick`. Review, council, and intake dispatches carry no depth marker. Copy `modelRationale` unchanged into the payload's `routingIdentity.routeRationale`; under `routing=economy` the writer puts `Route: economy` first when the rationale does not already start with `Route: `. Under `routing=off` there is no Route rationale, and the decision entry alone records the depth.
 
 ## Never Skipped
 
@@ -83,4 +81,4 @@ The plan prefixes each endpoint's `modelRationale`: `Route: bounded` on a lane d
 
 ## Helper
 
-`scripts/New-SquadDispatchPlan.ps1` computes the plan through `Get-SquadDepthPlan` (`SquadCoordinator.psm1`); `scripts/Get-SquadDispatchBrief.ps1 -RequestedDepth quick` prints the stage policy and the sections of this file that apply to the turn's mode. Both are read-only and deterministic: the same request evidence and artifacts always give the same plan.
+`scripts/New-SquadDispatchPlan.ps1` computes and enforces the plan through `Get-SquadDepthPlan` (`SquadCoordinator.psm1`) before it builds waves; `scripts/Get-SquadDispatchBrief.ps1 -RequestedDepth quick` prints the stage policy and the sections of this file that apply to the turn's mode. Both are read-only and deterministic: the same trusted depth input, request evidence, units, and artifacts always give the same plan.

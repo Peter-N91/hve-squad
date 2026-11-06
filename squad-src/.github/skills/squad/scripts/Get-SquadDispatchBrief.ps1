@@ -138,10 +138,9 @@ if ($AsJson -and (Test-Path -LiteralPath (Join-Path $SquadRoot 'federation.md') 
         Write-SquadTransportJson -Path $SnapshotPath -SquadRoot $SquadRoot -Value (Get-SquadFederationSnapshot -SquadRoot $SquadRoot -RepoRoot $RepoRoot)
     } else { '' }
     $federationBrief = [ordered]@{ status = 'ok'; kind = 'federation'; squadRoot = $SquadRoot; state = $federationState; registry = $registry; routing = $metaTables[0].Rows; requestedModelRouting = $RequestedModelRouting; snapshotPath = $savedSnapshot; reference = 'references/federation-runtime.md'; observedExecution = 'host-unreported' }
-    if ($RequestedDepth) {
-        $federationBrief['requestedDepth'] = $RequestedDepth
-        $federationBrief['depth'] = $(if ($RequestedDepth -ceq 'quick' -and $federationState['trigger'] -isnot [Collections.IDictionary]) { 'quick' } else { 'standard' })
-    }
+    $federationBrief['requestedDepth'] = $(if ($RequestedDepth) { $RequestedDepth } else { 'standard' })
+    $federationBrief['depthSource'] = $(if ($RequestedDepth) { 'input' } else { 'default' })
+    $federationBrief['depth'] = $(if ($RequestedDepth -ceq 'quick' -and $federationState['trigger'] -isnot [Collections.IDictionary]) { 'quick' } else { 'standard' })
     $federationBrief | ConvertTo-Json -Depth 12 -Compress
     exit 0
 }
@@ -321,15 +320,15 @@ $cap = if ($capText -match '^\d+$' -and [int]$capText -gt 0) { [int]$capText } e
 # quick-depth.md: depth is per turn and independent of routing; a Watch Mode run (state.json trigger) ignores it.
 $unattended = $state['trigger'] -is [System.Collections.IDictionary]
 $depth = if ($RequestedDepth -ceq 'quick' -and -not $unattended) { 'quick' } else { 'standard' }
+$depthSource = if ($RequestedDepth) { 'input' } else { 'default' }
 $covered = $depth -eq 'quick' -and -not $federationParent -and -not $ceiling
 $out.Add("state: schema $($state['schemaVersion']), turn $turn (next hand-off turn: $($turn + 1)), mode $($state['mode']), updated $updated")
 $out.Add("federation: $(if ($federated) { 'yes' } else { 'no' }) | cost ceiling: $(if ($ceiling) { 'active' } else { 'none' }) | ledger: $ledger | model routing: $routing | concurrency cap: $cap")
 if ($RequestedModelRouting) { $out.Add("routing intent: requested $RequestedModelRouting; recorded $recordedRouting. Prepare the selected role units before dispatch; this brief is not a dispatch plan.") }
-if ($RequestedDepth) {
-    $out.Add($(if ($depth -eq 'quick') { 'depth: quick (this turn only, never persisted; it changes how much work runs, never a model; the dispatch plan with requestedDepth is the source of the depth plan)' }
-            elseif ($RequestedDepth -ceq 'quick') { 'depth: standard (depth=quick ignored on an unattended run; recorded as seen and ignored)' }
-            else { 'depth: standard' }))
-}
+$out.Add($(if ($depth -eq 'quick') { 'depth: quick (trusted input this turn only, never persisted; pass requestedDepth=quick with depthSource=input)' }
+        elseif ($RequestedDepth -ceq 'quick') { 'depth: standard (depth=quick ignored on an unattended run; recorded as seen and ignored)' }
+        elseif ($RequestedDepth) { 'depth: standard (explicit input)' }
+        else { 'depth: standard (default; no depth input, and quick must not be inferred)' }))
 # economy-mode.md Consent (the same check Resolve-SquadModelRoute.ps1 and Write-SquadHandoff.ps1 make) and Route Markers.
 $decisionsPath = Join-Path $SquadRoot 'decisions.md'
 $decisionsText = if (Test-Path -LiteralPath $decisionsPath -PathType Leaf) { [string](Get-Content -LiteralPath $decisionsPath -Raw -Encoding utf8) } else { '' }
@@ -337,8 +336,8 @@ $consent = if ($decisionsText -match '(?m)^## Economy Mode Accepted\b') { 'recor
 $economyScope = Get-SquadEconomyConsentScope -DecisionsText $decisionsText
 if ($routing -eq 'economy') { $out.Add("consent: $consent") }
 if ($routing -eq 'economy' -and $consent -eq 'recorded') {
-    $out.Add($(if ($economyScope -eq 'all-roles') { 'scope: all-roles (every role with a mapped class takes the cheapest qualified pick within its floor)' }
-            else { 'scope: legacy (only the five implementation roles; state the all-roles trade once and record it with economyConsent in the dispatch plan to widen it)' }))
+    $out.Add($(if ($economyScope -eq 'all-roles') { 'scope: all-roles (every routed role takes the cheapest known-price pick within its floor; qualification or floor-only is disclosed)' }
+            else { 'scope: legacy (dispatch is blocked until the all-roles trade is accepted; no role is kept on Ranked as a compatibility fallback)' }))
 }
 if ($routing -eq 'economy' -and $consent -eq 'missing') {
     $out.Add('WARN economy consent not recorded: before any dispatch, state the trade once (economy-mode.md Consent) and hand the Scribe the ## Economy Mode Accepted decision with the roster refresh.')
@@ -588,10 +587,9 @@ if ($AsJson) {
         pendingConnectorTasks = @(Get-SquadPendingConnectors -RepoRoot $RepoRoot -SquadRoot $SquadRoot)
         reference = 'references/coordinator-runtime.md'
     }
-    if ($RequestedDepth) {
-        $squadBrief['requestedDepth'] = $RequestedDepth
-        $squadBrief['depth'] = $depth
-    }
+    $squadBrief['requestedDepth'] = $(if ($RequestedDepth) { $RequestedDepth } else { 'standard' })
+    $squadBrief['depthSource'] = $depthSource
+    $squadBrief['depth'] = $depth
     $squadBrief | ConvertTo-Json -Depth 12 -Compress
     exit 0
 }

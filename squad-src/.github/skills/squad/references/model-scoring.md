@@ -5,7 +5,7 @@ license: MIT
 metadata:
   authors: "Peter-N91/hve-squad"
   spec_version: "1.0"
-  last_updated: "2026-10-23"
+  last_updated: "2026-11-06"
 ---
 
 # Capability Comparison Policy
@@ -172,10 +172,10 @@ comparable secondary coverage on an exact capability tie; freshest oldest
 **verification** date; lowest known Blended cost on a remaining tie; newer
 generation within a family; fixed catalog order, never name spelling.
 
-**Economy:** every role resolves the same way, inside its own floor; none is
-exempt by an allowlist. Require the same eligibility, a known nonnegative price,
-and a class qualification: the class's verified selected-panel evidence when it
-has any, otherwise declared fit:
+**Economy:** every routed role resolves the same way, inside its own floor; none
+is exempt by role, class, attendance, or consent compatibility. Require the same
+floor eligibility and a known nonnegative price. Prefer a class qualification:
+the class's verified selected-panel evidence when it has any, otherwise declared fit:
 
 | Class evidence | Versioned Economy qualification |
 | --- | --- |
@@ -192,8 +192,10 @@ verified. Take the lowest qualified price, then higher capability (declared fit
 where the class has no evidence), then confidence and deterministic tie-breaks.
 Additional capability never overrides lower price. Unknown prices are not zero.
 
-No qualified candidate means explicit Ranked fallback with qualification and
-rejection reasons. Modes may legitimately agree; never force different winners.
+No qualified candidate activates `floor-only-known-price-v1`: select the cheapest
+known-price candidate that remains inside the floor, with qualification rejection
+reasons. No priced floor candidate stops dispatch; neither case falls back to
+Ranked. Modes may legitimately agree; never force different winners.
 Failure escalates once to Ranked after Scribe persistence and a new Cost
 Preflight when required. Equal picks have no higher-ranked escalation target.
 All ordinary review and safety gates remain required.

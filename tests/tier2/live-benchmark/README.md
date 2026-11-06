@@ -22,8 +22,9 @@ Offline self-tests do not call models. Live benchmark and judge scripts spend cr
 - D: candidate source, `routing=ranked`
 - E: candidate source, `routing=economy`
 - F: optional candidate source, `routing=economy delivery=background`
+- G: candidate source, routing off, `depth=quick`
 
-Default live matrix: arms A to E (F runs every selected level; the easy task has three independent items, so pair F with `-Levels easy` when only background delivery is under test), 8 repeats per cell, model `claude-sonnet-5.5`, blind judge on. Use `-SkipJudge` to report unjudged results. Use `-Arms A,B,C,D,E,F` to include F.
+Default live matrix: arms A to E plus G (F runs every selected level; the easy task has three independent items, so pair F with `-Levels easy` when only background delivery is under test), 8 repeats per cell, model `claude-sonnet-5.5`, blind judge on. B versus E isolates Economy, and B versus G isolates standard versus quick depth, always on the same candidate source. Use `-SkipJudge` to report unjudged results. Use `-Arms A,B,C,D,E,F,G` to include F.
 
 ## stopCause values
 
@@ -249,6 +250,25 @@ pwsh -NoProfile -File $Harness -Mode Series `
 	-TrialRoot "$Evidence\comparison-002" `
 	-MaxCredits 120 -MaxSeriesCredits 720 -Live -IsolatedEnvironment
 $LASTEXITCODE
+```
+
+To isolate standard versus quick depth on the full efficiency scenario, establish
+standard controls from one source, then reuse them against the same source with
+`-CompareDepth`. The candidate trials append only `depth=quick`; source, routing,
+model policy, fixture, grader and limits stay fixed.
+
+```powershell
+pwsh -NoProfile -File $Harness -Mode Establish `
+	-BaselineSourceRoot $Source -InstallRoot $Install `
+	-TrialRoot "$Evidence\depth-control" `
+	-MaxCredits 120 -MaxSeriesCredits 360 -Live -IsolatedEnvironment
+
+pwsh -NoProfile -File $Harness -Mode Series `
+	-BaselineSourceRoot $Source -CandidateSourceRoot $Source `
+	-BaselineEvidencePath "$Evidence\depth-control\out\control-series.json" `
+	-CompareDepth -InstallRoot $Install `
+	-TrialRoot "$Evidence\depth-quick" `
+	-MaxCredits 120 -MaxSeriesCredits 360 -Live -IsolatedEnvironment
 ```
 
 The complete scheduled reservation must fit `MaxSeriesCredits` before any model

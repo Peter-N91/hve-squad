@@ -587,7 +587,8 @@ function Get-SquadEconomyConsentScope {
     <#
     .SYNOPSIS
         The scope of the economy consent recorded in decisions.md text (references/economy-mode.md Consent): `all-roles` when an
-        `## Economy Mode Accepted` entry carries a `Scope: all-roles` bullet, otherwise `legacy` (the five implementation roles).
+        `## Economy Mode Accepted` entry carries a `Scope: all-roles` bullet, otherwise `legacy` and dispatch must re-consent
+        before Economy can apply. The resolver never mixes Economy and Ranked by role.
     #>
     param([AllowEmptyString()][string]$DecisionsText = '')
     foreach ($section in ($DecisionsText -split '(?m)^(?=## )')) {
@@ -607,6 +608,46 @@ function Test-SquadPathSetOverlap {
         }
     }
     $false
+}
+
+function Test-SquadDeliverableFanOutPlan {
+    <#
+    .SYNOPSIS
+        Proves that one repository-local Lead plan explicitly selected the deliverable-fan-out implementation shape.
+    #>
+    param([AllowEmptyString()][string]$PlanPath = '', [AllowEmptyString()][string]$RepoRoot = '')
+    if ([string]::IsNullOrWhiteSpace($PlanPath) -or [string]::IsNullOrWhiteSpace($RepoRoot)) { return $false }
+    try { $resolved = Resolve-SquadRepositoryPath -RepoRoot $RepoRoot -Path $PlanPath }
+    catch { return $false }
+    if (-not (Test-Path -LiteralPath $resolved -PathType Leaf)) { return $false }
+    $relative = ([IO.Path]::GetRelativePath([IO.Path]::GetFullPath($RepoRoot), $resolved) -replace '\\', '/')
+    if ($relative -cnotmatch '(^|/)\.copilot-tracking/(?:squad/members/[a-z0-9][a-z0-9-]*/)?plans/') { return $false }
+    $text = [IO.File]::ReadAllText($resolved)
+    [regex]::IsMatch(
+        $text,
+        '(?mi)^(?:[-*]\s*)?(?:\*\*)?Implement Shape(?:\*\*)?\s*(?::|[-\u2014])\s*`?deliverable-fan-out`?\s*(?:$|[,.;(])'
+    )
+}
+
+function Get-SquadDepthStageForUnit {
+    <#
+    .SYNOPSIS
+        Maps one selected unit to the fixed quick-depth stage table.
+    #>
+    param([AllowEmptyString()][string]$Role = '', [AllowEmptyString()][string]$Class = '')
+    if ($Role -ceq 'challenger') { return 'challenger-pass' }
+    switch ($Class) {
+        'research' { 'research' }
+        'planning' { 'plan' }
+        'implementation' { 'implement' }
+        'council' { 'task-fit-council' }
+        'intake' { 'intake-gate' }
+        'review' {
+            if ($Role -match 'security|vuln|supply-chain') { 'security-review' }
+            else { 'final-review' }
+        }
+        default { 'implement' }
+    }
 }
 
 function Get-SquadDepthStagePolicy {
@@ -712,6 +753,8 @@ function Get-SquadDepthPlan {
         [bool]$Council = $false,
         [object[]]$Units = @(),
         [System.Collections.IDictionary]$Evidence = $null,
+        [bool]$PlanFanOut = $false,
+        [ValidateSet('default', 'input', 'federation')][string]$DepthSource = 'default',
         [string[]]$ReasoningEfforts = @(),
         [datetime]$AsOf = [datetime]::UtcNow,
         [string]$RepoRoot = ''
@@ -727,6 +770,7 @@ function Get-SquadDepthPlan {
     }
     $result = [ordered]@{
         requested = $requested
+        source = $DepthSource
         effective = $effective
         ignored = $ignored
         forwarded = $false
@@ -749,7 +793,6 @@ function Get-SquadDepthPlan {
 
     $interactive = ($StateMode -ceq 'interactive')
     $unitList = @($Units)
-    $workClasses = @('research', 'planning', 'implementation')
     $implementers = @($unitList | Where-Object { [string]$_.Class -ceq 'implementation' })
     $researchUnits = @($unitList | Where-Object { [string]$_.Class -ceq 'research' })
     $planningUnits = @($unitList | Where-Object { [string]$_.Class -ceq 'planning' })
@@ -791,8 +834,6 @@ function Get-SquadDepthPlan {
     & $addCriterion 'no-council-lens' $lensMet $(if ($Council -or $councilUnits.Count -gt 0) { 'a council batch is part of this dispatch' } elseif ($lensText) { $lensText } else { 'no evidence that no council lens engages' })
     $gateText = Get-SquadDepthEvidenceText -Evidence $Evidence -Key 'noGateTrigger'
     & $addCriterion 'no-gate-trigger' ([bool]$gateText) $(if ($gateText) { $gateText } else { 'no evidence that no gate triggers' })
-    $stageUnitsMet = $researchUnits.Count -eq 0 -and $planningUnits.Count -eq 0
-    & $addCriterion 'no-research-or-plan-unit' $stageUnitsMet $(if ($stageUnitsMet) { 'no researcher or lead unit in this dispatch' } else { 'a researcher or lead unit is part of this dispatch' })
     $laneUnmet = @($criteria | Where-Object { -not $_.met } | ForEach-Object { $_.id })
     $laneEligible = $laneUnmet.Count -eq 0
     $result.lane = [ordered]@{ eligible = $laneEligible; criteria = $criteria.ToArray(); unmet = $laneUnmet }
@@ -823,12 +864,12 @@ function Get-SquadDepthPlan {
             }
             { $_ -in @('research', 'plan') } {
                 $units = @(if ($_ -ceq 'research') { $researchUnits } else { $planningUnits })
-                if ($units.Count -gt 0) { $text = "dispatched: $(@($units | ForEach-Object { [string]$_.Role }) -join ', ')" }
-                elseif ($laneEligible) {
+                if ($laneEligible) {
                     $action = 'skip'; $criterion = 'Bounded Lane: every lane criterion is met, so Research and Plan are skipped'
                     $text = "all $($criteria.Count) lane criteria are met; the evidence for each is on the Route: bounded line"
                 }
                 elseif ($reuse.ContainsKey($_)) { $action = 'skip'; $criterion = 'a fresh artifact already covers the topic'; $text = $reuse[$_] }
+                elseif ($units.Count -gt 0) { $text = "dispatched: $(@($units | ForEach-Object { [string]$_.Role }) -join ', ')" }
                 else {
                     $why = @($reuseNotes | Where-Object { $_ -like "$($policy.stage):*" })
                     $text = if ($why.Count -gt 0) { $why -join '; ' } else { 'no lane and no verified reusable artifact; runs shrunk' }
@@ -836,8 +877,8 @@ function Get-SquadDepthPlan {
             }
             'challenger-pass' {
                 $critique = Get-SquadDepthEvidenceText -Evidence $Evidence -Key 'noCritiqueRequested'
-                if ($challengerUnits.Count -gt 0) { $action = 'run'; $criterion = 'challenger is dispatched; review-class roles stay at standard depth'; $text = 'unit challenger is in this dispatch' }
-                elseif ($critique) { $text = $critique }
+                if ($critique) { $action = 'skip'; $criterion = 'the trusted request evidence says no critique or challenge was requested'; $text = $critique }
+                elseif ($challengerUnits.Count -gt 0) { $action = 'run'; $criterion = 'challenger is dispatched; review-class roles stay at standard depth'; $text = 'unit challenger is in this dispatch' }
                 else { $action = 'run'; $criterion = 'any doubt means standard depth'; $text = 'no evidence that no critique was requested' }
             }
             'implement' {
@@ -850,11 +891,33 @@ function Get-SquadDepthPlan {
     }
     $result.stages = $rows.ToArray()
     $result.gates = @(Get-SquadDepthStagePolicy | Where-Object { $_.kind -ceq 'gate' } | ForEach-Object { $_.stage })
+    $unitStages = @($unitList | ForEach-Object {
+            [pscustomobject]@{
+                Id = [string]$_.Id
+                Stage = if ($_.PSObject.Properties['Stage']) { [string]$_.Stage } else { Get-SquadDepthStageForUnit -Role ([string]$_.Role) -Class ([string]$_.Class) }
+            }
+        })
+    $result['gateCoverage'] = @($result.gates | ForEach-Object {
+            $gate = $_
+            $supplied = @($unitStages | Where-Object Stage -ceq $gate)
+            $status = if ($supplied.Count -gt 0) { 'supplied-this-plan' }
+            elseif ($gate -ceq 'final-review' -and $implementers.Count -gt 0) { 'required-follow-up' }
+            else { 'external-evaluation' }
+            [ordered]@{ stage = $gate; status = $status; units = @($supplied | ForEach-Object Id) }
+        })
 
-    $result.parallelism = if ($interactive) {
-        [ordered]@{ enabled = $true; reason = 'owners with proven-disjoint write sets run concurrently under one confirmation; escalate-tier owners are never batched' }
+    $result.parallelism = if (-not $interactive) {
+        [ordered]@{ enabled = $false; reason = "state mode is ${StateMode}: Plan-Driven Parallelism is interactive only" }
     }
-    else { [ordered]@{ enabled = $false; reason = "state mode is ${StateMode}: Plan-Driven Parallelism is interactive only" } }
+    elseif ($laneEligible) {
+        [ordered]@{ enabled = $true; basis = 'bounded'; reason = 'the bounded request proves independent owners and disjoint write sets; escalate-tier owners are never batched' }
+    }
+    elseif ($PlanFanOut) {
+        [ordered]@{ enabled = $true; basis = 'deliverable-fan-out'; reason = 'the verified Lead plan declares Implement Shape deliverable-fan-out; selected owners still need disjoint write sets and no dependency edge' }
+    }
+    else {
+        [ordered]@{ enabled = $false; reason = 'quick parallelism requires either a bounded request or a verified deliverable-fan-out Lead plan' }
+    }
 
     $effortRoles = @($unitList | Where-Object { [string]$_.Role -cin @('researcher', 'lead') } | ForEach-Object { [string]$_.Role } | Select-Object -Unique)
     $advertised = @($ReasoningEfforts | ForEach-Object { $_.Trim().ToLowerInvariant() })
@@ -878,10 +941,14 @@ function Get-SquadDepthPlan {
     }
     foreach ($note in $reuseNotes) { $lines.Add("* Reuse not applied: $note") }
     $lines.Add("* Gates run at standard depth: $($result.gates -join ', ')")
+    $pendingGates = @($result.gateCoverage | Where-Object status -ne 'supplied-this-plan')
+    if ($pendingGates.Count -gt 0) {
+        $lines.Add("* Gate coverage still required: $(@($pendingGates | ForEach-Object { "$($_.stage) ($($_.status))" }) -join ', ')")
+    }
     $lines.Add("* Parallelism: $($result.parallelism.reason)")
     $lines.Add("* Reasoning effort: $($effort.reason)")
     $result.decision = [ordered]@{ title = 'Depth plan: quick'; rationale = ($lines -join "`n"); adrNoted = $false }
     $result
 }
 
-Export-ModuleMember -Function Read-SquadTables, Get-SquadReferenceSection, Get-SquadRulePath, Resolve-SquadRepositoryPath, Get-SquadAgentIndex, Get-SquadRoster, Invoke-SquadLocalScript, Get-SquadInitData, New-SquadInitPayload, Resolve-SquadConnectorExecution, Write-SquadTransportJson, Get-SquadFederationSnapshot, New-SquadOrchestrationConsumption, ConvertTo-SquadModelKey, Get-SquadRoleClassMap, Get-SquadDispatchReservation, Get-SquadDecision, Get-SquadPendingConnectors, Get-SquadDepthPlan, Get-SquadDepthStagePolicy, Get-SquadDepthClause, Get-SquadEconomyConsentScope
+Export-ModuleMember -Function Read-SquadTables, Get-SquadReferenceSection, Get-SquadRulePath, Resolve-SquadRepositoryPath, Get-SquadAgentIndex, Get-SquadRoster, Invoke-SquadLocalScript, Get-SquadInitData, New-SquadInitPayload, Resolve-SquadConnectorExecution, Write-SquadTransportJson, Get-SquadFederationSnapshot, New-SquadOrchestrationConsumption, ConvertTo-SquadModelKey, Get-SquadRoleClassMap, Get-SquadDispatchReservation, Get-SquadDecision, Get-SquadPendingConnectors, Get-SquadDepthPlan, Get-SquadDepthStagePolicy, Get-SquadDepthClause, Get-SquadEconomyConsentScope, Test-SquadDeliverableFanOutPlan, Get-SquadDepthStageForUnit

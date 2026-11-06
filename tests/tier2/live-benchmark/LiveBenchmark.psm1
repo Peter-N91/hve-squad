@@ -12,18 +12,19 @@ Set-StrictMode -Version Latest
 $script:Root = $PSScriptRoot
 $script:Invariant = [cultureinfo]::InvariantCulture
 $script:Levels = @('easy', 'medium', 'hard')
-# A/B and C/D differ only in source, so each pair is a regression check; E is the economy effect against A.
+# A/B and C/D differ only in source; E is Economy against B, and G is quick depth against B.
 # F is optional because background delivery needs a task with independent items; the easy task has three.
 $script:ArmTable = [ordered]@{
-    A = @{ Source = 'baseline'; Routing = ''; Delivery = '' }
-    B = @{ Source = 'candidate'; Routing = ''; Delivery = '' }
-    C = @{ Source = 'baseline'; Routing = 'ranked'; Delivery = '' }
-    D = @{ Source = 'candidate'; Routing = 'ranked'; Delivery = '' }
-    E = @{ Source = 'candidate'; Routing = 'economy'; Delivery = '' }
-    F = @{ Source = 'candidate'; Routing = 'economy'; Delivery = 'background' }
+    A = @{ Source = 'baseline'; Routing = ''; Delivery = ''; Depth = '' }
+    B = @{ Source = 'candidate'; Routing = ''; Delivery = ''; Depth = '' }
+    C = @{ Source = 'baseline'; Routing = 'ranked'; Delivery = ''; Depth = '' }
+    D = @{ Source = 'candidate'; Routing = 'ranked'; Delivery = ''; Depth = '' }
+    E = @{ Source = 'candidate'; Routing = 'economy'; Delivery = ''; Depth = '' }
+    F = @{ Source = 'candidate'; Routing = 'economy'; Delivery = 'background'; Depth = '' }
+    G = @{ Source = 'candidate'; Routing = ''; Delivery = ''; Depth = 'quick' }
 }
 $script:ArmNames = @($script:ArmTable.Keys)
-$script:DefaultArmNames = @('A', 'B', 'C', 'D', 'E')
+$script:DefaultArmNames = @('A', 'B', 'C', 'D', 'E', 'G')
 $script:MinimumRepeats = 8
 $script:PassingVerdicts = @('Pass', 'Pass-With-Findings')
 $script:OwnerExcluded = @('Squad Reviewer', 'Squad Scribe')
@@ -48,19 +49,25 @@ function Write-BenchmarkRepeatWarning {
 
 function Get-ArmRouting {
     [CmdletBinding()]
-    param([Parameter(Mandatory)][ValidateSet('A', 'B', 'C', 'D', 'E', 'F')][string]$Arm)
+    param([Parameter(Mandatory)][ValidateSet('A', 'B', 'C', 'D', 'E', 'F', 'G')][string]$Arm)
     $script:ArmTable[$Arm].Routing
 }
 
 function Get-ArmDelivery {
     [CmdletBinding()]
-    param([Parameter(Mandatory)][ValidateSet('A', 'B', 'C', 'D', 'E', 'F')][string]$Arm)
+    param([Parameter(Mandatory)][ValidateSet('A', 'B', 'C', 'D', 'E', 'F', 'G')][string]$Arm)
     $script:ArmTable[$Arm].Delivery
+}
+
+function Get-ArmDepth {
+    [CmdletBinding()]
+    param([Parameter(Mandatory)][ValidateSet('A', 'B', 'C', 'D', 'E', 'F', 'G')][string]$Arm)
+    $script:ArmTable[$Arm].Depth
 }
 
 function Get-ArmSource {
     [CmdletBinding()]
-    param([Parameter(Mandatory)][ValidateSet('A', 'B', 'C', 'D', 'E', 'F')][string]$Arm)
+    param([Parameter(Mandatory)][ValidateSet('A', 'B', 'C', 'D', 'E', 'F', 'G')][string]$Arm)
     $script:ArmTable[$Arm].Source
 }
 
@@ -110,18 +117,20 @@ function Get-BenchmarkTask {
 function Get-ArmPrompt {
     <#
     .SYNOPSIS
-        The level's prompt, identical across arms apart from the trailing routing token.
+        The level's prompt, identical across arms apart from trailing routing, depth, or delivery tokens.
     #>
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)][ValidateSet('easy', 'medium', 'hard')][string]$Level,
-        [Parameter(Mandatory)][ValidateSet('A', 'B', 'C', 'D', 'E', 'F')][string]$Arm
+        [Parameter(Mandatory)][ValidateSet('A', 'B', 'C', 'D', 'E', 'F', 'G')][string]$Arm
     )
     $prompt = (Get-BenchmarkTask -Level $Level).Prompt
     $routing = Get-ArmRouting -Arm $Arm
     $delivery = Get-ArmDelivery -Arm $Arm
+    $depth = Get-ArmDepth -Arm $Arm
     $tokens = @()
     if ($routing) { $tokens += "routing=$routing" }
+    if ($depth) { $tokens += "depth=$depth" }
     if ($delivery) { $tokens += "delivery=$delivery" }
     if ($tokens.Count) { "$prompt $($tokens -join ' ')" } else { $prompt }
 }
@@ -565,6 +574,7 @@ function Get-ModelAssignment {
         $row = $null
         if ($agent.Agent -ne 'coordinator') {
             $row = @($Team.Rows | Where-Object {
+                    ($_.PSObject.Properties['Agent Name (Primary)'] -and $_.'Agent Name (Primary)' -eq $agent.Agent) -or
                     ($_.PSObject.Properties['Primary'] -and $_.Primary -eq $agent.Agent) -or
                     ($_.PSObject.Properties['Alternate Agents'] -and (($_.'Alternate Agents' -split ',\s*') -contains $agent.Agent))
                 } | Select-Object -First 1)
@@ -707,6 +717,7 @@ function Measure-LiveBenchmarkRun {
         handoffSeconds    = $events.HandoffSeconds
         briefRan          = $events.BriefRan
         routingMode       = $team.Mode
+        requestedDepth    = if ($meta.PSObject.Properties['depth']) { [string]$meta.depth } else { '' }
         modelCells        = (@($team.Rows | Where-Object { $_.PSObject.Properties['Model'] -and $_.Model -and $_.Model -notin '—', '-' } | ForEach-Object { "$($_.Role)=$($_.Model)" }) -join ';')
         modelMatch        = if ($withCells.Count) { "$(@($withCells | Where-Object match -EQ 'yes').Count)/$($withCells.Count)" } else { 'n/a' }
         hiddenPassed      = $hidden.Passed
@@ -755,11 +766,12 @@ function Protect-DeliverableText {
     param([AllowEmptyString()][string]$Text, [string[]]$Literal = @())
     foreach ($value in $Literal | Where-Object { $_ } | Sort-Object Length -Descending) { $Text = $Text.Replace($value, '<redacted>') }
     $Text = [regex]::Replace($Text, '(?i)routing\s*=\s*\w+', 'routing=<redacted>')
+    $Text = [regex]::Replace($Text, '(?i)depth\s*=\s*\w+', 'depth=<redacted>')
     $Text = [regex]::Replace($Text, '(?im)^([+\- ]?)Model routing:.*$', '$1Model routing: <redacted>')
     $Text = [regex]::Replace($Text, '(?i)\b(claude|gpt|gemini|grok|o\d)-[\w.\-]+', '<model>')
     $Text = [regex]::Replace($Text, '(?i)[a-z]:\\[^\s''"`)]+', '<path>')
-    $Text = [regex]::Replace($Text, '(?i)\b(arm|variant)[ _-]?[A-F]\b', '<arm>')
-    $Text = [regex]::Replace($Text, '(?i)\b(easy|medium|hard)-[A-F]-r\d+\b', '<run>')
+    $Text = [regex]::Replace($Text, '(?i)\b(arm|variant)[ _-]?[A-G]\b', '<arm>')
+    $Text = [regex]::Replace($Text, '(?i)\b(easy|medium|hard)-[A-G]-r\d+\b', '<run>')
     $Text
 }
 
@@ -922,7 +934,7 @@ function Get-BootstrapMedianInterval {
     }
 }
 
-Export-ModuleMember -Function Get-LiveBenchmarkLevel, Get-BenchmarkArm, Get-DefaultBenchmarkArm, Get-MinimumBenchmarkRepeats, Write-BenchmarkRepeatWarning, Get-ArmRouting, Get-ArmDelivery, Get-ArmSource, Get-BenchmarkTask, Get-ArmPrompt, Get-BenchmarkSchedule,
+Export-ModuleMember -Function Get-LiveBenchmarkLevel, Get-BenchmarkArm, Get-DefaultBenchmarkArm, Get-MinimumBenchmarkRepeats, Write-BenchmarkRepeatWarning, Get-ArmRouting, Get-ArmDelivery, Get-ArmDepth, Get-ArmSource, Get-BenchmarkTask, Get-ArmPrompt, Get-BenchmarkSchedule,
 New-InventoryFixture, Invoke-Pytest, Test-BenchmarkTask, Measure-DocCheck, Get-ReviewVerdict, Get-LedgerCheck, Get-StopCause,
 Get-UsageSummary, Get-EventSummary, Get-TeamRouting, Get-ModelAssignment, Get-DeliverableDiff, Measure-LiveBenchmarkRun,
 Get-SourceTreeHash, Protect-DeliverableText, Export-JudgeSample, Read-JudgeScore, Merge-JudgeScore, Invoke-BenchmarkJudgeAndReport, Get-Median, Get-BootstrapMedianInterval,

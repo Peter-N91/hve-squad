@@ -22,11 +22,10 @@ Unavailability is not failed validation; failures permit no bypass.
 
 Run `Get-SquadDispatchBrief.ps1 -RepoRoot <repo> -SquadRoot <root>
 -SessionModel <literal session id> -AsJson -CheckLedger` at turn start.
-Pass trusted `routing=` as `-RequestedModelRouting <mode>` and `depth=` as
-`-RequestedDepth`; saved `off` cannot cancel routing. `dispatchReady: false`
-requires preparation.
-Reuse a verified unchanged same-turn ledger receipt.
-Use `-Roles` after classification; JSON defers scoring. Reuse unchanged facts.
+Pass `routing=`/`depth=` as `-RequestedModelRouting`/`-RequestedDepth`;
+depth carries `depthSource: input`. Omission is `standard`, never inferred.
+Saved `off` cannot cancel; `dispatchReady: false` requires preparation. Reuse
+same-turn proof/facts; use `-Roles` after classification; JSON defers scoring.
 
 * With explicit `squadRoot`, stay scoped to that member.
 * Without one, `kind=federation` hands control to `/squad-federation`; a Watch

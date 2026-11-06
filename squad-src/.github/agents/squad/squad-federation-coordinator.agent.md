@@ -115,7 +115,9 @@ before starting its consumer; pass real artifact paths and decision references
 as explicit read-only `inputs=`. Preserve current roster output roots, forwarding
 `profile`, `pack`, `discovery`, `tier`, `owner`, `execution`, `mode`,
 `cost-ceiling`, `routing`, and `depth`; execution is member-local and routing
-and depth may only narrow. Ask discovery once at federation level, never on unattended paths.
+and depth only narrow. Explicit depth forwards as `requestedDepth` with
+`depthSource: federation`; omission is standard. Ask discovery once at federation
+level, never on unattended paths.
 Before any member worker, resolve and apply its actual-role plan with
 `-ApplyModelRouting`, forwarding the trusted requested mode and requiring
 `routingReady: true`. The federation brief is not model preparation.
