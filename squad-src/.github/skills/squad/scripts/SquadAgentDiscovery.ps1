@@ -1,6 +1,54 @@
 # Copyright (c) 2026 Microsoft Corporation. All rights reserved.
 # SPDX-License-Identifier: MIT
 
+function Get-DeclaredPluginAgentPath {
+    param(
+        [Parameter(Mandatory)][string]$PluginRoot,
+        [Parameter(Mandatory)][string]$ManifestPath,
+        [string]$Context = 'Plugin'
+    )
+
+    $manifest = Get-Content -LiteralPath $ManifestPath -Raw |
+        ConvertFrom-Json -AsHashtable -ErrorAction Stop
+    if ($manifest -isnot [Collections.IDictionary]) {
+        throw "Expected an object in $ManifestPath."
+    }
+
+    $agentPaths = @('agents')
+    if ($manifest.ContainsKey('agents')) {
+        $agentPaths = $manifest.agents
+    }
+    elseif (-not (Test-Path -LiteralPath (Join-Path $PluginRoot 'agents') -PathType Container)) {
+        return
+    }
+    if ($agentPaths -is [string]) { $agentPaths = @($agentPaths) }
+    if ($agentPaths -isnot [array]) { throw "Expected agent paths in $ManifestPath." }
+
+    foreach ($path in $agentPaths) {
+        if ($path -isnot [string] -or [string]::IsNullOrWhiteSpace($path) -or [IO.Path]::IsPathRooted($path)) {
+            throw "Invalid agent path in $ManifestPath."
+        }
+        $fullPath = [IO.Path]::GetFullPath((Join-Path $PluginRoot $path))
+        $relative = [IO.Path]::GetRelativePath($PluginRoot, $fullPath)
+        if ($relative -eq '..' -or $relative -match '^\.\.[\\/]' -or [IO.Path]::IsPathRooted($relative)) {
+            throw "Agent path leaves $Context plugin: $path"
+        }
+        $cursor = $fullPath
+        while ($cursor) {
+            $item = Get-Item -LiteralPath $cursor -Force -ErrorAction SilentlyContinue
+            if ($item -and ($item.Attributes -band [IO.FileAttributes]::ReparsePoint)) {
+                throw "Linked $Context plugin path refused: $cursor"
+            }
+            if ($cursor -eq $PluginRoot) { break }
+            $cursor = Split-Path -Parent $cursor
+        }
+        if (-not (Test-Path -LiteralPath $fullPath)) {
+            throw "$Context plugin agent path not found: $fullPath"
+        }
+        $fullPath
+    }
+}
+
 function Get-SquadAgentFile {
     param([string]$RepoRoot, [Parameter(Mandatory)][string]$ScriptRoot)
 
@@ -17,6 +65,25 @@ function Get-SquadAgentFile {
         (Join-Path $ScriptRoot '../agents')
     )
 
+    # The current distribution bundles HVE Core and Squad in one plugin. Resolve
+    # every manifest-declared agent from that same root before consulting legacy
+    # host inventory or sibling layouts.
+    $cursor = [IO.Path]::GetFullPath($ScriptRoot)
+    while ($cursor) {
+        $manifestPath = Join-Path $cursor 'plugin.json'
+        if (Test-Path -LiteralPath $manifestPath -PathType Leaf) {
+            $manifest = Get-Content -LiteralPath $manifestPath -Raw |
+                ConvertFrom-Json -AsHashtable -ErrorAction Stop
+            if ($manifest -is [Collections.IDictionary] -and $manifest['name'] -eq 'hve-squad') {
+                $paths += @(Get-DeclaredPluginAgentPath -PluginRoot $cursor -ManifestPath $manifestPath -Context 'bundled')
+                break
+            }
+        }
+        $parent = Split-Path -Parent $cursor
+        if (-not $parent -or $parent -eq $cursor) { break }
+        $cursor = $parent
+    }
+
     # An explicit host inventory replaces sibling guesses, including an empty inventory.
     if (Test-Path Env:SQUAD_ACTIVE_PLUGIN_ROOTS) {
         $roots = ConvertFrom-Json -InputObject $env:SQUAD_ACTIVE_PLUGIN_ROOTS -NoEnumerate -ErrorAction Stop
@@ -30,34 +97,7 @@ function Get-SquadAgentFile {
             if (-not (Test-Path -LiteralPath $manifestPath -PathType Leaf)) {
                 throw "Active plugin manifest not found: $manifestPath"
             }
-            $manifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json -AsHashtable -ErrorAction Stop
-            if ($manifest -isnot [Collections.IDictionary]) { throw "Expected an object in $manifestPath." }
-            $agentPaths = @('agents')
-            if ($manifest.ContainsKey('agents')) { $agentPaths = $manifest.agents }
-            elseif (-not (Test-Path -LiteralPath (Join-Path $root 'agents') -PathType Container)) { continue }
-            if ($agentPaths -is [string]) { $agentPaths = @($agentPaths) }
-            if ($agentPaths -isnot [array]) { throw "Expected agent paths in $manifestPath." }
-            foreach ($path in $agentPaths) {
-                if ($path -isnot [string] -or [string]::IsNullOrWhiteSpace($path) -or [IO.Path]::IsPathRooted($path)) {
-                    throw "Invalid agent path in $manifestPath."
-                }
-                $fullPath = [IO.Path]::GetFullPath((Join-Path $root $path))
-                $relative = [IO.Path]::GetRelativePath($root, $fullPath)
-                if ($relative -eq '..' -or $relative -match '^\.\.[\\/]' -or [IO.Path]::IsPathRooted($relative)) {
-                    throw "Agent path leaves active plugin: $path"
-                }
-                $cursor = $fullPath
-                while ($cursor) {
-                    $item = Get-Item -LiteralPath $cursor -Force -ErrorAction SilentlyContinue
-                    if ($item -and ($item.Attributes -band [IO.FileAttributes]::ReparsePoint)) {
-                        throw "Linked active plugin path refused: $cursor"
-                    }
-                    if ($cursor -eq $root) { break }
-                    $cursor = Split-Path -Parent $cursor
-                }
-                if (-not (Test-Path -LiteralPath $fullPath)) { throw "Active plugin agent path not found: $fullPath" }
-                $paths += $fullPath
-            }
+            $paths += @(Get-DeclaredPluginAgentPath -PluginRoot $root -ManifestPath $manifestPath -Context 'active')
         }
     }
     else {

@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Bien démarrer — hve-squad</title>
-  <meta name="description" content="Prérequis, installation du package APM hve-squad et première exécution de votre squad." />
+  <meta name="description" content="Prérequis, installation des plugins stable et preview, mises à jour, solution de repli APM et première exécution de la squad." />
   <link rel="icon" type="image/svg+xml" href="../assets/logo.svg" />
   <script src="../assets/theme.js"></script>
   <link rel="stylesheet" href="../assets/style.css" />
@@ -65,7 +65,8 @@
           ultérieure — Windows PowerShell 5.1 ne suffit pas. Sans <code>pwsh</code>, la squad fonctionne
           toujours, mais calcule le registre à la main, ce qui est plus lent, consomme plus de jetons et
           est moins fiable. Les scripts facultatifs de préparation Azure l'exigent dans tous les cas. Les
-          hooks du plugin n'en ont pas besoin : ils sont fournis avec des équivalents bash.
+          hooks du plugin existent en Bash et PowerShell ; le contrôle de routage des modèles utilise
+          <code>pwsh</code> sous Windows.
         </p>
         <p>
           Windows : <code>winget install --id Microsoft.PowerShell -e</code> · macOS :
@@ -75,38 +76,56 @@
           <code>pwsh</code> dans le <code>PATH</code>.
         </p>
       </div>
+      <div class="callout warn" data-release-change="20261106-in-repo-self-contained-plugin">
+        <p>
+          <strong>Migration depuis le marketplace retiré <code>hve-squad-plugin</code> :</strong>
+          désinstallez ses entrées <code>hve-squad</code> et <code>hve-squad-hve-core</code>, puis
+          supprimez ce marketplace avant d'installer le plugin ci-dessous. Conserver les anciennes et
+          nouvelles copies activées duplique les noms d'agents et laisse actif l'ancien serveur MCP inclus.
+        </p>
+      </div>
+      <div class="callout" data-release-change="20261106-in-repo-self-contained-plugin">
+        <p>
+          <strong>Installez les contrôles de secours du dépôt lorsque l'application des règles est
+          essentielle.</strong> Le plugin fournit toujours les règles des agents, mais certaines
+          versions actuelles de Copilot CLI répertorient les hooks du plugin sans les exécuter.
+          Demandez au coordinateur d'exécuter <code>squad-init-hooks</code> dans le dépôt. Conservez
+          les fichiers générés localement pour la CLI et validez-les dans Git lorsque l'agent cloud
+          ou Watch Mode doit appliquer les mêmes contrôles.
+        </p>
+      </div>
       <div class="host-guide installation-guide">
       <section data-host="cli">
         <h2>Copilot CLI</h2>
-        <p>Installez GitHub Copilot CLI, connectez-vous avec un compte disposant d'un accès à Copilot et ouvrez un terminal dans le dépôt de votre projet. Installez les deux entrées du marketplace :</p>
-        <pre><code>copilot plugin marketplace add Peter-N91/hve-squad-plugin
-copilot plugin install hve-squad@hve-squad-plugin
-copilot plugin install hve-squad-hve-core@hve-squad-plugin
+        <p data-release-change="20261106-in-repo-self-contained-plugin">Installez GitHub Copilot CLI, connectez-vous avec un compte disposant d'un accès à Copilot, puis ajoutez le marketplace stable depuis ce dépôt :</p>
+        <pre><code>copilot plugin marketplace add Peter-N91/hve-squad#plugin
+copilot plugin install hve-squad@hve-squad
 copilot</code></pre>
-  <p>Dans le sélecteur d'agents, Squad Coordinator peut apparaître sous le nom <code>hve-squad:squad-coordinator</code>. Après avoir vérifié l'installation, passez à l'initialisation ci-dessous.</p>
+        <p>Le plugin unique contient la squad et le commit HVE Core exact validé avec cette version. Il ne configure pas <code>hve-squad-mcp</code>. Dans le sélecteur d'agents, Squad Coordinator peut apparaître sous le nom <code>hve-squad:squad-coordinator</code>.</p>
+        <h3>Mettre à jour</h3>
+        <pre><code>copilot plugin marketplace update hve-squad
+copilot plugin update hve-squad</code></pre>
         <h3>Vérifier la disponibilité des agents</h3>
-        <p>Demandez au coordinateur d'exécuter <code>squad-doctor</code> avant de déléguer le travail. Certains domaines HVE Core peuvent manquer dans la distribution plugin. Si le rapport signale des domaines absents, appliquez la solution documentée en installant le package complet dans votre dépôt :</p>
-        <pre><code>apm install github/microsoft/hve-core --target copilot</code></pre>
-        <p>N'installez pas le plugin officiel <code>hve-core</code> à côté de <code>hve-squad-hve-core</code>. Pour les mises à jour, réinstallez l'entrée compagnon au lieu d'utiliser la commande de mise à jour du plugin. Suivez le <a href="https://peter-n91.github.io/hve-squad-plugin/install-cli.html">guide d'installation et de mise à jour pour CLI</a>.</p>
+        <p>Demandez au coordinateur d'exécuter <code>squad-doctor</code>. Des domaines HVE Core absents indiquent désormais une installation <code>hve-squad</code> obsolète, désactivée ou incomplète : mettez à jour ou réinstallez ce plugin unique, puis démarrez une nouvelle session. N'installez pas un second plugin <code>hve-core</code>.</p>
       </section>
       <section data-host="app">
         <h2>Copilot App</h2>
-        <p>Ouvrez votre projet dans l'application de bureau GitHub Copilot et connectez-vous avec un accès à Copilot. Dans les paramètres des plugins de l'application, enregistrez <code>Peter-N91/hve-squad-plugin</code> et installez à la fois <code>hve-squad</code> et <code>hve-squad-hve-core</code>. Les noms et l'emplacement des paramètres peuvent varier selon la version de l'application ; suivez le <a href="https://peter-n91.github.io/hve-squad-plugin/install-desktop.html">guide d'installation de l'application de bureau</a>.</p>
-        <p>Vérifiez que la paire est installée dans l'application elle-même. Une installation depuis un terminal peut utiliser un autre <code>COPILOT_HOME</code> et ne prouve pas que l'application dispose des mêmes plugins.</p>
-        <p>Cherchez l'agent <strong>Squad Coordinator</strong>, éventuellement répertorié sous le nom <code>hve-squad:squad-coordinator</code>, et non un skill au nom similaire. Demandez <code>squad-doctor</code> et résolvez les problèmes d'agents manquants avant de commencer le travail ; la <a href="https://peter-n91.github.io/hve-squad-plugin/">documentation du plugin</a> recense les domaines actuellement absents et la solution consistant à installer le package APM complet.</p>
-        <p>N'ajoutez pas un second plugin, le <code>hve-core</code> officiel, à côté du compagnon. Mettez les deux entrées à jour dans le répertoire de plugins de l'application, en réinstallant <code>hve-squad-hve-core</code> lorsque sa référence épinglée change.</p>
+        <p data-release-change="20261106-in-repo-self-contained-plugin">Ouvrez votre projet dans l'application GitHub Copilot et connectez-vous. Dans <strong>Customize → Plugins</strong>, ajoutez le marketplace <code>Peter-N91/hve-squad#plugin</code> et installez <code>hve-squad</code>.</p>
+        <p>Vérifiez le plugin dans l'application elle-même. Une installation depuis un terminal peut utiliser un autre <code>COPILOT_HOME</code> et ne prouve pas que l'application dispose de la même installation. Cherchez <strong>Squad Coordinator</strong>, éventuellement répertorié sous le nom <code>hve-squad:squad-coordinator</code>.</p>
+        <p>Utilisez l'action de mise à jour des plugins de l'application. La mise à jour remplace ensemble la squad et le contenu HVE Core épinglé. N'installez pas un second plugin <code>hve-core</code>.</p>
       </section>
       <section data-host="vscode">
       <h2>VS Code</h2>
-      <p>Ouvrez votre projet dans VS Code avec GitHub Copilot Chat activé et authentifié. Choisissez ci-dessous l'installation via le plugin ou l'installation du package dans le dépôt.</p>
+      <p>Ouvrez votre projet dans VS Code avec GitHub Copilot Chat activé et authentifié. Le plugin est la méthode d'installation principale.</p>
 
-      <h3>Option 1 — Installer les plugins dans les paramètres de VS Code</h3>
-      <p>Dans VS Code, ouvrez <strong>Paramètres → Extensions → Copilot → Plugins</strong>, enregistrez <code>Peter-N91/hve-squad-plugin</code>, puis installez <code>hve-squad</code> et <code>hve-squad-hve-core</code>. Les noms et emplacements des paramètres peuvent varier selon la version de VS Code ; suivez le <a href="https://peter-n91.github.io/hve-squad-plugin/install-vscode.html">guide d'installation pour VS Code</a>.</p>
-      <p>Vérifiez la paire dans VS Code lui-même avant le sélecteur d'agents et l'initialisation ci-dessous. Une installation par terminal peut utiliser un autre <code>COPILOT_HOME</code> et ne prouve pas que Copilot Chat dispose des mêmes plugins. Dans le sélecteur d'agents, Squad Coordinator peut apparaître sous le nom <code>hve-squad:squad-coordinator</code>.</p>
-      <p>N'installez pas le plugin officiel <code>hve-core</code> à côté de <code>hve-squad-hve-core</code>. Pour les mises à jour, réinstallez l'entrée compagnon au lieu d'utiliser la commande de mise à jour du plugin, comme le décrit le <a href="https://peter-n91.github.io/hve-squad-plugin/install-vscode.html">guide d'installation pour VS Code</a>.</p>
+      <h3 data-release-change="20261106-in-repo-self-contained-plugin">Installer le plugin stable</h3>
+      <p>Exécutez <strong>Chat: Manage Plugin Marketplaces</strong>, ajoutez <code>Peter-N91/hve-squad#plugin</code>, puis ouvrez <strong>Chat: Open Customizations → Plugins</strong> et installez <code>hve-squad</code>. Démarrez une nouvelle session Copilot après l'installation.</p>
+      <p>Le plugin installé possède une seule racine et une seule version : les agents Squad et HVE Core, les skills, les règles et les hooks sont mis à jour ensemble. Il ne contient aucun serveur MCP ; l'absence de Node ou de <code>npx</code> ne peut donc pas empêcher son chargement.</p>
+      <h3>Mettre à jour</h3>
+      <p>Ouvrez <strong>Chat: Open Customizations → Plugins</strong> et choisissez <strong>Check for and Apply Updates</strong>. Démarrez une nouvelle session, puis exécutez <code>squad-doctor</code>. N'installez pas le plugin officiel <code>hve-core</code> à côté de HVE Squad.</p>
 
-      <h3>Option 2 — Installer le package dans le dépôt avec APM</h3>
-      <p>Cette méthode installe l'ensemble des agents dans le dépôt via APM.</p>
+      <h3>Solution de repli — installer le package dans le dépôt avec APM</h3>
+      <p>Utilisez cette méthode uniquement lorsque les personnalisations doivent être copiées dans le dépôt plutôt qu'installées comme plugin utilisateur ou d'espace de travail.</p>
       <h4>Prérequis</h4>
       <ul>
         <li>PowerShell 7 ou version ultérieure (<code>pwsh</code>) sur toutes les plateformes — voir la note ci-dessus ; sous macOS et Linux, les commandes APM ci-dessous s'exécutent dans votre shell <code>zsh</code>/<code>bash</code> habituel</li>
@@ -404,7 +423,7 @@ targets:
         </table>
       </div>
 
-      <h2 id="testing-the-pre-release">Installer et tester la préversion</h2>
+      <h2 id="testing-the-pre-release" data-release-change="20261106-in-repo-self-contained-plugin">Installer et tester la préversion</h2>
       <p>
         Cette documentation suit <code>main</code>, qui peut devancer la dernière version stable.
         Un badge <strong>Préversion uniquement</strong> identifie une fonctionnalité fusionnée mais pas
@@ -416,22 +435,39 @@ targets:
         travaux dont vous dépendez.
       </p>
       <p>
-        Testez dans un dépôt de test distinct avec PowerShell 7+ et APM CLI <code>0.29.0</code> ;
-        vérifiez avec <code>apm --version</code>. Le site publié renseigne la commande actuelle ci-dessous.
-        Vous pouvez aussi trouver le tag marqué comme préversion sur
-        <a href="https://github.com/Peter-N91/hve-squad/releases">Releases</a>.
+        La méthode de test la plus simple est la branche <code>plugin-preview</code>, publiée
+        manuellement. Elle est indépendante du marketplace stable <code>plugin</code> et ne
+        nécessite aucune installation APM.
       </p>
-      <div data-release-install="preview"></div>
+      <pre><code>copilot plugin uninstall hve-squad
+copilot plugin marketplace add Peter-N91/hve-squad#plugin-preview
+copilot plugin install hve-squad@hve-squad-preview</code></pre>
+      <p>
+        Dans VS Code ou l'application Copilot, désinstallez le plugin stable, ajoutez
+        <code>Peter-N91/hve-squad#plugin-preview</code> dans l'interface des marketplaces, puis
+        installez <code>hve-squad</code>. N'activez pas simultanément les copies stable et preview,
+        car elles exposent les mêmes noms d'agents. Pour actualiser une preview, mettez à jour le
+        marketplace <code>hve-squad-preview</code>, puis le plugin.
+      </p>
       <ol>
-        <li>Installez le package APM complet dans le dépôt de test. Les miroirs plugin et MCP suivent les versions stables ; leur installation ou mise à jour n'installe pas cette préversion. Ne mélangez pas les plugins stables et la préversion APM dans le même environnement de test.</li>
+        <li>Utilisez un dépôt de test et vérifiez la version du plugin ainsi que le commit HVE Core inclus avec <code>squad-doctor</code>.</li>
         <li>Redémarrez votre client Copilot, sélectionnez <strong>Squad Coordinator</strong>, envoyez <code>init</code> et confirmez l'équipe proposée.</li>
-        <li>Envoyez une petite demande qui exerce la fonctionnalité portant un badge et examinez les livrables produits. Signalez les comportements inattendus avec le tag de préversion, le commit résolu dans <code>apm.lock.yaml</code>, les étapes de reproduction et les résultats attendus et observés ; retirez les données privées du projet avant tout partage.</li>
+        <li>Envoyez une petite demande qui exerce la fonctionnalité portant un badge et examinez les livrables produits. Signalez la version du plugin, le commit HVE Core indiqué dans <code>.github/plugin/hve-core-source.json</code>, les versions du client et du système d'exploitation, les étapes de reproduction et les résultats attendus et observés ; retirez les données privées du projet avant tout partage.</li>
       </ol>
       <p>
-        Le tag glissant se déplace à chaque fusion. Relancez l'installation pour l'actualiser et revérifiez
-        l'encart, car une incrémentation de version supérieure peut renommer le tag. Utilisez la commande ci-dessous pour revenir à
-        la version stable ; la réinstallation ne réinitialise pas l'état local de votre squad, donc isolez les tests de préversion.
+        Revenez à la version stable en désinstallant la preview, en ajoutant
+        <code>Peter-N91/hve-squad#plugin</code>, puis en installant
+        <code>hve-squad@hve-squad</code>. Les changements de plugin ne réinitialisent pas l'état
+        sous <code>.copilot-tracking/squad/</code> ; isolez donc les tests de préversion.
       </p>
+      <div class="callout">
+        <p>
+          <strong>Solution de repli APM pour la preview.</strong> Lorsque vous avez précisément
+          besoin de personnalisations déployées dans le dépôt, utilisez le tag de préversion
+          glissant ci-dessous avec APM CLI 0.29.0 au lieu du plugin preview.
+        </p>
+      </div>
+      <div data-release-install="preview"></div>
       <div data-release-install="stable"></div>
 
       <h2 id="initialize-the-squad">3. Initialiser la squad</h2>

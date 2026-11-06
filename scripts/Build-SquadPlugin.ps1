@@ -5,20 +5,21 @@
 
 <#
 .SYNOPSIS
-    Builds the hve-squad GitHub Copilot plugin distribution tree into the
-    hve-squad-plugin sibling repository.
+    Builds the hve-squad GitHub Copilot plugin distribution tree.
 .DESCRIPTION
-    Per ADR-0006, the plugin distribution tree (agents/, skills/,
-    plugin.json, .github/plugin/plugin.json, .github/plugin/marketplace.json) is generated
-    output that never lives in hve-squad's own working tree. This script is
-    the single, reproducible generator: it resolves an immutable source (a
-    git ref or, for local iteration only, a working copy), copies the squad
-    agents with their dead .instructions.md citations rewritten to the
-    plugin's skill-reference targets, ports squad-src/.github/skills/squad/
-    with its two housekeeping edits, authors the prompt-derived invocation
-    skills, writes a cwd-independent hooks.json, and writes byte-identical
-    version-stamped plugin.json manifests at the root and under
-    .github/plugin/, plus a marketplace.json scaffold.
+    Builds the stable or preview plugin distribution published from this
+    repository. The output contains the Squad agents and skill plus every
+    component declared by the exact microsoft/hve-core commit pinned in the
+    selected hve-squad source's apm.yml. HVE Core is therefore part of the same
+    installed plugin instead of a separately discovered companion plugin.
+
+    The generator resolves an immutable hve-squad source (a git ref or, for
+    local iteration only, a working copy), verifies the supplied HVE Core
+    checkout when it has git metadata, copies the pinned HVE Core plugin
+    components without transforming their bytes, copies and adapts the Squad
+    components, writes cwd-independent hooks, and emits one plugin and one
+    marketplace entry. The plugin deliberately contains no MCP registration;
+    hve-squad-mcp remains an independent product and installation decision.
 
     Source resolution never reads a live copy of main's working tree unless
     -SourceRoot is explicitly passed. Under -Ref (the default, resolving to
@@ -37,32 +38,35 @@
     ref. The stamped version is unambiguously non-release
     ('<latest-tag>+local'). Mutually exclusive with -Ref.
 .PARAMETER OutputRoot
-    Directory to write the plugin tree into. Defaults to the sibling
-    directory '../hve-squad-plugin' next to RepoRoot.
+    Dedicated directory to write the plugin tree into. Defaults to
+    '../hve-squad-plugin-build' next to RepoRoot. Do not point this at RepoRoot.
 .PARAMETER RepoRoot
     Root of the hve-squad repository. Defaults to the current git repository.
-.PARAMETER McpVersion
-    Exact @hve-squad/mcp npm version to pin in the generated .mcp.json (e.g.
-    '0.7.0'). Never a bare 'latest' — pinning an exact version is what keeps
-    a plugin install reproducible across different days/machines. Bumping
-    this is a deliberate, separate action from rebuilding agent content via
-    -Ref/-SourceRoot: when omitted, the script reuses OutputRoot's existing
-    .mcp.json pin unchanged (a content-only rebuild never silently re-pins
-    the MCP dependency). Required on a first-ever run against a fresh
-    OutputRoot with no existing .mcp.json.
+.PARAMETER HveCoreRoot
+    Checkout of microsoft/hve-core at the exact commit pinned in the selected
+    hve-squad source's apm.yml. A git checkout is verified before any output is
+    published.
+.PARAMETER PluginVersion
+    Optional version override for the generated plugin and marketplace. Stable
+    publication normally uses the selected tag version; preview publication can
+    append a unique prerelease build identifier.
+.PARAMETER MarketplaceName
+    Marketplace identity written to marketplace.json. Stable publication uses
+    hve-squad; preview publication uses hve-squad-preview.
+.PARAMETER AllowUnverifiedHveCoreSource
+    Permit a non-git HveCoreRoot for isolated tests or local fixture builds.
+    Publication must never pass this switch.
 .PARAMETER DryRun
     Report what would be written without touching OutputRoot.
 .EXAMPLE
-    ./scripts/Build-SquadPlugin.ps1 -SourceRoot .
+    ./scripts/Build-SquadPlugin.ps1 -SourceRoot . -HveCoreRoot ../hve-core
 .EXAMPLE
-    ./scripts/Build-SquadPlugin.ps1 -Ref v0.16.1-pre -OutputRoot C:\Solutions\hve-squad-plugin
+    ./scripts/Build-SquadPlugin.ps1 -Ref v0.19.2 -HveCoreRoot ../hve-core -OutputRoot C:\Temp\hve-squad-plugin
 .EXAMPLE
-    ./scripts/Build-SquadPlugin.ps1 -Ref v0.16.0 -McpVersion 0.7.0
-.EXAMPLE
-    ./scripts/Build-SquadPlugin.ps1
+    ./scripts/Build-SquadPlugin.ps1 -Ref v0.19.3-pre -HveCoreRoot ../hve-core -PluginVersion 0.19.3-pre.42 -MarketplaceName hve-squad-preview
 .NOTES
-    Invoked manually today; P02-T09's cross-repo publish workflow invokes it
-    at release-cut time with -Ref <the tag being cut>.
+    The manual publish workflow writes the result to the plugin or
+    plugin-preview branch in this repository.
 #>
 
 [CmdletBinding()]
@@ -85,7 +89,18 @@ param(
 
     [Parameter(Mandatory = $false)]
     [ValidateNotNullOrEmpty()]
-    [string]$McpVersion,
+    [string]$HveCoreRoot,
+
+    [Parameter(Mandatory = $false)]
+    [ValidatePattern('^[0-9]+\.[0-9]+\.[0-9]+(?:[-+][0-9A-Za-z.-]+)?$')]
+    [string]$PluginVersion,
+
+    [Parameter(Mandatory = $false)]
+    [ValidatePattern('^[a-z0-9]+(?:[.-][a-z0-9]+)*$')]
+    [string]$MarketplaceName = 'hve-squad',
+
+    [Parameter(Mandatory = $false)]
+    [switch]$AllowUnverifiedHveCoreSource,
 
     [Parameter(Mandatory = $false)]
     [switch]$DryRun
@@ -210,6 +225,225 @@ function Get-SourceFileContent {
     return ($content -join "`n")
 }
 
+function Get-HveCorePin {
+    <#
+    .SYNOPSIS
+        Resolves the single microsoft/hve-core commit pinned by apm.yml.
+    #>
+    [CmdletBinding()]
+    [OutputType([string])]
+    param(
+        [Parameter(Mandatory = $true)]
+        [pscustomobject]$Source,
+
+        [Parameter(Mandatory = $true)]
+        [string]$RepoRoot
+    )
+
+    $apmYaml = Get-SourceFileContent -Source $Source -RepoRoot $RepoRoot -RelativePath 'apm.yml'
+    $pinMatches = [regex]::Matches(
+        $apmYaml,
+        '(?m)^\s*-\s+microsoft/hve-core/[^\r\n#]+#(?<sha>[0-9a-f]{40})\s*$'
+    )
+    $pins = @($pinMatches | ForEach-Object { $_.Groups['sha'].Value } | Sort-Object -Unique)
+    if ($pins.Count -eq 0) {
+        throw "Could not resolve a microsoft/hve-core commit pin from apm.yml at '$($Source.Ref)'."
+    }
+    if ($pins.Count -ne 1) {
+        throw "apm.yml must pin every microsoft/hve-core dependency to one commit; found: $($pins -join ', ')."
+    }
+    return $pins[0]
+}
+
+function Assert-PluginRelativePath {
+    <#
+    .SYNOPSIS
+        Validates one manifest-declared plugin component path.
+    #>
+    [CmdletBinding()]
+    [OutputType([string])]
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Path
+    )
+
+    if ([string]::IsNullOrWhiteSpace($Path) -or [IO.Path]::IsPathRooted($Path)) {
+        throw "Plugin component path must be a non-empty relative path: '$Path'."
+    }
+    $normalized = $Path.Replace('\', '/')
+    while ($normalized.StartsWith('./', [StringComparison]::Ordinal)) {
+        $normalized = $normalized.Substring(2)
+    }
+    if (-not $normalized -or $normalized -eq '..' -or $normalized.StartsWith('../', [StringComparison]::Ordinal)) {
+        throw "Plugin component path leaves the plugin root: '$Path'."
+    }
+    return $normalized
+}
+
+function Write-BinaryFile {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Path,
+
+        [Parameter(Mandatory = $true)]
+        [AllowEmptyCollection()]
+        [byte[]]$Content,
+
+        [switch]$DryRun
+    )
+
+    $script:GeneratedPaths.Add((Resolve-OutputRelativePath -Path $Path)) | Out-Null
+    if ($DryRun) {
+        Write-Host "  [dry run] would write $Path" -ForegroundColor DarkGray
+        return
+    }
+
+    $dir = Split-Path -Path $Path -Parent
+    if ($dir -and -not (Test-Path -LiteralPath $dir)) {
+        New-Item -ItemType Directory -Path $dir -Force | Out-Null
+    }
+    [IO.File]::WriteAllBytes($Path, $Content)
+}
+
+function Copy-HveCorePluginContent {
+    <#
+    .SYNOPSIS
+        Copies the pinned HVE Core plugin component set into this plugin.
+    .DESCRIPTION
+        Component paths and bytes are preserved exactly. The returned manifest
+        is merged into hve-squad's manifest, so every host sees one plugin root
+        and Squad discovery never depends on a sibling plugin cache layout.
+    #>
+    [CmdletBinding()]
+    [OutputType([pscustomobject])]
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$HveCoreRoot,
+
+        [Parameter(Mandatory = $true)]
+        [string]$ExpectedCommit,
+
+        [Parameter(Mandatory = $true)]
+        [string]$OutputRoot,
+
+        [switch]$AllowUnverifiedSource,
+        [switch]$DryRun
+    )
+
+    $resolvedRoot = (Resolve-Path -LiteralPath $HveCoreRoot).Path
+    $manifestPath = Join-Path $resolvedRoot 'plugin.json'
+    if (-not (Test-Path -LiteralPath $manifestPath -PathType Leaf)) {
+        throw "HVE Core plugin manifest not found: $manifestPath"
+    }
+
+    $gitMetadata = Join-Path $resolvedRoot '.git'
+    if (Test-Path -LiteralPath $gitMetadata) {
+        $actualCommit = (git -C $resolvedRoot rev-parse HEAD 2>$null)
+        if ($LASTEXITCODE -ne 0 -or -not $actualCommit) {
+            throw "Could not resolve the HVE Core checkout commit at '$resolvedRoot'."
+        }
+        if ($actualCommit.Trim() -ne $ExpectedCommit) {
+            throw "HVE Core checkout is $($actualCommit.Trim()), but apm.yml pins $ExpectedCommit."
+        }
+        $workingTreeChanges = @(git -C $resolvedRoot status --porcelain=v1 --untracked-files=all 2>$null)
+        if ($LASTEXITCODE -ne 0) {
+            throw "Could not verify that the HVE Core checkout at '$resolvedRoot' is clean."
+        }
+        if ($workingTreeChanges.Count -gt 0) {
+            $preview = @($workingTreeChanges | Select-Object -First 10) -join '; '
+            throw "HVE Core checkout must be clean before publication; found: $preview"
+        }
+    }
+    elseif (-not $AllowUnverifiedSource) {
+        throw "HVE Core source '$resolvedRoot' has no git metadata. Publication requires an exact checkout of $ExpectedCommit."
+    }
+
+    $manifest = Get-Content -LiteralPath $manifestPath -Raw |
+        ConvertFrom-Json -AsHashtable -ErrorAction Stop
+    if ($manifest -isnot [Collections.IDictionary] -or $manifest['name'] -ne 'hve-core') {
+        throw "Expected the hve-core plugin manifest at '$manifestPath'."
+    }
+
+    $componentKeys = @('agents', 'commands', 'rules', 'skills', 'extensions')
+    $components = [ordered]@{}
+    $declaredPaths = [System.Collections.Generic.List[string]]::new()
+    foreach ($key in $componentKeys) {
+        $values = if ($manifest.ContainsKey($key)) { @($manifest[$key]) } else { @() }
+        foreach ($value in $values) {
+            if ($value -isnot [string]) {
+                throw "HVE Core plugin field '$key' must contain only string paths."
+            }
+            $declaredPaths.Add((Assert-PluginRelativePath -Path $value))
+        }
+        $components[$key] = @($values | ForEach-Object { Assert-PluginRelativePath -Path $_ })
+    }
+    if ($declaredPaths.Count -eq 0) {
+        throw "HVE Core plugin manifest '$manifestPath' declares no distributable components."
+    }
+
+    $copied = [System.Collections.Generic.List[object]]::new()
+    $seenTargets = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+    foreach ($relativePath in @($declaredPaths | Sort-Object -Unique)) {
+        $sourcePath = [IO.Path]::GetFullPath((Join-Path $resolvedRoot $relativePath))
+        $relativeToRoot = [IO.Path]::GetRelativePath($resolvedRoot, $sourcePath)
+        if ($relativeToRoot -eq '..' -or $relativeToRoot -match '^\.\.[\\/]' -or [IO.Path]::IsPathRooted($relativeToRoot)) {
+            throw "HVE Core component path leaves its checkout: '$relativePath'."
+        }
+        if (-not (Test-Path -LiteralPath $sourcePath)) {
+            throw "HVE Core component path does not exist at ${ExpectedCommit}: '$relativePath'."
+        }
+
+        $files = if (Test-Path -LiteralPath $sourcePath -PathType Leaf) {
+            @(Get-Item -LiteralPath $sourcePath -Force)
+        }
+        else {
+            @(Get-ChildItem -LiteralPath $sourcePath -Recurse -File -Force | Sort-Object FullName)
+        }
+        foreach ($file in $files) {
+            $cursor = $file.FullName
+            while ($cursor) {
+                $item = Get-Item -LiteralPath $cursor -Force -ErrorAction Stop
+                if ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) {
+                    throw "Linked HVE Core plugin content is not publishable: $cursor"
+                }
+                if ($cursor -eq $resolvedRoot) { break }
+                $cursor = Split-Path -Parent $cursor
+            }
+            $sourceRelative = [IO.Path]::GetRelativePath($resolvedRoot, $file.FullName).Replace('\', '/')
+            if (-not $seenTargets.Add($sourceRelative)) { continue }
+            $target = Join-Path $OutputRoot $sourceRelative
+            Write-BinaryFile -Path $target -Content ([IO.File]::ReadAllBytes($file.FullName)) -DryRun:$DryRun
+            $copied.Add([ordered]@{ source = $sourceRelative; target = $sourceRelative }) | Out-Null
+        }
+    }
+
+    foreach ($legalFile in @('LICENSE', 'NOTICE', 'THIRD-PARTY-NOTICES')) {
+        $sourcePath = Join-Path $resolvedRoot $legalFile
+        if (-not (Test-Path -LiteralPath $sourcePath -PathType Leaf)) { continue }
+        $targetRelative = "third-party/hve-core/$legalFile"
+        Write-BinaryFile -Path (Join-Path $OutputRoot $targetRelative) `
+            -Content ([IO.File]::ReadAllBytes($sourcePath)) -DryRun:$DryRun
+    }
+
+    $manifestHash = (Get-FileHash -LiteralPath $manifestPath -Algorithm SHA256).Hash.ToLowerInvariant()
+    $provenance = [ordered]@{
+        repository         = 'microsoft/hve-core'
+        commit             = $ExpectedCommit
+        version            = $manifest['version']
+        pluginManifestHash = $manifestHash
+        files              = @($copied)
+    }
+    Write-TextFile -Path (Join-Path $OutputRoot '.github/plugin/hve-core-source.json') `
+        -Content (($provenance | ConvertTo-Json -Depth 10) + "`n") -DryRun:$DryRun
+
+    return [pscustomobject]@{
+        Manifest   = $manifest
+        Components = $components
+        FileCount  = $copied.Count
+    }
+}
+
 function Convert-AgentCitations {
     <#
     .SYNOPSIS
@@ -256,9 +490,9 @@ function Convert-AgentCitations {
     # Anything still addressed under .github/instructions/squad/ after the rewrite above is
     # not a squad instruction file — the squad directory holds exactly the ported set. It is
     # an hve-core instruction cited with a stray 'squad/' segment, and hve-core ships to the
-    # consumer through the hve-squad-hve-core marketplace entry, so the fix is the real path
-    # rather than a drop. Normalizing here keeps already-tagged refs publishable instead of
-    # failing the conformance gate over a typo the tag has already frozen.
+    # consumer as bundled HVE Core content, so the fix is the real path rather than a drop.
+    # Normalizing here keeps already-tagged refs publishable instead of failing the
+    # conformance gate over a typo the tag has already frozen.
     $Content = [regex]::Replace(
         $Content,
         '\.github/instructions/squad/([a-z0-9-]+)\.instructions\.md',
@@ -335,9 +569,9 @@ function Copy-InstructionRules {
         Ports every squad instruction file into skills/squad/references/rules/
         and records the citation target for each.
     .DESCRIPTION
-        The plugin surface has no .instructions.md channel: plugin.json declares
-        agents, skills, hooks, and mcpServers, and nothing applies an applyTo
-        glob. Distilling the rules by hand into a few reference files lost some
+        The legacy plugin surface does not apply .instructions.md files from
+        arbitrary source paths. Distilling the rules by hand into a few
+        reference files lost some
         of them outright — squad-routing's Tracker-Write Gate and the roster's
         "never self-fill an absent role" reached no plugin file at all, so the
         squad dispatched an opt-in role that was not on the roster. Porting each
@@ -417,6 +651,54 @@ function Assert-PluginTreeConformance {
     $generated = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
     foreach ($p in $script:GeneratedPaths) { $generated.Add($p) | Out-Null }
 
+    $manifestPath = Join-Path $OutputRoot 'plugin.json'
+    if (-not (Test-Path -LiteralPath $manifestPath -PathType Leaf)) {
+        $problems.Add('plugin.json was not generated.') | Out-Null
+    }
+    else {
+        $manifest = Get-Content -LiteralPath $manifestPath -Raw |
+            ConvertFrom-Json -AsHashtable -ErrorAction Stop
+        foreach ($forbidden in @('$schema', 'mcpServers')) {
+            if ($manifest.ContainsKey($forbidden)) {
+                $problems.Add("plugin.json still declares retired field '$forbidden'.") | Out-Null
+            }
+        }
+        foreach ($field in @('agents', 'commands', 'rules', 'skills', 'extensions')) {
+            if (-not $manifest.ContainsKey($field)) { continue }
+            foreach ($path in @($manifest[$field])) {
+                if ($path -isnot [string]) {
+                    $problems.Add("plugin.json field '$field' contains a non-string entry.") | Out-Null
+                    continue
+                }
+                if (-not (Test-Path -LiteralPath (Join-Path $OutputRoot $path))) {
+                    $problems.Add("plugin.json field '$field' points at missing path '$path'.") | Out-Null
+                }
+            }
+        }
+        if (-not $manifest.ContainsKey('hooks') -or $manifest['hooks'] -ne 'hooks.json') {
+            $problems.Add("plugin.json must declare the generated hooks.json.") | Out-Null
+        }
+    }
+
+    foreach ($mcpPath in @('.mcp.json', 'mcp.json')) {
+        if (Test-Path -LiteralPath (Join-Path $OutputRoot $mcpPath)) {
+            $problems.Add("$mcpPath must not ship in the hve-squad plugin.") | Out-Null
+        }
+    }
+
+    $marketplacePath = Join-Path $OutputRoot '.github/plugin/marketplace.json'
+    if (-not (Test-Path -LiteralPath $marketplacePath -PathType Leaf)) {
+        $problems.Add('.github/plugin/marketplace.json was not generated.') | Out-Null
+    }
+    else {
+        $marketplace = Get-Content -LiteralPath $marketplacePath -Raw |
+            ConvertFrom-Json -AsHashtable -ErrorAction Stop
+        $entries = @($marketplace['plugins'])
+        if ($entries.Count -ne 1 -or $entries[0]['name'] -ne 'hve-squad' -or $entries[0]['source'] -ne '.') {
+            $problems.Add('marketplace.json must expose exactly one relative hve-squad plugin entry.') | Out-Null
+        }
+    }
+
     # 1. No generated file may cite a squad instruction path that no longer ships.
     # 2. No generated file may cite a skills/ target this run did not author.
     foreach ($rel in $script:GeneratedPaths) {
@@ -438,16 +720,15 @@ function Assert-PluginTreeConformance {
         }
     }
 
-    # 3. Nothing under agents/ or skills/ may exist that this run did not author:
-    #    a hand-written file there has no source of truth in hve-squad and drifts silently.
-    foreach ($dir in @('agents', 'skills')) {
-        $abs = Join-Path $OutputRoot $dir
-        if (-not (Test-Path -LiteralPath $abs)) { continue }
-        foreach ($file in Get-ChildItem -LiteralPath $abs -Recurse -File) {
-            $rel = Resolve-OutputRelativePath -Path $file.FullName
-            if (-not $generated.Contains($rel)) {
-                $problems.Add("$rel exists in the output tree but no generator step authored it (hand-written orphan: adopt it into squad-src or delete it).") | Out-Null
-            }
+    # 3. The distribution branch is generated output. Every file outside .git
+    #    must have been authored by this run.
+    foreach ($file in Get-ChildItem -LiteralPath $OutputRoot -Recurse -File -Force) {
+        $rel = Resolve-OutputRelativePath -Path $file.FullName
+        if ($rel -eq '.git' -or $rel.StartsWith('.git/', [StringComparison]::OrdinalIgnoreCase)) {
+            continue
+        }
+        if (-not $generated.Contains($rel)) {
+            $problems.Add("$rel exists in the output tree but no generator step authored it.") | Out-Null
         }
     }
 
@@ -456,7 +737,7 @@ function Assert-PluginTreeConformance {
         throw "Plugin tree conformance failed with $($problems.Count) problem(s):`n$detail"
     }
 
-    Write-Host "Conform: citations resolve and no unauthored files under agents/ or skills/" -ForegroundColor Green
+    Write-Host 'Conform: one self-contained plugin, no MCP registration, valid component paths, and no unauthored files' -ForegroundColor Green
 }
 
 function Write-PluginHookManifest {
@@ -506,14 +787,16 @@ function Write-PluginHookManifest {
 
         $entry = [ordered]@{
             type       = 'command'
-            bash       = 'bash "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/' + $definition.Script + '.sh"'
-            powershell = $(if ($definition.Script -eq 'dispatch-guards') { 'pwsh' } else { 'powershell.exe' }) + ' -NoProfile -ExecutionPolicy Bypass -File "$env:CLAUDE_PLUGIN_ROOT/hooks/scripts/' + $definition.Script + '.ps1"'
+            cwd        = '${PLUGIN_ROOT}'
+            bash       = 'bash "hooks/scripts/' + $definition.Script + '.sh"'
+            powershell = $(if ($definition.Script -eq 'dispatch-guards') { 'pwsh' } else { 'powershell.exe' }) + ' -NoProfile -ExecutionPolicy Bypass -File "hooks/scripts/' + $definition.Script + '.ps1"'
             timeoutSec = 10
         }
         if ($definition.Matcher) {
             $entry = [ordered]@{
                 type       = $entry.type
                 matcher    = $definition.Matcher
+                cwd        = $entry.cwd
                 bash       = $entry.bash
                 powershell = $entry.powershell
                 timeoutSec = $entry.timeoutSec
@@ -785,13 +1068,12 @@ Dispatch this request to the `Squad Learn` agent. This skill does not perform di
 '@
 
         # The two below are plugin-only capabilities with no squad-src counterpart: they
-        # exist because the plugin surface differs from the apm one. They were hand-written
-        # straight into hve-squad-plugin and survived every rebuild unnoticed, which is the
-        # drift the conformance check now refuses.
+        # exist because the plugin surface differs from the APM one. Keeping them in the
+        # generator prevents the published branches from becoming a second source of truth.
         'squad-doctor'              = @'
 ---
 name: squad-doctor
-description: "Checks which hve-core-owned cast roles (security, RAI, privacy, accessibility, project-planning, design-thinking, coding-standards) are absent when only the hve-core Copilot plugin is installed, without an `apm install`. Use at squad Init, on request ('run squad-doctor', 'check for missing roles', 'what's not installed'), or any time a dispatch fails because a mapped Primary agent cannot be found."
+description: "Checks that the HVE Core cast bundled inside the hve-squad plugin is visible and dispatchable. Use at squad Init, on request ('run squad-doctor', 'check for missing roles', 'what's not installed'), or any time a mapped Primary agent cannot be found."
 license: MIT
 metadata:
   authors: "Peter-N91/hve-squad"
@@ -801,21 +1083,12 @@ metadata:
 
 ## Why This Exists
 
-Per `hve-squad`'s own architecture decision (the plugin deliberately does not
-vendor hve-core's domain content), the `hve-squad` plugin does **not** vendor
-hve-core's domain content. When a consumer installs only this plugin (no
-`apm install github/hve-core`, and no `hve-squad-hve-core` marketplace entry),
-the domain agents from seven areas are missing: **accessibility, security,
-privacy, RAI, project-planning, design-thinking, and coding-standards**. Most
-of the roster's cast catalog casts against agents in exactly those seven
-domains — so most roster rows resolve to an absent agent at dispatch time, and
-the roster's own rule is to **escalate rather than dispatch a partial squad**.
-This check makes that gap visible before a turn hits it, instead of failing
-mid-dispatch with an unexplained "agent not found."
-
-This check never vendors or duplicates hve-core's content (that would repeat
-the rejected alternative) — it only reports what is present versus what the
-roster expects.
+The published `hve-squad` plugin bundles the exact HVE Core commit recorded in
+its `.github/plugin/hve-core-source.json`. Every supported host should therefore
+see the Squad and HVE Core cast from one plugin root. A missing domain indicates
+an incomplete or stale update, a disabled plugin, a host inventory problem, or
+a corrupt installation rather than an optional companion that still needs to
+be installed. This check exposes that condition before dispatch.
 
 ## Inputs
 
@@ -837,7 +1110,7 @@ None required. Optionally accepts **scope** (`all` default, or a single domain n
    | `coding-standards` | `Code Review Functional`, `Code Review Standards`, `Code Review Security`, `Code Review Accessibility` |
 
 3. **Report per-domain, not just an aggregate.** For each domain: `present` (name the resolved agent) or `absent`. Never report a domain `present` on the strength of the squad's own `squad-*` glue agents (`Squad Reviewer`, `Squad Lead`, etc.) — those dispatch *to* the domain's agents and are not a substitute for them being present.
-4. **Name the fix for every absent domain**, without vendoring the content itself: installing the `hve-squad-hve-core` marketplace entry (pinned to the commit this hve-squad release was validated against), or `apm install github/microsoft/hve-core` for an apm consumer, resolves all seven at once.
+4. **Name the fix for every absent domain.** For a plugin consumer, update or reinstall the single `hve-squad` plugin from the same marketplace channel and start a fresh session. For an APM fallback consumer, rerun the pinned `apm install` command. Never tell a plugin consumer to install a second HVE Core plugin.
 5. **Cross-check the mapping's currency.** This table mirrors the cast catalog canonical in `skills/squad/references/roster-catalog.md` as of this plugin's build. If the roster changes which Primary a role resolves to, this table drifts — note that possibility in the report rather than presenting the table as infallible.
 
 ## Output
@@ -852,7 +1125,7 @@ This is a mechanical inspection, not a role dispatch — perform it directly rat
         'squad-init-hooks'          = @'
 ---
 name: squad-init-hooks
-description: "Writes the squad's hooks.json guards into the consuming repository's own .github/hooks/ so they also run under Copilot cloud agent, which only loads repository-level hook files and never a plugin's own hooks.json. Use when the user asks to enable squad hooks for the cloud agent, wants hooks to work on GitHub.com, or asks to run '/squad init' or 'squad-init-hooks'."
+description: "Writes the squad's hook backstops into the consuming repository's .github/hooks/ for hosts that require repository hooks or do not reliably execute plugin hooks. Use for Copilot CLI enforcement, cloud-agent/Watch Mode enforcement, or when the user asks to run 'squad-init-hooks'."
 license: MIT
 metadata:
   authors: "Peter-N91/hve-squad"
@@ -862,7 +1135,7 @@ metadata:
 
 ## Why This Exists
 
-Per the GitHub Copilot hooks reference, a plugin's own `hooks.json` is loaded by **Copilot CLI only**. **Copilot cloud agent loads hook configuration exclusively from `.github/hooks/*.json` files committed in the cloned repository** — it never reads a plugin's `hooks.json`. So this plugin's guards (the Impactful-Action Gate, the append-only/single-writer backstop, the dispatch-time gates, the autonomous escalation check) run for a CLI or desktop-app session, but not for a Watch Mode run or any other cloud-agent job, unless a copy is committed at the repository level.
+Plugin hook discovery is not proof of hook execution. Current validation against Copilot CLI 1.0.105 showed that an installed plugin's hook entries can be listed yet not fire, while Copilot cloud agent loads hooks only from committed `.github/hooks/*.json` files. The agents and reference rules remain the primary behavioral contract; this skill installs repository-owned runtime backstops for the Impactful-Action Gate, append-only state, dispatch-time checks, and autonomous escalation.
 
 This is a **single-purpose action**: it drops hook files into the consuming repository. It does nothing else — no roster seeding, no profile selection, no `team.md`/`routing.md` creation.
 
@@ -874,10 +1147,10 @@ This is a **single-purpose action**: it drops hook files into the consuming repo
 ## Flow
 
 1. **Read the plugin's own `hooks.json`** and its referenced scripts under `hooks/scripts/`.
-2. **Filter to the cloud-agent-relevant subset.** Copilot cloud agent honors the plugin's events but only the `bash` command field (`command` is a fallback); it ignores the `powershell` field. Keep each Bash entry. The dispatch guard's Bash wrapper calls `pwsh`, so its PowerShell implementation and runtime dependencies must also travel with the drop. PowerShell 7.4+ must be available in the cloud setup, as it is for the squad runtime; disclose this prerequisite rather than installing it or claiming the hook was executed.
-3. **Write the hook configuration** to `<targetDir>/hve-squad.json`, with paths rewritten relative to the repository root (cloud agent's working directory is `/workspace` when a repository is cloned) rather than the plugin's own install directory.
-4. **Copy the Bash scripts** to `<targetDir>/hve-squad/*.sh`, preserving execute permissions. Also copy `dispatch-guards.ps1` beside its wrapper and the skill's `scripts/SquadCoordinator.psm1`, `scripts/Resolve-SquadConnectorDispatch.ps1` and `scripts/SquadAgentDiscovery.ps1` into `<targetDir>/hve-squad/runtime/`. These are the dispatch guard's required dependencies; the other PowerShell companions are not used by cloud agent.
-5. **Report exactly what was written** — the hook file path, each script path, and a one-line note that this drop must be committed to take effect for cloud agent (an uncommitted local file is invisible to a cloud-agent job, which operates on the cloned repository, not the developer's working tree).
+2. **Keep the cross-platform command entries.** Preserve each hook's Bash and PowerShell commands. Cloud agent ignores PowerShell, while local Windows clients use it. PowerShell 7.4+ remains required for the dispatch guard; disclose this prerequisite rather than installing it or claiming a hook executed.
+3. **Write the hook configuration** to `<targetDir>/hve-squad.json`, replacing the plugin-only `${PLUGIN_ROOT}` working directory with the repository root and rewriting command paths relative to that root.
+4. **Copy both script variants** to `<targetDir>/hve-squad/`, including `dispatch-guards.ps1` and `dispatch-guards.sh`, and preserve executable Bash files. Copy the skill's `scripts/SquadCoordinator.psm1`, `scripts/Resolve-SquadConnectorDispatch.ps1` and `scripts/SquadAgentDiscovery.ps1` into `<targetDir>/hve-squad/runtime/`; these are the dispatch guard's required dependencies.
+5. **Report exactly what was written** — the hook file path, each script path, whether local execution was tested, and a note that the drop must be committed before cloud agent can see it. An uncommitted drop can still serve a local CLI session.
 
 ## Idempotency
 
@@ -890,6 +1163,7 @@ This is a **single-purpose action**: it drops hook files into the consuming repo
 * It does not run `apm install` or seed any roster/profile state.
 * It does not enable Watch Mode itself — the two GitHub Actions workflows (`skills/squad/github-approval-watcher.workflow.yml`, `skills/squad/squad-watch.workflow.yml`) are a separate, explicit copy-and-commit step a consumer performs when they want Watch Mode's actual trigger and approval enforcement, not just its hooks-layer backstop.
 * It does not touch `.mcp.json` or any MCP server registration.
+* It does not replace the agent and reference rules. Hooks are runtime backstops and may be unavailable on a host or version.
 
 ## Invocation
 
@@ -945,19 +1219,32 @@ if ($MyInvocation.InvocationName -ne '.') {
     $RepoRoot = (Resolve-Path -LiteralPath $RepoRoot).Path
 
     if (-not $OutputRoot) {
-        $OutputRoot = Join-Path (Split-Path -Path $RepoRoot -Parent) 'hve-squad-plugin'
+        $OutputRoot = Join-Path (Split-Path -Path $RepoRoot -Parent) 'hve-squad-plugin-build'
+    }
+    if (-not $HveCoreRoot) {
+        throw 'Pass -HveCoreRoot with microsoft/hve-core checked out at the commit pinned in apm.yml.'
+    }
+
+    $resolvedOutputRoot = [IO.Path]::GetFullPath($OutputRoot)
+    if ($resolvedOutputRoot -eq [IO.Path]::GetFullPath($RepoRoot)) {
+        throw 'OutputRoot must be a dedicated plugin distribution directory, not the hve-squad repository root.'
     }
 
     $source = Resolve-BuildSource -RepoRoot $RepoRoot `
         -RefSpecified $PSBoundParameters.ContainsKey('Ref') -Ref $Ref `
         -SourceRootSpecified $PSBoundParameters.ContainsKey('SourceRoot') -SourceRoot $SourceRoot
+    if ($PluginVersion) {
+        $source.PluginVersion = $PluginVersion
+    }
+    $hveCorePin = Get-HveCorePin -Source $source -RepoRoot $RepoRoot
 
     Write-Host "Source:  $($source.Mode) $(if ($source.Mode -eq 'Ref') { $source.Ref } else { $source.SourceRoot })" -ForegroundColor Cyan
     Write-Host "Output:  $OutputRoot" -ForegroundColor Cyan
     Write-Host "Version: $($source.PluginVersion)" -ForegroundColor Cyan
+    Write-Host "HVE Core: $hveCorePin" -ForegroundColor Cyan
     Write-Host ''
 
-    $script:OutputRootResolved = $OutputRoot
+    $script:OutputRootResolved = $resolvedOutputRoot
     $script:GeneratedPaths = [System.Collections.Generic.List[string]]::new()
     $script:RuleCitationMap = [ordered]@{}
 
@@ -967,7 +1254,7 @@ if ($MyInvocation.InvocationName -ne '.') {
         $ruleCount = Copy-InstructionRules -Source $source -RepoRoot $RepoRoot -OutputRoot $OutputRoot -DryRun:$DryRun
         Write-Host "Rules:   $ruleCount instruction files ported to skills/squad/references/rules/" -ForegroundColor Cyan
 
-        # ── Agents: verbatim copy + citation rewrite + inline-fold (P02-T01/T02/T03) ──
+        # ── Squad agents: verbatim copy + citation rewrite + inline-fold ──
         $agentPaths = Get-SourceFileList -Source $source -RepoRoot $RepoRoot -RelativeDir 'squad-src/.github/agents/squad'
         $agentFiles = @($agentPaths | Where-Object { $_ -like '*.agent.md' })
         Write-Host "Agents:  $($agentFiles.Count) files" -ForegroundColor Cyan
@@ -978,7 +1265,7 @@ if ($MyInvocation.InvocationName -ne '.') {
             Write-TextFile -Path (Join-Path $OutputRoot "agents/squad/$fileName") -Content $content -DryRun:$DryRun
         }
 
-        # ── Skill: verbatim port of skills/squad/ + 2 housekeeping edits (P02-T05) ──
+        # ── Squad skill: verbatim port + distribution housekeeping edits ──
         $skillPaths = Get-SourceFileList -Source $source -RepoRoot $RepoRoot -RelativeDir 'squad-src/.github/skills/squad'
         Write-Host "Skill:   $($skillPaths.Count) files under skills/squad/" -ForegroundColor Cyan
         foreach ($relPath in $skillPaths) {
@@ -1000,7 +1287,7 @@ if ($MyInvocation.InvocationName -ne '.') {
                     '## Companion hook rules and reference files'
                 $content = $content -replace `
                     'The `squad` skill complements eleven instruction files that auto-apply when squad state is touched\. Their `applyTo` globs only fire in a host that loads modular instructions, so a rule that must hold unconditionally belongs in a reference file above, not only here\.', `
-                    'In the plugin distribution these rules do not ship as `.instructions.md` files, because the plugin surface has no instructions channel to apply them. Deterministic enforcement moves to `hooks.json`; the full rule text of every file below is ported verbatim under `references/rules/`, and the citations in this section resolve there. The distilled reference files above remain the curated entry points — read those first, and read `references/rules/` when you need the complete rule.'
+                    'In the plugin distribution these rules do not ship as `.instructions.md` files, because the plugin surface has no instructions channel to apply them. Their full text is ported verbatim under `references/rules/` and remains authoritative even when a host does not execute plugin hooks. `hooks.json` supplies optional runtime backstops, and `squad-init-hooks` can install repository-owned backstops for CLI or cloud use. The distilled reference files above remain the curated entry points — read those first, and read `references/rules/` when you need the complete rule.'
             }
 
             # Skill files cite the instruction files too (00-index.md names them by path),
@@ -1011,7 +1298,7 @@ if ($MyInvocation.InvocationName -ne '.') {
             Write-TextFile -Path (Join-Path $OutputRoot "skills/squad/$subPath") -Content $content -DryRun:$DryRun
         }
 
-        # ── Prompt-derived invocation skills (P02-T04) ──
+        # ── Prompt-derived invocation skills ──
         $invocationSkills = New-InvocationSkillContent -Source $source -RepoRoot $RepoRoot
         Write-Host "Skills:  $($invocationSkills.Count) invocation skills" -ForegroundColor Cyan
         foreach ($name in $invocationSkills.Keys) {
@@ -1027,16 +1314,40 @@ if ($MyInvocation.InvocationName -ne '.') {
         # ── hooks.json (plugin-root-qualified) ──
         Write-PluginHookManifest -OutputRoot $OutputRoot -DryRun:$DryRun
 
-        # ── plugin.json (P02-T06; hooks/mcpServers fields added, P03/P04-aware) ──
+        # ── Pinned HVE Core components ──
+        $hveCore = Copy-HveCorePluginContent -HveCoreRoot $HveCoreRoot `
+            -ExpectedCommit $hveCorePin -OutputRoot $OutputRoot `
+            -AllowUnverifiedSource:$AllowUnverifiedHveCoreSource -DryRun:$DryRun
+        Write-Host "HVE Core: $($hveCore.FileCount) files bundled from $($hveCorePin.Substring(0, 7))" -ForegroundColor Cyan
+
+        # ── plugin.json: one self-contained plugin, no MCP registration ──
+        # Keep the supported Copilot manifest form (no $schema) because HVE Core
+        # declares component paths under .github/. Agent Plugins 1.0 uses fixed
+        # locations and cannot preserve those paths without rewriting the upstream
+        # package. Never restore the retired github/open-plugin-spec schema URL.
+        $hveCoreAgents = @($hveCore.Components['agents'])
+        $hveCoreCommands = @($hveCore.Components['commands'])
+        $hveCoreRules = @($hveCore.Components['rules'])
+        $hveCoreSkills = @($hveCore.Components['skills'])
+        $hveCoreExtensions = @($hveCore.Components['extensions'])
         $pluginManifest = [ordered]@{
-            '$schema'     = 'https://raw.githubusercontent.com/github/open-plugin-spec/main/schemas/plugin.schema.json'
-            name          = 'hve-squad'
-            version       = $source.PluginVersion
-            description   = "Plugin distribution tree for hve-squad: $($agentFiles.Count) Squad Copilot agents and the squad skill (including $($invocationSkills.Count) invocation skills under skills/squad/invocations/), generated and release-gated from Peter-N91/hve-squad."
-            agents        = @('agents/squad/')
-            skills        = @('skills/squad/')
-            hooks         = 'hooks.json'
-            mcpServers    = '.mcp.json'
+            name        = 'hve-squad'
+            version     = $source.PluginVersion
+            description = "HVE Squad and its pinned HVE Core cast in one GitHub Copilot plugin: $($agentFiles.Count) Squad agents, $($hveCoreAgents.Count) HVE Core agent entries, and $($invocationSkills.Count) Squad invocation skills."
+            author      = [ordered]@{
+                name = 'Peter-N91'
+                url  = 'https://github.com/Peter-N91'
+            }
+            homepage    = 'https://peter-n91.github.io/hve-squad/'
+            repository  = 'https://github.com/Peter-N91/hve-squad'
+            license     = 'MIT'
+            keywords    = @('hve', 'hve-squad', 'agents', 'skills', 'copilot')
+            agents      = @((@('agents/squad/') + $hveCoreAgents) | Sort-Object -Unique)
+            commands    = @($hveCoreCommands | Sort-Object -Unique)
+            rules       = @($hveCoreRules | Sort-Object -Unique)
+            skills      = @((@('skills/squad/') + $hveCoreSkills) | Sort-Object -Unique)
+            hooks       = 'hooks.json'
+            extensions  = @($hveCoreExtensions | Sort-Object -Unique)
         }
         $pluginManifestContent = ($pluginManifest | ConvertTo-Json -Depth 10) + "`n"
         Write-TextFile -Path (Join-Path $OutputRoot '.github/plugin/plugin.json') `
@@ -1044,27 +1355,12 @@ if ($MyInvocation.InvocationName -ne '.') {
         Write-TextFile -Path (Join-Path $OutputRoot 'plugin.json') `
             -Content $pluginManifestContent -DryRun:$DryRun
 
-        # ── marketplace.json (P02-T07 scaffold, P04-T02-aware) ──
-        #    autoUpdate is deliberately absent: a consumer must receive the
-        #    hve-squad and hve-core entries as a matched pair (see below), and
-        #    an unattended update of one without the other reintroduces the
-        #    version skew the pinned hve-core entry exists to prevent.
-
-        # The hve-core entry ships the exact commit this hve-squad ref's apm.yml
-        # was validated against, so a consumer never resolves hve-core content
-        # newer than the routing and charters that reference it.
-        $apmYaml = Get-SourceFileContent -Source $source -RepoRoot $RepoRoot -RelativePath 'apm.yml'
-        $hveCoreSha = ([regex]::Match($apmYaml, 'microsoft/hve-core/[^\s#]+#([0-9a-f]{40})')).Groups[1].Value
-        if (-not $hveCoreSha) {
-            throw "Could not resolve the microsoft/hve-core commit pin from apm.yml at '$($source.Ref)'. The marketplace's hve-core entry must ship the exact validated commit, so refusing to emit an unpinned entry."
-        }
-        Write-Host "hve-core: pinning marketplace entry to $($hveCoreSha.Substring(0,7))" -ForegroundColor Cyan
-
+        # ── marketplace.json: the branch itself is the versioned source ──
         $marketplaceManifest = [ordered]@{
-            name       = 'hve-squad-plugin'
+            name       = $MarketplaceName
             owner      = [ordered]@{ name = 'Peter-N91' }
             metadata   = [ordered]@{
-                description = 'Marketplace for the hve-squad GitHub Copilot plugin, generated and release-gated from Peter-N91/hve-squad.'
+                description = 'HVE Squad plugin marketplace published from Peter-N91/hve-squad.'
                 version     = $source.PluginVersion
             }
             plugins    = @(
@@ -1072,24 +1368,10 @@ if ($MyInvocation.InvocationName -ne '.') {
                     name        = 'hve-squad'
                     description = $pluginManifest.description
                     version     = $source.PluginVersion
-                    source      = [ordered]@{
-                        source = 'github'
-                        repo   = 'Peter-N91/hve-squad-plugin'
-                        ref    = 'main'
-                    }
-                    repository  = 'https://github.com/Peter-N91/hve-squad-plugin'
-                    license     = 'MIT'
-                }
-                [ordered]@{
-                    name        = 'hve-squad-hve-core'
-                    description = "microsoft/hve-core pinned to the exact commit validated against hve-squad $($source.PluginVersion)'s apm.yml (Sync and Adapt / cast-delta guard). Install this INSTEAD OF the official hve-core plugin, not alongside it: the distinct name only prevents a name collision at install time, and registering both gives you a second, unpinned copy of every hve-core agent that squad roles can resolve to. Refresh it with uninstall-then-install; plugin update cannot see a new pin because the recorded version comes from upstream hve-core's own plugin.json."
-                    version     = $source.PluginVersion
-                    source      = [ordered]@{
-                        source = 'github'
-                        repo   = 'microsoft/hve-core'
-                        sha    = $hveCoreSha
-                    }
-                    repository  = 'https://github.com/microsoft/hve-core'
+                    source      = '.'
+                    author      = $pluginManifest.author
+                    homepage    = $pluginManifest.homepage
+                    repository  = $pluginManifest.repository
                     license     = 'MIT'
                 }
             )
@@ -1097,34 +1379,25 @@ if ($MyInvocation.InvocationName -ne '.') {
         Write-TextFile -Path (Join-Path $OutputRoot '.github/plugin/marketplace.json') `
             -Content (($marketplaceManifest | ConvertTo-Json -Depth 10) + "`n") -DryRun:$DryRun
 
-        # ── .mcp.json (P03-T04; version-pinned, never silently re-pinned) ──
-        $mcpJsonPath = Join-Path $OutputRoot '.mcp.json'
-        $resolvedMcpVersion = $McpVersion
-        if (-not $resolvedMcpVersion) {
-            if (Test-Path -LiteralPath $mcpJsonPath) {
-                $existingMcp = Get-Content -LiteralPath $mcpJsonPath -Raw | ConvertFrom-Json
-                $existingArgs = $existingMcp.mcpServers.'hve-squad'.args
-                $pinnedArg = @($existingArgs) | Where-Object { $_ -like '@hve-squad/mcp@*' } | Select-Object -First 1
-                if ($pinnedArg) { $resolvedMcpVersion = $pinnedArg -replace '^@hve-squad/mcp@', '' }
-            }
-            if (-not $resolvedMcpVersion) {
-                throw "No -McpVersion given and no existing pin found at '$mcpJsonPath'. Pass -McpVersion <exact @hve-squad/mcp version> on first generation."
-            }
-            Write-Host "MCP:     reusing existing pin @hve-squad/mcp@$resolvedMcpVersion (pass -McpVersion to bump deliberately)" -ForegroundColor DarkGray
+        $sourceLabel = if ($source.Mode -eq 'Ref') { $source.Ref } else { $source.PluginVersion }
+        $readme = @"
+# hve-squad plugin
+
+This generated branch contains the installable **hve-squad** GitHub Copilot
+plugin built from ``Peter-N91/hve-squad@$sourceLabel``. It bundles the HVE Core
+plugin components from commit ``$hveCorePin`` in the same plugin root.
+
+The plugin contains no MCP server configuration. Install and operate
+``hve-squad-mcp`` separately when an MCP host needs the outbound Squad tools.
+
+Installation, update, preview-channel, and verification instructions:
+https://peter-n91.github.io/hve-squad/getting-started.html
+"@
+        Write-TextFile -Path (Join-Path $OutputRoot 'README.md') -Content ($readme + "`n") -DryRun:$DryRun
+        foreach ($legalFile in @('LICENSE', 'NOTICE')) {
+            $content = Get-SourceFileContent -Source $source -RepoRoot $RepoRoot -RelativePath $legalFile
+            Write-TextFile -Path (Join-Path $OutputRoot $legalFile) -Content ($content.TrimEnd() + "`n") -DryRun:$DryRun
         }
-        else {
-            Write-Host "MCP:     pinning @hve-squad/mcp@$resolvedMcpVersion" -ForegroundColor Cyan
-        }
-        $mcpManifest = [ordered]@{
-            mcpServers = [ordered]@{
-                'hve-squad' = [ordered]@{
-                    type    = 'stdio'
-                    command = 'npx'
-                    args    = @('-y', "@hve-squad/mcp@$resolvedMcpVersion")
-                }
-            }
-        }
-        Write-TextFile -Path $mcpJsonPath -Content (($mcpManifest | ConvertTo-Json -Depth 10) + "`n") -DryRun:$DryRun
 
         if (-not $DryRun) {
             Assert-PluginTreeConformance -OutputRoot $OutputRoot
