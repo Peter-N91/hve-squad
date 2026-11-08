@@ -415,6 +415,14 @@ Describe 'GATE-48 Repository Watch Mode and Sync-and-Adapt workflows enforce ful
         $script:RepoSquadWatch | Should -Not -Match ([regex]::Escape("'.agents', 'apm_modules', 'install.log'"))
     }
 
+    It 'pins a Watch CLI version compatible with the Haiku 5.5 subagent smoke test' {
+        $versionMatch = [regex]::Match($script:RepoSquadWatch, "(?m)^\s*COPILOT_CLI_VERSION:\s*'(\d+\.\d+\.\d+)'\s*$")
+        $versionMatch.Success | Should -BeTrue
+        if ($versionMatch.Success) {
+            [version]$versionMatch.Groups[1].Value | Should -BeGreaterOrEqual ([version]'1.0.106')
+        }
+    }
+
     It 'wires issues, pull_request, issue_comment, and workflow_dispatch with per-case/per-ask squad selection and a gated full RPI handoff in squad-watch.yml' {
         $script:RepoSquadWatch | Should -Match ([regex]::Escape('SQUAD SELECTION PER CASE AND PER ASK (NON-NEGOTIABLE).'))
         $script:RepoSquadWatch | Should -Match ([regex]::Escape('COMPLETE SQUAD LIFECYCLE (FULL RPI - NON-NEGOTIABLE).'))
