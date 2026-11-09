@@ -846,7 +846,7 @@ jobs:
 
             if (authorized && typeof buildPrompt === 'function') {
               prompt = buildPrompt();
-              prompt += `\n\nWrite current-run Open Questions as JSON to .copilot-tracking/squad/members/${member}/watch-questions.json with a rows array of objects that have ID, Source, Question, Impact, and Status. Write team.md with the actual roster and exactly one Watch Profile Selection block for runId ${triggerRunId} into decisions.md. Do not add another selection heading after it. Required question IDs are the Risk Gate tokens, COUNCIL-<verdict-ordinal>-<ROLE>-RISK, COUNCIL-<verdict-ordinal>-<ROLE>-COND-<n>, and ASM-<n> from that current run only. Two council verdicts by the same role need two distinct IDs. An empty question list does not cover recorded risks. Do not post questions yourself.`;
+              prompt += `\n\nWrite current-run Open Questions as JSON to .copilot-tracking/squad/members/${member}/watch-questions.json with a rows array of objects that have ID, Source, Question, Impact, and Status. Every cell is required and single-line; ID is at most 32 characters, Source at most 256, Status at most 256, Question and Impact at most 1000; IDs must be unique. Source must be exactly one of: OQ-WATCH-NNN (three digits), decisions.md#lowercase-kebab-anchor (lowercase letters, digits, and hyphens only), or the current thread ${sourceThreadNumber ? `${owner}/${repo}#${sourceThreadNumber}` : 'owner/repo#N when the run has a thread'}. Any other Source value, such as a file path or a plan section, blocks publication after the run. Write team.md with the actual roster and exactly one Watch Profile Selection block for runId ${triggerRunId} into decisions.md. Do not add another selection heading after it. Required question IDs are the Risk Gate tokens, COUNCIL-<verdict-ordinal>-<ROLE>-RISK, COUNCIL-<verdict-ordinal>-<ROLE>-COND-<n>, and ASM-<n> from that current run only. Two council verdicts by the same role need two distinct IDs. An empty question list does not cover recorded risks. Do not post questions yourself.`;
             }
 
             const hasExistingPublication = Boolean(existingPr || publicationBranchExists);
@@ -1257,7 +1257,9 @@ jobs:
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: squad-watch-diagnostics-${{ github.run_id }}
-          path: ${{ runner.temp }}/squad-watch-publication.json
+          path: |
+            ${{ runner.temp }}/squad-watch-publication.json
+            ${{ github.workspace }}/.copilot-tracking/squad/members/${{ steps.prep.outputs.subSquad }}/watch-questions.json
           if-no-files-found: ignore
           retention-days: 1
 
