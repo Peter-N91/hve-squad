@@ -428,7 +428,9 @@ Describe 'GATE-48 Repository Watch Mode and Sync-and-Adapt workflows enforce ful
             $workflow | Should -Match 'canonical profile and retained'
             $workflow | Should -Match 'do not add'
             $workflow | Should -Match 'do not repeat'
+            $workflow | Should -Match 'never custom'
         }
+        $script:RepoSquadWatch | Should -Match 'squad-watch-diagnostics-'
         $script:RepoSquadWatch | Should -Match 'full Tier 0 suite inside Watch unless'
         $script:RepoSquadWatch | Should -Match 'profileValid=\$\(\$gate\.ProfileValid\), questionsValid=\$\(\$gate\.QuestionsValid\)'
     }

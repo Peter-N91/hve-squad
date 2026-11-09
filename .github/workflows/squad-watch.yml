@@ -309,6 +309,11 @@ jobs:
               'the full methodology spine and the specialists the ask warrants; do not add',
               'arbitrary extra roles to the roster. If no eligible combination covers the',
               'required roles, escalate rather than weakening the work or inventing a roster.',
+              'The Selected Profile must be exactly one profile name from',
+              'references/profiles-and-packs.md (never custom), and no pack is installed on',
+              'this runner, so select none. team.md must list exactly that profile\'s roles.',
+              'Publication is rejected after the run for any other roster. Work that needs a',
+              'role outside the profile is done by the profile\'s own roles; do not add it.',
               'Never copy a team.md, routing.md, or history/ layout from',
               'an earlier members/* directory, and when .copilot-tracking/squad/federation.md',
               'is absent, seed the full federation-root meta layer (federation.md,',
@@ -1221,6 +1226,15 @@ jobs:
           [System.IO.File]::WriteAllText($assertPath, (($assertBlob -join "`n") + "`n"))
           & $assertPath -TrustedRoot $env:SQUAD_WATCH_TRUSTED_ROOT -ExpectedSha $env:SQUAD_WATCH_TRUSTED_SHA
           & (Join-Path $env:SQUAD_WATCH_TRUSTED_ROOT 'squad-src/.github/skills/squad/scripts/Invoke-SquadWatchMarkedBody.ps1')
+
+      - name: Upload publication diagnostics
+        if: failure() && steps.stage.outcome == 'failure'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: squad-watch-diagnostics-${{ github.run_id }}
+          path: ${{ runner.temp }}/squad-watch-publication.json
+          if-no-files-found: ignore
+          retention-days: 1
 
       - name: Upload encoded questions
         if: steps.stage.outputs.publishSourceComment == 'true'
