@@ -1,0 +1,200 @@
+<!-- Ported from squad-src/.github/instructions/squad/squad-autopilot.instructions.md by scripts/Build-SquadPlugin.ps1. Source of truth lives in hve-squad; do not hand-edit here. -->
+
+
+# Squad Autopilot Conventions
+
+These conventions define `mode=autopilot`: a full delivery pipeline the Squad Coordinator runs end-to-end on the user's behalf. Autopilot sequences the squad's normal roles — research, then planning, then implementation, then review — without pausing for a human at every stage. It pauses **only** at the two places that matter: any impactful or irreversible action, and the final outcome.
+
+Autopilot exists so the squad earns its keep. If a human had to approve every intermediate step, there would be no reason to run a squad over the individual HVE Core agents. Autopilot delegates the *flow* to the coordinator while keeping the *consequential decisions* with the human.
+
+## Relationship to the Other Modes
+
+The squad has three operating modes. They are selected per turn through the `/squad` prompt's `mode` input.
+
+| Mode                     | Opt-in              | Who approves what                                                                                                  |
+|--------------------------|---------------------|-------------------------------------------------------------------------------------------------------------------|
+| Interactive (default)    | no `mode` flag      | The human approves **each stage** (research, plan, implement, review). A notification fires at every stage gate.    |
+| `mode=autonomous`        | `mode=autonomous`   | A narrow validator loop: the council re-validates a single implementer output (max 2 cycles). See `skills/squad/references/rules/squad-autonomous.md`. |
+| `mode=autopilot`         | `mode=autopilot`    | The human approves **only** impactful actions and the **final outcome**. Everything in between runs autonomously.   |
+
+Autopilot is the higher-level orchestration; `mode=autonomous` is one component it reuses at the implementation stage. Setting `mode=autopilot` does not require also setting `mode=autonomous`.
+
+## Opt-In Surface
+
+The single opt-in is the `/squad` prompt input `mode=autopilot`. When the input is present:
+
+* The coordinator runs the Pipeline Contract below across the matched work instead of the normal single-pattern, single-turn classification.
+* The coordinator records the opt-in through the Squad Scribe so the autopilot-run history file (see History Entries) carries the per-run opt-in evidence.
+
+When the input is absent, the coordinator runs the normal interactive per-turn protocol from `.github/agents/squad/squad-coordinator.agent.md`, where each routed stage is gated by its routing autonomy tier.
+
+## Pipeline Contract
+
+Resolve each work role's saved connector default per the skill's
+`references/connector-role-modes.md`; do not require an `execution=` flag.
+
+Autopilot runs the squad's roles as an ordered pipeline. Each stage dispatches the roles that own it (resolved through `team.md`), waits for their findings, runs and verifies its ordinary handoff, and advances to the next stage without a human turn — except where a Human Gate (below) fires.
+
+**Precondition — the squad must be built first.** Before the Research stage runs, a confirmed squad must exist: `.copilot-tracking/squad/team.md` and `routing.md` are present. When they are missing, the coordinator runs Init Mode (propose → confirm → create) from `.github/agents/squad/squad-coordinator.agent.md` to completion — including the user's profile confirmation — and only then enters the pipeline. Autopilot never auto-seeds the roster or starts Research without a built squad; the opt-in sequences the work, it does not waive the build.
+
+0. **Pre-work gates.** Two gates guard the front of the pipeline. They fire on inverse triggers, so at most one of them does real work on any given run.
+   * **0a — Discovery gate (opt-in, `product` and `full` only).** When the active roster is `product` or `full`, the run's work is grounded in **no** requirement or input artifact, and the request states a goal rather than a settled task, offer the discovery gate per `skills/squad/references/rules/squad-discovery-gate.md` **before entering the pipeline** — at the same turn edge as the squad build and the profile confirmation, never mid-pipeline. When the user supplies a `discovery=` input, run that depth without asking. An accepted session dispatches the depth's roles, which interview the user, writes a brief through `analyst`, and records a `## Discovery Verdict` through the validated verdict writer; the brief then becomes the run's grounding input, so stage 0b is no longer a no-op. A declined session records a `Depth: skip` verdict and leaves this stage a no-op. In every other profile the stage is a silent no-op rather than an escalation. The gate is **never available on an unattended path** (Watch Mode or any headless run), where the triggering payload becomes the input artifact for stage 0b instead.
+   * **0b — Intake gate (conditional).** When the run's work is grounded in requirement or input artifacts (a PRD, BRD, specification, requirements document, user story, design document, transcript, or a user-referenced input file), run the intake gate per `skills/squad/references/rules/squad-intake-gate.md` before Research: dispatch `intake-validator`, record the `## Intake Readiness Verdict` through the validated verdict writer, and on `Not-Ready` run the bounded auto-remediation loop (dispatch `analyst` or `product-owner`, re-validate, cap two cycles). A `Not-Ready` the loop cannot clear fires a Human Gate (Risk Gate). When no input artifact grounds the run, this stage is a no-op and the pipeline starts at Research. When inputs ground the run but the roster lacks `intake-validator` (profiles other than `product` and `full`), the coordinator escalates to add the role before advancing.
+1. **Research.** Dispatch the `researcher` role (and any parallel-eligible read-only roles the request matches) at `auto` tier. Gather findings; no human gate.
+2. **Plan.** Dispatch the `lead` role to produce the implementation plan. In autopilot the plan does not pause for per-step human confirmation; the coordinator advances once the plan is recorded through the validated handoff writer (or cold fallback). The plan also enumerates the requested deliverables and the **artifact-owning role** that owns each, in dependency order; that deliverable list becomes the Implement stage's execution script and is what decides the stage's shape.
+3. **Pre-implementation council.** When the work crosses two or more council-member domains (architecture, security, cost, product-fit) or raises any RAI concern, run the council per `skills/squad/references/rules/squad-council.md` before any implementation dispatch. Select the task-fit roles from the roster without asking and record the selection, including the lenses not proposed, through the validated handoff/verdict writers; this adds no Human Gate. Stop only when a needed role is absent from the roster, and offer it as a council extension at that stop; a decline records a `## Council Waiver` that permits the implementation stage. A `Stop` verdict fires a Human Gate. A `Go` or `Go-With-Conditions` verdict permits the implementation stage with the conditions attached as inputs.
+4. **Implement.** The Implement stage takes one of two shapes, selected by what the Plan stage produced:
+   * **Single build (default).** Dispatch the `developer` role. The implementation stage runs the bounded validator loop from `skills/squad/references/rules/squad-autonomous.md` (council re-validation, max two cycles, divergence detection) so the build self-validates before review. Any action the implementer cannot self-validate — and every impactful action — fires a Human Gate rather than proceeding. This is the shape when the plan's deliverable list names at most one Implement-stage candidate.
+   * **Deliverable fan-out.** When the plan's deliverable list names two or more artifact-owning roles on the team, dispatch each owning specialist in dependency order instead of a single `developer`, each followed by a verified ordinary handoff. See *Deliverable Fan-Out* below.
+5. **Review.** Dispatch the `tester` role at `auto` tier against the implemented changes. Close review with a verified ordinary handoff.
+6. **Final-outcome validation.** Autopilot never auto-releases. After review, the coordinator compiles the run outcome and fires a final-outcome notification to the registered user per `skills/squad/references/rules/squad-notifications.md`, then waits for human validation before any release-tier action.
+
+The coordinator advances from prior findings and persists each stage through the validated writers or cold Scribe. Ordinary handoffs in every routing mode run directly and synchronously with `Write-SquadHandoff.ps1 -Quiet`; Council, Intake Readiness, and Discovery Verdicts follow with `Write-SquadVerdict.ps1 -Quiet`, without Scribe startup. Verify status/counts, Decision Refs, and stage/history proof; surface warnings, never auto-bypass failures. Unsupported verdicts plus cold summaries/notifications retain full Scribe loading; serialize all writers with Cost Preflight per root.
+
+**One validated hand-off per stage — never one per pipeline.** Dispatch the stage's role and record its findings with the ordinary writer or cold Scribe. Only for a cold Scribe dispatch, the next stage's dispatch must share a parallel tool-call block with that hand-off whenever the Enablement Predicate holds and no barrier applies (see *Scribe Hand-off Pipelining* in `references/operating-procedure.md`). Ordinary handoffs complete synchronously first. Every stage counts as run only after its artifact, history, and consumption are read back and verified. Never merge stages into an end-of-run handoff. Under autopilot `state.json` advances per stage, so its `turn` counts stages rather than human turns.
+
+## Deliverable Fan-Out (Multi-Artifact Runs)
+
+Much of the squad's work delivers its value through several distinct, specialist-owned artifacts rather than a single code or infrastructure build. A `product` run spans requirements, a roadmap and backlog, an experiment, written documentation, and a stakeholder deck; an `azure` run spans a target architecture, an IaC scaffold, an as-built record, and a migration sequence; a `security` run spans a security model, a supply-chain posture, an RAI assessment, and a privacy DPIA. Each is owned by a different **artifact-owning role** — a roster row whose `Deliverable Root` names a real path; defined in `skills/squad/references/rules/squad-roster.md`. The fixed single-`developer` Implement stage cannot produce these, so autopilot fans the Implement stage out across the owning specialists.
+
+**When fan-out engages.** The coordinator selects fan-out when the Plan stage's deliverable list names **two or more artifact-owning roles that are present on the team**, counting every such role except `researcher`, `lead`, and `tester`, which own the Research, Plan, and Review stages instead. The test is read off `team.md`, not off the profile name, so a consumer who edited a `Deliverable Root` or hired an extra specialist is judged on the roster they actually have. A plan naming one candidate stays the unchanged single-`developer` shape, which is the ordinary case for `default`. Fan-out never changes the Research, Plan, council, Review, or Final-outcome stages — only the Implement stage's internal shape.
+
+**Eligibility used to be a fixed list of seven `product` role names**, which classified every other profile as a single build no matter what its roster owned. A live `azure` run produced five specialist artifacts under that classification, improvised a fan-out the pipeline does not define, and left no `history/<agent>.md` for any of them — because the per-dispatch recording rule below belongs to a path that run was never on.
+
+**How fan-out runs.** The Implement stage becomes an ordered sub-pipeline driven by the plan's deliverable list:
+
+1. For each deliverable, in dependency order, the coordinator resolves the owning role to a concrete agent through the roster's *Resolving a Role to an Agent* rules and dispatches it via `runSubagent`/`task`, passing the prior deliverables as context.
+2. Deliverables that do not depend on each other are dispatched in the same parallel batch; dependent deliverables run sequentially. A typical `product` order is: requirements (`analyst`) → then the roadmap and backlog (`product-owner`) and the experiment (`experimenter`) in parallel → then documentation (`technical-writer`) → then the deck (`presenter`). Design research (`designer`) runs alongside requirements when the request needs it. A typical `azure` order is: target architecture (`azure-architect`) → IaC scaffold (`iac-author`) → then the migration sequence (`modernizer`) and the as-built record (`asbuilt-author`).
+3. Each specialist dispatch is a first-class recorded stage: the ordinary writer appends its `history/<agent>.md` entry and consumption block; only unsupported exit 2 uses cold Scribe. The proof-of-dispatch rule from `skills/squad/references/rules/squad-state.md` applies per deliverable — a deliverable with no history entry did not run, and the run is not complete until every planned deliverable has one or the coordinator has escalated.
+4. The deck deliverable is built by the `powerpoint` skill pipeline and nothing else. A `presenter` dispatch that returns a deck produced by a hand-written script did not satisfy the deliverable; see `skills/squad/references/rules/pptx-brand-template.md`.
+5. The Human Gates are unchanged. An owning specialist that reaches an impactful action fires the Impactful-Action Gate; a `Risk: High` or `Stop` finding fires the Risk Gate. Document and design artifacts that only write under `.copilot-tracking/` and `docs/` are not impactful and flow automatically. A `product-owner` deliverable is one of those artifacts: it plans a backlog and stops at a finalized handoff. Writing that backlog into a live Azure DevOps or Jira project is a separate, gated step owned by the opt-in `backlog-executor` role, which most rosters do not carry — see the *Tracker-Write Gate* in `skills/squad/references/rules/squad-routing.md`.
+
+**Dispatch discipline still holds.** Fan-out changes which agents the Implement stage dispatches, not the rule that the coordinator dispatches them. The coordinator never authors a deliverable itself; when an owning agent is not installed it stops and escalates per *Dispatch Discipline* rather than substituting its own output.
+
+## Artifact Gates (Evidence Required)
+
+Each pipeline stage's artifact existing on disk gates dispatching the next stage; the stage itself counts as run only once its `history/<agent>.md` entry also lands (see *Scribe Hand-off Pipelining* in `references/operating-procedure.md`). The coordinator confirms both before treating the stage as complete, and the pipeline cannot skip a stage with neither. This is what makes the methodology auditable rather than assumed.
+
+Artifact paths below are the **single-squad** paths. In a federation they are rebased under the sub-squad's `squadRoot` per *Deliverable Roots* in `skills/squad/references/rules/squad-roster.md` — a `product` sub-squad's plan lands at `.copilot-tracking/squad/members/product/plans/`, not at the repository-root tracking path. A sub-squad artifact written to the repository-root path has escaped its root and the stage does not count.
+
+| Stage     | Mapped role(s)                                                                  | Must produce                              | Cannot start until                                     |
+|-----------|--------------------------------------------------------------------------------|-------------------------------------------|--------------------------------------------------------|
+| discovery | `analyst` (+`designer`, `challenger`, `experimenter` by depth)                  | a `## Discovery Verdict` in `decisions.md`, plus a brief in the `analyst` root on any depth other than `skip` | the roster is `product` or `full` **and** the user accepted the offer or supplied `discovery=` |
+| intake    | `intake-validator` (+`analyst`/`product-owner` on remediation)                 | a `## Intake Readiness Verdict` in `decisions.md` (only when inputs ground the run) | requirement or input artifacts are in scope |
+| research  | `researcher`                                                                   | `.copilot-tracking/research/<date>/*.md`  | request classified                                     |
+| plan      | `lead`                                                                          | `.copilot-tracking/plans/*.md`            | a research artifact exists                             |
+| council   | task-fit subset of `architect`, `security`, `cost-manager`, `product-owner`, `rai` from the roster | a `## Council Verdict` (or the user's `## Council Waiver`) in `decisions.md` | a plan artifact exists |
+| implement | `developer`                                                                    | `.copilot-tracking/changes/*`             | a plan artifact and a non-`Stop` Council Verdict or a Council Waiver exist |
+| review    | `tester`                                                                       | a review record + `history/<agent>.md`    | implementation changes exist                           |
+
+When a required artifact is missing, the coordinator dispatches the owning agent to produce it — it never authors the artifact itself and never advances on assumed completion. When the owning agent is not installed, the coordinator stops and escalates per *Dispatch Discipline* in `.github/agents/squad/squad-coordinator.agent.md`.
+
+For a **deliverable fan-out** run (see above), the single `implement` row expands into one sub-row per planned deliverable: each owning specialist must produce its artifact at that role's `Deliverable Root` (from `team.md`, per *Deliverable Roots* in `skills/squad/references/rules/squad-roster.md`) and its own `history/<agent>.md` entry before the Review stage runs. The Review stage does not begin until every planned deliverable has a recorded artifact or the coordinator has escalated the gap.
+
+## Per-Stage Advance Checklist (Run After Every Stage)
+
+Stage N's required artifact from the *Artifact Gates* table above, at the owning role's `Deliverable Root`, gates dispatching stage N+1. Stage N's `history/<agent>.md` entry with its consumption block additionally gates counting stage N complete. When the artifact is absent, re-dispatch the owning role or fire the Risk Gate — never advance on assumed completion. When the artifact exists but history does not, run the missing ordinary handoff; re-send Scribe only when that stage used cold fallback. Never re-run the stage that produced the artifact. State the confirmed evidence (the artifact path and the history entry) when reporting the stage, and quote only paths this run actually enumerated. For a deliverable fan-out run, apply this check per deliverable before the Review stage begins. This restates the Artifact Gates as a mechanical per-stage loop so a lighter model cannot skip a stage by narrating it as done.
+
+**Count the history entries.** At the end of the run, the number of `history/<agent>.md` entries must be at least the number of stages plus deliverables the run claims to have executed. A run that produced polished deliverables but left one or two history files did not dispatch its cast — it was authored inline, which is the *Dispatch Discipline* violation the pipeline exists to prevent. Report that as a failed run rather than a completed one.
+
+**The run summary reports the count whether or not anyone reads it.** The Scribe fills the `Dispatch Record` column of `history/autopilot-run-<id>.md` from `history/` rather than from the stage narrative, and any stage with no record forces the summary's `Outcome` to `incomplete (<n> stage(s) without a dispatch record)`. The coordinator may not report a run as completed over an `incomplete` summary. This is the check that survives a coordinator which skipped every other one.
+
+## Human Gates
+
+Human Gates are the only points where autopilot stops and hands control to the human. They are deliberately narrow. A gate stops the pipeline, fires a notification per `skills/squad/references/rules/squad-notifications.md`, and waits for explicit human approval through the configured approval channel before the gated action proceeds.
+
+When the approval channel is `github-issue`, the gate is approvable **remotely from a phone**: the human receives a GitHub mobile push and replies with `/approve`, `/changes: <note>`, or `/stop` from the issue. This is what lets an unattended run on a VM advance through its gates while the human is away from the machine. The squad persists the pending gate in `state.json` and proceeds only when an authorized approval returns — never on a timeout.
+
+Two gate classes exist.
+
+### Impactful-Action Gate
+
+Before performing any impactful or irreversible action, autopilot stops and requires explicit human approval for that specific action. This reuses the **Mandatory Escalation Triggers** from `skills/squad/references/rules/squad-autonomous.md`. Gated actions include, at minimum:
+
+* Any deployment to Azure or any other environment (production or otherwise) the project has not marked safe.
+* Any `git push`, and any force-push to any branch.
+* Any pull-request merge.
+* Schema migrations, data deletions, and other destructive data operations.
+* Destructive infrastructure operations such as `terraform apply -auto-approve` or `az` deletes.
+* Secret or credential rotation.
+* Any side effect the user has marked irreversible for the project.
+
+The gate is per-action: autopilot may complete all non-impactful work and stop precisely at the impactful step, presenting the human with exactly what is about to happen and why.
+
+### Risk Gate
+
+Autopilot also stops, regardless of pipeline stage, on any of these — identical to the autonomous loop's mandatory triggers so the two modes never disagree:
+
+* Any `Stop` verdict from the council or any individual council role.
+* Any `Risk: High` finding from `security`, `cost-manager`, or `rai`.
+* Any cost-impacting move the `cost-manager` flags at `confirm` tier.
+* Any compliance violation flagged by `rai` or `security` (regulated-data handling, PII leakage, GDPR/HIPAA scope).
+* Divergence: two consecutive validator cycles producing different verdicts on the same issue.
+* A configured Cost Preflight returns `over-ceiling` or `cannot-confirm` before the next dispatch round. A valid persisted `approved-over-ceiling` round clears only this cost trigger.
+* An intake-readiness `Not-Ready` verdict the bounded auto-remediation loop could not clear (see `skills/squad/references/rules/squad-intake-gate.md`).
+
+A single qualifying trigger is enough to fire the gate, no matter how many other findings are clean.
+
+### Cost Preflight in Autopilot
+
+Before research and before every later dispatch round, apply the *Cost Preflight Procedure* in the `squad` skill's `references/gates-and-modes.md`. Each round prices only the actual next dispatch wave plus the coordinator lookup and is recalculated after the previous wave.
+
+Only a persisted `within-ceiling` or valid `approved-over-ceiling` round permits its named next slots. `over-ceiling` offers stop or bounded proceed; explicit proceed runs sequential units until exact used plus pending reservations reaches the ceiling. `cannot-confirm` remains non-admitting, and a changed or expanded next wave requires a new approval.
+
+A Cost Preflight round is never issued in the same parallel block as a Scribe hand-off. A configured cost ceiling no longer disables Scribe hand-off pipelining: the round admitting stage N+1 runs between blocks and keeps stage N's admitted reservation pending until complete native usage records replace it, per the Enablement Predicate in `references/gates-and-modes.md`. An `approved-over-ceiling` round still runs one sequential unit at a time.
+
+## What Autopilot Does Not Do
+
+* It does not stop for human confirmation at every stage. Research, planning, implementation, and review flow automatically between gates.
+* It does not perform any impactful action without explicit human approval at the Impactful-Action Gate.
+* It does not auto-release: the final outcome always returns to the human for validation before deploy, push, or merge.
+* It does not downgrade a `confirm`-tier action to `auto`. Autopilot changes *who sequences the work*, not *which actions need a human*.
+
+## Final-Outcome Validation
+
+When the pipeline reaches Final-outcome validation:
+
+1. The coordinator compiles a concise outcome: what the squad built, the review result, any conditions left open, and the impactful actions awaiting approval (if any). For any council-gated work it includes the Council Verdict's **Decision Ref** (per `skills/squad/references/rules/squad-council.md`) so the human can open the exact verdict section rather than scanning `decisions.md`.
+2. The coordinator fires a `final-outcome` notification to the registered approval channel through `skills/squad/references/rules/squad-notifications.md`. When the channel is `github-issue`, the human can validate the outcome from a phone. When no channel is configured, or no transport is available, the notification degrades to an in-chat summary and is still logged.
+3. The coordinator waits for human validation. The human may approve (releasing the gated impactful actions one by one), request changes (re-entering the pipeline at the appropriate stage), or stop.
+
+## History Entries
+
+Every autopilot run produces history the Squad Scribe writes (the single-writer rule from `skills/squad/references/rules/squad-state.md` still holds):
+
+1. **Per-agent history.** Each dispatched role adds its normal entry to `.copilot-tracking/squad/history/<agent>.md`, plus the autopilot run id and stage so the run is reconstructable.
+2. **Autopilot-run summary.** The coordinator hands the Scribe one summary payload per run. The Scribe writes it to `.copilot-tracking/squad/history/autopilot-run-<id>.md`, where `<id>` is the run topic-id slug. The summary uses this shape:
+
+```markdown
+---
+description: "Autopilot-run summary for topic <id>"
+---
+
+# Autopilot Run: <id>
+
+* Topic: <one-line summary>
+* Opt-In: mode=autopilot
+* Cost Ceiling: <value or unset>
+* Outcome: completed (awaiting final validation) | escalated (<reason>) | stopped (<reason>)
+
+## Stages
+
+| Stage  | Role(s)      | Result                          | Gate Fired                    |
+|--------|--------------|---------------------------------|-------------------------------|
+| research | <agent(s)> | <one-line outcome>              | none                          |
+| plan     | <agent>    | <one-line outcome>              | none                          |
+| council  | <roles>    | <verdict-or-skipped>            | <none or Risk Gate reason>    |
+| implement| <agent>    | <one-line outcome>              | <none or Impactful-Action>    |
+| review   | <agent>    | <one-line outcome>              | none                          |
+| final    | coordinator| notified <recipient-or-in-chat> | Final-Outcome Validation      |
+
+## Gates and Approvals
+
+| Timestamp | Gate                 | Awaiting / Resolved By        | Notes                  |
+|-----------|----------------------|-------------------------------|------------------------|
+| <ts>      | <Impactful / Risk / Final> | <human decision or pending> | <one-line>             |
+```
+
+In a **deliverable fan-out** run, the single `implement` row expands into one row per deliverable — labelled `implement: <deliverable>` with its owning agent — so the run's per-specialist outcomes and any gates are all visible in the table.
+
+The autopilot-run file is append-only by topic-id; one file per run topic. Re-running the same topic appends a new dated `## Stages` section rather than overwriting.

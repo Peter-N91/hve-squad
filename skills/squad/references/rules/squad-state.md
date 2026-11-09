@@ -1,0 +1,247 @@
+<!-- Ported from squad-src/.github/instructions/squad/squad-state.instructions.md by scripts/Build-SquadPlugin.ps1. Source of truth lives in hve-squad; do not hand-edit here. -->
+
+
+# Squad State Conventions
+
+These conventions define where squad state lives, who may change it, and how the squad's coordination tools map onto concrete HVE Core mechanisms. The coordinator reads this layout; supported ordinary writes use the validated deterministic writer directly or through Scribe, and cold writes remain Scribe-owned. Existing Markdown/state storage is unchanged.
+
+State is per-project and runtime-created. It is never packaged with the squad source — only the coordinator produces it under `.copilot-tracking/squad/` when a project first runs the squad.
+
+## Squad Root (parameterized state root)
+
+Every state path below is relative to a **squad root**. The root is parameterized so the same layout can serve either a single squad or a sub-squad within a federation:
+
+* The default squad root is `.copilot-tracking/squad/`. When no root is supplied, the paths in this file are literal and behavior is exactly today's single-squad behavior.
+* In a **federation** (opt-in), each sub-squad roots at `.copilot-tracking/squad/members/<name>/`, and every path in this file is read as `<squadRoot>/...`. The Squad Coordinator and Squad Scribe accept an optional `squadRoot`; when omitted, the default preserves single-squad behavior.
+
+The federation layout, the registry, meta-routing, detection precedence (`federation.md` → federation, else `team.md` → plain squad, else Init), and the two-level single-writer rule are defined in `skills/squad/references/rules/squad-federation.md`. The remainder of this file describes the state tree under a single squad root; it applies unchanged to each sub-squad root in a federation.
+
+## State Layout
+
+All squad state lives under the squad root (`.copilot-tracking/squad/` by default; `.copilot-tracking/squad/members/<name>/` for a federation sub-squad):
+
+| Path                  | Purpose                                                                    | Write Semantics      |
+|-----------------------|----------------------------------------------------------------------------|----------------------|
+| `team.md`             | Roster, routing mode, agents, and active-policy Model cells                 | Replace via Scribe; selected Model-cell refresh via validated script |
+| `routing.md`          | Request-pattern routing table (see routing conventions)                    | Replace via scribe   |
+| `decisions.md`        | Chronological log of squad decisions and their rationale                   | Append-only via validated writer or Scribe; Cost Preflight via coordinator |
+| `notifications.md`    | Chronological log of notifications (pings) fired and their delivery channel | Append-only          |
+| `history/<agent>.md`  | Per-agent dispatch history: requests handled, findings, outcomes           | Append-only          |
+| `history/autopilot-run-<id>.md` | Per-run autopilot pipeline summary: stages, gates, approvals     | Append-only by id    |
+| `state.json`          | Machine-readable squad status: current turn, active roles, mode, notification contact, open escalations | Replace via validated writer or Scribe; Cost Preflight compare-and-swap via coordinator |
+| `consumption.md`      | Aggregated member/model/credit ledger; carries the cost comparison line    | Replace via validated writer or Scribe |
+| `consumption-sessions.json` | Optional exact-native per-session journal used to rebuild cumulative exact totals | Replace atomically by the ledger writer; created lazily |
+| `consumption-rates.md`| Per-model token-rate table (USD per 1M) plus the comparison methodology    | Replace via seeder or Scribe |
+
+* `decisions.md`, `notifications.md`, and the `history/<agent>.md` files are **append-only**. New entries are added to the end; prior entries are never edited or removed.
+* Init seeds only `history/Squad Scribe.md` with initialization overhead. Each role's `history/<agent>.md` is created with the dispatch it records, never pre-created as proof of a stage that did not run.
+* `state.json` mirrors the HVE Core `state.json` precedent: a small, machine-readable status document the coordinator overwrites as the squad advances. It carries the `notify` object (the captured notification contact) and the current `mode`.
+
+### state.json Shape
+
+The Scribe seeds `state.json`; the validated ordinary writer or cold Scribe advances it. In every routing mode, the coordinator may synchronously run `Write-SquadHandoff.ps1 -Quiet` using the minimal JSON in `references/economy-scribe.md`, without loading cold schemas or dispatching Scribe. Council, Intake Readiness, and Discovery Verdicts use `Write-SquadVerdict.ps1 -Quiet` after that handoff; it shares the same per-root lock, appends only the validated verdict to `decisions.md`, and works unchanged at a federation member root. Hash-bound Model-cell and additive-roster writers change only their sealed configuration/decision files, never state or accounting. Serialize every writer with Cost Preflight per root. Quiet success requires one valid status/count/check object; warnings stay visible on stderr. Failure never permits unvalidated hand edits or ordinary ledger arithmetic. Before a child dispatch the coordinator may compare-and-swap only `currentRun.costPreflight`, append its matching decision and, for legacy state only, bump `schemaVersion` from `1.3` to `1.4`.
+
+```json
+{
+  "schemaVersion": "1.4",
+  "updated": "",
+  "turn": 0,
+  "mode": "interactive",
+  "activeRoles": [],
+  "openEscalations": [],
+  "currentRun": {
+    "sessionModel": "",
+    "modelOverrides": {},
+    "estCostUsd": 0,
+    "estCreditsTotal": 0,
+    "costPreflight": {
+      "runId": "",
+      "roundId": "",
+      "ceilingUsd": null,
+      "evaluatedSpendUsd": 0,
+      "remainingUsd": null,
+      "plannedDispatches": 0,
+      "projectedCostUsd": 0,
+      "reserveMultiplier": 3.0,
+      "admissionCostUsd": 0,
+      "confidence": "not-applicable",
+      "basis": "not-requested",
+      "decision": "not-requested",
+      "reason": "No cost ceiling configured."
+    }
+  },
+  "notify": {
+    "approvalChannel": "in-chat",
+    "enabled": false,
+    "email": "",
+    "github": {
+      "handle": "",
+      "repo": ""
+    }
+  }
+}
+```
+
+The `notify` object follows `skills/squad/references/rules/squad-notifications.md`: `approvalChannel` is `in-chat`, `github-issue`, or `webhook`; the `github` block is used only by the `github-issue` channel; and webhook URLs are never stored here. The `mode` field records the autonomy mode in effect for the current turn (`interactive`, `autonomous`, or `autopilot`). The `currentRun` object holds ledger totals plus the latest compact Cost Preflight decision; that decision's `evaluatedSpendUsd` is exact host usage plus pending reservations when its basis is `host-exact+estimated-reservation` (the older `host-observed+estimated-reservation` spelling remains readable). The exact next-wave rows and permitted dispatch set live in the matching `decisions.md` entry rather than as JSON scratch data.
+
+Cost-ceiling omission is stateful only inside one run. When the latest Cost Preflight `runId` matches the active run id, an omitted argument preserves its finite positive `ceilingUsd`. The literal `cost-ceiling=unset` replaces the compact object with the exact `not-requested` shape above while preserving `estCostUsd` and `estCreditsTotal`. A new run id with no supplied ceiling also starts from that `not-requested` shape; a ceiling never carries across run ids.
+
+In a federation, ordinary routing and targeted autopilot resolve this lifecycle independently at every selected `members/<name>/` root. The federation root keeps `not-requested`. Only untargeted federation autopilot owns an aggregate root lifecycle and uses the root `consumption-rates.md`; it does not forward that aggregate ceiling into child state.
+
+Read legacy schema `1.3` without `costPreflight` as an unset ceiling and the default `not-requested` object. On the next preflight or ordinary Scribe write, add the object, bump to `1.4`, and preserve all existing root, `notify`, `trigger`, model, override, and accumulated-total values.
+
+**`state.json` advances on every turn that writes anything, not only at Init.** `updated`, `turn`, `mode`, `activeRoles`, and `openEscalations` all describe the turn just taken, so the Scribe moves them forward on the same hand-off that appends the decision and history entries — the three writes belong to one turn and a status document left behind is worse than an absent one, because it reads as current. Because the file has replace semantics, the advance is a read-modify-write: `schemaVersion`, `notify`, `trigger`, `currentRun.sessionModel`, and `currentRun.modelOverrides` are carried forward rather than reset to their seed values. The symptom of a missed advance is a `decisions.md` several entries long beside a `state.json` still reading `turn: 0`. In a federation this applies at both levels independently — a routed turn advances the sub-squad's `state.json` under `members/<name>/` **and** the federation's own at the federation root.
+
+Watch Mode runs additionally carry an optional `trigger` object recording the event that started the run (`source`, `ref`, `eventId`, `actor`, `receivedAt`, `runId`). It is additive and omitted for interactive, autonomous, and autopilot runs that were not event-triggered; see `skills/squad/references/rules/squad-watch-mode.md`.
+
+## Consumption Tracking
+
+Squad records model cost and AI-credit consumption for every dispatch. GitHub Copilot UBB is token-metered from 2026-06-01, priced per model in USD per 1M tokens; 1 AI credit is $0.01. History blocks are deterministic estimates. Complete native session records replace ledger/state estimates only after role attribution and nano-AIU reconciliation; otherwise the estimator stays visible. The usage-metrics REST aggregate is fallback calibration only.
+
+The Scribe records consumption in three places:
+
+* A per-dispatch consumption block appended to `history/<agent>.md` (append-only), one block per dispatch, written as an `#### Consumption` heading followed by a fenced `json` block, with fields in this order: `model`, `model_source`, `priced_as`, `model_tier`, `internal_turns`, `input_tokens`, `cached_tokens`, `cache_write_tokens`, `output_tokens`, `basis`. Numeric fields are bare numbers. The container is fixed rather than free-form because these blocks are the source the aggregated ledger is rebuilt from. **The block records consumption, not cost**: rates and money live in the two files below and nowhere else, and `priced_as` is what carries the pricing decision forward to the ledger.
+* The aggregated `consumption.md` ledger (replace via writer) mirrors roster order in **Attribution** and **Usage & Cost** tables, adds `orchestration`, totals the run, and carries Cost Comparison. Basis is `exact-native` only when complete records reconcile; otherwise it keeps the history-derived estimate. **The file replaces, but rows accumulate**: fallback rewrites sum every run block in `history/*.md`, never only the current turn. Exact rewrites sum every accepted session snapshot in optional `consumption-sessions.json`, upserting the active session by native session id and validating that cached history identities remain an ordered prefix. When no journal exists yet, `-SessionLog auto` may bootstrap it from the matching repository sessions; the active session alone has a bounded open-tail allowance for the host tool-completion event, and the next write refreshes earlier snapshots from their logs before appending. Native usage is authoritative and history is bookkeeping: a gap in either is a `NOTE:` in the Derivation, never an estimate. This is why a new Copilot session adds to prior exact totals instead of resetting them, and why reconciliation counts ledger rows against history rather than checking only that the ledger exists.
+* The `consumption-rates.md` table (replace via scribe; seeded from the `consumption-rates-template.md` skill reference, cold — read only at Init or a Step 7.1 reseed), the single maintainable source of per-model input, cached, cache-write, and output rates in USD per 1M tokens, plus the tier-fallback rates, the dispatch-size estimator, and the calibration block.
+
+Model attribution — which model each block reports and how it is resolved — is governed by [Model Attribution](#model-attribution) below.
+
+### Why a dispatch is not one model call
+
+A dispatched agent runs an internal tool loop, and every internal turn resends the accumulated context. Cost therefore scales with `internal_turns × average_context`, not with a single input-and-output pair, and the accumulated context is largely billed at the cheaper cached rate. Pricing a dispatch as one call is the single largest source of undercounting in this ledger, so the estimator in `consumption-rates.md` models the loop explicitly and every block records the `internal_turns` it assumed.
+
+**Orchestration counts** too: the coordinator's own turns and the Scribe's writes get their own ledger row, because they are real consumption that no dispatch block covers.
+
+The Scribe computes the cost and credit estimates **once per ledger row**, from that role's summed token columns and the rates of the row `priced_as` names in `consumption-rates.md`. No history block carries a rate or a cost:
+
+```text
+raw_cost_usd = ( input_tokens       × input_rate
+               + cached_tokens      × cached_rate
+               + cache_write_tokens × cache_write_rate
+               + output_tokens      × output_rate ) / 1e6
+est_cost_usd = raw_cost_usd × calibration_factor
+est_credits  = est_cost_usd / 0.01
+```
+
+### Calibration
+
+Estimates are fallback and future-reservation inputs, not completed-work authority when native attribution is available. `consumption-rates.md` retains a `calibration_factor` — the running mean of legacy `observed_credits / estimated_credits`, clamped to 0.25-10.0 — only for that fallback. Exact-native ledger rows and ceiling consumption are never calibrated or scaled. Until a fallback estimate has eligible reconciliation evidence, the factor stays at 1.00 and the fallback carries an "uncalibrated" note.
+
+Every numeric output carries an "estimated, not billed" disclaimer. These values support run planning and cost comparison, not invoicing.
+
+## Model Attribution
+
+The `model` field records **what actually ran**. It is resolved, never guessed. A ledger that reports a model the operator did not choose is worse than one that reports nothing, because it invites cost decisions based on a fiction.
+
+### Resolution ladder
+
+Resolve every dispatch's model by walking this ladder and stopping at the first hit. Record which rung produced the answer in `model_source`:
+
+1. **Dispatch-reported** → `model_source: dispatch-reported`. The host named the model the dispatch actually ran on. Two forms count: the Copilot CLI prints it on the dispatch line as `AgentName(model-id)`, and an agent may state it in its own response. This is the strongest rung because it is an observation of what ran rather than a prediction of what should have run, and it is the only rung that detects a silent fallback.
+2. **Agent-pinned** → `model_source: agent-pinned`. The dispatched agent's file declares a `model:` string and **both hosts honor it under a fixed session model** — a pin outranks the session model, including a headless `--model`. Read the agent file rather than guessing. Treat this as a prediction, not an observation, because two conditions void it: an entitlement gap makes the host substitute the session model (silently, on the dispatch path), and an `auto` session lets the router override the pin outright. A row resolved here is trustworthy only while neither applies, which is precisely why rung 1 outranks it.
+3. **Operator declaration** → `model_source: operator-declared`. The user volunteered a model for this run or this role, recorded in `state.json` `currentRun.modelOverrides`. Never prompted for; recorded only when offered. It sits below the pin because a declaration states an intent the host does not enforce: an agent that pins a model runs that model regardless of what was declared for it.
+4. **Session model** → `model_source: session-inherited`, or `cli-pinned` when the run is headless (a Watch Mode run, identifiable by the `trigger` object in `state.json`) and the model came from `--model`. This rung answers only for agents that pin nothing. `--model` sets the session model; it does not override a pin.
+5. **Unresolved** → `model_source: unresolved`. None of the above is knowable, so `model` is the literal `unknown`.
+
+Every rung is an observation or a file read — none requires asking the user, and none is a guess. Rung 5 should be vanishingly rare: reaching it means the dispatch reported nothing, the agent file was not read, and the session model was never recorded.
+
+The host reports what it ran; prefer that over inference. Measured against the Copilot CLI: a valid pin beats `--model`; an unresolvable pin on a directly invoked agent warns and falls back to the session model; an unresolvable pin on a *dispatched* agent falls back silently. A ledger built on frontmatter alone will therefore look correct and be wrong on exactly the runs where an account lacks the pinned model. Capturing the dispatch line is what closes that gap.
+
+### Never invent a model name
+
+* `model` is either a model the ladder resolved or the literal `unknown`. It is **never** derived from a tier, a rate row, a roster preference, or a plausible-sounding guess.
+* **`unresolved` is earned, not assumed.** Recording it requires that the dispatch reported no model, the agent's file was opened and carried no `model:` frontmatter, *and* `state.json` held no usable `sessionModel`. Every rung is an observation or a file read, so a ledger where every row says `unresolved` while agents plainly pin models on disk means the ladder was never walked — a defect, not a gap.
+* Never copy the tier-fallback table's "priced as" model into `model`. That table names a model for *pricing* purposes only; writing it into the attribution field is the fabrication this rule exists to prevent.
+* `priced_as` records the rate row actually used. It equals `model` whenever the resolved model has its own rate row, and differs only when `model` is `unknown` (priced at the tier fallback) or when the resolved model is missing from the rate table.
+* When `model` is `unknown`, the ledger row and the run summary say so plainly rather than presenting a confident-looking name.
+
+### A tier is not a model
+
+`team.md`'s `Model Tier` is a routing preference. It never determines what ran and never appears in `model`. Two consequences follow, and both are common sources of surprise:
+
+* An agent that pins `model:` in its frontmatter does **not** run on the operator's selected model, provided that selection is a fixed one. The Squad Scribe, Squad Reviewer, Squad Cost Manager, and Squad Technical Writer pin a lightweight model by design, so an operator running a high-capability model everywhere will still see those roles attributed to the pinned lightweight model. That is correct, not a bug — `model_source: agent-pinned` is what makes it legible. This holds in a headless Watch Mode run too: `--model` sets the session model for agents that pin nothing, and the pinned roles keep their pin. It does **not** hold under `auto`, where the router overrides the pin.
+* An agent that pins nothing runs on the operator's model. If the operator selected a high-capability model, that dispatch must be priced at that model's rates, not at its roster tier's rates. Pricing an inherited high-capability dispatch at a mid-tier fallback is a direct undercount.
+
+### Recording the session model
+
+`state.json` `currentRun.sessionModel` is the single source of truth for rung 4, and it is captured **automatically, never by asking**. The coordinator runs *on* the session model, so it records the model it is itself running on — an observation about itself, not a fact it needs from the user. It re-reports on every turn, so a mid-run model switch is picked up without anyone announcing it. `currentRun.modelOverrides` optionally maps a role or agent name to a model the user volunteered; it is never prompted for.
+
+Adding a build question here would buy nothing: the answer is already in the coordinator's possession, and a squad that interrogates its operator about facts it can observe is a squad that gets skipped.
+
+**Normalize before recording.** A self-reported or dispatch-reported name is a display name and may not match a rate-table row exactly (`Claude Opus 5` versus `claude-opus-5`, or a version the table has not caught up with). Match case-insensitively, ignoring punctuation and a `(copilot)` suffix; when no exact row matches, fall to the nearest row in the same model family and note the substitution on the ledger. Record the reported name in `model` and the row actually charged in `priced_as`, so a stale rate table is visible rather than silently rounding attribution.
+
+**`auto` is a routing mode, not a model.** When the host is set to automatic model selection, record `sessionModel: auto` verbatim — never resolve it to a concrete model name, because under auto the host routes *per request*, so the model can differ between two dispatches in the same turn. A single run-level model is wrong by construction here.
+
+Auto changes which rungs can answer:
+
+* **Rung 2 cannot resolve under auto — measured.** The router overrides a frontmatter pin. A child pinned to `Claude Sonnet 5 (copilot)` ran on `gpt-5.6-luna` on repeated `--model auto` runs, while the same agent under a fixed session model ran on `claude-sonnet-5`. A pin is deterministic only under a fixed selection; under auto it is a preference the router may disregard.
+* Rung 4 cannot resolve. `auto` names no model, so it can never be copied into `model`.
+* **Rung 1 is therefore the only rung that can answer under auto**, for pinned and unpinned dispatches alike. Under auto the host's dispatch line is not merely the strongest signal, it is the only one, which is why every dispatch is asked for it.
+* A dispatch that reported nothing under auto falls to `unresolved` and is priced at its tier fallback. Flag those rows `auto-unreported` on the ledger and state plainly that they are the least trustworthy figures on the page: auto routes agentic tool loops toward capable models more often than cheap ones, so a tier fallback most likely understates them. The remedy is to get the report, not to guess a better number.
+
+**Auto voids the roster's cost control.** Every lightweight pin — Scribe, Reviewer, Cost Manager, Technical Writer — is advisory under auto, and the router's bias toward capable models on tool-heavy loops runs precisely opposite to the intent of those pins. A run that must honor its pins needs a fixed session model. Say so plainly when reporting cost for an auto run rather than presenting the roster's tiers as though they held.
+
+**The literal string `unknown` is not a valid `sessionModel`.** It is a placeholder that cascades: every agent without its own pin falls through to `unresolved`, gets priced at a tier fallback, and is billed as a cheaper model than the one that actually ran. A ledger whose rows are uniformly `unresolved` is almost always this failure, not a genuine ambiguity. `auto` is the correct value when the host is routing; `unknown` never is.
+
+`basis` describes pricing; `model_source` describes attribution. They are independent, and both are required on every block. Each takes exactly one value from its own set — never a combined string such as `estimated, tier-default`.
+
+### Sizing a dispatch honestly
+
+The dispatch-class rows in `consumption-rates.md` are **floors, not fallbacks**. Start at the floor for the class and raise it with whatever the dispatch reported; never record below it.
+
+This matters because of what the Scribe can and cannot see. The Scribe receives a short summary *about* a dispatch, never the dispatch's own context, so sizing from the summary measures the wrong thing and always understates the run. An agent's prompt plus its auto-applied instructions already exceeds most floors before it reads a single file, which is why a derived `gross_input / internal_turns` below the class `base_context` is a reliable signal that the floor was skipped.
+
+Totals are computed by summing the rows, never estimated. The total row must equal its columns and the cost quoted in the comparison prose must be the same number as the table's total, because a ledger that disagrees with its own arithmetic discredits every figure on the page.
+
+## State Ownership
+
+Only the owning coordinator initiates state changes. Supported ordinary and
+configuration writes use validated scripts; cold operations use Scribe. Cost
+Preflight remains the narrow compare-and-swap transaction. Other cast agents
+never write squad state directly.
+
+One writer per root keeps concurrent roles from racing: serialize handoff writer, verdict writer, routing refresh, roster expansion, cold Scribe, and Cost Preflight. Under cold autopilot pipelining, at most one Scribe hand-off is ever in flight for a given root, later stages' hand-offs queue behind it in stage order. Direct ordinary handoffs, verdicts, routing refreshes, and roster expansions run synchronously, never alongside another writer; each federation member applies this independently.
+
+## Proof of Dispatch
+
+A verified `history/<agent>.md` entry is proof of dispatch only together with its domain artifact and consumption block. The validated ordinary writer or cold Scribe writes it from actual dispatch findings. Its absence means the stage is unproven, not permission to claim it complete. `history/Squad Scribe.md` retains orchestration overhead on direct routes but does not imply a Scribe dispatch; count only actual coordinator/Scribe usage.
+
+The coordinator and the pipeline gates treat history as the gate mechanism:
+
+* A stage (discovery, intake, research, plan, council, implement, review) has its domain artifact gate dispatching the next stage; it additionally needs a `history/<agent>.md` entry for the dispatched agent to count as complete.
+* Every `history/<agent>.md` dispatch entry MUST be accompanied by its per-dispatch consumption block (see [Consumption Tracking](#consumption-tracking)). A history entry written without its consumption block is an incomplete dispatch record: the Scribe always writes the two together, and the coordinator may not treat a stage as complete — or advance past it — when the consumption block is missing. This binds consumption to the same gate that already guarantees history, so a run can never leave `consumption.md` at its seed while history shows dispatches occurred.
+* A missing history entry means the stage did not run, regardless of any narrative claim that it did. The coordinator may not advance past a stage whose history entry is absent — it dispatches the owning agent (or escalates) instead of synthesizing the stage itself.
+* This makes the methodology checkable after the fact: every completed run leaves a research file, a plan file, a Council Verdict, change records, and one `history/<agent>.md` per dispatched agent, each carrying its consumption block. When the run's work was grounded in requirement or input artifacts, it also leaves an Intake Readiness Verdict in `decisions.md`; when the discovery gate ran or was offered and declined, it leaves a Discovery Verdict there too, plus a brief for any depth other than `skip`. If any is missing, the run is provably incomplete.
+
+## Tool-to-Mechanism Mapping
+
+The squad's coordination verbs map onto existing HVE Core mechanisms. There is no separate squad runtime; each verb is a thin convention over a deployed capability.
+
+| Squad Tool       | HVE Core Mechanism                                                                                       |
+|------------------|----------------------------------------------------------------------------------------------------------|
+| `squad_route`    | Dispatch the assigned role via `runSubagent` / `task` against a `user-invocable: false` agent            |
+| `squad_decide`   | Append the decision and rationale to `decisions.md`; optionally record an ADR via the `adr-author` skill |
+| `squad_memory`   | Write durable per-agent notes with the memory tool to `/memories/repo/squad-<agent>.md`                  |
+| `squad_notify`   | Fire a notification per `skills/squad/references/rules/squad-notifications.md`; deliver via a configured notification tool when present, else in-chat, and append the record to `notifications.md` |
+| `squad_escalate` | Apply the escalate-to-user convention from the routing rules before any role acts                        |
+
+### Decision Recording
+
+* `squad_decide` always appends to `decisions.md` so the squad keeps a complete, ordered decision trail.
+* When a decision is architecturally significant, additionally capture it as an Architecture Decision Record through the `adr-author` skill. The `decisions.md` entry references the ADR so the two stay linked.
+
+### Memory Recording
+
+Squad learnings live on up to three distinct surfaces: a consumer-local writable surface, a shipped read-only surface, and an optional tenant-internal read-only surface.
+
+* `squad_memory` persists role-scoped learnings to the consumer-local `/memories/repo/squad-<agent>.md` via the memory tool, keeping squad notes in repository memory rather than ephemeral turn context. This surface is writable per consumer and is unchanged by the shared playbooks.
+* Repository memory survives across conversations in the workspace, so durable squad facts (conventions a role discovered, recurring routing choices) belong here rather than in `decisions.md`.
+* The squad skill's shipped `learnings/shared-learnings.md` playbook is the second surface. It travels as versioned package content, and the coordinator consults it as read-only, authoritative context. No run ever writes to it.
+* An optional tenant-internal playbook is the third surface, present only when the organization configured the tenant APM dependency. It deploys to `.agents/skills/squad-learnings-tenant/tenant-learnings.md`, and the coordinator consults it as read-only, authoritative context after the shipped playbook and never writes to it.
+* Consumer-local memory is never auto-promoted into either shared surface. Promotion is a deliberate, human-reviewed path documented in `CONTRIBUTING.md`, which keeps a maintainer review gate between a local note and shared content; that governance covers both upstream promotion to the shipped playbook and promotion to a tenant-internal repository.
+
+## Watch Mode (DR-01)
+
+Watch Mode — triggering the squad automatically on repository events (a new issue, a PR, a `/squad` comment, a schedule) so a run produces a pull request — is specified in `skills/squad/references/rules/squad-watch-mode.md`. A Watch Mode run reads `routing.md` and appends to `decisions.md` and `history/<agent>.md` through the same single-writer Scribe path an interactive run uses, rooted at the **event-scoped sub-squad** the run executes in (`.copilot-tracking/squad/members/<name>/`) rather than the top-level squad root.
+
+Watch Mode carries an optional `trigger` object in current schema `1.4` (see [state.json Shape](#statejson-shape)). Historical schema `1.2`, which first introduced this object, is migration input only and upgrades without losing provenance. A squad that never runs in Watch Mode omits `trigger`. The inbound approval half ships as the reference workflow `.github/skills/squad/github-approval-watcher.workflow.yml`; the outbound trigger half ships as the reference workflow `.github/skills/squad/squad-watch.workflow.yml`.

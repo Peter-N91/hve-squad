@@ -1,0 +1,16 @@
+output: ./output/demo.mp4
+resolution: 1280x720
+fps: 24
+transition:
+  type: crossfade
+  duration: 0.5
+  fade_in: true
+  fade_out: true
+segments:
+  - type: frame
+    visual: ./fixtures/intro.png
+    narration: ./fixtures/intro.wav
+    duration: 3.0
+  - type: clip
+    clip: ./fixtures/interaction.mp4
+    narration: ./fixtures/interaction.wav

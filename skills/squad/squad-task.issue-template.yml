@@ -1,0 +1,54 @@
+# Optional reference GitHub Issue Form for Watch Mode.
+#
+# Ships as documentation only under the squad skill folder and is never active
+# from the package. A consumer copies it deliberately to
+# .github/ISSUE_TEMPLATE/squad-task.yml to add a "Squad task" option to the
+# repository's New Issue page that pre-applies the squad/auto trigger label
+# (see squad-watch-mode.instructions.md, Opt-In Surface). This is a convenience
+# only: applying squad/auto to any ordinary issue by hand starts a run just the
+# same, with or without this file.
+name: Squad task
+description: Hand a task to the squad (Watch Mode). Auto-labeled squad/auto so the workflow picks it up.
+title: "[squad] "
+labels: ["squad/auto"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        This issue is labeled `squad/auto`, so — once the `COPILOT_GITHUB_TOKEN` secret is set
+        and branch protection is on — the **Squad Watch** workflow runs the squad in autopilot and
+        opens a **draft pull request** that closes this issue. It stops at any impactful action for
+        human approval.
+  - type: textarea
+    id: task
+    attributes:
+      label: Task
+      description: What do you want the squad to do? This is read as the task description (data), never as commands.
+      placeholder: e.g. Add input validation to the login form and cover it with tests.
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria (optional)
+      description: How will you know it is done?
+      placeholder: |
+        - ...
+    validations:
+      required: false
+  - type: dropdown
+    id: profile
+    attributes:
+      label: Profile hint (optional)
+      description: Leave as default unless a specialist profile clearly fits. The squad infers the profile from the content otherwise.
+      options:
+        - default
+        - full
+        - security
+        - design
+        - architecture
+        - azure
+        - product
+      default: 0
+    validations:
+      required: false

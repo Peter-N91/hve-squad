@@ -1,0 +1,68 @@
+{
+  "version": 1,
+  "hooks": {
+    "sessionStart": [
+      {
+        "type": "command",
+        "cwd": "${PLUGIN_ROOT}",
+        "bash": "bash \"hooks/scripts/session-start-check.sh\"",
+        "powershell": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File \"hooks/scripts/session-start-check.ps1\"",
+        "timeoutSec": 10
+      }
+    ],
+    "preToolUse": [
+      {
+        "type": "command",
+        "matcher": "bash|powershell",
+        "cwd": "${PLUGIN_ROOT}",
+        "bash": "bash \"hooks/scripts/impactful-action-gate.sh\"",
+        "powershell": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File \"hooks/scripts/impactful-action-gate.ps1\"",
+        "timeoutSec": 10
+      },
+      {
+        "type": "command",
+        "matcher": "create|edit",
+        "cwd": "${PLUGIN_ROOT}",
+        "bash": "bash \"hooks/scripts/state-write-guard.sh\"",
+        "powershell": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File \"hooks/scripts/state-write-guard.ps1\"",
+        "timeoutSec": 10
+      },
+      {
+        "type": "command",
+        "matcher": "task",
+        "cwd": "${PLUGIN_ROOT}",
+        "bash": "bash \"hooks/scripts/dispatch-guards.sh\"",
+        "powershell": "pwsh -NoProfile -ExecutionPolicy Bypass -File \"hooks/scripts/dispatch-guards.ps1\"",
+        "timeoutSec": 10
+      }
+    ],
+    "postToolUse": [
+      {
+        "type": "command",
+        "matcher": "bash|powershell",
+        "cwd": "${PLUGIN_ROOT}",
+        "bash": "bash \"hooks/scripts/notification-audit.sh\"",
+        "powershell": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File \"hooks/scripts/notification-audit.ps1\"",
+        "timeoutSec": 10
+      }
+    ],
+    "subagentStop": [
+      {
+        "type": "command",
+        "cwd": "${PLUGIN_ROOT}",
+        "bash": "bash \"hooks/scripts/autonomous-escalation-check.sh\"",
+        "powershell": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File \"hooks/scripts/autonomous-escalation-check.ps1\"",
+        "timeoutSec": 10
+      }
+    ],
+    "userPromptSubmitted": [
+      {
+        "type": "command",
+        "cwd": "${PLUGIN_ROOT}",
+        "bash": "bash \"hooks/scripts/prompt-injection-note.sh\"",
+        "powershell": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File \"hooks/scripts/prompt-injection-note.ps1\"",
+        "timeoutSec": 10
+      }
+    ]
+  }
+}
