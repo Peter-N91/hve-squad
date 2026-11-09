@@ -45,7 +45,11 @@
     For one completed dispatch, pass -RunId, -Agent, -Request, -Deliverable and -Outcome
     instead of preparing JSON. This builds the same payload with that agent as activeRoles
     and uses the same validation and write path. Optional -MemberName, -SelectionCue and
-    -PassedModel retain actual dispatch attribution. Optional -ConsumptionPath and
+    -PassedModel retain actual dispatch attribution. Optional -Mode (interactive, autonomous,
+    autopilot) states the run's mode and is persisted to state.json; without it the recorded
+    mode applies. Under autopilot a payload with more than one history record exits 1:
+    each stage is handed off, verified, and only then followed by the next role's dispatch.
+    Optional -ConsumptionPath and
     -OrchestrationConsumptionPath supply existing consumption JSON objects unchanged;
     omit them only when no usage block was supplied, to use the existing estimated fallback.
     This mode never captures a review, refreshes an artifact or repairs dispatch order.
@@ -236,6 +240,10 @@ param(
 
     [Parameter(Mandatory, ParameterSetName = 'SingleDispatch')]
     [string]$Outcome,
+
+    [Parameter(ParameterSetName = 'SingleDispatch')]
+    [ValidateSet('interactive', 'autonomous', 'autopilot')]
+    [string]$Mode,
 
     [Parameter(ParameterSetName = 'SingleDispatch')]
     [string]$MemberName,
@@ -932,11 +940,13 @@ if ($PSCmdlet.ParameterSetName -eq 'SingleDispatch') {
     foreach ($field in @('memberName', 'selectionCue', 'passedModel')) {
         if ($PSBoundParameters.ContainsKey($field)) { $record[$field] = $PSBoundParameters[$field] }
     }
-    $PayloadJson = [ordered]@{
+    $singlePayload = [ordered]@{
         runId          = $RunId
         historyRecords = @($record)
         stateAdvance   = [ordered]@{ activeRoles = @($Agent) }
-    } | ConvertTo-Json -Depth 8
+    }
+    if ($PSBoundParameters.ContainsKey('Mode')) { $singlePayload['mode'] = $Mode }
+    $PayloadJson = $singlePayload | ConvertTo-Json -Depth 8
 }
 else {
     if ($PSBoundParameters.ContainsKey('PayloadJson') -eq $PSBoundParameters.ContainsKey('PayloadPath')) {
@@ -1526,6 +1536,9 @@ $records = [System.Collections.Generic.List[hashtable]]::new()
 $recordNodes = $payload['historyRecords']
 if ((Get-Kind $recordNodes) -ne 'Array') { $problems.Add('payload.historyRecords must be an array (empty when no dispatch was recorded).') }
 else {
+    if ($mode -eq 'autopilot' -and $recordNodes.Count -gt 1) {
+        $problems.Add('autopilot records one hand-off per stage: write this stage''s record now and verify it before dispatching the next role; never merge stages into one hand-off (squad-autopilot.instructions.md).')
+    }
     $index = 0
     foreach ($node in $recordNodes) {
         $where = "historyRecords[$index]"
