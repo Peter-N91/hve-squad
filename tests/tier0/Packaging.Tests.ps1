@@ -423,6 +423,86 @@ Describe 'GATE-48 Repository Watch Mode and Sync-and-Adapt workflows enforce ful
         }
     }
 
+    It 'keeps Watch specialist selection within the canonical roster and avoids unnecessary repeated suites' {
+        foreach ($workflow in @($script:RepoSquadWatch, $script:ReferenceSquadWatch)) {
+            $workflow | Should -Match 'canonical profile and retained'
+            $workflow | Should -Match 'do not add'
+            $workflow | Should -Match 'do not repeat'
+        }
+        $script:RepoSquadWatch | Should -Match 'full Tier 0 suite inside Watch unless'
+        $script:RepoSquadWatch | Should -Match 'profileValid=\$\(\$gate\.ProfileValid\), questionsValid=\$\(\$gate\.QuestionsValid\)'
+    }
+
+    It 'exposes depth, routing, and economy consent as validated trusted run controls in both workflows' {
+        foreach ($workflow in @($script:RepoSquadWatch, $script:ReferenceSquadWatch)) {
+            $workflow | Should -Match '(?m)^  SQUAD_DEPTH: standard\s*$'
+            $workflow | Should -Match "(?m)^  SQUAD_ROUTING: 'off'\s*$"
+            $workflow | Should -Match "(?m)^  SQUAD_ECONOMY_CONSENT: 'false'\s*$"
+            $workflow | Should -Match ([regex]::Escape('options: [default, standard, quick]'))
+            $workflow | Should -Match ([regex]::Escape("options: [default, 'off', ranked, economy]"))
+            $workflow | Should -Match '(?m)^      economy_consent:\s*$'
+            $workflow | Should -Match ([regex]::Escape('TRUSTED RUN CONTROLS (WORKFLOW CONFIGURATION, NOT EVENT TEXT).'))
+            $workflow | Should -Match ([regex]::Escape("].join('\n') + '\n\n' + controlsText;"))
+        }
+    }
+
+    It 'resolves run controls from trusted configuration only and downgrades unconsented economy' {
+        $node = Get-Command node -ErrorAction Stop
+        $driver = @'
+const fs = require('fs');
+const [snippetPath, casesPath] = process.argv.slice(2);
+const snippet = fs.readFileSync(snippetPath, 'utf8');
+const cases = JSON.parse(fs.readFileSync(casesPath, 'utf8'));
+const results = cases.map(c => {
+  const warnings = [];
+  const core = { warning: m => warnings.push(String(m)) };
+  const context = { actor: c.actor || 'octocat', payload: { inputs: c.inputs || {} } };
+  const body = snippet.replace(/process\.env/g, 'env') + '\nreturn { runDepth, runRouting, economyGranted };';
+  const out = new Function('evt', 'context', 'core', 'env', body)(c.evt, context, core, c.env || {});
+  return { name: c.name, ...out, warned: warnings.length };
+});
+console.log(JSON.stringify(results));
+'@
+        $cases = @(
+            @{ name = 'defaults'; evt = 'workflow_dispatch'; inputs = @{ depth = 'default'; routing = 'default'; economy_consent = 'false' }; env = @{ SQUAD_DEPTH = 'standard'; SQUAD_ROUTING = 'off'; SQUAD_ECONOMY_CONSENT = 'false' } }
+            @{ name = 'dispatch overrides'; evt = 'workflow_dispatch'; inputs = @{ depth = 'quick'; routing = 'ranked'; economy_consent = 'false' }; env = @{ SQUAD_DEPTH = 'standard'; SQUAD_ROUTING = 'off' } }
+            @{ name = 'economy without consent'; evt = 'workflow_dispatch'; inputs = @{ routing = 'economy'; economy_consent = 'false' }; env = @{ SQUAD_ECONOMY_CONSENT = 'false' } }
+            @{ name = 'economy with dispatch consent'; evt = 'workflow_dispatch'; inputs = @{ routing = 'economy'; economy_consent = 'true' }; env = @{} }
+            @{ name = 'committed economy and consent on an issue event'; evt = 'issues'; inputs = @{}; env = @{ SQUAD_ROUTING = 'economy'; SQUAD_ECONOMY_CONSENT = 'true'; SQUAD_DEPTH = 'quick' } }
+            @{ name = 'invalid values fall back'; evt = 'workflow_dispatch'; inputs = @{ depth = 'turbo' }; env = @{ SQUAD_DEPTH = 'quick'; SQUAD_ROUTING = 'cheapest' } }
+            @{ name = 'event inputs are never read off dispatch'; evt = 'issues'; inputs = @{ depth = 'quick'; routing = 'economy'; economy_consent = 'true' }; env = @{} }
+        )
+        $expected = @{
+            'defaults'                                            = @('standard', 'off', 0)
+            'dispatch overrides'                                  = @('quick', 'ranked', 0)
+            'economy without consent'                             = @('standard', 'off', 1)
+            'economy with dispatch consent'                       = @('standard', 'economy', 0)
+            'committed economy and consent on an issue event'     = @('quick', 'economy', 0)
+            'invalid values fall back'                            = @('quick', 'off', 2)
+            'event inputs are never read off dispatch'            = @('standard', 'off', 0)
+        }
+        $dir = Join-Path $TestDrive ('controls-' + [guid]::NewGuid().ToString('n'))
+        New-Item -ItemType Directory -Path $dir | Out-Null
+        $casesPath = Join-Path $dir 'cases.json'
+        $driverPath = Join-Path $dir 'driver.js'
+        Set-Content -LiteralPath $casesPath -Value ($cases | ConvertTo-Json -Depth 6) -Encoding utf8
+        Set-Content -LiteralPath $driverPath -Value $driver -Encoding utf8
+        foreach ($workflow in @($script:RepoSquadWatch, $script:ReferenceSquadWatch)) {
+            $match = [regex]::Match($workflow, '(?s)(const dispatchedInputs = .*?)\r?\n\s*const controlActor')
+            $match.Success | Should -BeTrue
+            $snippetPath = Join-Path $dir ('snippet-' + [guid]::NewGuid().ToString('n') + '.js')
+            Set-Content -LiteralPath $snippetPath -Value $match.Groups[1].Value -Encoding utf8
+            $json = & $node.Source $driverPath $snippetPath $casesPath
+            $LASTEXITCODE | Should -Be 0 -Because ($json -join "`n")
+            foreach ($row in @($json | ConvertFrom-Json)) {
+                $want = $expected[$row.name]
+                $row.runDepth | Should -Be $want[0] -Because $row.name
+                $row.runRouting | Should -Be $want[1] -Because $row.name
+                $row.warned | Should -Be $want[2] -Because $row.name
+            }
+        }
+    }
+
     It 'wires issues, pull_request, issue_comment, and workflow_dispatch with per-case/per-ask squad selection and a gated full RPI handoff in squad-watch.yml' {
         $script:RepoSquadWatch | Should -Match ([regex]::Escape('SQUAD SELECTION PER CASE AND PER ASK (NON-NEGOTIABLE).'))
         $script:RepoSquadWatch | Should -Match ([regex]::Escape('COMPLETE SQUAD LIFECYCLE (FULL RPI - NON-NEGOTIABLE).'))

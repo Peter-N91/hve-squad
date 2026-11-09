@@ -712,6 +712,52 @@ flowchart TD
           dans l'issue.
         </li>
       </ol>
+
+      <h3>Paramètres d'exécution : depth, routing et accord Economy</h3>
+      <p>
+        Le workflow Watch propose trois paramètres facultatifs. Ils proviennent du workflow lui-même, jamais
+        du texte d'une issue : une issue ne peut donc pas les modifier. Définissez la valeur par défaut validée dans le bloc
+        <code>env:</code> du workflow, ou remplacez-la pour une exécution manuelle via le formulaire
+        <strong>Run workflow</strong> de l'onglet Actions (<code>default</code> conserve la valeur validée).
+      </p>
+      <table>
+        <thead>
+          <tr><th>Paramètre</th><th>Valeurs</th><th>Par défaut</th><th>Effet</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>depth</code> (<code>SQUAD_DEPTH</code>)</td>
+            <td><code>standard</code>, <code>quick</code></td>
+            <td><code>standard</code></td>
+            <td><code>quick</code> réduit la recherche à un cycle et deux voies, planifie une seule approche et garde le diff minimal. Il ne modifie jamais un gate.</td>
+          </tr>
+          <tr>
+            <td><code>routing</code> (<code>SQUAD_ROUTING</code>)</td>
+            <td><code>off</code>, <code>ranked</code>, <code>economy</code></td>
+            <td><code>off</code></td>
+            <td>Mode de choix du modèle de chaque rôle. <code>off</code> conserve les modèles par défaut de l'hôte.</td>
+          </tr>
+          <tr>
+            <td><code>economy_consent</code> (<code>SQUAD_ECONOMY_CONSENT</code>)</td>
+            <td><code>true</code>, <code>false</code></td>
+            <td><code>false</code></td>
+            <td>Requis pour <code>routing=economy</code>. Sans lui, le workflow revient à <code>off</code> et l'indique dans le journal d'exécution.</td>
+          </tr>
+        </tbody>
+      </table>
+      <p>
+        Définir <code>economy_consent</code> sur <code>true</code> revient à accepter le compromis Economy
+        pour cette exécution ou pour la valeur par défaut du dépôt. Le coordinateur le consigne comme
+        <code>## Economy Mode Accepted</code> avec <code>Scope: all-roles</code>. Economy ne change que le choix du
+        modèle ; il n'affaiblit jamais un gate ni une revue.
+      </p>
+      <p><strong>Garder les exécutions Watch rapides.</strong></p>
+      <ul>
+        <li>Utilisez <code>depth=quick</code> pour les issues petites et bien délimitées.</li>
+        <li>Watch n'exécute pas la suite Tier 0 complète de ce dépôt ; l'exécution utilise des tests ciblés sur les fichiers modifiés et ne répète pas ceux qui sont inchangés. La CI exécute la suite complète sur la pull request.</li>
+        <li>Les spécialistes doivent provenir d'un profil canonique et des packs conservés. Une équipe avec des rôles supplémentaires arbitraires échoue au gate de publication après la fin de l'exécution : une longue exécution peut donc se terminer sans livraison.</li>
+      </ul>
+
       <h3>Créer et appliquer l'étiquette <code>squad/auto</code></h3>
       <p>
         Le déclencheur est une étiquette GitHub ordinaire portant exactement le nom <code>squad/auto</code>. Créez-la une fois,
@@ -1964,7 +2010,9 @@ layouts:
         rôles utilisent Economy et les autres restent sur Ranked. Une exécution Watch Mode ou autre
         exécution sans surveillance ne passe jamais en <code>economy</code> à partir du texte d'une
         issue, d'une pull request ou d'un commentaire, mais un mode Economy tous rôles déjà accepté
-        continue de s'appliquer à chaque rôle routé.
+        continue de s'appliquer à chaque rôle routé. La seule façon d'exécuter Watch en Economy est le
+        <code>routing=economy</code> du workflow lui-même avec <code>economy_consent=true</code> ; sans cet
+        accord, le workflow revient à <code>off</code>.
       </p>
       <p>
         <strong>Jamais affaibli.</strong> Le mode economy ne change que le choix du modèle. Il ne saute, n'abrège ni n'assouplit jamais le Risk Gate,

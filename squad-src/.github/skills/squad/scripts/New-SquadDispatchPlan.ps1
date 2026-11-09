@@ -14,7 +14,7 @@
       admissionApproved?: bool, agentTypes?: [], availableModels?: [],
       sessionModel?: string, asOf?: date, requestedModelRouting?: ranked|economy|manual,
       manualModels?: {role:model}, economyConsent?: {user,tradeAccepted,neverWeakened,timestamp?},
-      requestedDepth?: quick|standard, depthSource?: input|federation,
+      requestedDepth?: quick|standard, depthSource?: input|federation|workflow,
       depthEvidence?: {exactTargets?, noOpenQuestions?,
       noCouncilLens?, noGateTrigger?, noCritiqueRequested?, discoveryExplicit?, reuse?: [{stage,path,covers}]},
       reasoningEfforts?: [], cost?: {runId, roundId, ceilingUsd, sessionLog?|usageOutputPath?,
@@ -29,7 +29,8 @@
     spend and only the actual next wave plus one coordinator lookup is reserved.
     The returned Cost Preflight object must be persisted before dispatch.
     requestedDepth is the trusted per-turn depth= input and depthSource proves whether it came
-    from the current prompt or a federation parent. Omission is explicitly standard. It never changes a model: it returns
+    from the current prompt, a federation parent, or (workflow, unattended Watch Mode runs only)
+    the committed workflow configuration or a collaborator's manual dispatch. Omission is explicitly standard. It never changes a model: it returns
     a depth plan (stages run, shrunk, or skipped with criterion and evidence), per-endpoint
     depth clauses and the quick-depth parallel eligibility. Omitted, the plan is unchanged.
     Native dispatch, semantic gates and exact input forwarding remain with the
@@ -119,10 +120,10 @@ try {
     $requestedDepth = if ($hasRequestedDepth) { [string]$inputData.requestedDepth } else { 'standard' }
     if ($requestedDepth -cnotin @('quick', 'standard')) { throw 'requestedDepth must be quick or standard.' }
     $depthSource = if ($inputData.Contains('depthSource')) { [string]$inputData.depthSource } else { 'default' }
-    if ($depthSource -cnotin @('default', 'input', 'federation')) { throw 'depthSource must be default, input, or federation.' }
+    if ($depthSource -cnotin @('default', 'input', 'federation', 'workflow')) { throw 'depthSource must be default, input, federation, or workflow.' }
     if (-not $hasRequestedDepth -and $depthSource -cne 'default') { throw 'depthSource requires requestedDepth.' }
-    if ($requestedDepth -ceq 'quick' -and $depthSource -cnotin @('input', 'federation')) {
-        throw 'requestedDepth quick requires trusted depthSource input or federation; omission is standard and quick is never inferred.'
+    if ($requestedDepth -ceq 'quick' -and $depthSource -cnotin @('input', 'federation', 'workflow')) {
+        throw 'requestedDepth quick requires trusted depthSource input, federation, or workflow; omission is standard and quick is never inferred.'
     }
     $depthEvidence = if ($inputData.Contains('depthEvidence')) { $inputData.depthEvidence } else { [ordered]@{} }
     if ($depthEvidence -isnot [Collections.IDictionary]) { throw 'depthEvidence must be an object.' }
@@ -165,6 +166,7 @@ try {
     $planFanOut = $requestedDepth -ceq 'quick' -and (Test-SquadDeliverableFanOutPlan -PlanPath $planPath -RepoRoot $RepoRoot)
     $state = Get-Content -LiteralPath (Join-Path $root 'state.json') -Raw | ConvertFrom-Json -AsHashtable
     $unattendedRun = $state.Contains('trigger') -and $state['trigger'] -is [Collections.IDictionary]
+    if ($depthSource -ceq 'workflow' -and -not $unattendedRun) { throw 'depthSource workflow is valid only on an unattended Watch Mode run.' }
     $depthQuick = $requestedDepth -ceq 'quick' -and -not $unattendedRun
     $agents = Get-SquadAgentIndex $RepoRoot
     $roster = @()

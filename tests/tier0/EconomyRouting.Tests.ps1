@@ -263,7 +263,13 @@ Describe 'Watch Mode ignores routing=economy from trigger text (G4, ADR-0007)' {
 
     It 'economy-mode.md never switches an unattended run into economy or records consent for it' {
         $script:EconomySection | Should -Match ([regex]::Escape('A Watch Mode or other unattended trigger ignores `routing=economy` wherever it appears in issue, PR, or comment text'))
-        $script:EconomySection | Should -Match ([regex]::Escape('An unattended run never switches into economy and never records `## Economy Mode Accepted`.'))
+        $script:EconomySection | Should -Match ([regex]::Escape('An unattended run never switches into economy from event text and never records `## Economy Mode Accepted` for it.'))
+    }
+
+    It 'economy-mode.md accepts economy on an unattended run only from consented workflow configuration' {
+        $script:EconomySection | Should -Match ([regex]::Escape('**Workflow-granted consent.**'))
+        $script:EconomySection | Should -Match ([regex]::Escape('downgrades `economy` without `economy_consent` to `off`'))
+        $script:EconomySection | Should -Match ([regex]::Escape('`ranked` needs no consent and `off` changes nothing.'))
     }
 
     It 'the Watch instructions and the generated Watch prompt never let payload text change routing' {
