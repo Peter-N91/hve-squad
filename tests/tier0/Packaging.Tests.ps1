@@ -443,6 +443,8 @@ Describe 'GATE-48 Repository Watch Mode and Sync-and-Adapt workflows enforce ful
             $workflow | Should -Match ([regex]::Escape('options: [default, standard, quick]'))
             $workflow | Should -Match ([regex]::Escape("options: [default, 'off', ranked, economy]"))
             $workflow | Should -Match '(?m)^      economy_consent:\s*$'
+            $workflow | Should -Match '(?m)^  SQUAD_PROFILE: default\s*$'
+            $workflow | Should -Match ([regex]::Escape('options: [keep, auto, default, full,'))
             $workflow | Should -Match ([regex]::Escape('TRUSTED RUN CONTROLS (WORKFLOW CONFIGURATION, NOT EVENT TEXT).'))
             $workflow | Should -Match ([regex]::Escape("].join('\n') + '\n\n' + controlsText;"))
         }
@@ -459,7 +461,7 @@ const results = cases.map(c => {
   const warnings = [];
   const core = { warning: m => warnings.push(String(m)) };
   const context = { actor: c.actor || 'octocat', payload: { inputs: c.inputs || {} } };
-  const body = snippet.replace(/process\.env/g, 'env') + '\nreturn { runDepth, runRouting, economyGranted };';
+  const body = snippet.replace(/process\.env/g, 'env') + '\nreturn { runDepth, runRouting, runProfile, economyGranted };';
   const out = new Function('evt', 'context', 'core', 'env', body)(c.evt, context, core, c.env || {});
   return { name: c.name, ...out, warned: warnings.length };
 });
@@ -473,6 +475,9 @@ console.log(JSON.stringify(results));
             @{ name = 'committed economy and consent on an issue event'; evt = 'issues'; inputs = @{}; env = @{ SQUAD_ROUTING = 'economy'; SQUAD_ECONOMY_CONSENT = 'true'; SQUAD_DEPTH = 'quick' } }
             @{ name = 'invalid values fall back'; evt = 'workflow_dispatch'; inputs = @{ depth = 'turbo' }; env = @{ SQUAD_DEPTH = 'quick'; SQUAD_ROUTING = 'cheapest' } }
             @{ name = 'event inputs are never read off dispatch'; evt = 'issues'; inputs = @{ depth = 'quick'; routing = 'economy'; economy_consent = 'true' }; env = @{} }
+            @{ name = 'profile defaults to default'; evt = 'workflow_dispatch'; inputs = @{ profile = 'keep' }; env = @{ SQUAD_PROFILE = 'default' } }
+            @{ name = 'profile dispatch override'; evt = 'workflow_dispatch'; inputs = @{ profile = 'security' }; env = @{ SQUAD_PROFILE = 'default' } }
+            @{ name = 'custom profile is refused'; evt = 'workflow_dispatch'; inputs = @{ profile = 'custom' }; env = @{} }
         )
         $expected = @{
             'defaults'                                            = @('standard', 'off', 0)
@@ -482,7 +487,11 @@ console.log(JSON.stringify(results));
             'committed economy and consent on an issue event'     = @('quick', 'economy', 0)
             'invalid values fall back'                            = @('quick', 'off', 2)
             'event inputs are never read off dispatch'            = @('standard', 'off', 0)
+            'profile defaults to default'                         = @('standard', 'off', 0)
+            'profile dispatch override'                           = @('standard', 'off', 0)
+            'custom profile is refused'                           = @('standard', 'off', 1)
         }
+        $expectedProfile = @{ 'profile defaults to default' = 'default'; 'profile dispatch override' = 'security'; 'custom profile is refused' = 'default'; 'defaults' = 'default'; 'event inputs are never read off dispatch' = 'default' }
         $dir = Join-Path $TestDrive ('controls-' + [guid]::NewGuid().ToString('n'))
         New-Item -ItemType Directory -Path $dir | Out-Null
         $casesPath = Join-Path $dir 'cases.json'
@@ -501,6 +510,7 @@ console.log(JSON.stringify(results));
                 $row.runDepth | Should -Be $want[0] -Because $row.name
                 $row.runRouting | Should -Be $want[1] -Because $row.name
                 $row.warned | Should -Be $want[2] -Because $row.name
+                if ($expectedProfile.ContainsKey($row.name)) { $row.runProfile | Should -Be $expectedProfile[$row.name] -Because $row.name }
             }
         }
     }

@@ -715,7 +715,7 @@ flowchart TD
 
       <h3>Paramètres d'exécution : depth, routing et accord Economy</h3>
       <p>
-        Le workflow Watch propose trois paramètres facultatifs. Ils proviennent du workflow lui-même, jamais
+        Le workflow Watch propose quatre paramètres facultatifs. Ils proviennent du workflow lui-même, jamais
         du texte d'une issue : une issue ne peut donc pas les modifier. Définissez la valeur par défaut validée dans le bloc
         <code>env:</code> du workflow, ou remplacez-la pour une exécution manuelle via le formulaire
         <strong>Run workflow</strong> de l'onglet Actions (<code>default</code> conserve la valeur validée).
@@ -743,6 +743,12 @@ flowchart TD
             <td><code>false</code></td>
             <td>Requis pour <code>routing=economy</code>. Sans lui, le workflow revient à <code>off</code> et l'indique dans le journal d'exécution.</td>
           </tr>
+          <tr>
+            <td><code>profile</code> (<code>SQUAD_PROFILE</code>)</td>
+            <td><code>default</code>, <code>auto</code> ou tout profil du catalogue</td>
+            <td><code>default</code></td>
+            <td>L'exécution utilise exactement ce profil du catalogue, sans pack ni rôle ajouté. <code>auto</code> laisse la squad choisir un profil du catalogue. Sur l'entrée <code>profile</code>, <code>keep</code> utilise la valeur validée.</td>
+          </tr>
         </tbody>
       </table>
       <p>
@@ -755,7 +761,7 @@ flowchart TD
       <ul>
         <li>Utilisez <code>depth=quick</code> pour les issues petites et bien délimitées.</li>
         <li>Watch n'exécute pas la suite Tier 0 complète de ce dépôt ; l'exécution utilise des tests ciblés sur les fichiers modifiés et ne répète pas ceux qui sont inchangés. La CI exécute la suite complète sur la pull request.</li>
-        <li>Les spécialistes doivent provenir d'un profil canonique et des packs conservés. Une équipe avec des rôles supplémentaires arbitraires échoue au gate de publication après la fin de l'exécution : une longue exécution peut donc se terminer sans livraison.</li>
+        <li>L'équipe doit être exactement un profil du catalogue, sans pack ni rôle ajouté (paramètre <code>profile</code>, <code>default</code> sauf changement). Toute autre équipe échoue au gate de publication après la fin de l'exécution : une longue exécution peut donc se terminer sans livraison.</li>
       </ul>
 
       <h3>Créer et appliquer l'étiquette <code>squad/auto</code></h3>

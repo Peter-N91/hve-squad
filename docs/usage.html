@@ -711,7 +711,7 @@ flowchart TD
 
       <h3>Run controls: depth, routing, and economy consent</h3>
       <p>
-        The Watch workflow has three optional settings. They come from the workflow itself, never
+        The Watch workflow has four optional settings. They come from the workflow itself, never
         from issue text, so an issue cannot change them. Set the committed default in the workflow's
         <code>env:</code> block, or override it for one manual run through the
         <strong>Run workflow</strong> form on the Actions tab (<code>default</code> keeps the committed
@@ -740,6 +740,12 @@ flowchart TD
             <td><code>false</code></td>
             <td>Required for <code>routing=economy</code>. Without it the workflow falls back to <code>off</code> and says so in the run log.</td>
           </tr>
+          <tr>
+            <td><code>profile</code> (<code>SQUAD_PROFILE</code>)</td>
+            <td><code>default</code>, <code>auto</code>, or any catalog profile</td>
+            <td><code>default</code></td>
+            <td>The run uses exactly that profile from the catalog, with no packs and no added roles. <code>auto</code> lets the squad pick one catalog profile. On the <code>profile</code> input, <code>keep</code> uses the committed value.</td>
+          </tr>
         </tbody>
       </table>
       <p>
@@ -752,7 +758,7 @@ flowchart TD
       <ul>
         <li>Use <code>depth=quick</code> for small, well-scoped issues.</li>
         <li>Watch does not run this repository's full Tier 0 suite; the run uses focused tests for the files it changes and does not repeat unchanged ones. CI runs the full suite on the pull request.</li>
-        <li>The specialists must come from a canonical profile plus retained packs. A roster with arbitrary extra roles fails the publication gate after the run has finished, so a long run can end without a handoff.</li>
+        <li>The roster must be exactly a catalog profile, with no packs and no added roles (the <code>profile</code> setting, <code>default</code> unless you change it). Any other roster fails the publication gate after the run has finished, so a long run can end without a handoff.</li>
       </ul>
 
       <h3>Create and apply the <code>squad/auto</code> label</h3>
