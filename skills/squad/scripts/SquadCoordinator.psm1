@@ -1,0 +1,1105 @@
+# Copyright (c) 2026 Microsoft Corporation. All rights reserved.
+# SPDX-License-Identifier: MIT
+#Requires -Version 7.4
+
+Set-StrictMode -Version Latest
+$ErrorActionPreference = 'Stop'
+$script:SkillRoot = Split-Path -Parent $PSScriptRoot
+. (Join-Path $PSScriptRoot 'Resolve-SquadConnectorDispatch.ps1')
+. (Join-Path $PSScriptRoot 'SquadAgentDiscovery.ps1')
+
+function Read-SquadTables {
+    param([Parameter(Mandatory)][string]$Path)
+    Get-MarkdownTablesFromContentLocal -Content ([IO.File]::ReadAllText($Path))
+}
+
+function Get-SquadReferenceSection {
+    param([Parameter(Mandatory)][string]$Path, [Parameter(Mandatory)][string]$Heading)
+    $text = [IO.File]::ReadAllText($Path) -replace "`r`n", "`n"
+    $pattern = '(?m)^' + [regex]::Escape($Heading) + '[ \t]*$'
+    $match = [regex]::Match($text, $pattern)
+    if (-not $match.Success) { throw "Missing section '$Heading' in $Path." }
+    $level = [regex]::Match($Heading, '^#+').Length
+    $tail = $text.Substring($match.Index + $match.Length)
+    $next = [regex]::Match($tail, "(?m)^#{1,$level} ")
+    if ($next.Success) { $tail = $tail.Substring(0, $next.Index) }
+    $match.Value + $tail
+}
+
+function Get-SquadRulePath {
+    param([Parameter(Mandatory)][string]$Name, [string]$RepoRoot = (Get-Location).ProviderPath)
+    $artifactRoot = Split-Path -Parent (Split-Path -Parent $script:SkillRoot)
+    foreach ($path in @(
+            (Join-Path $artifactRoot 'instructions' 'squad' "$Name.instructions.md"),
+            (Join-Path $artifactRoot 'instructions' "$Name.instructions.md"),
+            (Join-Path (Split-Path -Parent $artifactRoot) '.github' 'instructions' "$Name.instructions.md"),
+            (Join-Path $script:SkillRoot 'references' 'rules' "$Name.md"),
+            (Join-Path $RepoRoot '.github' 'instructions' 'squad' "$Name.instructions.md"),
+            (Join-Path $RepoRoot '.github' 'instructions' "$Name.instructions.md")
+        )) {
+        if (Test-Path -LiteralPath $path -PathType Leaf) { return $path }
+    }
+    throw "The selected Squad installation is missing rule '$Name'."
+}
+
+function Resolve-SquadRepositoryPath {
+    param(
+        [Parameter(Mandatory)][string]$RepoRoot,
+        [Parameter(Mandatory)][string]$Path,
+        [switch]$AllowMissing
+    )
+    $repository = [IO.Path]::GetFullPath($RepoRoot).TrimEnd([IO.Path]::DirectorySeparatorChar)
+    if ($Path -match '(^|[\\/])\.\.([\\/]|$)|[\r\n\x00]' -or $Path -match '^[a-z]+://') {
+        throw "Unsafe repository path: $Path"
+    }
+    $resolved = [IO.Path]::GetFullPath($Path, $repository)
+    $relative = [IO.Path]::GetRelativePath($repository, $resolved)
+    if ($relative -eq '..' -or $relative -match '^\.\.[\\/]' -or [IO.Path]::IsPathRooted($relative)) {
+        throw "Path leaves the repository: $Path"
+    }
+    $cursor = $resolved
+    while ($cursor) {
+        $item = Get-Item -LiteralPath $cursor -Force -ErrorAction SilentlyContinue
+        if ($item -and ($item.Attributes -band [IO.FileAttributes]::ReparsePoint)) {
+            throw "Linked repository path refused: $cursor"
+        }
+        if ($cursor -eq $repository) { break }
+        $cursor = Split-Path -Parent $cursor
+    }
+    if (-not $AllowMissing -and -not (Test-Path -LiteralPath $resolved)) { throw "Path not found: $Path" }
+    $resolved
+}
+
+function Get-SquadAgentIndex {
+    param([Parameter(Mandatory)][string]$RepoRoot)
+    $index = [Collections.Generic.Dictionary[string, object]]::new([StringComparer]::Ordinal)
+    foreach ($file in Get-SquadAgentFile -RepoRoot $RepoRoot -ScriptRoot $PSScriptRoot) {
+        $text = [IO.File]::ReadAllText($file.FullName).TrimStart([char]0xfeff) -replace "`r`n", "`n"
+        $match = [regex]::Match($text, '\A---\n(?<front>.*?)\n---(?:\n|$)', 'Singleline')
+        if (-not $match.Success) { continue }
+        $front = $match.Groups['front'].Value
+        $name = [regex]::Match($front, '(?m)^name:[ \t]*(?<value>[^\n]+)$')
+        if (-not $name.Success) { continue }
+        $identity = $name.Groups['value'].Value.Trim().Trim('"', "'")
+        if ($index.ContainsKey($identity)) { continue }
+        $pin = [regex]::Match($front, '(?m)^model:[ \t]*(?<value>[^\n]+)$')
+        $index.Add($identity, [pscustomobject]@{
+                name = $identity
+                path = $file.FullName
+                dispatchable = $front -notmatch '(?m)^disable-model-invocation:[ \t]*true[ \t]*(?:#.*)?$'
+                model = $(if ($pin.Success) { $pin.Groups['value'].Value.Trim().Trim('"', "'") } else { '' })
+            })
+    }
+    return ,$index
+}
+
+function Get-SquadSkillIndex {
+    param([Parameter(Mandatory)][string]$RepoRoot, [string[]]$AvailableSkill = @())
+    $index = [Collections.Generic.Dictionary[string, object]]::new([StringComparer]::Ordinal)
+    foreach ($file in Get-SquadSkillFile -RepoRoot $RepoRoot -ScriptRoot $PSScriptRoot) {
+        $text = [IO.File]::ReadAllText($file.FullName).TrimStart([char]0xfeff) -replace "`r`n", "`n"
+        $match = [regex]::Match($text, '\A---\n(?<front>.*?)\n---(?:\n|$)', 'Singleline')
+        if (-not $match.Success) { continue }
+        $name = [regex]::Match($match.Groups['front'].Value, '(?m)^name:[ \t]*(?<value>[^\n]+)$')
+        if (-not $name.Success) { continue }
+        $identity = $name.Groups['value'].Value.Trim().Trim('"', "'")
+        if (-not $identity -or $index.ContainsKey($identity)) { continue }
+        $index.Add($identity, [pscustomobject]@{ name = $identity; path = $file.FullName; source = 'filesystem' })
+    }
+    foreach ($identity in $AvailableSkill) {
+        if ($identity -cnotmatch '^[a-z0-9][a-z0-9-]*$') { throw "Invalid available skill identity: $identity" }
+        if (-not $index.ContainsKey($identity)) {
+            $index.Add($identity, [pscustomobject]@{ name = $identity; path = ''; source = 'host-inventory' })
+        }
+    }
+    return ,$index
+}
+
+function Get-SquadRoster {
+    param([Parameter(Mandatory)][string]$SquadRoot)
+    $tables = @(Read-SquadTables (Join-Path $SquadRoot 'team.md'))
+    $members = @($tables | Where-Object { 'Role' -in $_.Header -and 'Agent Name (Primary)' -in $_.Header })
+    if ($members.Count -ne 1) { throw 'Expected exactly one Members roster table.' }
+    $members[0].Rows
+}
+
+function Invoke-SquadLocalScript {
+    param(
+        [Parameter(Mandatory)][string]$Name,
+        [string[]]$Arguments = @(),
+        [int]$TimeoutSeconds = 120
+    )
+    if ($Name -notmatch '^[A-Za-z][A-Za-z0-9-]+\.ps1$') { throw 'A shipped script name is required.' }
+    $start = [Diagnostics.ProcessStartInfo]::new()
+    $start.FileName = Join-Path $PSHOME 'pwsh'
+    $start.UseShellExecute = $false
+    $start.RedirectStandardOutput = $true
+    $start.RedirectStandardError = $true
+    foreach ($argument in @('-NoProfile', '-File', (Join-Path $PSScriptRoot $Name)) + $Arguments) {
+        $start.ArgumentList.Add($argument)
+    }
+    $process = [Diagnostics.Process]::new()
+    $process.StartInfo = $start
+    try {
+        $null = $process.Start()
+        $stdout = $process.StandardOutput.ReadToEndAsync()
+        $stderr = $process.StandardError.ReadToEndAsync()
+        if (-not $process.WaitForExit($TimeoutSeconds * 1000)) {
+            $process.Kill($true)
+            $process.WaitForExit()
+            throw "$Name exceeded its $TimeoutSeconds-second local execution timeout."
+        }
+        [pscustomobject]@{ exitCode = $process.ExitCode; stdout = $stdout.GetAwaiter().GetResult(); stderr = $stderr.GetAwaiter().GetResult() }
+    }
+    finally { $process.Dispose() }
+}
+
+function Get-SquadInitData {
+    param([string]$RepoRoot = (Get-Location).ProviderPath)
+    $rulesPath = Get-SquadRulePath -Name 'squad-roster' -RepoRoot $RepoRoot
+    $tables = @(Read-SquadTables $rulesPath)
+    $profiles = @($tables | Where-Object { 'Profile' -in $_.Header -and 'Members (roles)' -in $_.Header })
+    $packs = @($tables | Where-Object { 'Pack' -in $_.Header -and 'Adds (roles)' -in $_.Header })
+    $roots = @($tables | Where-Object { 'Role' -in $_.Header -and 'Deliverable Root' -in $_.Header -and $_.Header.Count -eq 2 })
+    $catalogTables = @(Read-SquadTables (Join-Path $script:SkillRoot 'references' 'roster-catalog.md'))
+    $cast = @($catalogTables | Where-Object { 'Primary Agent (`name:`)' -in $_.Header })
+    $externalResources = @($catalogTables | Where-Object {
+            'Resource' -in $_.Header -and 'Resource Kind' -in $_.Header -and 'Install or Entry' -in $_.Header
+        })
+    $packSkills = @($catalogTables | Where-Object { 'Pack' -in $_.Header -and 'Skill' -in $_.Header -and $_.Header.Count -eq 2 })
+    $seeds = @(Read-SquadTables (Join-Path $script:SkillRoot 'references' 'seed-templates.md') |
+            Where-Object { 'Agent Name (Primary)' -in $_.Header })
+    if ($profiles.Count -ne 1 -or $packs.Count -ne 1 -or $roots.Count -ne 1 -or $cast.Count -ne 1 -or
+        $externalResources.Count -ne 1 -or $packSkills.Count -ne 1 -or $seeds.Count -ne 1) {
+        throw 'The selected installation has ambiguous or missing profile, pack, cast, resource, root, or seed tables.'
+    }
+    $aliasesSection = Get-SquadReferenceSection $rulesPath '#### Deterministic Alias Wordlist'
+    $aliasesMatch = [regex]::Match($aliasesSection, '(?s)```text\s*\n(?<names>.*?)\n```')
+    if (-not $aliasesMatch.Success) { throw 'Missing canonical alias wordlist.' }
+    [pscustomobject]@{
+        profiles = $profiles[0].Rows
+        packs = $packs[0].Rows
+        cast = $cast[0].Rows
+        externalResources = $externalResources[0].Rows
+        packSkills = $packSkills[0].Rows
+        roots = $roots[0].Rows
+        seeds = $seeds[0].Rows
+        aliases = @($aliasesMatch.Groups['names'].Value -split ',\s*')
+    }
+}
+
+function Get-SquadPackResourceInventory {
+    param(
+        [Parameter(Mandatory)]$InitData,
+        [AllowEmptyCollection()][string[]]$Pack = @(),
+        [Parameter(Mandatory)][string]$RepoRoot,
+        [string[]]$AvailableSkill = @()
+    )
+    $selected = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+    foreach ($name in $Pack) {
+        if ($name -cnotmatch '^[a-z0-9][a-z0-9-]*$' -or -not @($InitData.packs | Where-Object { $_.Pack -ceq $name }).Count) {
+            throw "Unknown pack: $name"
+        }
+        $null = $selected.Add($name)
+    }
+    if (-not $selected.Count) { return @() }
+    $skillIndex = Get-SquadSkillIndex -RepoRoot $RepoRoot
+    $hostVisible = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+    foreach ($identity in $AvailableSkill) {
+        if ($identity -cnotmatch '^[a-z0-9][a-z0-9-]*$') { throw "Invalid available skill identity: $identity" }
+        $null = $hostVisible.Add($identity)
+    }
+    $inventory = [ordered]@{}
+    foreach ($mapping in $InitData.packSkills) {
+        $packName = [string]$mapping.Pack
+        if (-not $selected.Contains($packName)) { continue }
+        $resourceName = ([string]$mapping.Skill).Trim().Trim('`')
+        if ($resourceName -cnotmatch '^[a-z0-9][a-z0-9-]*$') { throw "Invalid registered pack skill: $resourceName" }
+        $rows = @($InitData.externalResources | Where-Object {
+                ([string]($_['Resource'])).Trim().Trim('`') -ceq $resourceName -and
+                ([string]($_['Resource Kind'])).Trim() -ceq 'skill' -and
+                ([string]$_.Tier).Trim() -ceq 'opt-in'
+            })
+        if (-not $rows.Count) { throw "Pack '$packName' references an unregistered opt-in skill: $resourceName" }
+        $commands = @($rows | ForEach-Object { ([string]($_['Install or Entry'])).Trim() } | Sort-Object -Unique)
+        $origins = @($rows | ForEach-Object { ([string]$_.Origin).Trim() } | Sort-Object -Unique)
+        $licenses = @($rows | ForEach-Object { ([string]$_.License).Trim() } | Sort-Object -Unique)
+        if ($commands.Count -ne 1 -or $origins.Count -ne 1 -or $licenses.Count -ne 1) {
+            throw "Pack skill '$resourceName' has inconsistent registry metadata."
+        }
+        if (-not $inventory.Contains($resourceName)) {
+            $inventory[$resourceName] = [ordered]@{
+                resource = $resourceName
+                packs = [Collections.Generic.List[string]]::new()
+                roles = @($rows | ForEach-Object { ([string]$_.Role).Trim() } | Sort-Object -Unique)
+                hostVisible = $hostVisible.Contains($resourceName)
+                installed = $hostVisible.Contains($resourceName)
+                installedOnDisk = $skillIndex.ContainsKey($resourceName)
+                installOrEntry = $commands[0]
+                origin = $origins[0]
+                license = $licenses[0]
+                prerequisites = @($rows | ForEach-Object { ([string]$_.Prerequisites).Trim() } | Sort-Object -Unique)
+            }
+        }
+        if ($packName -notin $inventory[$resourceName].packs) { $inventory[$resourceName].packs.Add($packName) }
+    }
+    @(
+        foreach ($entry in $inventory.Values) {
+            [ordered]@{
+                resource = $entry.resource
+                packs = $entry.packs.ToArray()
+                roles = $entry.roles
+                hostVisible = $entry.hostVisible
+                installed = $entry.installed
+                installedOnDisk = $entry.installedOnDisk
+                installOrEntry = $entry.installOrEntry
+                origin = $entry.origin
+                license = $entry.license
+                prerequisites = $entry.prerequisites
+            }
+        }
+    )
+}
+
+function Assert-SquadPackResourceDecisions {
+    param(
+        [Parameter(Mandatory)]$InitData,
+        [AllowEmptyCollection()][string[]]$Pack = @(),
+        [Parameter(Mandatory)][string]$RepoRoot,
+        $Decisions,
+        [string[]]$AvailableSkill = @()
+    )
+    $inventory = @(Get-SquadPackResourceInventory -InitData $InitData -Pack $Pack -RepoRoot $RepoRoot -AvailableSkill $AvailableSkill)
+    if (-not $inventory.Count) {
+        if ($null -ne $Decisions -and ($Decisions -isnot [Collections.IDictionary] -or $Decisions.Count)) {
+            throw 'resourceDecisions names resources that no selected pack owns.'
+        }
+        return [ordered]@{}
+    }
+    if ($Decisions -isnot [Collections.IDictionary]) {
+        throw 'Selected packs with registered skills require resourceDecisions.'
+    }
+    $ordered = [ordered]@{}
+    foreach ($entry in $inventory) {
+        $resource = $entry.resource
+        if (-not $Decisions.Contains($resource)) { throw "Missing pack resource decision: $resource" }
+        $status = [string]$Decisions[$resource]
+        if ($status -notin @('available', 'declined')) {
+            throw "Invalid pack resource decision for '$resource': $status"
+        }
+        if ($status -eq 'available' -and -not $entry.installed) {
+            throw "Pack resource '$resource' is not visible in the supplied host or filesystem inventory."
+        }
+        $ordered[$resource] = $status
+    }
+    foreach ($resource in $Decisions.Keys) {
+        if ($resource -notin $inventory.resource) { throw "Unknown pack resource decision: $resource" }
+    }
+    $ordered
+}
+
+function New-SquadInitPayload {
+    param(
+        [Parameter(Mandatory)][Collections.IDictionary]$Choices,
+        [Parameter(Mandatory)][string]$RepoRoot
+    )
+    $required = @('confirmed', 'squadRoot', 'runId', 'profile', 'naming', 'notify')
+    $optional = @('packs', 'roles', 'excludeRoles', 'names', 'modelRouting', 'models', 'mode', 'sessionModel', 'modelOverrides', 'usage', 'resourceDecisions', 'availableSkills')
+    foreach ($key in $required) {
+        if (-not $Choices.Contains($key)) { throw "Missing confirmed Init choice: $key" }
+    }
+    foreach ($key in $Choices.Keys) {
+        if ($key -notin ($required + $optional)) { throw "Unsupported Init choice: $key" }
+    }
+    if ($Choices.confirmed -isnot [bool] -or -not $Choices.confirmed) { throw 'Init requires explicit user confirmation.' }
+    if ($Choices.naming -notin @('skip', 'aliases', 'custom', 'mixed')) { throw 'Supply the answered naming policy: skip, aliases, custom, or mixed.' }
+    if ($Choices.notify -isnot [Collections.IDictionary]) { throw 'Supply the answered or inherited notify object.' }
+    $root = Resolve-SquadRepositoryPath -RepoRoot $RepoRoot -Path $Choices.squadRoot -AllowMissing
+    $relative = [IO.Path]::GetRelativePath([IO.Path]::GetFullPath($RepoRoot), $root) -replace '\\', '/'
+    if ($relative -notmatch '^\.copilot-tracking/squad(?:/members/[a-z0-9][a-z0-9-]*)?$') { throw 'Invalid single-squad/member root.' }
+    $data = Get-SquadInitData -RepoRoot $RepoRoot
+    $profiles = @($data.profiles | Where-Object { $_.Profile -ceq $Choices.profile })
+    if ($Choices.profile -eq 'custom') {
+        if (-not $Choices.Contains('roles') -or $Choices.roles -isnot [array] -or $Choices.roles.Count -eq 0) { throw 'Custom Init requires confirmed role IDs.' }
+        $roles = @($Choices.roles)
+    }
+    else {
+        if ($profiles.Count -ne 1 -or $Choices.Contains('roles')) { throw 'Select a known profile, or use custom with role IDs.' }
+        $roles = @($profiles[0]['Members (roles)'] -split ',\s*')
+    }
+    $packNames = @()
+    if ($Choices.Contains('packs')) {
+        if ($Choices.packs -isnot [array]) { throw 'packs must be an array.' }
+        foreach ($name in $Choices.packs) {
+            $pack = @($data.packs | Where-Object { $_.Pack -ceq $name })
+            if ($pack.Count -ne 1 -or $name -in $packNames) { throw "Unknown or duplicate pack: $name" }
+            $packNames += $name
+            $roles += @($pack[0]['Adds (roles)'] -split ',\s*')
+        }
+    }
+    $availableSkills = @(
+        if ($Choices.Contains('availableSkills')) {
+            if ($Choices.availableSkills -isnot [array]) { throw 'availableSkills must be an array.' }
+            $Choices.availableSkills
+        }
+    )
+    $resourceDecisions = Assert-SquadPackResourceDecisions -InitData $data -Pack $packNames -RepoRoot $RepoRoot `
+        -Decisions $(if ($Choices.Contains('resourceDecisions')) { $Choices.resourceDecisions } else { $null }) `
+        -AvailableSkill $availableSkills
+    $roles = @($roles | Select-Object -Unique)
+    if ($Choices.Contains('excludeRoles')) {
+        if ($Choices.excludeRoles -isnot [array]) { throw 'excludeRoles must be an array.' }
+        foreach ($role in $Choices.excludeRoles) {
+            if ($role -notin $roles -or $role -in @('researcher', 'lead', 'developer', 'tester', 'scribe')) {
+                throw "Cannot exclude missing or methodology role: $role"
+            }
+        }
+        $roles = @($roles | Where-Object { $_ -notin $Choices.excludeRoles })
+    }
+    foreach ($role in @('researcher', 'lead', 'developer', 'tester', 'scribe')) {
+        if ($role -notin $roles) { throw "Confirmed roster is missing methodology role: $role" }
+    }
+    $names = if ($Choices.Contains('names')) { $Choices.names } else { @{} }
+    if ($names -isnot [Collections.IDictionary]) { throw 'names must be a role-to-name object.' }
+    foreach ($role in $names.Keys) {
+        if ($role -notin $roles -or $names[$role] -isnot [string] -or $names[$role] -match '[\r\n|]' -or [string]::IsNullOrWhiteSpace($names[$role])) {
+            throw "Invalid confirmed member name for $role."
+        }
+    }
+    if ($Choices.naming -eq 'skip' -and $names.Count -gt 0) { throw 'Skip naming cannot carry supplied names.' }
+    if ($Choices.naming -eq 'custom' -and $names.Count -ne $roles.Count) { throw 'Custom naming requires a supplied name for every role.' }
+    $models = if ($Choices.Contains('models')) { $Choices.models } else { @{} }
+    if ($models -isnot [Collections.IDictionary]) { throw 'models must be a role-to-model object.' }
+    $routing = if ($Choices.Contains('modelRouting')) { $Choices.modelRouting } else { 'off' }
+    if ($routing -notin @('off', 'ranked', 'economy', 'manual')) { throw 'Invalid modelRouting.' }
+    foreach ($role in $models.Keys) {
+        if ($role -notin $roles -or $models[$role] -isnot [string] -or $routing -eq 'off') { throw "Invalid confirmed model cell for $role." }
+    }
+    $agents = Get-SquadAgentIndex $RepoRoot
+    $usedNames = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+    foreach ($name in $names.Values) { $null = $usedNames.Add($name) }
+    $aliasIndex = 0
+    $roster = @(
+        foreach ($role in $roles) {
+            $cast = @($data.cast | Where-Object { $_.Role -ceq $role })
+            if ($cast.Count -ne 1) { throw "Unknown or ambiguous catalog role: $role" }
+            $primary = $cast[0]['Primary Agent (`name:`)']
+            if (-not $agents.ContainsKey($primary) -or -not $agents[$primary].dispatchable) {
+                throw "Role '$role' has no installed dispatchable Primary '$primary'; confirm another roster or install it."
+            }
+            $name = if ($names.Contains($role)) { $names[$role] } else { '' }
+            if (-not $name -and $Choices.naming -in @('aliases', 'mixed')) {
+                do {
+                    $cycle = [int][Math]::Floor($aliasIndex / $data.aliases.Count)
+                    $name = $data.aliases[$aliasIndex % $data.aliases.Count] + $(if ($cycle) { "-$($cycle + 1)" })
+                    $aliasIndex++
+                } while (-not $usedNames.Add($name))
+            }
+            $seed = @($data.seeds | Where-Object { $_.Role -ceq $role })
+            $rootRows = @($data.roots | Where-Object { $role -cin @($_.Role -split ',\s*') })
+            if ($rootRows.Count -gt 1) { throw "Ambiguous canonical Deliverable Root for $role." }
+            $deliverable = if ($role -eq 'scribe') { '(squad state)' } elseif ($rootRows.Count) { $rootRows[0]['Deliverable Root'] } else { [string][char]0x2014 }
+            $row = [ordered]@{
+                Role = $role
+                'Member Name' = $name
+                'Agent Name (Primary)' = $primary
+                'Alternate Agents' = $cast[0]['Alternate Agents (`name:`)']
+                'Selection Cue' = $cast[0]['Selection Cue']
+                Invocation = 'runSubagent / task'
+                'Model Tier' = $(if ($seed.Count) { $seed[0]['Model Tier'] } else { 'default' })
+            }
+            if ($routing -ne 'off') { $row['Model'] = $(if ($models.Contains($role)) { $models[$role] } else { '' }) }
+            $row['Deliverable Root'] = $deliverable
+            $row
+        }
+    )
+    $payload = [ordered]@{
+        squadRoot = $relative
+        runId = $Choices.runId
+        roster = $roster
+        provenance = $Choices.profile + (($packNames | ForEach-Object { " +$_" }) -join '')
+        modelRouting = $routing
+        notify = $Choices.notify
+    }
+    if ($packNames.Count) { $payload.packs = $packNames }
+    if ($resourceDecisions.Count) { $payload.packResources = $resourceDecisions }
+    if ($availableSkills.Count) { $payload.availableSkills = $availableSkills }
+    foreach ($key in @('mode', 'sessionModel', 'modelOverrides', 'usage')) {
+        if ($Choices.Contains($key)) { $payload[$key] = $Choices[$key] }
+    }
+    $payload
+}
+
+function Write-SquadTransportJson {
+    param(
+        [Parameter(Mandatory)][string]$Path,
+        [Parameter(Mandatory)][string]$SquadRoot,
+        [Parameter(Mandatory)]$Value
+    )
+    $destination = [IO.Path]::GetFullPath($Path)
+    $relative = [IO.Path]::GetRelativePath([IO.Path]::GetFullPath($SquadRoot), $destination)
+    if ([IO.Path]::GetExtension($destination) -ne '.json' -or
+        ($relative -ne '..' -and $relative -notmatch '^\.\.[\\/]' -and -not [IO.Path]::IsPathRooted($relative))) {
+        throw 'Transport JSON must be a new file outside squad state.'
+    }
+    $parent = Split-Path -Parent $destination
+    if (-not (Test-Path -LiteralPath $parent -PathType Container)) { throw 'Transport parent must already exist.' }
+    $cursor = $parent
+    while ($cursor) {
+        if ((Get-Item -LiteralPath $cursor -Force).Attributes -band [IO.FileAttributes]::ReparsePoint) { throw 'Linked transport directory refused.' }
+        $cursor = Split-Path -Parent $cursor
+    }
+    $stream = [IO.File]::Open($destination, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write, [IO.FileShare]::None)
+    try {
+        $bytes = [Text.UTF8Encoding]::new($false).GetBytes(($Value | ConvertTo-Json -Depth 30))
+        $stream.Write($bytes)
+    }
+    finally { $stream.Dispose() }
+    $destination
+}
+
+function Get-SquadFederationSnapshot {
+    param([Parameter(Mandatory)][string]$SquadRoot, [Parameter(Mandatory)][string]$RepoRoot)
+    $tables = @(Read-SquadTables (Join-Path $SquadRoot 'federation.md') | Where-Object { 'Sub-squad' -in $_.Header -and 'Location' -in $_.Header })
+    if ($tables.Count -ne 1) { throw 'Missing federation registry.' }
+    $members = [ordered]@{}
+    foreach ($row in $tables[0].Rows) {
+        $name = $row['Sub-squad']
+        if ($name -cnotmatch '^[a-z0-9][a-z0-9-]*$' -or $members.Contains($name) -or $row.Kind -ne 'in-repo' -or
+            ($row.Location -replace '\\', '/').TrimEnd('/') -cne "members/$name") { throw 'Invalid or duplicate federation member.' }
+        $path = Resolve-SquadRepositoryPath -RepoRoot $RepoRoot -Path (Join-Path $SquadRoot 'members' $name 'state.json')
+        $stateBytes = [IO.File]::ReadAllBytes($path)
+        $state = [Text.Encoding]::UTF8.GetString($stateBytes).TrimStart([char]0xfeff) | ConvertFrom-Json -AsHashtable
+        foreach ($field in @('estCostUsd', 'estCreditsTotal')) {
+            $value = $state.currentRun[$field]
+            if ($value -isnot [ValueType] -or $value -is [bool] -or -not [double]::IsFinite([double]$value) -or $value -lt 0) { throw 'Invalid member totals.' }
+        }
+        $members[$name] = [ordered]@{ stateHash = [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($stateBytes)); costUsd = $state.currentRun.estCostUsd; credits = $state.currentRun.estCreditsTotal }
+    }
+    $files = [ordered]@{}
+    $paths = @(
+        Get-ChildItem -LiteralPath $SquadRoot -File -Force
+        $history = Join-Path $SquadRoot 'history'
+        if (Test-Path -LiteralPath $history) { Get-ChildItem -LiteralPath $history -File -Force }
+    )
+    foreach ($file in $paths | Sort-Object FullName) {
+        $path = Resolve-SquadRepositoryPath -RepoRoot $RepoRoot -Path $file.FullName
+        $files[[IO.Path]::GetRelativePath($SquadRoot, $path) -replace '\\', '/'] = (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash
+    }
+    foreach ($name in $members.Keys) {
+        if ((Get-FileHash -LiteralPath (Join-Path $SquadRoot 'members' $name 'state.json') -Algorithm SHA256).Hash -cne $members[$name].stateHash) {
+            throw 'A member changed while its federation snapshot was being captured.'
+        }
+    }
+    [ordered]@{ schemaVersion = 1; squadRoot = $SquadRoot; files = $files; members = $members }
+}
+
+function New-SquadOrchestrationConsumption {
+    param(
+        [Parameter(Mandatory)][string]$RatesPath,
+        [AllowEmptyString()][string]$SessionModel,
+        [ValidateSet('fast', 'default', 'extended')][string]$FallbackTier = 'default'
+    )
+    $tables = @(Read-SquadTables $RatesPath)
+    $modelTables = @($tables | Where-Object { 'Model (as routed)' -in $_.Header })
+    $fallbackTables = @($tables | Where-Object { 'Priced as' -in $_.Header -and 'Tier' -in $_.Header })
+    $floorTables = @($tables | Where-Object { 'Dispatch class' -in $_.Header })
+    if ($modelTables.Count -ne 1 -or $fallbackTables.Count -ne 1 -or $floorTables.Count -ne 1) { throw 'Missing or ambiguous orchestration rate/estimator tables.' }
+    $floors = @($floorTables[0].Rows | Where-Object { $_['Dispatch class'] -eq 'Scribe state write' })
+    if ($floors.Count -ne 1) { throw 'Missing orchestration estimator floor.' }
+    $sizes = @(
+        foreach ($field in @('Internal turns', 'Base context', 'Growth/turn', 'Output/turn')) {
+            $number = 0L
+            if (-not [long]::TryParse(($floors[0][$field] -replace ',', ''), [ref]$number) -or $number -le 0) { throw 'Invalid orchestration estimator number.' }
+            $number
+        }
+    )
+    $concrete = $SessionModel.Trim() -notin @('', 'auto', 'unknown', 'fast', 'default', 'extended')
+    $model = if ($concrete) { $SessionModel } else { 'unknown' }
+    $key = ($model -replace '\s*\((?:copilot|github|anthropic|openai)\)\s*$', '' -replace '[\s_]+', '-').ToLowerInvariant()
+    if ($key -in @('hydrafusion', 'hydrafusion-balance', 'hydrafusion-efficiency')) { $key = 'hydrafusion-max' }
+    $own = @($modelTables[0].Rows | Where-Object { $key -in @(($_['Model (as routed)'] -replace '\s+', '-').ToLowerInvariant(), $_['Model ID'].Trim('`').ToLowerInvariant()) } | Select-Object -First 1)
+    $tier = if ($own.Count) { $own[0].Tier } else { $FallbackTier }
+    $fallback = @($fallbackTables[0].Rows | Where-Object { $_.Tier -eq $tier })
+    if ($fallback.Count -ne 1) { throw 'Missing orchestration tier fallback.' }
+    $price = if ($own.Count) { $own[0]['Model (as routed)'] } else { $fallback[0]['Priced as'] }
+    $priceRows = @($modelTables[0].Rows | Where-Object { $_['Model (as routed)'] -eq $price })
+    if ($priceRows.Count -ne 1) { throw 'Missing orchestration price row.' }
+    $turns, $base, $growth, $output = $sizes
+    $factor = if ($key -eq 'hydrafusion-max') { 0.35 } else { 1.0 }
+    $gross = $turns * ($base + $growth * ($turns - 1) / 2.0) * $factor
+    [ordered]@{
+        model = $model; model_source = $(if ($concrete) { 'session-inherited' } else { 'unresolved' })
+        priced_as = $price; model_tier = $tier; internal_turns = [long]$turns
+        input_tokens = [long][Math]::Round($gross * 0.20); cached_tokens = [long][Math]::Round($gross * 0.80)
+        cache_write_tokens = $(if ([double]$priceRows[0]['Cache write'] -gt 0) { [long][Math]::Round(($base + $growth * ($turns - 1)) * $factor) } else { 0L })
+        output_tokens = [long]($turns * $output); basis = $(if ($concrete) { 'estimated' } else { 'tier-default' })
+    }
+}
+
+function ConvertTo-SquadModelKey {
+    param([AllowEmptyString()][AllowNull()][string]$Value)
+    if (-not $Value) { return '' }
+    $key = ($Value.Trim().Trim('`') -replace '\s*\((?:copilot|github|anthropic|openai)\)\s*$', '' -replace '[\s_]+', '-').ToLowerInvariant()
+    if ($key -in @('hydrafusion', 'hydrafusion-balance', 'hydrafusion-efficiency')) { return 'hydrafusion-max' }
+    $key
+}
+
+function Get-SquadRoleClassMap {
+    param([string]$Path = (Join-Path $script:SkillRoot 'references' 'model-routing.md'))
+    $section = Get-SquadReferenceSection -Path $Path -Heading '## Assignment Classes'
+    $map = @{}
+    foreach ($line in ($section -split '\r?\n')) {
+        $match = [regex]::Match($line, '^\|\s*`(?<class>[a-z]+)`\s*\|(?<roles>.*)\|\s*$')
+        if (-not $match.Success) { continue }
+        foreach ($role in [regex]::Matches($match.Groups['roles'].Value, '`([a-z][a-z0-9-]*)`')) {
+            if (-not $map.ContainsKey($role.Groups[1].Value)) {
+                $map[$role.Groups[1].Value] = $match.Groups['class'].Value
+            }
+        }
+    }
+    $map
+}
+
+function Get-SquadDispatchReservation {
+    <#
+    .SYNOPSIS
+        Prices one future dispatch from its actual role class and resolved model.
+    #>
+    param(
+        [Parameter(Mandatory)][string]$RatesPath,
+        [Parameter(Mandatory)][string]$Model,
+        [ValidateSet('research', 'planning', 'implementation', 'review', 'council', 'intake', 'bookkeeping', 'coordinator')]
+        [string]$AssignmentClass = 'implementation',
+        [string]$DispatchClass,
+        [ValidateRange(1, 1000)][int]$Count = 1
+    )
+
+    $tables = @(Read-SquadTables $RatesPath)
+    $modelTables = @($tables | Where-Object { 'Model (as routed)' -in $_.Header -and 'Model ID' -in $_.Header })
+    $floorTables = @($tables | Where-Object { 'Dispatch class' -in $_.Header -and 'Internal turns' -in $_.Header })
+    if ($modelTables.Count -ne 1 -or $floorTables.Count -ne 1) { throw 'Missing or ambiguous model-rate or dispatch-class table.' }
+
+    if (-not $DispatchClass) {
+        $DispatchClass = switch ($AssignmentClass) {
+            'research' { 'Research / file survey' }
+            'planning' { 'Plan / synthesis' }
+            'implementation' { 'Implement / edit loop' }
+            'review' { 'Review / verification' }
+            'intake' { 'Review / verification' }
+            'council' { 'Council member opinion' }
+            'bookkeeping' { 'Scribe state write' }
+            'coordinator' { 'Lookup / single-file read' }
+        }
+    }
+
+    $floor = @($floorTables[0].Rows | Where-Object { $_['Dispatch class'] -eq $DispatchClass })
+    if ($floor.Count -ne 1) { throw "No unique dispatch estimator row for '$DispatchClass'." }
+    $numbers = @()
+    foreach ($field in @('Internal turns', 'Base context', 'Growth/turn', 'Output/turn')) {
+        $value = 0L
+        if (-not [long]::TryParse(($floor[0][$field] -replace ',', ''), [ref]$value) -or $value -le 0) {
+            throw "Invalid '$field' in dispatch estimator row '$DispatchClass'."
+        }
+        $numbers += $value
+    }
+    $turns, $base, $growth, $outputPerTurn = $numbers
+
+    $modelKey = ConvertTo-SquadModelKey $Model
+    if (-not $modelKey -or $modelKey -in @('auto', 'unknown', 'fast', 'default', 'extended')) {
+        throw "A concrete priced model is required for '$DispatchClass'; got '$Model'."
+    }
+    $modelRows = @($modelTables[0].Rows | Where-Object {
+            $modelKey -in @(
+                (ConvertTo-SquadModelKey $_['Model ID']),
+                (ConvertTo-SquadModelKey $_['Model (as routed)'])
+            )
+        })
+    if ($modelRows.Count -ne 1) { throw "No unique rate row for model '$Model'." }
+    $rate = $modelRows[0]
+
+    $threshold = $null
+    $thresholdMatch = [regex]::Match([string]$rate['LC Threshold'], '(?<value>\d+(?:\.\d+)?)K')
+    if ($thresholdMatch.Success) {
+        $threshold = [double]$thresholdMatch.Groups['value'].Value * 1000.0
+    }
+    $largestContext = $base + $growth * ($turns - 1)
+    $longContext = $null -ne $threshold -and $largestContext -gt $threshold
+    $columns = if ($longContext) {
+        @{ input = 'LC Input'; cached = 'LC Cached'; cacheWrite = 'LC Cache write'; output = 'LC Output' }
+    }
+    else {
+        @{ input = 'Input'; cached = 'Cached'; cacheWrite = 'Cache write'; output = 'Output' }
+    }
+    $prices = @{}
+    foreach ($name in $columns.Keys) {
+        $raw = [string]$rate[$columns[$name]]
+        $value = [decimal]0
+        if ($raw -in @('', 'n/a') -or -not [decimal]::TryParse($raw, [Globalization.NumberStyles]::Float, [Globalization.CultureInfo]::InvariantCulture, [ref]$value) -or $value -lt 0) {
+            throw "Invalid $($columns[$name]) rate for model '$Model'."
+        }
+        $prices[$name] = $value
+    }
+
+    $tokenFactor = if ($modelKey -eq 'hydrafusion-max') { [decimal]0.35 } else { [decimal]1 }
+    $gross = [decimal]$turns * ([decimal]$base + [decimal]$growth * ($turns - 1) / 2) * $tokenFactor
+    $inputTokens = [long][Math]::Round([double]($gross * [decimal]0.20))
+    $cached = [long][Math]::Round([double]($gross * [decimal]0.80))
+    $cacheWrite = if ($prices.cacheWrite -gt 0) {
+        [long][Math]::Round([double](([decimal]$base + [decimal]$growth * ($turns - 1)) * $tokenFactor))
+    }
+    else { 0L }
+    $output = [long]($turns * $outputPerTurn)
+    $singleCost = (
+        [decimal]$inputTokens * $prices.input +
+        [decimal]$cached * $prices.cached +
+        [decimal]$cacheWrite * $prices.cacheWrite +
+        [decimal]$output * $prices.output
+    ) / [decimal]1e6
+
+    [pscustomobject][ordered]@{
+        model = ([string]$rate['Model ID']).Trim('`')
+        pricedAs = $rate['Model (as routed)']
+        assignmentClass = $AssignmentClass
+        dispatchClass = $DispatchClass
+        count = $Count
+        longContext = $longContext
+        internalTurns = $turns
+        inputTokens = $inputTokens * $Count
+        cachedTokens = $cached * $Count
+        cacheWriteTokens = $cacheWrite * $Count
+        outputTokens = $output * $Count
+        projectedCostUsd = $singleCost * $Count
+    }
+}
+
+function Get-SquadDecision {
+    param(
+        [Parameter(Mandatory)][string]$RepoRoot,
+        [Parameter(Mandatory)][string]$SquadRoot,
+        [Parameter(Mandatory)][string]$Reference
+    )
+    if ($Reference -notmatch '^(?<path>[^#]+)#(?<anchor>[^#\s]+)$') { throw 'A concrete decision anchor is required.' }
+    $path = $Matches.path
+    $anchor = $Matches.anchor
+    $expected = Join-Path $SquadRoot 'decisions.md'
+    $resolved = Resolve-SquadRepositoryPath -RepoRoot $RepoRoot -Path $path -AllowMissing
+    if ($resolved -ne $expected) {
+        $resolved = Resolve-SquadRepositoryPath -RepoRoot $RepoRoot -Path (Join-Path $SquadRoot $path)
+        if ($resolved -ne $expected) { throw 'Decision references must belong to the selected squad.' }
+    }
+    $found = @(
+        foreach ($section in [regex]::Matches([IO.File]::ReadAllText($resolved), '(?ms)^## (?<heading>[^\r\n]+)\r?\n(?<body>.*?)(?=^## |\z)')) {
+            $slug = ($section.Groups['heading'].Value.ToLowerInvariant() -replace '[^\p{L}\p{Nd}_ -]', '') -replace ' ', '-'
+            if ($slug -ceq $anchor) { $section }
+        }
+    )
+    if ($found.Count -ne 1) { throw 'Decision anchor is missing or ambiguous.' }
+    $found[0]
+}
+
+function Get-SquadPendingConnectors {
+    param([Parameter(Mandatory)][string]$RepoRoot, [Parameter(Mandatory)][string]$SquadRoot)
+    $tables = @(Read-SquadTables (Join-Path $SquadRoot 'team.md') | Where-Object { 'Manifest' -in $_.Header -and 'Binding ID' -in $_.Header })
+    $tasks = [Collections.Generic.List[object]]::new()
+    $seen = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+    foreach ($table in $tables) {
+        foreach ($binding in $table.Rows) {
+            $manifestPath = Resolve-SquadRepositoryPath -RepoRoot $RepoRoot -Path $binding.Manifest
+            $manifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json -AsHashtable
+            if (-not $manifest.Contains('dropPath') -or $manifest.dropPath -isnot [string]) { throw 'Registered connector manifest is missing dropPath.' }
+            $drop = Resolve-SquadRepositoryPath -RepoRoot $RepoRoot -Path $manifest.dropPath -AllowMissing
+            $privateRoot = Join-Path $drop '.squad-connector'
+            if (-not (Test-Path -LiteralPath $privateRoot -PathType Container)) { continue }
+            $null = Resolve-SquadRepositoryPath -RepoRoot $RepoRoot -Path $privateRoot
+            foreach ($file in Get-ChildItem -LiteralPath $privateRoot -File -Filter '*.state.json') {
+                $path = Resolve-SquadRepositoryPath -RepoRoot $RepoRoot -Path $file.FullName
+                if (-not $seen.Add($path)) { continue }
+                $state = Get-Content -LiteralPath $path -Raw | ConvertFrom-Json -AsHashtable
+                if (-not $state.Contains('consumed') -or $state.consumed -isnot [bool] -or -not $state.Contains('taskId')) { throw 'Malformed connector dispatch state; resolve its pending identity before new work.' }
+                if ($state.consumed) { continue }
+                $id = $state.taskId
+                if ($id -isnot [string] -or $id -notmatch '^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$') { throw 'Invalid pending connector task id.' }
+                $requestPath = Resolve-SquadRepositoryPath -RepoRoot $RepoRoot -Path (Join-Path $drop "$id.request.json")
+                $request = Get-Content -LiteralPath $requestPath -Raw | ConvertFrom-Json -AsHashtable
+                if ($request.taskId -cne $id -or $request.connectorId -cne $manifest.connectorId) { throw 'Pending connector request identity mismatch.' }
+                $tasks.Add([ordered]@{
+                        taskId = $id; connectorId = $request.connectorId; role = $request.role
+                        requestPath = $requestPath; statePath = $path; manifestPath = $manifestPath
+                        resultAvailable = Test-Path -LiteralPath (Join-Path $drop "$id.result.json") -PathType Leaf
+                    })
+            }
+        }
+    }
+    $tasks.ToArray()
+}
+
+function Get-SquadEconomyConsentScope {
+    <#
+    .SYNOPSIS
+        The scope of the economy consent recorded in decisions.md text (references/economy-mode.md Consent): `all-roles` when an
+        `## Economy Mode Accepted` entry carries a `Scope: all-roles` bullet, otherwise `legacy` and dispatch must re-consent
+        before Economy can apply. The resolver never mixes Economy and Ranked by role.
+    #>
+    param([AllowEmptyString()][string]$DecisionsText = '')
+    foreach ($section in ($DecisionsText -split '(?m)^(?=## )')) {
+        if ($section -match '(?m)^## Economy Mode Accepted\b' -and $section -match '(?m)^\s*[*-]\s+Scope:\s*all-roles\b') { return 'all-roles' }
+    }
+    'legacy'
+}
+
+function Test-SquadPathSetOverlap {
+    param([string[]]$Left = @(), [string[]]$Right = @())
+    foreach ($first in $Left) {
+        foreach ($second in $Right) {
+            $forward = [IO.Path]::GetRelativePath($first, $second)
+            $reverse = [IO.Path]::GetRelativePath($second, $first)
+            if (($forward -eq '.' -or $forward -notmatch '^\.\.(?:[\\/]|$)') -or
+                ($reverse -eq '.' -or $reverse -notmatch '^\.\.(?:[\\/]|$)')) { return $true }
+        }
+    }
+    $false
+}
+
+function Test-SquadDeliverableFanOutPlan {
+    <#
+    .SYNOPSIS
+        Proves that one repository-local Lead plan explicitly selected the deliverable-fan-out implementation shape.
+    #>
+    param([AllowEmptyString()][string]$PlanPath = '', [AllowEmptyString()][string]$RepoRoot = '')
+    if ([string]::IsNullOrWhiteSpace($PlanPath) -or [string]::IsNullOrWhiteSpace($RepoRoot)) { return $false }
+    try { $resolved = Resolve-SquadRepositoryPath -RepoRoot $RepoRoot -Path $PlanPath }
+    catch { return $false }
+    if (-not (Test-Path -LiteralPath $resolved -PathType Leaf)) { return $false }
+    $relative = ([IO.Path]::GetRelativePath([IO.Path]::GetFullPath($RepoRoot), $resolved) -replace '\\', '/')
+    if ($relative -cnotmatch '(^|/)\.copilot-tracking/(?:squad/members/[a-z0-9][a-z0-9-]*/)?plans/') { return $false }
+    $text = [IO.File]::ReadAllText($resolved)
+    [regex]::IsMatch(
+        $text,
+        '(?mi)^(?:[-*]\s*)?(?:\*\*)?Implement Shape(?:\*\*)?\s*(?::|[-\u2014])\s*`?deliverable-fan-out`?\s*(?:$|[,.;(])'
+    )
+}
+
+function Get-SquadDepthStageForUnit {
+    <#
+    .SYNOPSIS
+        Maps one selected unit to the fixed quick-depth stage table.
+    #>
+    param([AllowEmptyString()][string]$Role = '', [AllowEmptyString()][string]$Class = '')
+    if ($Role -ceq 'challenger') { return 'challenger-pass' }
+    switch ($Class) {
+        'research' { 'research' }
+        'planning' { 'plan' }
+        'implementation' { 'implement' }
+        'council' { 'task-fit-council' }
+        'intake' { 'intake-gate' }
+        'review' {
+            if ($Role -match 'security|vuln|supply-chain') { 'security-review' }
+            else { 'final-review' }
+        }
+        default { 'implement' }
+    }
+}
+
+function Get-SquadDepthStagePolicy {
+    <#
+    .SYNOPSIS
+        The fixed stage table `depth=quick` evaluates, one row per stage in pipeline order (references/quick-depth.md Depth Plan).
+    #>
+    $gate = 'gate: never skipped or shortened under depth=quick'
+    @(
+        [pscustomobject]@{ stage = 'discovery-offer'; kind = 'optional'; quick = 'skip'; criterion = 'depth=quick declines the discovery offer; an explicit discovery= input wins' }
+        [pscustomobject]@{ stage = 'intake-gate'; kind = 'gate'; quick = 'run'; criterion = $gate }
+        [pscustomobject]@{ stage = 'risk-gate'; kind = 'gate'; quick = 'run'; criterion = $gate }
+        [pscustomobject]@{ stage = 'impactful-action-gate'; kind = 'gate'; quick = 'run'; criterion = $gate }
+        [pscustomobject]@{ stage = 'cost-preflight'; kind = 'gate'; quick = 'run'; criterion = $gate }
+        [pscustomobject]@{ stage = 'research'; kind = 'work'; quick = 'shrink'; criterion = 'one cycle, Wider wave only, at most 2 lanes; gaps listed instead of Deeper or Contrarian waves' }
+        [pscustomobject]@{ stage = 'plan'; kind = 'work'; quick = 'shrink'; criterion = 'one recommended approach, no alternatives matrix' }
+        [pscustomobject]@{ stage = 'challenger-pass'; kind = 'optional'; quick = 'skip'; criterion = 'no critique or challenge was requested' }
+        [pscustomobject]@{ stage = 'implement'; kind = 'work'; quick = 'shrink'; criterion = 'minimal diff that satisfies the request' }
+        [pscustomobject]@{ stage = 'task-fit-council'; kind = 'gate'; quick = 'run'; criterion = $gate }
+        [pscustomobject]@{ stage = 'security-review'; kind = 'gate'; quick = 'run'; criterion = $gate }
+        [pscustomobject]@{ stage = 'final-review'; kind = 'gate'; quick = 'run'; criterion = $gate }
+    )
+}
+
+function Get-SquadDepthClause {
+    <#
+    .SYNOPSIS
+        The shrink budget a quick-depth dispatch carries for one assignment class; empty for roles that stay at standard depth.
+    #>
+    param([Parameter(Mandatory)][string]$Class, [switch]$Bounded)
+    switch ($Class) {
+        'research' { 'depth=quick: run one research cycle, the Wider wave only, with at most 2 lanes; list the remaining gaps instead of running Deeper or Contrarian waves; if the gaps leave the findings unusable for planning, return "blocked: needs deeper pass" without guessing.' }
+        'planning' { 'depth=quick: produce one recommended approach with its steps and success criteria, no alternatives matrix; list the open gaps; if the plan cannot be made safe at this depth, return "blocked: needs deeper pass" without guessing.' }
+        'implementation' {
+            if ($Bounded) {
+                'depth=quick, bounded: read only the named files and the change-record convention; do not explore the repository, but you may search for references to any symbol, heading, or link you change; make the minimal diff; if a dependent outside the named files needs a change, return "blocked: not bounded" without editing it.'
+            }
+            else {
+                'depth=quick: make the minimal diff that satisfies the request and the plan; if the change cannot be made safely at this depth, return "blocked: needs deeper pass" without editing.'
+            }
+        }
+        default { '' }
+    }
+}
+
+function Get-SquadDepthEvidenceText {
+    param([System.Collections.IDictionary]$Evidence, [Parameter(Mandatory)][string]$Key)
+    if ($null -ne $Evidence -and $Evidence.Contains($Key) -and $Evidence[$Key] -is [string] -and -not [string]::IsNullOrWhiteSpace($Evidence[$Key])) {
+        return $Evidence[$Key].Trim()
+    }
+    ''
+}
+
+function Test-SquadDepthReuse {
+    <#
+    .SYNOPSIS
+        Verifies one reusable research or plan artifact: it exists inside the repository, sits under its stage's tracking folder,
+        carries a date within the freshness window before asOf, and states what it covers. Any doubt rejects the reuse.
+    #>
+    param([Parameter(Mandatory)][System.Collections.IDictionary]$Item, [Parameter(Mandatory)][datetime]$AsOf, [string]$RepoRoot = '', [int]$FreshDays = 7)
+    $stage = if ($Item.Contains('stage')) { [string]$Item['stage'] } else { '' }
+    $covers = if ($Item.Contains('covers')) { [string]$Item['covers'] } else { '' }
+    $pathText = if ($Item.Contains('path')) { [string]$Item['path'] } else { '' }
+    $reject = { param($Why) [pscustomobject]@{ stage = $stage; accepted = $false; evidence = "reuse rejected: $Why" } }
+    if ($stage -cnotin @('research', 'plan')) { return (& $reject 'stage must be research or plan') }
+    if ([string]::IsNullOrWhiteSpace($covers)) { return (& $reject 'no statement of what the artifact covers') }
+    if ([string]::IsNullOrWhiteSpace($pathText) -or [string]::IsNullOrWhiteSpace($RepoRoot)) { return (& $reject 'no artifact path') }
+    try { $resolved = Resolve-SquadRepositoryPath -RepoRoot $RepoRoot -Path $pathText }
+    catch { return (& $reject 'the path is missing or leaves the repository') }
+    if (-not (Test-Path -LiteralPath $resolved -PathType Leaf)) { return (& $reject 'the path is not a file') }
+    $relative = ([IO.Path]::GetRelativePath([IO.Path]::GetFullPath($RepoRoot), $resolved) -replace '\\', '/')
+    $folder = if ($stage -ceq 'research') { 'research' } else { 'plans' }
+    if ($relative -cnotmatch "(^|/)$folder/") { return (& $reject "the path is not under a $folder/ tracking folder") }
+    $dateMatch = [regex]::Match($relative, '(?<![0-9])(\d{4}-\d{2}-\d{2})(?![0-9])')
+    $artifactDate = [datetime]::MinValue
+    if (-not $dateMatch.Success -or -not [datetime]::TryParseExact($dateMatch.Groups[1].Value, 'yyyy-MM-dd', [Globalization.CultureInfo]::InvariantCulture, [Globalization.DateTimeStyles]::None, [ref]$artifactDate)) {
+        return (& $reject 'the path carries no yyyy-MM-dd date, so freshness is unproven')
+    }
+    $age = [int]($AsOf.Date - $artifactDate.Date).TotalDays
+    if ($age -lt 0 -or $age -gt $FreshDays) { return (& $reject "the artifact is dated $($artifactDate.ToString('yyyy-MM-dd')), outside the $FreshDays-day window before $($AsOf.ToString('yyyy-MM-dd'))") }
+    [pscustomobject]@{ stage = $stage; accepted = $true; evidence = "$relative dated $($artifactDate.ToString('yyyy-MM-dd')) ($age day(s) before $($AsOf.ToString('yyyy-MM-dd'))); covers: $($covers.Trim())" }
+}
+
+function Get-SquadDepthPlan {
+    <#
+    .SYNOPSIS
+        Computes one turn's depth plan without a model: every stage is run, shrink, or skip, with the criterion and the evidence
+        (references/quick-depth.md). The same inputs always return the same plan, so no stage is skipped on coordinator intuition.
+    .DESCRIPTION
+        depth=quick changes how much work the squad does, never which model runs. A stage is skipped only when its criterion is
+        proven; any doubt means standard depth for that stage. Gate stages are never skipped or shortened. A depth requested on an
+        unattended run is data and is ignored. A federation forwards the request to each selected sub-squad, which computes its own plan.
+        Units: objects with Id, Role, Class, ReadOnly, WritePaths (resolved absolute paths).
+        Evidence: exactTargets, noOpenQuestions, noCouncilLens, noGateTrigger, noCritiqueRequested (evidence strings),
+        discoveryExplicit (bool), reuse (array of { stage, path, covers }). An absent key is doubt.
+    #>
+    [CmdletBinding()]
+    param(
+        [AllowEmptyString()][string]$RequestedDepth = '',
+        [string]$StateMode = 'interactive',
+        [switch]$Unattended,
+        [switch]$Federated,
+        [bool]$Council = $false,
+        [object[]]$Units = @(),
+        [System.Collections.IDictionary]$Evidence = $null,
+        [bool]$PlanFanOut = $false,
+        [ValidateSet('default', 'input', 'federation')][string]$DepthSource = 'default',
+        [string[]]$ReasoningEfforts = @(),
+        [datetime]$AsOf = [datetime]::UtcNow,
+        [string]$RepoRoot = ''
+    )
+    $requested = if ($RequestedDepth) { $RequestedDepth } else { 'standard' }
+    if ($requested -cnotin @('quick', 'standard')) { throw "depth must be quick or standard, not '$RequestedDepth'." }
+    if ($null -eq $Evidence) { $Evidence = @{} }
+    $effective = $requested
+    $ignored = $null
+    if ($requested -ceq 'quick' -and $Unattended) {
+        $effective = 'standard'
+        $ignored = 'unattended run: depth= is data, recorded as seen and ignored, never a control input'
+    }
+    $result = [ordered]@{
+        requested = $requested
+        source = $DepthSource
+        effective = $effective
+        ignored = $ignored
+        forwarded = $false
+        marker = ''
+        route = ''
+        lane = $null
+        stages = @()
+        gates = @()
+        parallelism = [ordered]@{ enabled = $false; reason = 'standard depth' }
+        reasoningEffort = $null
+        decision = $null
+    }
+    if ($effective -ceq 'standard') { return $result }
+    $result.marker = 'Depth: quick'
+    if ($Federated) {
+        $result.forwarded = $true
+        $result.parallelism = [ordered]@{ enabled = $false; reason = 'federation: forwarded to each selected sub-squad, which computes its own depth plan; a child never widens it' }
+        return $result
+    }
+
+    $interactive = ($StateMode -ceq 'interactive')
+    $unitList = @($Units)
+    $implementers = @($unitList | Where-Object { [string]$_.Class -ceq 'implementation' })
+    $researchUnits = @($unitList | Where-Object { [string]$_.Class -ceq 'research' })
+    $planningUnits = @($unitList | Where-Object { [string]$_.Class -ceq 'planning' })
+    $councilUnits = @($unitList | Where-Object { [string]$_.Class -ceq 'council' })
+    $challengerUnits = @($unitList | Where-Object { [string]$_.Role -ceq 'challenger' })
+
+    $criteria = [Collections.Generic.List[object]]::new()
+    $addCriterion = {
+        param([string]$Id, [bool]$Met, [string]$Text)
+        $criteria.Add([ordered]@{ id = $Id; met = $Met; evidence = $Text })
+    }
+    & $addCriterion 'interactive-mode' $interactive "state mode $StateMode"
+    foreach ($pair in @(
+            @('exact-targets', 'exactTargets', 'the request names the exact files and the change'),
+            @('no-open-questions', 'noOpenQuestions', 'no open question remains')
+        )) {
+        $text = Get-SquadDepthEvidenceText -Evidence $Evidence -Key $pair[1]
+        & $addCriterion $pair[0] ([bool]$text) $(if ($text) { $text } else { "no evidence that $($pair[2])" })
+    }
+    $ownersMet = $false
+    $ownersText = ''
+    if ($implementers.Count -eq 0) { $ownersText = 'no implementation owner in this dispatch' }
+    elseif ($implementers.Count -eq 1) { $ownersMet = $true; $ownersText = "one owner: $([string]$implementers[0].Role)" }
+    else {
+        $proven = @($implementers | Where-Object { [bool]$_.ReadOnly -or @($_.WritePaths).Count -gt 0 }).Count -eq $implementers.Count
+        $overlap = $false
+        for ($i = 0; $proven -and $i -lt $implementers.Count; $i++) {
+            for ($j = $i + 1; $j -lt $implementers.Count; $j++) {
+                if (Test-SquadPathSetOverlap -Left @($implementers[$i].WritePaths) -Right @($implementers[$j].WritePaths)) { $overlap = $true }
+            }
+        }
+        if (-not $proven) { $ownersText = 'write independence is unproven for at least one owner' }
+        elseif ($overlap) { $ownersText = 'owner write sets overlap' }
+        else { $ownersMet = $true; $ownersText = "$($implementers.Count) owners with proven-disjoint write sets" }
+    }
+    & $addCriterion 'owners-disjoint' $ownersMet $ownersText
+    $lensText = Get-SquadDepthEvidenceText -Evidence $Evidence -Key 'noCouncilLens'
+    $lensMet = [bool]$lensText -and -not $Council -and $councilUnits.Count -eq 0
+    & $addCriterion 'no-council-lens' $lensMet $(if ($Council -or $councilUnits.Count -gt 0) { 'a council batch is part of this dispatch' } elseif ($lensText) { $lensText } else { 'no evidence that no council lens engages' })
+    $gateText = Get-SquadDepthEvidenceText -Evidence $Evidence -Key 'noGateTrigger'
+    & $addCriterion 'no-gate-trigger' ([bool]$gateText) $(if ($gateText) { $gateText } else { 'no evidence that no gate triggers' })
+    $laneUnmet = @($criteria | Where-Object { -not $_.met } | ForEach-Object { $_.id })
+    $laneEligible = $laneUnmet.Count -eq 0
+    $result.lane = [ordered]@{ eligible = $laneEligible; criteria = $criteria.ToArray(); unmet = $laneUnmet }
+    if ($laneEligible) { $result.route = 'bounded'; $result.marker = 'Route: bounded; Depth: quick' }
+
+    $reuse = @{}
+    $reuseNotes = [Collections.Generic.List[string]]::new()
+    if ($interactive -and $Evidence.Contains('reuse') -and $Evidence['reuse'] -is [array]) {
+        foreach ($item in $Evidence['reuse']) {
+            if ($item -isnot [Collections.IDictionary]) { $reuseNotes.Add('reuse rejected: each reuse entry must be an object'); continue }
+            $checked = Test-SquadDepthReuse -Item $item -AsOf $AsOf -RepoRoot $RepoRoot
+            if ($checked.accepted -and -not $reuse.ContainsKey($checked.stage)) { $reuse[$checked.stage] = $checked.evidence }
+            elseif (-not $checked.accepted) { $reuseNotes.Add("$($checked.stage): $($checked.evidence)") }
+        }
+    }
+
+    $rows = [Collections.Generic.List[object]]::new()
+    foreach ($policy in Get-SquadDepthStagePolicy) {
+        $action = $policy.quick
+        $criterion = $policy.criterion
+        $text = ''
+        switch ($policy.stage) {
+            'discovery-offer' {
+                if ($Evidence.Contains('discoveryExplicit') -and $Evidence['discoveryExplicit'] -is [bool] -and $Evidence['discoveryExplicit']) {
+                    $action = 'run'; $criterion = 'an explicit discovery= input wins over depth=quick'; $text = 'discovery= was passed this turn'
+                }
+                else { $text = 'no discovery= input this turn' }
+            }
+            { $_ -in @('research', 'plan') } {
+                $units = @(if ($_ -ceq 'research') { $researchUnits } else { $planningUnits })
+                if ($laneEligible) {
+                    $action = 'skip'; $criterion = 'Bounded Lane: every lane criterion is met, so Research and Plan are skipped'
+                    $text = "all $($criteria.Count) lane criteria are met; the evidence for each is on the Route: bounded line"
+                }
+                elseif ($reuse.ContainsKey($_)) { $action = 'skip'; $criterion = 'a fresh artifact already covers the topic'; $text = $reuse[$_] }
+                elseif ($units.Count -gt 0) { $text = "dispatched: $(@($units | ForEach-Object { [string]$_.Role }) -join ', ')" }
+                else {
+                    $why = @($reuseNotes | Where-Object { $_ -like "$($policy.stage):*" })
+                    $text = if ($why.Count -gt 0) { $why -join '; ' } else { 'no lane and no verified reusable artifact; runs shrunk' }
+                }
+            }
+            'challenger-pass' {
+                $critique = Get-SquadDepthEvidenceText -Evidence $Evidence -Key 'noCritiqueRequested'
+                if ($critique) { $action = 'skip'; $criterion = 'the trusted request evidence says no critique or challenge was requested'; $text = $critique }
+                elseif ($challengerUnits.Count -gt 0) { $action = 'run'; $criterion = 'challenger is dispatched; review-class roles stay at standard depth'; $text = 'unit challenger is in this dispatch' }
+                else { $action = 'run'; $criterion = 'any doubt means standard depth'; $text = 'no evidence that no critique was requested' }
+            }
+            'implement' {
+                if ($laneEligible) { $criterion = 'Bounded Lane owner brief: read only the named files; minimal diff'; $text = $ownersText }
+                else { $text = if ($implementers.Count -gt 0) { "dispatched: $(@($implementers | ForEach-Object { [string]$_.Role }) -join ', ')" } else { 'implementers run shrunk when dispatched' } }
+            }
+            default { $text = 'always runs at standard depth' }
+        }
+        $rows.Add([ordered]@{ stage = $policy.stage; kind = $policy.kind; action = $action; criterion = $criterion; evidence = $text })
+    }
+    $result.stages = $rows.ToArray()
+    $result.gates = @(Get-SquadDepthStagePolicy | Where-Object { $_.kind -ceq 'gate' } | ForEach-Object { $_.stage })
+    $unitStages = @($unitList | ForEach-Object {
+            [pscustomobject]@{
+                Id = [string]$_.Id
+                Stage = if ($_.PSObject.Properties['Stage']) { [string]$_.Stage } else { Get-SquadDepthStageForUnit -Role ([string]$_.Role) -Class ([string]$_.Class) }
+            }
+        })
+    $result['gateCoverage'] = @($result.gates | ForEach-Object {
+            $gate = $_
+            $supplied = @($unitStages | Where-Object Stage -ceq $gate)
+            $status = if ($supplied.Count -gt 0) { 'supplied-this-plan' }
+            elseif ($gate -ceq 'final-review' -and $implementers.Count -gt 0) { 'required-follow-up' }
+            else { 'external-evaluation' }
+            [ordered]@{ stage = $gate; status = $status; units = @($supplied | ForEach-Object Id) }
+        })
+
+    $result.parallelism = if (-not $interactive) {
+        [ordered]@{ enabled = $false; reason = "state mode is ${StateMode}: Plan-Driven Parallelism is interactive only" }
+    }
+    elseif ($laneEligible) {
+        [ordered]@{ enabled = $true; basis = 'bounded'; reason = 'the bounded request proves independent owners and disjoint write sets; escalate-tier owners are never batched' }
+    }
+    elseif ($PlanFanOut) {
+        [ordered]@{ enabled = $true; basis = 'deliverable-fan-out'; reason = 'the verified Lead plan declares Implement Shape deliverable-fan-out; selected owners still need disjoint write sets and no dependency edge' }
+    }
+    else {
+        [ordered]@{ enabled = $false; reason = 'quick parallelism requires either a bounded request or a verified deliverable-fan-out Lead plan' }
+    }
+
+    $effortRoles = @($unitList | Where-Object { [string]$_.Role -cin @('researcher', 'lead') } | ForEach-Object { [string]$_.Role } | Select-Object -Unique)
+    $advertised = @($ReasoningEfforts | ForEach-Object { $_.Trim().ToLowerInvariant() })
+    $effort = [ordered]@{ requested = 'low'; applied = $false; roles = @(); reason = '' }
+    if ($advertised.Count -eq 0) { $effort.reason = 'the dispatch tool advertises no reasoning_effort values; the parameter is omitted' }
+    elseif ($advertised -cnotcontains 'low') { $effort.reason = "the dispatch tool advertises $($advertised -join ', ') without low; the parameter is omitted" }
+    elseif ($effortRoles.Count -eq 0) { $effort.reason = 'no researcher or lead unit in this dispatch' }
+    else {
+        $effort.applied = $true
+        $effort.roles = $effortRoles
+        $effort.reason = 'depth=quick is the explicit request; low for researcher and lead, where thinking tokens dominate; retry once without it if the host rejects it, and disclose'
+    }
+    $result.reasoningEffort = $effort
+
+    $lines = [Collections.Generic.List[string]]::new()
+    $lines.Add('* Depth: quick (requested this turn; models are unchanged, routing chooses them independently)')
+    if ($laneEligible) { $lines.Add("* Route: bounded; every lane criterion is met: $(@($criteria | ForEach-Object { "$($_.id) ($($_.evidence))" }) -join '; ')") }
+    else { $lines.Add("* Route: not bounded; unmet lane criteria: $($laneUnmet -join ', ')") }
+    foreach ($row in $rows) {
+        if ($row.action -cne 'run') { $lines.Add("* Stage $($row.stage): $($row.action); criterion: $($row.criterion); evidence: $($row.evidence)") }
+    }
+    foreach ($note in $reuseNotes) { $lines.Add("* Reuse not applied: $note") }
+    $lines.Add("* Gates run at standard depth: $($result.gates -join ', ')")
+    $pendingGates = @($result.gateCoverage | Where-Object status -ne 'supplied-this-plan')
+    if ($pendingGates.Count -gt 0) {
+        $lines.Add("* Gate coverage still required: $(@($pendingGates | ForEach-Object { "$($_.stage) ($($_.status))" }) -join ', ')")
+    }
+    $lines.Add("* Parallelism: $($result.parallelism.reason)")
+    $lines.Add("* Reasoning effort: $($effort.reason)")
+    $result.decision = [ordered]@{ title = 'Depth plan: quick'; rationale = ($lines -join "`n"); adrNoted = $false }
+    $result
+}
+
+Export-ModuleMember -Function Read-SquadTables, Get-SquadReferenceSection, Get-SquadRulePath, Resolve-SquadRepositoryPath, Get-SquadAgentIndex, Get-SquadSkillIndex, Get-SquadRoster, Invoke-SquadLocalScript, Get-SquadInitData, Get-SquadPackResourceInventory, Assert-SquadPackResourceDecisions, New-SquadInitPayload, Resolve-SquadConnectorExecution, Write-SquadTransportJson, Get-SquadFederationSnapshot, New-SquadOrchestrationConsumption, ConvertTo-SquadModelKey, Get-SquadRoleClassMap, Get-SquadDispatchReservation, Get-SquadDecision, Get-SquadPendingConnectors, Get-SquadDepthPlan, Get-SquadDepthStagePolicy, Get-SquadDepthClause, Get-SquadEconomyConsentScope, Test-SquadDeliverableFanOutPlan, Get-SquadDepthStageForUnit

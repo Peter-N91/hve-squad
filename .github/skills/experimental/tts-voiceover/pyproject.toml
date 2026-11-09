@@ -1,0 +1,49 @@
+[project]
+name = "tts-voiceover-skill"
+version = "0.0.0"
+requires-python = ">=3.11"
+dependencies = [
+    "azure-cognitiveservices-speech>=1.41",
+    "azure-identity>=1.19",
+    "lxml>=6.1.0",  # direct dep (embed_audio.py) and transitive via python-pptx; explicit pin ensures CVE patches
+    "python-pptx>=1.0",
+    "pyyaml>=6.0",
+    # transitive via python-pptx; CVE-2026-54058/54059/54060/55379/55798/59199/59205 fixed in 12.3.0.
+    # Update policy: re-check NVD + OSV advisories quarterly and on any pip-audit alert.
+    "pillow>=12.3.0,<13.0",
+    # transitive via azure-identity/msal/pyjwt[crypto]; CVE-2026-69247 (Bleichenbacher oracle
+    # in PKCS7 decrypt) fixed in 50.0.0.
+    # Update policy: re-check NVD + OSV advisories quarterly and on any pip-audit alert.
+    "cryptography>=50.0.0,<51.0",
+    # transitive via azure-identity/msal; GHSA-42vr-xj54-vc7v and related PyJWT advisories
+    # fixed in 2.15.0 (2.14.0 remains affected).
+    # Update policy: re-check NVD + OSV advisories quarterly and on any pip-audit alert.
+    "pyjwt[crypto]>=2.15.0,<3.0",
+    # transitive via azure-core/msal/requests; GHSA-8988-9cw3-xx77, GHSA-gh4c-6fx4-qh6g,
+    # and GHSA-vxq7-64xx-v4gw fixed in 2.8.0.
+    # Update policy: re-check NVD + OSV advisories quarterly and on any pip-audit alert.
+    "urllib3>=2.8.0,<3.0",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.0",
+    "pytest-cov>=5.0",
+    "pytest-mock>=3.14",
+    "ruff>=0.15",
+]
+fuzz = [
+    "atheris>=3.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["scripts"]
+python_files = ["test_*.py", "fuzz_harness.py"]
+
+[tool.ruff]
+line-length = 88
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W"]
