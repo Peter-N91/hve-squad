@@ -940,6 +940,17 @@ dispatch-9911223344         # a free-form manual dispatch (workflow run id)</cod
         <code>Dispatch Record: n/a</code> avec une raison courte. Ce n'est pas une délégation inventée.
       </p>
       <p>
+        Les champs de fin sont des statuts machine : une étape terminée utilise <code>Result: complete</code>
+        et son entrée d'historique utilise <code>Outcome: Completed.</code>. Les descriptions, constats et
+        limites vont dans Notes, afin qu'une phrase comme « running a skill » ne soit pas prise pour un
+        travail inachevé. Le workflow actif du dépôt vérifie le profil, les questions et le cycle de vie
+        avant de nettoyer le runtime. En cas d'échec, il autorise une seule correction des enregistrements
+        dans la même session d'agent, puis vérifie à nouveau. Le staging final répète les contrôles avec
+        un validateur protégé par empreinte. Un travail inachevé bloque toujours la publication ; cette
+        reprise ne relance pas le pipeline. L'ossature consommateur documente le format des statuts,
+        mais ne fournit pas ce mécanisme de reprise.
+      </p>
+      <p>
         L'exécution sélectionne exactement un profil canonique, et les packs éventuels, à partir de la demande. Elle consigne
         cette sélection et ne pose pas de question ni n'envoie de notification lorsque la sélection réussit. La publication exige que le
         roster égale ce profil du catalogue épinglé. Un pack sélectionné n'est pas publié tant qu'un inventaire de confiance des packs installés

@@ -937,6 +937,16 @@ dispatch-9911223344         # a free-form manual dispatch (workflow run id)</cod
         <code>Dispatch Record: n/a</code> with a short reason. It is not a fabricated dispatch.
       </p>
       <p>
+        Completion fields are machine statuses: a completed stage uses <code>Result: complete</code>
+        and its history entry uses <code>Outcome: Completed.</code>. Descriptions, findings, and
+        limitations belong in Notes, so phrases such as “running a skill” cannot be mistaken for
+        unfinished work. The live repository workflow checks profile, questions, and lifecycle
+        before runtime cleanup. If that check fails, it allows one record-only repair in the same
+        agent session, then checks again. Final staging repeats the checks with a hash-protected
+        validator. Unfinished work still blocks publication; this recovery does not rerun the pipeline.
+        The consumer scaffold documents the status format but does not supply this recovery wiring.
+      </p>
+      <p>
         The run selects exactly one canonical profile, and any packs, from the demand. It records
         that selection and does not ask or notify when selection succeeds. Publication requires the
         roster to equal that pinned catalog profile. A selected pack is not published until a trusted

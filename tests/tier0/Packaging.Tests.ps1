@@ -430,6 +430,8 @@ Describe 'GATE-48 Repository Watch Mode and Sync-and-Adapt workflows enforce ful
             $workflow | Should -Match 'do not repeat'
             $workflow | Should -Match 'never custom'
             $workflow | Should -Match 'Stages table format is machine-checked'
+            $workflow | Should -Match 'Result is exactly complete'
+            $workflow | Should -Match 'Outcome is exactly Completed'
         }
         $script:RepoSquadWatch | Should -Match 'squad-watch-diagnostics-'
         $script:RepoSquadWatch | Should -Match 'Source must be exactly one of: OQ-WATCH-NNN'
