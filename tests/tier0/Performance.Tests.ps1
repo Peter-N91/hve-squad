@@ -351,7 +351,11 @@ Describe 'The correctness inventory never regresses against the checked-in BEFOR
             # other baseline obligation and the replacement itself still hold.
             $retired = "3. Rank by, in order: **fit** for the class, highest first; then **Blended** rate, lowest first; then, within the same model family, the **newer generation** first; then the fit table's row order. Never break a tie by the Catalog ID's spelling."
             $replacement = "3. Compare **granular task capability**, highest first, using the versioned fixed-primary policy in [model-scoring.md](model-scoring.md), not legacy fit buckets. On an exact capability tie use comparable secondary coverage, then freshest oldest primary evidence, then lowest known **Blended** rate, then newer generation within a family, then catalog row order. Never break a tie by the Catalog ID's spelling."
+            # hve-core f425e94 removed the powerpoint skill and presenter role, so
+            # the deck-builder sentence is retired with its capability.
+            $removedCapability = '**Never author a substitute deck builder.**'
             foreach ($sentence in $Baseline) {
+                if ($sentence.StartsWith($removedCapability, [System.StringComparison]::Ordinal)) { continue }
                 $required = if ($sentence -ceq $retired) { $replacement } else { $sentence }
                 if ($required -cnotin $Current) { $required }
             }
@@ -438,8 +442,10 @@ Describe 'The correctness inventory never regresses against the checked-in BEFOR
             $baselineHeadings | Should -Contain $migration.Before -Because 'the heading migration must remain tied to the captured BEFORE baseline'
             $currentHeadings | Should -Contain $migration.After -Because 'the replacement heading identifies the approved contract'
         }
+        # Retired with the removed powerpoint skill (hve-core f425e94).
+        $removedHeadings = @('Brand Template for PowerPoint Builds', 'The pipeline is the only supported path')
         $migratedHeadings = @($migrations | ForEach-Object Before)
-        $missing = @($baselineHeadings | Where-Object { $_ -notin $currentHeadings -and $_ -notin $migratedHeadings })
+        $missing = @($baselineHeadings | Where-Object { $_ -notin $currentHeadings -and $_ -notin $migratedHeadings -and $_ -notin $removedHeadings })
         $missing.Count | Should -Be 0 -Because "these headings existed in the BEFORE baseline and are absent from the current tree: $($missing -join ' | ')"
     }
 }

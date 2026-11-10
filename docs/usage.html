@@ -1298,7 +1298,7 @@ flowchart TD
           <tr><td><code>modernization</code></td><td>researcher, lead, developer, tester, modernizer, architect, azure-architect, iac-author, cost-manager, asbuilt-author, scribe</td><td>Legacy uplift &mdash; framework and dependency upgrades, re-platforming, SQL or cloud migration</td></tr>
           <tr><td><code>compliance</code></td><td>researcher, lead, developer, tester, security, supply-chain, vuln-manager, privacy, rai, accessibility, risk-manager, scribe</td><td>Conformance evidence is the goal &mdash; an audit, an attestation, or a customer security questionnaire</td></tr>
           <tr><td><code>operations</code></td><td>researcher, lead, developer, tester, azure-diagnose, performance, observability, asbuilt-author, iac-author, deployer, scribe</td><td>Running a deployed system &mdash; incidents, reliability targets, instrumentation design, and as-built documentation</td></tr>
-          <tr><td><code>product</code></td><td>researcher, lead, developer, tester, analyst, designer, product-owner, presenter, technical-writer, experimenter, data-scientist, intake-validator, scribe</td><td>Business discovery and delivery &mdash; requirements, design thinking, roadmap, and stakeholder deliverables (often non-technical)</td></tr>
+          <tr><td><code>product</code></td><td>researcher, lead, developer, tester, analyst, designer, product-owner, technical-writer, experimenter, data-scientist, intake-validator, scribe</td><td>Business discovery and delivery &mdash; requirements, design thinking, roadmap, and stakeholder deliverables (often non-technical)</td></tr>
         </tbody>
       </table>
       <p>
@@ -1745,18 +1745,10 @@ apm install microsoft/skills-for-fabric/skills/sqldw-cli --target copilot</code>
 
       <h2>Branded PowerPoint decks</h2>
       <p>
-        The <code>presenter</code> role (seeded by the <code>product</code> and <code>full</code>
-        profiles) generates decks from your content. Give it your branded <code>.pptx</code> once and
-        every deck inherits your slide masters, layouts, theme colors, and fonts. The branding rule
-        ships with hve-squad and switches on by itself &mdash; you never copy a file, edit a config, or
-        restate the template on each request.
+        The squad no longer has a deck-building role. The notes below describe how a branded <code>.pptx</code> template was applied; they are reference only for consumers who supply their own pptx tooling.
       </p>
       <p>
-        When you ask for a deck, the coordinator dispatches the <strong>PowerPoint Subagent</strong>,
-        which runs the <code>powerpoint</code> skill's <code>build_deck.py</code>. Branding is applied
-        through the <code>--template</code> flag (PowerShell <code>-TemplatePath</code>): the build
-        inherits the template's <strong>slide masters, layouts, and theme</strong>, discards the
-        template's own example slides, then adds only the slides defined in your content.
+        <strong>Note:</strong> hve-core removed the <code>PowerPoint Builder</code> and <code>PowerPoint Subagent</code> agents and the <code>powerpoint</code> skill at f425e94, so the squad no longer ships a <code>presenter</code> role or a deck pipeline. The branding guidance below is reference only, for consumers who supply their own pptx tooling.
       </p>
       <div class="callout">
         <p>
@@ -1801,7 +1793,7 @@ apm install microsoft/skills-for-fabric/skills/sqldw-cli --target copilot</code>
         hve-squad ships the branding instruction as part of the package, so on <code>apm install</code>
         it lands at <code>.github/instructions/pptx-brand-template.instructions.md</code> and switches
         on by itself. Its <code>applyTo</code> matches <code>**/.copilot-tracking/ppt/**</code>, so the
-        PowerPoint Subagent reads it every time it works on a deck &mdash; using your template as
+        PowerPoint agent (removed upstream) read it every time it works on a deck &mdash; using your template as
         <code>--template</code> for full rebuilds and <code>--source</code> for partial ones. If no
         template is present yet, the builder does not quietly fall back to a plain deck: it asks
         whether you have a branded <code>.pptx</code> and offers to save it for you.

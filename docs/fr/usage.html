@@ -1290,7 +1290,7 @@ flowchart TD
           <tr><td><code>modernization</code></td><td>researcher, lead, developer, tester, modernizer, architect, azure-architect, iac-author, cost-manager, asbuilt-author, scribe</td><td>Évolution de l'existant &mdash; mise à niveau des frameworks et dépendances, changement de plateforme, migration SQL ou cloud</td></tr>
           <tr><td><code>compliance</code></td><td>researcher, lead, developer, tester, security, supply-chain, vuln-manager, privacy, rai, accessibility, risk-manager, scribe</td><td>Production de preuves de conformité &mdash; audit, attestation ou questionnaire de sécurité d'un client</td></tr>
           <tr><td><code>operations</code></td><td>researcher, lead, developer, tester, azure-diagnose, performance, observability, asbuilt-author, iac-author, deployer, scribe</td><td>Exploitation d'un système déployé &mdash; incidents, objectifs de fiabilité, conception de l'instrumentation et documentation de l'existant déployé</td></tr>
-          <tr><td><code>product</code></td><td>researcher, lead, developer, tester, analyst, designer, product-owner, presenter, technical-writer, experimenter, data-scientist, intake-validator, scribe</td><td>Découverte métier et livraison &mdash; exigences, design thinking, feuille de route et livrables pour les parties prenantes (souvent non techniques)</td></tr>
+          <tr><td><code>product</code></td><td>researcher, lead, developer, tester, analyst, designer, product-owner, technical-writer, experimenter, data-scientist, intake-validator, scribe</td><td>Découverte métier et livraison &mdash; exigences, design thinking, feuille de route et livrables pour les parties prenantes (souvent non techniques)</td></tr>
         </tbody>
       </table>
       <p>
@@ -1745,18 +1745,10 @@ apm install microsoft/skills-for-fabric/skills/sqldw-cli --target copilot</code>
 
       <h2>Présentations PowerPoint aux couleurs de votre marque</h2>
       <p>
-        Le rôle <code>presenter</code> (initialisé par les profils <code>product</code> et <code>full</code>)
-        génère des présentations à partir de votre contenu. Fournissez-lui une fois votre <code>.pptx</code> de marque, et
-        chaque présentation héritera de vos masques de diapositives, dispositions, couleurs de thème et polices. La règle de personnalisation graphique
-        est fournie avec hve-squad et s'active automatiquement &mdash; vous n'avez jamais à copier un fichier, modifier une configuration ou
-        repréciser le modèle à chaque demande.
+        La squad n'a plus de rôle de génération de présentations. Les notes ci-dessous décrivent l'application d'un modèle <code>.pptx</code> de marque ; elles sont données à titre de référence pour les utilisateurs qui apportent leur propre outillage pptx.
       </p>
       <p>
-        Lorsque vous demandez une présentation, le coordinateur lance le <strong>PowerPoint Subagent</strong>,
-        qui exécute le script du skill <code>powerpoint</code> nommé <code>build_deck.py</code>. La personnalisation graphique est appliquée
-        au moyen du paramètre <code>--template</code> (<code>-TemplatePath</code> en PowerShell) : la génération
-        hérite des <strong>masques de diapositives, des dispositions et du thème</strong> du modèle, élimine les
-        diapositives d'exemple du modèle, puis ajoute uniquement celles définies dans votre contenu.
+        <strong>Remarque :</strong> hve-core a supprimé les agents <code>PowerPoint Builder</code> et <code>PowerPoint Subagent</code> ainsi que le skill <code>powerpoint</code> au commit f425e94 ; la squad ne fournit donc plus de rôle <code>presenter</code> ni de pipeline de présentation. Les indications de personnalisation ci-dessous sont données à titre de référence, pour les utilisateurs qui apportent leur propre outillage pptx.
       </p>
       <div class="callout">
         <p>
@@ -1801,7 +1793,7 @@ apm install microsoft/skills-for-fabric/skills/sqldw-cli --target copilot</code>
         hve-squad fournit l'instruction de personnalisation graphique dans le package : lors d'un <code>apm install</code>,
         elle arrive dans <code>.github/instructions/pptx-brand-template.instructions.md</code> et s'active
         automatiquement. Son <code>applyTo</code> correspond à <code>**/.copilot-tracking/ppt/**</code> :
-        le PowerPoint Subagent la lit donc chaque fois qu'il travaille sur une présentation &mdash; en utilisant votre modèle avec
+        un agent PowerPoint (supprimé en amont) la lisait donc chaque fois qu'il travaille sur une présentation &mdash; en utilisant votre modèle avec
         <code>--template</code> pour les reconstructions complètes et <code>--source</code> pour les reconstructions partielles. Si aucun
         modèle n'est encore présent, le générateur ne se rabat pas silencieusement sur une présentation neutre : il demande
         si vous disposez d'un <code>.pptx</code> de marque et propose de l'enregistrer pour vous.

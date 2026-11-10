@@ -90,8 +90,7 @@
           <tr><td>Requirements (BRD / PRD)</td><td>analyst (BRD Builder)</td><td>Turns the discovery into a signable business requirements document.</td></tr>
           <tr><td>Roadmap + backlog</td><td>product-owner (Functional Planner)</td><td>Sequences the work into a validated, goal-oriented work-item hierarchy.</td></tr>
           <tr><td>Cheap validation</td><td>experimenter (Experiment Designer)</td><td>Designs a Minimum Viable Experiment for the riskiest assumption before anyone builds.</td></tr>
-          <tr><td>Executive deck</td><td>presenter (PowerPoint Subagent)</td><td>A board-ready summary of the whole arc.</td></tr>
-          <tr><td>Research → Plan → Implement → Review</td><td>researcher, lead, developer, tester</td><td>The methodology spine, seeded into the <code>product</code> profile alongside the specialists.</td></tr>
+                    <tr><td>Research → Plan → Implement → Review</td><td>researcher, lead, developer, tester</td><td>The methodology spine, seeded into the <code>product</code> profile alongside the specialists.</td></tr>
         </tbody>
       </table>
 
@@ -118,7 +117,7 @@
         <p>
           <strong>No Azure, no spend, no code.</strong> Every beat in this demo produces a business
           document. That makes it safe to run live in front of a non-technical client — there is
-          nothing to deploy and nothing to break. The PowerPoint and documentation roles are the
+          nothing to deploy and nothing to break. The documentation role is the
           translation layer that turns squad artifacts into deliverables a client actually reads.
         </p>
       </div>
@@ -205,7 +204,7 @@
       <h2>Beat 6 — Executive deck</h2>
       <pre><code>/squad request="Build an executive summary deck of the whole initiative: the problem, the journey, the requirements, the roadmap, and the experiment — for a non-technical leadership audience."</code></pre>
       <p>
-        The <code>presenter</code> (PowerPoint Subagent) assembles a board-ready deck from the artifacts
+        <strong>Note:</strong> the <code>presenter</code> role and PowerPoint Subagent were removed with hve-core f425e94, so this beat no longer dispatches a deck builder; treat it as a historical walkthrough. Previously it assembled a board-ready deck from the artifacts
         the squad already produced. <strong>Review Follow-Through</strong> then dispatches
         <code>tester</code> to check the deck against the source artifacts, so the closing deliverable
         is validated, not just generated. The client walks away with something they can take into a
@@ -222,7 +221,7 @@
       <ul>
         <li><strong>Init</strong> — proposes the <code>product</code> profile and waits for your confirmation.</li>
         <li><strong>Research → Plan</strong> — discovery (researcher + designer) then the roadmap plan (lead).</li>
-        <li><strong>Implement</strong> — the analyst, product-owner, experimenter, and presenter author the BRD, backlog, experiment, and deck.</li>
+        <li><strong>Implement</strong> — the analyst, product-owner, and experimenter author the BRD, backlog, and experiment.</li>
         <li><strong>Review</strong> — <code>tester</code> validates each artifact against the discovery and requirements.</li>
         <li><strong>Final-outcome validation</strong> — fires a notification to your registered contact and waits for your sign-off before calling the initiative done.</li>
       </ul>
@@ -246,7 +245,7 @@
           <tr><th>If…</th><th>Then…</th></tr>
         </thead>
         <tbody>
-          <tr><td>A role does not dispatch</td><td>Confirm the agent it maps to is installed — the <code>product</code> profile resolves <code>analyst</code>, <code>designer</code>, <code>product-owner</code>, <code>experimenter</code>, <code>presenter</code>, and <code>technical-writer</code> to deployed HVE Core agents.</td></tr>
+          <tr><td>A role does not dispatch</td><td>Confirm the agent it maps to is installed — the <code>product</code> profile resolves <code>analyst</code>, <code>designer</code>, <code>product-owner</code>, <code>experimenter</code>, and <code>technical-writer</code> to deployed HVE Core agents (the <code>presenter</code> role was removed with hve-core f425e94).</td></tr>
           <tr><td>The request needs security / cost / architecture review</td><td>The squad offers to add those roles or switch to the <code>full</code> profile — accept, and the council convenes.</td></tr>
           <tr><td>No GitHub repo for phone approval</td><td>Keep the default <code>in-chat</code> channel and approve in the session — nothing blocks.</td></tr>
           <tr><td>Live tooling hiccups</td><td>Cut to a pre-recorded run of the same script against a neutral scenario — the arc is identical, so the narrative never breaks.</td></tr>

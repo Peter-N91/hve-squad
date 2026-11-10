@@ -20,7 +20,7 @@ compatibility. Instructions use artifact-specific scopes, not all squad state.
 ## Prerequisites
 
 * A `runSubagent` or `task` tool is available so the coordinator can dispatch `user-invocable: false` agents.
-* The deployed HVE Core cast exists (System Architecture Reviewer, Security Planner, RAI Planner, UX UI Designer, Finding Deep Verifier, PowerPoint Subagent) plus the squad-owned charters (Squad Scribe, Squad Researcher, Squad Lead, Squad Implementor, Squad Reviewer, Squad Challenger, Squad Technical Writer, Squad Prompt Engineer).
+* The deployed HVE Core cast exists (System Architecture Reviewer, Security Planner, RAI Planner, UX UI Designer, Finding Deep Verifier) plus the squad-owned charters (Squad Scribe, Squad Researcher, Squad Lead, Squad Implementor, Squad Reviewer, Squad Challenger, Squad Technical Writer, Squad Prompt Engineer).
 * Each selected work endpoint resolves to an installed, dispatchable agent. Step 1b checks `Squad Connector` for a connector default; its consumer endpoint runs externally.
 * The memory tool is available for durable per-agent notes under `/memories/repo/`.
 
