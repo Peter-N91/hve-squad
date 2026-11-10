@@ -432,6 +432,8 @@ Describe 'GATE-48 Repository Watch Mode and Sync-and-Adapt workflows enforce ful
         }
         $script:RepoSquadWatch | Should -Match 'squad-watch-diagnostics-'
         $script:RepoSquadWatch | Should -Match 'Source must be exactly one of: OQ-WATCH-NNN'
+        $script:RepoSquadWatch | Should -Match ([regex]::Escape("$stateDoc['mode'] = 'autopilot'"))
+        $script:RepoSquadWatch | Should -Match ([regex]::Escape('runId      = $env:TRIGGER_RUN_ID'))
         $script:RepoSquadWatch | Should -Match 'full Tier 0 suite inside Watch unless'
         $script:RepoSquadWatch | Should -Match 'profileValid=\$\(\$gate\.ProfileValid\), questionsValid=\$\(\$gate\.QuestionsValid\)'
     }

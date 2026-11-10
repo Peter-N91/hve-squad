@@ -1137,6 +1137,11 @@ jobs:
           STABLE_REF: ${{ steps.prep.outputs.stableRef }}
           SQUAD_WATCH_TRUSTED_SHA: ${{ steps.prep.outputs.trustedBaseSha }}
           TRIGGER_RUN_ID: ${{ steps.prep.outputs.triggerRunId }}
+          TRIGGER_SOURCE: ${{ steps.prep.outputs.triggerSource }}
+          TRIGGER_REF: ${{ steps.prep.outputs.triggerRef }}
+          TRIGGER_EVENT_ID: ${{ steps.prep.outputs.triggerEventId }}
+          TRIGGER_ACTOR: ${{ steps.prep.outputs.triggerActor }}
+          TRIGGER_RECEIVED_AT: ${{ steps.prep.outputs.triggerReceivedAt }}
           WATCH_MODULE_HASH: ${{ steps.runtime.outputs.watchModuleHash }}
           BASELINE_HASH: ${{ steps.runtime.outputs.baselineHash }}
         run: |
@@ -1200,6 +1205,22 @@ jobs:
             "issueLessSummary=false" | Add-Content -LiteralPath $env:GITHUB_OUTPUT
             throw "Watch publication validation failed (profileValid=$($gate.ProfileValid), questionsValid=$($gate.QuestionsValid)). Publication is blocked."
           }
+          # The Scribe writer does not set mode or trigger, so stamp them from the trusted
+          # authorization values (never from model output) before the lifecycle check.
+          $statePath = Join-Path $memberRoot 'state.json'
+          if (Test-Path -LiteralPath $statePath -PathType Leaf) {
+            $stateDoc = Get-Content -LiteralPath $statePath -Raw | ConvertFrom-Json -AsHashtable
+            $stateDoc['mode'] = 'autopilot'
+            $stateDoc['trigger'] = [ordered]@{
+              source     = $env:TRIGGER_SOURCE
+              ref        = $env:TRIGGER_REF
+              eventId    = $env:TRIGGER_EVENT_ID
+              actor      = $env:TRIGGER_ACTOR
+              receivedAt = $env:TRIGGER_RECEIVED_AT
+              runId      = $env:TRIGGER_RUN_ID
+            }
+            $stateDoc | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath $statePath -Encoding utf8NoBOM
+          }
           $result = New-SquadWatchHandoff `
             -WorkspaceRoot $workspace `
             -MemberRoot $memberRoot `
@@ -1259,7 +1280,8 @@ jobs:
           name: squad-watch-diagnostics-${{ github.run_id }}
           path: |
             ${{ runner.temp }}/squad-watch-publication.json
-            ${{ github.workspace }}/.copilot-tracking/squad/members/${{ steps.prep.outputs.subSquad }}/watch-questions.json
+            ${{ runner.temp }}/squad-watch-baseline.json
+            ${{ github.workspace }}/.copilot-tracking/squad/members/${{ steps.prep.outputs.subSquad }}/**
           if-no-files-found: ignore
           retention-days: 1
 
