@@ -434,6 +434,8 @@ Describe 'GATE-48 Repository Watch Mode and Sync-and-Adapt workflows enforce ful
         $script:RepoSquadWatch | Should -Match 'squad-watch-diagnostics-'
         $script:RepoSquadWatch | Should -Match 'Source must be exactly one of: OQ-WATCH-NNN'
         $script:RepoSquadWatch | Should -Match 'never repeat that prefix'
+        $script:RepoSquadWatch | Should -Match 'copied in this exact shape'
+        $script:RepoSquadWatch | Should -Match '\* Source: watch-demand'
         $script:RepoSquadWatch | Should -Match 'Stage, Role\(s\), Dispatch Record, Result, Gate Fired in that order'
         $script:RepoSquadWatch | Should -Match 'record an ordinary risk rating under a heading named Risk Assessment'
         $script:RepoSquadWatch | Should -Match ([regex]::Escape("$stateDoc['mode'] = 'autopilot'"))
