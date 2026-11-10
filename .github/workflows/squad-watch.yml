@@ -1440,7 +1440,7 @@ jobs:
             fetched=true
           fi
           export FETCHED="$fetched"
-          branch_reason="$(pwsh -NoProfile -Command "& { . (Join-Path $env:GITHUB_WORKSPACE '.squad-trusted/squad-src/.github/skills/squad/scripts/SquadWatch.Delivery.ps1'); (Test-SquadWatchExpectedBranch -ExpectedExisting ($env:PUBLICATION_BRANCH_EXISTS -eq 'true') -Fetched ($env:FETCHED -eq 'true')).Reason }")"
+          branch_reason="$(pwsh -NoProfile -Command '& { . (Join-Path $env:GITHUB_WORKSPACE ".squad-trusted/squad-src/.github/skills/squad/scripts/SquadWatch.Delivery.ps1"); (Test-SquadWatchExpectedBranch -ExpectedExisting ($env:PUBLICATION_BRANCH_EXISTS -eq "true") -Fetched ($env:FETCHED -eq "true")).Reason }')"
           if [[ "$branch_reason" == "branch-disappeared" ]]; then
             echo "::error::Publication branch disappeared after resolution. Refusing to recreate it."
             exit 1
@@ -1459,7 +1459,7 @@ jobs:
           git -C "$trusted" show "${TRUSTED_BASE_SHA}:squad-src/.github/skills/squad/scripts/Invoke-SquadWatchAppliedPatch.ps1" > "$RUNNER_TEMP/Invoke-SquadWatchAppliedPatch.ps1"
           pwsh -NoProfile -File "$RUNNER_TEMP/Invoke-SquadWatchAppliedPatch.ps1"
 
-          CLOSES="$(pwsh -NoProfile -Command "& { . (Join-Path $env:GITHUB_WORKSPACE '.squad-trusted/squad-src/.github/skills/squad/scripts/SquadWatch.Delivery.ps1'); Get-SquadWatchClosingLabel -StableRef $env:STABLE_REF }")"
+          CLOSES="$(pwsh -NoProfile -Command '& { . (Join-Path $env:GITHUB_WORKSPACE ".squad-trusted/squad-src/.github/skills/squad/scripts/SquadWatch.Delivery.ps1"); Get-SquadWatchClosingLabel -StableRef $env:STABLE_REF }')"
           ISSUE=""
           if [[ "$CLOSES" == Closes\ #* ]]; then
             ISSUE="${CLOSES#Closes #}"

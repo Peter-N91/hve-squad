@@ -438,7 +438,7 @@ Describe 'GATE-48 Repository Watch Mode and Sync-and-Adapt workflows enforce ful
         $script:RepoSquadWatch | Should -Match '\* Source: watch-demand'
         $script:RepoSquadWatch | Should -Match 'Stage, Role\(s\), Dispatch Record, Result, Gate Fired in that order'
         $script:RepoSquadWatch | Should -Match 'record an ordinary risk rating under a heading named Risk Assessment'
-        $script:RepoSquadWatch | Should -Match ([regex]::Escape("$stateDoc['mode'] = 'autopilot'"))
+        $script:RepoSquadWatch | Should -Match ([regex]::Escape('$stateDoc[''mode''] = ''autopilot'''))
         $script:RepoSquadWatch | Should -Match ([regex]::Escape('runId      = $env:TRIGGER_RUN_ID'))
         $script:RepoSquadWatch | Should -Match 'full Tier 0 suite inside Watch unless'
         $script:RepoSquadWatch | Should -Match 'profileValid=\$\(\$gate\.ProfileValid\), questionsValid=\$\(\$gate\.QuestionsValid\)'
@@ -616,6 +616,43 @@ Describe 'GATE-50 Watch workflow publication contract' {
         $script:LiveWatch | Should -Match 'Escalate on run failure'
     }
 
+    It 'GATE-50 executes publication PowerShell commands without Bash expanding their environment references' {
+        $bash = Get-Command bash -ErrorAction Stop
+        $commands = @([regex]::Matches($script:LiveWatch, '(?m)^\s*(?:branch_reason|CLOSES)=.*pwsh -NoProfile -Command.*$') | ForEach-Object { $_.Value.Trim() })
+        $commands.Count | Should -Be 2
+        $workspace = Join-Path $TestDrive 'watch publication $fixture'
+        $helperDir = Join-Path $workspace '.squad-trusted/squad-src/.github/skills/squad/scripts'
+        New-Item -ItemType Directory -Path $helperDir -Force | Out-Null
+        Copy-Item -LiteralPath (Join-Path $script:SourceRootResolved 'squad-src/.github/skills/squad/scripts/SquadWatch.Delivery.ps1') -Destination $helperDir
+        $shellScript = (@('set -euo pipefail', 'unset env') + $commands + @('printf "%s\t%s\n" "$branch_reason" "$CLOSES"')) -join "`n"
+        $cases = @(
+            @{ Name = 'new branch'; Existing = 'false'; Fetched = 'false'; Ref = 'Peter-N91/hve-squad#248'; Expected = "continue`tCloses #248" }
+            @{ Name = 'existing branch'; Existing = 'true'; Fetched = 'true'; Ref = 'Peter-N91/hve-squad#248'; Expected = "continue`tCloses #248" }
+            @{ Name = 'disappeared branch'; Existing = 'true'; Fetched = 'false'; Ref = 'Peter-N91/hve-squad#248'; Expected = "branch-disappeared`tCloses #248" }
+            @{ Name = 'issue-less dispatch'; Existing = 'false'; Fetched = 'false'; Ref = 'dispatch@abc123'; Expected = "continue`t" }
+        )
+        $savedEnvironment = @{}
+        foreach ($name in @('GITHUB_WORKSPACE', 'PUBLICATION_BRANCH_EXISTS', 'FETCHED', 'STABLE_REF')) {
+            $savedEnvironment[$name] = [Environment]::GetEnvironmentVariable($name, 'Process')
+        }
+        try {
+            $env:GITHUB_WORKSPACE = $workspace
+            foreach ($case in $cases) {
+                $env:PUBLICATION_BRANCH_EXISTS = $case.Existing
+                $env:FETCHED = $case.Fetched
+                $env:STABLE_REF = $case.Ref
+                $output = @(& $bash.Source -c $shellScript 2>&1)
+                $LASTEXITCODE | Should -Be 0 -Because "$($case.Name): $($output -join "`n")"
+                ($output -join "`n") | Should -BeExactly $case.Expected -Because $case.Name
+            }
+        }
+        finally {
+            foreach ($name in $savedEnvironment.Keys) {
+                [Environment]::SetEnvironmentVariable($name, $savedEnvironment[$name], 'Process')
+            }
+        }
+    }
+
     It 'GATE-49 comments encoded questions and creates no PR or placeholder for blocked no-material' {
         $script:LiveWatch | Should -Match 'publishSourceComment'
         $script:LiveWatch | Should -Match 'no material publication'
@@ -729,17 +766,7 @@ print(json.dumps(items))
                 }
             }
             else {
-                $dir = Join-Path $TestDrive ("sh-" + [guid]::NewGuid().ToString('n'))
-                New-Item -ItemType Directory -Path $dir | Out-Null
-                $scriptPath = Join-Path $dir 'script.sh'
-                [System.IO.File]::WriteAllText($scriptPath, ([string]$item.script).Replace("`r`n", "`n"))
-                $posix = if ($scriptPath -match '^[A-Za-z]:\\') {
-                    '/mnt/' + ($scriptPath.Substring(0, 1).ToLower()) + ($scriptPath.Substring(2) -replace '\\', '/')
-                }
-                else {
-                    $scriptPath
-                }
-                & $bash.Source -n $posix
+                ([string]$item.script).Replace("`r`n", "`n") | & $bash.Source -n
                 $LASTEXITCODE | Should -Be 0 -Because "$($item.name) bash must parse"
             }
         }
