@@ -7,14 +7,19 @@ import test from "node:test";
 import { load } from "cheerio";
 import nunjucks from "nunjucks";
 import { assembleContent, buildPages, embedConnectorTemplates, enhanceContent, headingIds, readLocales, pageOrder, readSource } from "../../scripts/docs-content.mjs";
+import { resolveReleaseInfo } from "../../scripts/docs-release.mjs";
 
 test("shared pages load Google Fonts without local binaries or a JavaScript font dependency", () => {
+  const latest = {
+    tag_name: "v1.0.0", draft: false, prerelease: false, published_at: "2024-01-01T00:00:00Z",
+  };
+  const release = resolveReleaseInfo({ latest, releases: [latest] }, []);
   const environment = new nunjucks.Environment(new nunjucks.FileSystemLoader(
     fileURLToPath(new URL("../../site/_includes/", import.meta.url))));
   environment.addFilter("jsonScript", value => JSON.stringify(value).replace(/</g, "\\u003c"));
   const template = readFileSync(new URL("../../site/pages.njk", import.meta.url), "utf8")
     .replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n/, "");
-  for (const doc of buildPages().filter(page => page.slug === "index")) {
+  for (const doc of buildPages(undefined, release).filter(page => page.slug === "index")) {
     const $ = load(environment.renderString(template, { doc }));
     const links = $('link[rel="stylesheet"]').toArray().map(element => $(element).attr("href"));
     const url = new URL(links.find(href => href.startsWith("https://fonts.googleapis.com/")));
