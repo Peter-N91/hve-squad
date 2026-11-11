@@ -24,6 +24,7 @@ Run `Get-SquadDispatchBrief.ps1 -RepoRoot <repo> -SquadRoot <root>
 -SessionModel <literal session id> -AsJson -CheckLedger` at turn start.
 Pass `routing=`/`depth=` as `-RequestedModelRouting`/`-RequestedDepth`;
 depth carries `depthSource: input`. Omission is `standard`, never inferred.
+Pass `mode=` as `-RequestedMode`; for autopilot follow the brief's `modeRule`.
 Saved `off` cannot cancel; `dispatchReady: false` requires preparation. Reuse
 same-turn proof/facts; use `-Roles` after classification; JSON defers scoring.
 
@@ -32,7 +33,7 @@ same-turn proof/facts; use `-Roles` after classification; JSON defers scoring.
   event never runs at the plain top-level root.
 * `none`/`uninitialized` enters `coordinator-init.md`; partial roots are not
   permission to overwrite. Missing `routing.md` requires Init/explicit repair.
-* Availability is not permission. Check only the chosen endpoint after selection.
+* Availability is not permission; check only the chosen endpoint.
 * `history-integrity` stops. A `ledger-only` mismatch is disclosed; without a
   ceiling the next ordinary writer re-derives accounting, not an extra Scribe
   audit loop. With a ceiling reconcile once before admission; unresolved spend
@@ -42,7 +43,7 @@ same-turn proof/facts; use `-Roles` after classification; JSON defers scoring.
 
 ## 2. Classify and Load Only Active Policy
 
-Match the most specific pattern/direct owner; clarify conflicts without a specialist skill.
+Match the most specific pattern/direct owner; clarify conflicts, no specialist skill.
 
 Read applicable `gates-and-modes.md` sections with
 `Get-SquadProcedure.ps1 -Name <comma-separated names>`:
@@ -79,8 +80,7 @@ Put roles, routes, endpoints, dependencies, write sets, host models, supplied ac
 squad state. Run
 `New-SquadDispatchPlan.ps1 -RepoRoot <repo> -InputPath <json> -ApplyModelRouting`.
 It applies the hash-bound routing refresh and returns `routingReady: true`.
-Without the switch it is read-only.
-Pass available `agentTypes`; use resolved native IDs, not guessed display-name types.
+Pass available `agentTypes`; use resolved native IDs, not guessed names.
 For active routing, `task` hosts pass their complete `availableModels` enum;
 `auto` is not inventory. A host without an enum may pass a concrete priced
 session model. Unresolved availability stops before refresh or dispatch.
@@ -137,7 +137,7 @@ Cold consultative proofs include `role`, `findingsOnly` and `decisionRef`.
 It checks files, turn/member history, consumption, admission, ledger and state;
 no second audit or model verifier.
 
-Complete only with verified evidence. Backfill missing history, not the producer.
+Complete only with verified evidence. Backfill history, not the producer.
 `ledger-only` is never PASS. Missing proof, invented paths, unmatched agents or
 unadmitted slots require repair/escalation.
 

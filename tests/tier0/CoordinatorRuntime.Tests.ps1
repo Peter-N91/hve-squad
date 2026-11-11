@@ -520,6 +520,21 @@ Describe 'Universal compact metadata and deterministic scheduling (COORD-04..06)
         Write-FixtureText $path $team
     }
 
+    It 'requires per-stage autopilot handoff on an initialized squad whose recorded mode is interactive, read-only' {
+        $before = Get-FixtureHash $script:MetadataFixture.Root
+        $base = @('-RepoRoot', $script:MetadataRepo, '-SquadRoot', $script:MetadataFixture.Root, '-AsJson')
+        $auto = (Invoke-Local 'Get-SquadDispatchBrief.ps1' $script:MetadataRepo ($base + @('-RequestedMode', 'autopilot'))).Output | ConvertFrom-Json
+        $auto.mode | Should -Be 'interactive'
+        $auto.requestedMode | Should -Be 'autopilot'
+        $auto.handoffPolicy | Should -Be 'per-stage'
+        $auto.requiredProcedures | Should -Be 'autopilot,progress'
+        $auto.modeRule | Should -Match 'EACH role'
+        $plain = (Invoke-Local 'Get-SquadDispatchBrief.ps1' $script:MetadataRepo ($base + @('-RequestedMode', 'interactive'))).Output | ConvertFrom-Json
+        $plain.PSObject.Properties.Name | Should -Not -Contain 'handoffPolicy'
+        (Invoke-Local 'Get-SquadDispatchBrief.ps1' $script:MetadataRepo $base).Output | Should -Not -Match 'handoffPolicy'
+        Get-FixtureHash $script:MetadataFixture.Root | Should -BeExactly $before
+    }
+
     It 'reads dispatchability beyond a long frontmatter allowlist' {
         $repo = New-FixtureRepo
         $lines = @('---', 'name: Long Frontmatter', 'agents:') + @(1..60 | ForEach-Object { "  - Agent $_" }) + @('disable-model-invocation: true', '---')

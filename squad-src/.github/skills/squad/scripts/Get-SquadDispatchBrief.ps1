@@ -52,6 +52,11 @@
     `input` (default) is the user's own turn input. `workflow` marks a depth that came from
     the committed Watch workflow configuration or a collaborator's manual dispatch, the one
     trusted channel an unattended run has; event text never qualifies.
+.PARAMETER RequestedMode
+    The trusted user's `mode=` input for this turn. Read-only: it persists nothing. For
+    `autopilot` the brief names the procedures to load and the per-stage hand-off rule, so a
+    run on an already initialized squad (whose recorded mode is still `interactive`) honors
+    autopilot exactly as a run that initialized in the same turn does.
 .PARAMETER AvailableModels
     The exact host-advertised model IDs, used only by the human-readable routing
     report. JSON mode defers scoring to New-SquadDispatchPlan.ps1.
@@ -89,6 +94,9 @@ param(
 
     [ValidateSet('input', 'workflow')]
     [string]$DepthSource = 'input',
+    
+    [ValidateSet('interactive', 'autonomous', 'autopilot')]
+    [string]$RequestedMode,
 
     [string[]]$AvailableModels = @(),
 
@@ -331,8 +339,11 @@ $workflowDepth = $DepthSource -ceq 'workflow'
 $depth = if ($RequestedDepth -ceq 'quick' -and (-not $unattended -or $workflowDepth)) { 'quick' } else { 'standard' }
 $depthSourceUsed = if ($RequestedDepth) { $(if ($unattended -and $workflowDepth) { 'workflow' } else { 'input' }) } else { 'default' }
 $covered = $depth -eq 'quick' -and -not $federationParent -and -not $ceiling
+$autopilotRule = 'Before the first dispatch run Get-SquadProcedure.ps1 -Name autopilot,progress. After EACH role returns and its artifact exists, run one Write-SquadHandoff.ps1 -Mode autopilot with only that role''s record, verify it, then dispatch the next role; never merge stages into one hand-off.'
 $out.Add("state: schema $($state['schemaVersion']), turn $turn (next hand-off turn: $($turn + 1)), mode $($state['mode']), updated $updated")
 $out.Add("federation: $(if ($federated) { 'yes' } else { 'no' }) | cost ceiling: $(if ($ceiling) { 'active' } else { 'none' }) | ledger: $ledger | model routing: $routing | concurrency cap: $cap")
+$autopilotRequested = $RequestedMode -ceq 'autopilot'
+if ($RequestedMode) { $out.Add($(if ($autopilotRequested) { "mode: autopilot requested (recorded $($state['mode'])). $autopilotRule" } else { "mode: $RequestedMode requested (recorded $($state['mode']))" })) }
 if ($RequestedModelRouting) { $out.Add("routing intent: requested $RequestedModelRouting; recorded $recordedRouting. Prepare the selected role units before dispatch; this brief is not a dispatch plan.") }
 $out.Add($(if ($depth -eq 'quick') { "depth: quick (trusted input this turn only, never persisted; pass requestedDepth=quick with depthSource=$depthSourceUsed)" }
         elseif ($RequestedDepth -ceq 'quick') { 'depth: standard (depth=quick ignored on an unattended run; recorded as seen and ignored)' }
@@ -599,6 +610,15 @@ if ($AsJson) {
     $squadBrief['requestedDepth'] = $(if ($RequestedDepth) { $RequestedDepth } else { 'standard' })
     $squadBrief['depthSource'] = $depthSourceUsed
     $squadBrief['depth'] = $depth
+    if ($RequestedMode) {
+        $squadBrief['requestedMode'] = $RequestedMode
+        if ($autopilotRequested) {
+            $squadBrief['requiredProcedures'] = 'autopilot,progress'
+            $squadBrief['handoffPolicy'] = 'per-stage'
+            $squadBrief['handoffMode'] = 'autopilot'
+            $squadBrief['modeRule'] = $autopilotRule
+        }
+    }
     $squadBrief | ConvertTo-Json -Depth 12 -Compress
     exit 0
 }
