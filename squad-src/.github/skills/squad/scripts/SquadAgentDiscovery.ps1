@@ -99,6 +99,7 @@ function Get-SquadAgentFile {
             }
             $paths += @(Get-DeclaredPluginAgentPath -PluginRoot $root -ManifestPath $manifestPath -Context 'active')
         }
+
     }
     else {
         $parent = Split-Path -Parent $artifactRoot
@@ -120,4 +121,91 @@ function Get-SquadAgentFile {
             if ($seen.Add($file.FullName)) { $file }
         }
     }
+
 }
+
+function Get-SquadSkillFile {
+        param([string]$RepoRoot, [Parameter(Mandatory)][string]$ScriptRoot)
+
+        $artifactRoot = [IO.Path]::GetFullPath((Join-Path $ScriptRoot '../../..'))
+        $paths = @()
+        if ($RepoRoot) {
+            $paths += @('.agents/skills', '.github/skills', '.copilot/skills') |
+                ForEach-Object { Join-Path $RepoRoot $_ }
+        }
+        $copilotHome = if ($env:COPILOT_HOME) {
+            [IO.Path]::GetFullPath($env:COPILOT_HOME)
+        }
+        else {
+            Join-Path ([Environment]::GetFolderPath('UserProfile')) '.copilot'
+        }
+        $paths += @(
+            (Join-Path $copilotHome 'skills'),
+            (Join-Path $artifactRoot 'skills'),
+            (Join-Path (Split-Path -Parent $artifactRoot) 'skills'),
+            (Join-Path $ScriptRoot '..')
+        )
+
+        if (Test-Path Env:SQUAD_ACTIVE_PLUGIN_ROOTS) {
+            $roots = ConvertFrom-Json -InputObject $env:SQUAD_ACTIVE_PLUGIN_ROOTS -NoEnumerate -ErrorAction Stop
+            if ($roots -isnot [array]) { throw 'SQUAD_ACTIVE_PLUGIN_ROOTS must be a JSON array of active plugin roots.' }
+            foreach ($root in $roots) {
+                if ($root -isnot [string] -or -not [IO.Path]::IsPathFullyQualified($root)) {
+                    throw 'Each SQUAD_ACTIVE_PLUGIN_ROOTS entry must be an absolute plugin directory.'
+                }
+                $root = [IO.Path]::GetFullPath($root)
+                $manifestPath = Join-Path $root 'plugin.json'
+                if (-not (Test-Path -LiteralPath $manifestPath -PathType Leaf)) {
+                    throw "Active plugin manifest not found: $manifestPath"
+                }
+                $manifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json -AsHashtable -ErrorAction Stop
+                if ($manifest -isnot [Collections.IDictionary]) { throw "Expected an object in $manifestPath." }
+                $skillPaths = @('skills')
+                if ($manifest.ContainsKey('skills')) { $skillPaths = $manifest.skills }
+                elseif (-not (Test-Path -LiteralPath (Join-Path $root 'skills') -PathType Container)) { continue }
+                if ($skillPaths -is [string]) { $skillPaths = @($skillPaths) }
+                if ($skillPaths -isnot [array]) { throw "Expected skill paths in $manifestPath." }
+                foreach ($path in $skillPaths) {
+                    if ($path -isnot [string] -or [string]::IsNullOrWhiteSpace($path) -or [IO.Path]::IsPathRooted($path)) {
+                        throw "Invalid skill path in $manifestPath."
+                    }
+                    $fullPath = [IO.Path]::GetFullPath((Join-Path $root $path))
+                    $relative = [IO.Path]::GetRelativePath($root, $fullPath)
+                    if ($relative -eq '..' -or $relative -match '^\.\.[\\/]' -or [IO.Path]::IsPathRooted($relative)) {
+                        throw "Skill path leaves active plugin: $path"
+                    }
+                    $cursor = $fullPath
+                    while ($cursor) {
+                        $item = Get-Item -LiteralPath $cursor -Force -ErrorAction SilentlyContinue
+                        if ($item -and ($item.Attributes -band [IO.FileAttributes]::ReparsePoint)) {
+                            throw "Linked active plugin path refused: $cursor"
+                        }
+                        if ($cursor -eq $root) { break }
+                        $cursor = Split-Path -Parent $cursor
+                    }
+                    if (-not (Test-Path -LiteralPath $fullPath)) { throw "Active plugin skill path not found: $fullPath" }
+                    $paths += $fullPath
+                }
+            }
+        }
+        else {
+            $parent = Split-Path -Parent $artifactRoot
+            $paths += @(
+                (Join-Path $parent 'hve-squad-hve-core/.github/skills'),
+                (Join-Path $parent 'hve-core/.github/skills'),
+                (Join-Path $parent 'hve-core/skills')
+            )
+        }
+
+        $comparer = if ($IsWindows) { [StringComparer]::OrdinalIgnoreCase } else { [StringComparer]::Ordinal }
+        $seen = [Collections.Generic.HashSet[string]]::new($comparer)
+        foreach ($path in $paths | Select-Object -Unique) {
+            if (-not (Test-Path -LiteralPath $path)) { continue }
+            $files = if (Test-Path -LiteralPath $path -PathType Leaf) { Get-Item -LiteralPath $path }
+            else { Get-ChildItem -LiteralPath $path -Recurse -File -Filter 'SKILL.md' | Sort-Object FullName }
+            foreach ($file in $files) {
+                if ($file.Name -ine 'SKILL.md' -or ($file.Attributes -band [IO.FileAttributes]::ReparsePoint)) { continue }
+                if ($seen.Add($file.FullName)) { $file }
+            }
+        }
+    }

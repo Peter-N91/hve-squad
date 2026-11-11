@@ -19,7 +19,7 @@ One catalog role — `backlog-executor`, which writes work items into a live Azu
 | Profile         | Members                                                                                                                       | Use When                                                                                     |
 |-----------------|-------------------------------------------------------------------------------------------------------------------------------|----------------------------------------------------------------------------------------------|
 | `default`       | researcher, lead, developer, tester, scribe                                                                                   | General-purpose work; recommended starting point                                             |
-| `full`          | researcher, lead, developer, tester, challenger, architect, azure-architect, iac-author, deployer, asbuilt-author, azure-diagnose, security, supply-chain, vuln-manager, rai, privacy, accessibility, risk-manager, performance, observability, designer, fact-checker, cost-manager, modernizer, prompt-engineer, analyst, product-owner, presenter, technical-writer, experimenter, data-scientist, intake-validator, scribe | Complex, cross-cutting projects that need every discipline except the opt-in roles |
+| `full`          | researcher, lead, developer, tester, challenger, architect, azure-architect, iac-author, deployer, asbuilt-author, azure-diagnose, security, supply-chain, vuln-manager, rai, privacy, accessibility, risk-manager, performance, observability, designer, fact-checker, cost-manager, modernizer, prompt-engineer, analyst, product-owner, technical-writer, experimenter, data-scientist, intake-validator, scribe | Complex, cross-cutting projects that need every discipline except the opt-in roles |
 | `security`      | researcher, lead, developer, tester, security, supply-chain, rai, privacy, fact-checker, scribe                               | Security, supply-chain, privacy, threat-modeling, and responsible-AI focus                   |
 | `design`        | researcher, lead, developer, tester, designer, accessibility, scribe                                                          | UX/UI and product-design focus                                                               |
 | `accessibility` | researcher, lead, developer, tester, accessibility, designer, scribe                                                          | Accessibility conformance as the goal itself (WCAG 2.2, Section 508, EN 301 549)             |
@@ -28,7 +28,7 @@ One catalog role — `backlog-executor`, which writes work items into a live Azu
 | `modernization` | researcher, lead, developer, tester, modernizer, architect, azure-architect, iac-author, cost-manager, asbuilt-author, scribe | Legacy uplift: framework and dependency upgrades, re-platforming, SQL or cloud migration      |
 | `compliance`    | researcher, lead, developer, tester, security, supply-chain, vuln-manager, privacy, rai, accessibility, risk-manager, scribe  | Conformance evidence as the goal: an audit, an attestation, or a customer security questionnaire |
 | `operations`    | researcher, lead, developer, tester, azure-diagnose, performance, observability, asbuilt-author, iac-author, deployer, scribe | Running a deployed system: incidents, reliability targets, instrumentation design, and as-built docs |
-| `product`       | researcher, lead, developer, tester, analyst, designer, product-owner, presenter, technical-writer, experimenter, data-scientist, intake-validator, scribe | Business discovery and delivery — requirements, design thinking, roadmap, and stakeholder deliverables (often non-technical) |
+| `product`       | researcher, lead, developer, tester, analyst, designer, product-owner, technical-writer, experimenter, data-scientist, intake-validator, scribe | Business discovery and delivery — requirements, design thinking, roadmap, and stakeholder deliverables (often non-technical) |
 
 ## Registered Packs
 
@@ -57,6 +57,36 @@ with its install command rather than seeded.
 A pack is proposed, never imposed. The coordinator offers one at Init when the repository carries the domain's signals **or the request itself names the domain**, and offers one mid-project when a request needs a role only that pack provides. Confirmed mid-project additions use the sealed `roster-expansion.md` transaction for a plain squad or one selected federation member; it adds no model consumption and preserves the existing ledger, state, rates, notifications, and history byte-for-byte. A pack is equally removable: dropping one removes only the roles it still owns — never a role the profile or another pack also contributes — and appends a decision rather than editing anything. The append-only `decisions.md` and `history/<agent>.md` are untouched by a removal, the removed member's row stays in `consumption.md` marked removed so the run total stays truthful, and deliverables already written stay on disk. See *Removing a Pack* in `.github/instructions/squad/squad-roster.instructions.md`.
 
 Seeded Selection Cues, copied from the cast catalog: Power Pages ALM planning, model-driven app building, or Dataverse overview → Squad Power Platform Architect; broader Power Platform architecture or Copilot Studio, Power Automate, cloud flow, canvas app, DLP policy, or solution ALM → Power Platform Expert. codeful MCP tool or UI generation, or Dataverse connection → Squad Power Platform Integrator; broader connector or integration work, custom connector, or connector certification → Power Platform MCP Integration Expert. .NET Agents SDK production readiness → Squad M365 Agent Architect; declarative agent, TypeSpec, API plugin, or broader M365 architecture, Microsoft 365 Copilot agent, agent manifest, or Agents Toolkit → Declarative Agents Architect. Agents SDK OpenTelemetry or provisioning → Squad M365 Agent Integrator; broader MCP-backed M365 integration, Microsoft Graph, Graph SDK, Graph permission scope, or MCP-backed Copilot agent → MCP M365 Agent Expert. No cue match keeps the Primary. A matched Alternate that is absent or not dispatchable escalates; do not substitute. Pack absence means the role is not seeded, so installed official skills are not squad-selected. Fabric Warehouse, Eventhouse, Spark, Dataflow, or an admitted migration selects the registered Fabric skills only while `fabric` is active. Host visibility is not selection.
+
+### Pack Resource Preflight
+
+| Resource pack | Registered skills |
+|---|---|
+| `foundry` | microsoft-foundry, use-ai-gateway, azure-aigateway, caira, foundry-iq, appinsights-instrumentation |
+| `fabric` | sqldw-cli, sqldb-cli, eventhouse-cli, eventstream-cli, spark-cli, dataflows-cli, databricks-migration, pipeline-migration |
+
+After packs are selected, rerun `Get-SquadInitContext.ps1 -Pack <packs>` and
+inspect `packResources`. It reports each registered pack skill, whether the
+native host inventory exposes it, whether it exists only on disk awaiting reload,
+its exact install entry, prerequisites, origin and license.
+
+For missing skills, ask once whether to install all, install a selected subset,
+continue without them, or change the pack selection. Approval authorizes running
+`Install-SquadPackResources.ps1 -RepoRoot <repo> -Pack <packs> [-Resource <approved names>] [-AvailableSkill <host-visible names>] -ReceiptPath <new-receipt.json> -Confirmed`
+for the approved resources now; do not merely print the commands. Run it from
+the consumer repository and require receipt `status: PASS`; exit 0 with
+`status: PLANNED` is only a preview. A native plugin or
+`npx` confirmation remains visible and must succeed. Never install a prerequisite,
+CLI, MCP server, account permission, tenant consent or cloud resource from this
+step. A failed or cancelled command remains missing.
+
+The installer receipt is audit evidence, not an Init credential. Any resource
+reported as `installed` or present only on disk requires a host reload. Stop
+before Init or roster expansion, reload the host, rerun preflight, and record one
+final `resourceDecisions` entry per listed resource: host-visible `available`, or
+explicitly `declined`. Copy the relevant native host inventory into
+`availableSkills`; the deterministic planners reject missing, unknown,
+on-disk-only, or invented availability.
 
 ### Pack Discovery
 

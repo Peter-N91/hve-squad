@@ -33,7 +33,7 @@ Select one admitted skill only for its cue. Do not use an admitted skill to answ
 
 Every admitted skill was gated at `microsoft/skills-for-fabric@4c3986d2e5b498ce2d6e6025533b94b5e5bb2ccd`. The repository licence is MIT. Each skill's frontmatter `name` matches its directory. Install only the granular command in *Registered External Cast*: `apm install microsoft/skills-for-fabric/skills/<name> --target copilot`. The whole-plugin `fabric-skills@fabric-collection` form was rejected: that bundle includes colliding semantic-model and medallion skills, external agents, and tenant-authenticated MCP servers.
 
-Runtime prerequisites are explicit in the skill and in `common/COMMON-CLI.md`: `az login` to the Fabric tenant, workspace resolution, and capacity where the skill creates or runs an item. `sqldw-cli` also needs the `fabric-sqlendpoint` MCP `execute_query` tool for T-SQL. Do not auto-install a CLI, MCP server, or skill. Do not request tenant consent. Item creation, dacpac deployment, and data-plane writes are impactful; report them and stop for approval. Do not execute them from this guidance.
+Runtime prerequisites are explicit in the skill and in `common/COMMON-CLI.md`: `az login` to the Fabric tenant, workspace resolution, and capacity where the skill creates or runs an item. `sqldw-cli` also needs the `fabric-sqlendpoint` MCP `execute_query` tool for T-SQL. The shared Pack Resource Preflight may install these skills after explicit approval; it never installs a CLI, MCP server or prerequisite. Do not request tenant consent. Item creation, dacpac deployment, and data-plane writes are impactful; report them and stop for approval. Do not execute them from this guidance.
 
 ## Not admitted
 

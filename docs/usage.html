@@ -708,6 +708,59 @@ flowchart TD
           on the issue.
         </li>
       </ol>
+
+      <h3>Run controls: depth, routing, and economy consent</h3>
+      <p>
+        The Watch workflow has four optional settings. They come from the workflow itself, never
+        from issue text, so an issue cannot change them. Set the committed default in the workflow's
+        <code>env:</code> block, or override it for one manual run through the
+        <strong>Run workflow</strong> form on the Actions tab (<code>default</code> keeps the committed
+        value).
+      </p>
+      <table>
+        <thead>
+          <tr><th>Setting</th><th>Values</th><th>Default</th><th>Effect</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>depth</code> (<code>SQUAD_DEPTH</code>)</td>
+            <td><code>standard</code>, <code>quick</code></td>
+            <td><code>standard</code></td>
+            <td><code>quick</code> shrinks research to one cycle and two lanes, plans one approach, and keeps the diff minimal. It never changes a gate.</td>
+          </tr>
+          <tr>
+            <td><code>routing</code> (<code>SQUAD_ROUTING</code>)</td>
+            <td><code>off</code>, <code>ranked</code>, <code>economy</code></td>
+            <td><code>off</code></td>
+            <td>How each role's model is chosen. <code>off</code> keeps the host's default models.</td>
+          </tr>
+          <tr>
+            <td><code>economy_consent</code> (<code>SQUAD_ECONOMY_CONSENT</code>)</td>
+            <td><code>true</code>, <code>false</code></td>
+            <td><code>false</code></td>
+            <td>Required for <code>routing=economy</code>. Without it the workflow falls back to <code>off</code> and says so in the run log.</td>
+          </tr>
+          <tr>
+            <td><code>profile</code> (<code>SQUAD_PROFILE</code>)</td>
+            <td><code>default</code>, <code>auto</code>, or any catalog profile</td>
+            <td><code>default</code></td>
+            <td>The run uses exactly that profile from the catalog, with no packs and no added roles. <code>auto</code> lets the squad pick one catalog profile. On the <code>profile</code> input, <code>keep</code> uses the committed value.</td>
+          </tr>
+        </tbody>
+      </table>
+      <p>
+        Setting <code>economy_consent</code> to <code>true</code> is you accepting the Economy trade
+        for that run or for the repository default. The coordinator records it as
+        <code>## Economy Mode Accepted</code> with <code>Scope: all-roles</code>. Economy only changes
+        model choice; it never weakens a gate or a review.
+      </p>
+      <p><strong>Keeping Watch runs fast.</strong></p>
+      <ul>
+        <li>Use <code>depth=quick</code> for small, well-scoped issues.</li>
+        <li>Watch does not run this repository's full Tier 0 suite; the run uses focused tests for the files it changes and does not repeat unchanged ones. CI runs the full suite on the pull request.</li>
+        <li>The roster must be exactly a catalog profile, with no packs and no added roles (the <code>profile</code> setting, <code>default</code> unless you change it). Any other roster fails the publication gate after the run has finished, so a long run can end without a handoff.</li>
+      </ul>
+
       <h3>Create and apply the <code>squad/auto</code> label</h3>
       <p>
         The trigger is an ordinary GitHub label named exactly <code>squad/auto</code>. Create it once,
@@ -882,6 +935,16 @@ dispatch-9911223344         # a free-form manual dispatch (workflow run id)</cod
         Every Watch Mode run executes the full pipeline: Research, Plan, Council when it applies,
         Implement, and Review. A council that does not apply stays visible as
         <code>Dispatch Record: n/a</code> with a short reason. It is not a fabricated dispatch.
+      </p>
+      <p>
+        Completion fields are machine statuses: a completed stage uses <code>Result: complete</code>
+        and its history entry uses <code>Outcome: Completed.</code>. Descriptions, findings, and
+        limitations belong in Notes, so phrases such as “running a skill” cannot be mistaken for
+        unfinished work. The live repository workflow checks profile, questions, and lifecycle
+        before runtime cleanup. If that check fails, it allows one record-only repair in the same
+        agent session, then checks again. Final staging repeats the checks with a hash-protected
+        validator. Unfinished work still blocks publication; this recovery does not rerun the pipeline.
+        The consumer scaffold documents the status format but does not supply this recovery wiring.
       </p>
       <p>
         The run selects exactly one canonical profile, and any packs, from the demand. It records
@@ -1298,7 +1361,7 @@ flowchart TD
           <tr><td><code>modernization</code></td><td>researcher, lead, developer, tester, modernizer, architect, azure-architect, iac-author, cost-manager, asbuilt-author, scribe</td><td>Legacy uplift &mdash; framework and dependency upgrades, re-platforming, SQL or cloud migration</td></tr>
           <tr><td><code>compliance</code></td><td>researcher, lead, developer, tester, security, supply-chain, vuln-manager, privacy, rai, accessibility, risk-manager, scribe</td><td>Conformance evidence is the goal &mdash; an audit, an attestation, or a customer security questionnaire</td></tr>
           <tr><td><code>operations</code></td><td>researcher, lead, developer, tester, azure-diagnose, performance, observability, asbuilt-author, iac-author, deployer, scribe</td><td>Running a deployed system &mdash; incidents, reliability targets, instrumentation design, and as-built documentation</td></tr>
-          <tr><td><code>product</code></td><td>researcher, lead, developer, tester, analyst, designer, product-owner, presenter, technical-writer, experimenter, data-scientist, intake-validator, scribe</td><td>Business discovery and delivery &mdash; requirements, design thinking, roadmap, and stakeholder deliverables (often non-technical)</td></tr>
+          <tr><td><code>product</code></td><td>researcher, lead, developer, tester, analyst, designer, product-owner, technical-writer, experimenter, data-scientist, intake-validator, scribe</td><td>Business discovery and delivery &mdash; requirements, design thinking, roadmap, and stakeholder deliverables (often non-technical)</td></tr>
         </tbody>
       </table>
       <p>
@@ -1466,11 +1529,16 @@ apm install microsoft/skills-for-fabric/skills/pipeline-migration --target copil
         role the pack would provide. Foundry reuses existing roles and points them to registered upstream
         Microsoft and Azure skills instead of copying changing product documentation into the squad.
       </p>
-      <h3 data-release-change="20261024-foundry-agent-sync-replacement">Install the Foundry pack's skills</h3>
+      <h3 data-release-change="20261106-pack-resource-installer">Install a pack's registered skills</h3>
       <p>
-        When you apply <code>foundry</code>, the coordinator reports all missing registered skills and
-        prerequisites in one message. Install only the capabilities the project needs; nothing is
-        installed automatically. The catalog remains the source of truth for these commands.
+        When you apply <code>foundry</code> or <code>fabric</code>, the coordinator inventories all
+        registered pack skills and their prerequisites in one message. If you approve installation,
+        it runs the catalog commands immediately and verifies their exit status instead of only
+        displaying them. You can install a subset or continue without them. The installer receipt
+        records what changed; after any required reload, final preflight records each skill as
+        host-visible or declined. The preflight never installs a CLI, MCP server,
+        authentication, tenant consent, or cloud resource. Whenever installation changes the skill
+        inventory, reload the host and rerun the preflight before Init or pack expansion continues.
       </p>
       <pre><code># Microsoft Foundry and APIM AI Gateway skills
 apm install microsoft/azure-skills/skills/microsoft-foundry --target copilot
@@ -1481,7 +1549,10 @@ copilot plugin marketplace add Azure/aigateway
 copilot plugin install ai-gateway@azure
 
 # Inspect selected CAIRA reference components
-npx skills add github.com/microsoft/CAIRA/skills</code></pre>
+npx skills add github.com/microsoft/CAIRA/skills
+
+# Fabric Warehouse skill example
+apm install microsoft/skills-for-fabric/skills/sqldw-cli --target copilot</code></pre>
       <p>
         The plugin path needs GitHub Copilot CLI with plugin support; CAIRA needs Node.js and
         <code>npx</code>. Foundry and gateway workflows may also need Azure CLI access, an Azure
@@ -1737,18 +1808,10 @@ npx skills add github.com/microsoft/CAIRA/skills</code></pre>
 
       <h2>Branded PowerPoint decks</h2>
       <p>
-        The <code>presenter</code> role (seeded by the <code>product</code> and <code>full</code>
-        profiles) generates decks from your content. Give it your branded <code>.pptx</code> once and
-        every deck inherits your slide masters, layouts, theme colors, and fonts. The branding rule
-        ships with hve-squad and switches on by itself &mdash; you never copy a file, edit a config, or
-        restate the template on each request.
+        The squad no longer has a deck-building role. The notes below describe how a branded <code>.pptx</code> template was applied; they are reference only for consumers who supply their own pptx tooling.
       </p>
       <p>
-        When you ask for a deck, the coordinator dispatches the <strong>PowerPoint Subagent</strong>,
-        which runs the <code>powerpoint</code> skill's <code>build_deck.py</code>. Branding is applied
-        through the <code>--template</code> flag (PowerShell <code>-TemplatePath</code>): the build
-        inherits the template's <strong>slide masters, layouts, and theme</strong>, discards the
-        template's own example slides, then adds only the slides defined in your content.
+        <strong>Note:</strong> hve-core removed the <code>PowerPoint Builder</code> and <code>PowerPoint Subagent</code> agents and the <code>powerpoint</code> skill at f425e94, so the squad no longer ships a <code>presenter</code> role or a deck pipeline. The branding guidance below is reference only, for consumers who supply their own pptx tooling.
       </p>
       <div class="callout">
         <p>
@@ -1793,7 +1856,7 @@ npx skills add github.com/microsoft/CAIRA/skills</code></pre>
         hve-squad ships the branding instruction as part of the package, so on <code>apm install</code>
         it lands at <code>.github/instructions/pptx-brand-template.instructions.md</code> and switches
         on by itself. Its <code>applyTo</code> matches <code>**/.copilot-tracking/ppt/**</code>, so the
-        PowerPoint Subagent reads it every time it works on a deck &mdash; using your template as
+        PowerPoint agent (removed upstream) read it every time it works on a deck &mdash; using your template as
         <code>--template</code> for full rebuilds and <code>--source</code> for partial ones. If no
         template is present yet, the builder does not quietly fall back to a plain deck: it asks
         whether you have a branded <code>.pptx</code> and offers to save it for you.
@@ -1951,7 +2014,9 @@ layouts:
         accept the wider trade; it never creates a mixed run where five roles use Economy and the rest
         stay Ranked. A Watch Mode or other unattended run never switches into <code>economy</code>
         from issue, pull-request, or comment text, but a previously consented all-role Economy mode
-        continues to apply to every routed role.
+        continues to apply to every routed role. The one way to run Watch on Economy is the workflow's
+        own <code>routing=economy</code> with <code>economy_consent=true</code>; without that consent
+        the workflow falls back to <code>off</code>.
       </p>
       <p>
         <strong>Never weakened.</strong> Economy only changes model choice. It never skips, shortens, or relaxes the Risk Gate,

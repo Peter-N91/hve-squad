@@ -62,7 +62,6 @@ The coordinator seeds `routing.md` with these defaults. Adjust per project, but 
 | create work items in ADO, push backlog to Azure DevOps, create Jira issues, apply the handoff, execute handoff, sync work items to the tracker | backlog-executor | confirm | no |
 | GitLab merge request, GitLab pipeline, GitLab issue, open an MR | product-owner    | escalate      | no                |
 | experiment, hypothesis, validate assumption, MVE, riskiest assumption | experimenter | confirm | yes        |
-| presentation, deck, slides, executive summary, pitch | presenter    | confirm       | no                |
 | document, write up, summarize for stakeholders, readme | technical-writer | confirm  | no                |
 | data profile, data dictionary, EDA, exploratory analysis, notebook, dashboard, dataset, Power BI, DAX, semantic model, star schema, report design, Fabric, Lakehouse, OneLake | data-scientist | confirm | no |
 | architecture, system design, components    | architect              | auto          | yes               |

@@ -193,7 +193,8 @@ try {
         foreach ($member in $choices.subSquads) {
             Assert-FieldSet $member @('name', 'profile', 'description', 'routes') @(
                 'owner', 'packs', 'roles', 'excludeRoles', 'names', 'naming', 'notify',
-                'modelRouting', 'models', 'mode', 'sessionModel', 'modelOverrides', 'usage'
+                'modelRouting', 'models', 'mode', 'sessionModel', 'modelOverrides', 'usage',
+                'resourceDecisions', 'availableSkills'
             )
             Assert-Line $member.name
             Assert-Line $member.profile
@@ -227,7 +228,7 @@ try {
                 naming = $(if ($member.Contains('naming')) { $member.naming } else { $choices.naming })
                 notify = $(if ($member.Contains('notify')) { $member.notify } else { $choices.notify })
             }
-            foreach ($field in @('packs', 'roles', 'excludeRoles', 'names', 'modelRouting', 'models', 'mode', 'usage')) {
+            foreach ($field in @('packs', 'roles', 'excludeRoles', 'names', 'modelRouting', 'models', 'mode', 'usage', 'resourceDecisions', 'availableSkills')) {
                 if ($member.Contains($field)) { $initChoices[$field] = $member[$field] }
             }
             foreach ($field in @('sessionModel', 'modelOverrides')) {

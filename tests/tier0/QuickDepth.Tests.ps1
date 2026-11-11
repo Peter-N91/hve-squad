@@ -134,7 +134,7 @@ Describe 'Quick depth trusted input and graph enforcement' {
             units = @(@{ id = 'work'; role = 'developer'; writePaths = @('src/work.ps1') })
         }
         $result.ExitCode | Should -Be 1
-        $result.Output | Should -Match 'requestedDepth quick requires trusted depthSource input or federation'
+        $result.Output | Should -Match 'requestedDepth quick requires trusted depthSource input, federation, or workflow'
     }
 
     It 'computes the bounded plan before waves and removes supplied Research and Plan units' {
@@ -209,6 +209,43 @@ Describe 'Quick depth trusted input and graph enforcement' {
         $plan.depth.ignored | Should -Match 'unattended run'
         @($plan.units).Count | Should -Be 4
         Get-FixtureHash $root | Should -BeExactly $before
+    }
+
+    It 'honors quick from trusted workflow configuration on an unattended state and shrinks without a lane' {
+        $repo = New-FixtureRepo
+        $root = Initialize-Fixture $repo
+        $statePath = Join-Path $root 'state.json'
+        $state = Get-Content -LiteralPath $statePath -Raw | ConvertFrom-Json -AsHashtable
+        $state['trigger'] = @{ source = 'issue'; ref = 'Peter-N91/hve-squad#224' }
+        Write-FixtureJson $statePath $state
+        $result = Invoke-DepthPlan -Repo $repo -PlanInput @{
+            squadRoot = $root
+            requestedDepth = 'quick'
+            depthSource = 'workflow'
+            units = New-FullPipelineUnits
+        }
+        $result.ExitCode | Should -Be 0 -Because $result.Output
+        $plan = $result.Output | ConvertFrom-Json
+        $plan.depth.source | Should -Be 'workflow'
+        $plan.depth.effective | Should -Be 'quick'
+        $plan.depth.ignored | Should -BeNullOrEmpty
+        $plan.depth.route | Should -BeNullOrEmpty
+        @($plan.units).Count | Should -Be 4
+        @($plan.depth.skippedUnits).Count | Should -Be 0
+        @($plan.depth.stages | Where-Object { $_.kind -eq 'gate' -and $_.action -ne 'run' }).Count | Should -Be 0
+    }
+
+    It 'refuses the workflow depth source outside an unattended Watch Mode run' {
+        $repo = New-FixtureRepo
+        $root = Initialize-Fixture $repo
+        $result = Invoke-DepthPlan -Repo $repo -PlanInput @{
+            squadRoot = $root
+            requestedDepth = 'quick'
+            depthSource = 'workflow'
+            units = New-FullPipelineUnits
+        }
+        $result.ExitCode | Should -Not -Be 0
+        $result.Output | Should -Match 'unattended Watch Mode run'
     }
 }
 

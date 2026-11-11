@@ -55,7 +55,7 @@ BeforeAll {
         $repo = Join-Path $TestDrive ("federation-init-$([guid]::NewGuid().ToString('N'))")
         $agentRoot = Join-Path $repo '.github/agents'
         $null = [IO.Directory]::CreateDirectory($agentRoot)
-        foreach ($agent in @('Squad Researcher', 'Squad Lead', 'Squad Implementor', 'Squad Reviewer', 'Squad Scribe')) {
+        foreach ($agent in @('Squad Researcher', 'Squad Lead', 'Squad Implementor', 'Squad Reviewer', 'Squad Scribe', 'Squad Data Scientist')) {
             $file = ($agent.ToLowerInvariant() -replace '[^a-z0-9]+', '-') + '.agent.md'
             [IO.File]::WriteAllText(
                 (Join-Path $agentRoot $file),
@@ -176,6 +176,36 @@ Describe 'Confirmed federation Init planning' {
         Get-TreeHash $repo | Should -Not -BeExactly $before -Because 'only the explicit choices/payload transport files were added outside squad state'
     }
 
+    It 'requires pack resource preflight for each federation member' {
+        $repo = Get-FederationRepoFixture
+        $choices = Get-FederationChoice -OneMember
+        $member = $choices.subSquads[0]
+        $member.profile = 'custom'
+        $member.roles = @('researcher', 'lead', 'developer', 'tester', 'scribe')
+        $member.packs = @('fabric')
+        $choicesPath = Join-Path $repo 'fabric-member.json'
+        $payloadPath = Join-Path $repo 'fabric-member-payload.json'
+        Write-Json $choicesPath $choices
+        $missing = Invoke-Local $script:Plan $repo @(
+            '-RepoRoot', $repo, '-ChoicesPath', $choicesPath, '-PayloadPath', $payloadPath
+        )
+        $missing.ExitCode | Should -Be 1
+        $missing.Output | Should -Match 'resourceDecisions'
+
+        $member.resourceDecisions = [ordered]@{}
+        foreach ($resource in @('sqldw-cli', 'sqldb-cli', 'eventhouse-cli', 'eventstream-cli', 'spark-cli', 'dataflows-cli', 'databricks-migration', 'pipeline-migration')) {
+            $member.resourceDecisions[$resource] = 'declined'
+        }
+        Write-Json $choicesPath $choices
+        $prepared = Invoke-Local $script:Plan $repo @(
+            '-RepoRoot', $repo, '-ChoicesPath', $choicesPath, '-PayloadPath', $payloadPath
+        )
+        $prepared.ExitCode | Should -Be 0 -Because $prepared.Output
+        $payload = Get-Content -LiteralPath $payloadPath -Raw | ConvertFrom-Json -AsHashtable
+        $payload.members[0].initPayload.packResources.Count | Should -Be 8
+        @($payload.members[0].initPayload.packs) | Should -Be @('fabric')
+    }
+
     It 'refuses unconfirmed, duplicate, or plain-squad federation choices' {
         $repo = Get-FederationRepoFixture
         $unconfirmed = Get-FederationChoice
@@ -212,6 +242,40 @@ Describe 'Confirmed federation Init planning' {
         $payload.operation | Should -Be 'expand'
         $payload.rootBaseline.kind | Should -Be 'federation'
         $payload.rootBaseline.snapshot.members.Keys | Should -Be @('product')
+        Get-TreeHash $root | Should -BeExactly $before
+    }
+
+    It 'requires pack resource preflight for an existing federation expansion member' {
+        $repo = Get-FederationRepoFixture
+        $null = Initialize-ExistingFederation $repo
+        $root = Join-Path $repo '.copilot-tracking/squad'
+        $before = Get-TreeHash $root
+        $choices = Get-ExpansionChoice -Name 'fabric' -Pattern 'warehouse, eventhouse'
+        $member = $choices.subSquads[0]
+        $member.profile = 'custom'
+        $member.roles = @('researcher', 'lead', 'developer', 'tester', 'scribe')
+        $member.packs = @('fabric')
+        $choicesPath = Join-Path $repo 'fabric-expansion.json'
+        $payloadPath = Join-Path $repo 'fabric-expansion-payload.json'
+        Write-Json $choicesPath $choices
+        $missing = Invoke-Local $script:Plan $repo @(
+            '-RepoRoot', $repo, '-ChoicesPath', $choicesPath, '-PayloadPath', $payloadPath
+        )
+        $missing.ExitCode | Should -Be 1
+        $missing.Output | Should -Match 'resourceDecisions'
+
+        $member.resourceDecisions = [ordered]@{}
+        foreach ($resource in @('sqldw-cli', 'sqldb-cli', 'eventhouse-cli', 'eventstream-cli', 'spark-cli', 'dataflows-cli', 'databricks-migration', 'pipeline-migration')) {
+            $member.resourceDecisions[$resource] = 'declined'
+        }
+        Write-Json $choicesPath $choices
+        $prepared = Invoke-Local $script:Plan $repo @(
+            '-RepoRoot', $repo, '-ChoicesPath', $choicesPath, '-PayloadPath', $payloadPath
+        )
+        $prepared.ExitCode | Should -Be 0 -Because $prepared.Output
+        $payload = Get-Content -LiteralPath $payloadPath -Raw | ConvertFrom-Json -AsHashtable
+        $payload.operation | Should -BeExactly 'expand'
+        $payload.members[0].initPayload.packResources.Count | Should -Be 8
         Get-TreeHash $root | Should -BeExactly $before
     }
 

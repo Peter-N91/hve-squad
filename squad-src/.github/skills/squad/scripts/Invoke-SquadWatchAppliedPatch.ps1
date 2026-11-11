@@ -41,7 +41,9 @@ $gate = Test-SquadWatchAppliedPublication `
     -CurrentThread $env:SOURCE_THREAD_REF `
     -StableRef $env:STABLE_REF `
     -TrustedBaseSha $sha `
-    -CatalogMarkdown $catalog
+    -CatalogMarkdown $catalog `
+    -InstalledPacks @() `
+    -InstalledSkills @()
 if ($gate.BlockPublication) {
     throw 'Applied patch failed current-run profile or question validation.'
 }

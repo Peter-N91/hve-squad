@@ -712,6 +712,58 @@ flowchart TD
           dans l'issue.
         </li>
       </ol>
+
+      <h3>Paramètres d'exécution : depth, routing et accord Economy</h3>
+      <p>
+        Le workflow Watch propose quatre paramètres facultatifs. Ils proviennent du workflow lui-même, jamais
+        du texte d'une issue : une issue ne peut donc pas les modifier. Définissez la valeur par défaut validée dans le bloc
+        <code>env:</code> du workflow, ou remplacez-la pour une exécution manuelle via le formulaire
+        <strong>Run workflow</strong> de l'onglet Actions (<code>default</code> conserve la valeur validée).
+      </p>
+      <table>
+        <thead>
+          <tr><th>Paramètre</th><th>Valeurs</th><th>Par défaut</th><th>Effet</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>depth</code> (<code>SQUAD_DEPTH</code>)</td>
+            <td><code>standard</code>, <code>quick</code></td>
+            <td><code>standard</code></td>
+            <td><code>quick</code> réduit la recherche à un cycle et deux voies, planifie une seule approche et garde le diff minimal. Il ne modifie jamais un gate.</td>
+          </tr>
+          <tr>
+            <td><code>routing</code> (<code>SQUAD_ROUTING</code>)</td>
+            <td><code>off</code>, <code>ranked</code>, <code>economy</code></td>
+            <td><code>off</code></td>
+            <td>Mode de choix du modèle de chaque rôle. <code>off</code> conserve les modèles par défaut de l'hôte.</td>
+          </tr>
+          <tr>
+            <td><code>economy_consent</code> (<code>SQUAD_ECONOMY_CONSENT</code>)</td>
+            <td><code>true</code>, <code>false</code></td>
+            <td><code>false</code></td>
+            <td>Requis pour <code>routing=economy</code>. Sans lui, le workflow revient à <code>off</code> et l'indique dans le journal d'exécution.</td>
+          </tr>
+          <tr>
+            <td><code>profile</code> (<code>SQUAD_PROFILE</code>)</td>
+            <td><code>default</code>, <code>auto</code> ou tout profil du catalogue</td>
+            <td><code>default</code></td>
+            <td>L'exécution utilise exactement ce profil du catalogue, sans pack ni rôle ajouté. <code>auto</code> laisse la squad choisir un profil du catalogue. Sur l'entrée <code>profile</code>, <code>keep</code> utilise la valeur validée.</td>
+          </tr>
+        </tbody>
+      </table>
+      <p>
+        Définir <code>economy_consent</code> sur <code>true</code> revient à accepter le compromis Economy
+        pour cette exécution ou pour la valeur par défaut du dépôt. Le coordinateur le consigne comme
+        <code>## Economy Mode Accepted</code> avec <code>Scope: all-roles</code>. Economy ne change que le choix du
+        modèle ; il n'affaiblit jamais un gate ni une revue.
+      </p>
+      <p><strong>Garder les exécutions Watch rapides.</strong></p>
+      <ul>
+        <li>Utilisez <code>depth=quick</code> pour les issues petites et bien délimitées.</li>
+        <li>Watch n'exécute pas la suite Tier 0 complète de ce dépôt ; l'exécution utilise des tests ciblés sur les fichiers modifiés et ne répète pas ceux qui sont inchangés. La CI exécute la suite complète sur la pull request.</li>
+        <li>L'équipe doit être exactement un profil du catalogue, sans pack ni rôle ajouté (paramètre <code>profile</code>, <code>default</code> sauf changement). Toute autre équipe échoue au gate de publication après la fin de l'exécution : une longue exécution peut donc se terminer sans livraison.</li>
+      </ul>
+
       <h3>Créer et appliquer l'étiquette <code>squad/auto</code></h3>
       <p>
         Le déclencheur est une étiquette GitHub ordinaire portant exactement le nom <code>squad/auto</code>. Créez-la une fois,
@@ -886,6 +938,17 @@ dispatch-9911223344         # a free-form manual dispatch (workflow run id)</cod
         Chaque exécution du mode Watch parcourt le pipeline complet : recherche, plan, conseil lorsqu'il s'applique,
         implémentation et revue. Un conseil qui ne s'applique pas reste visible sous
         <code>Dispatch Record: n/a</code> avec une raison courte. Ce n'est pas une délégation inventée.
+      </p>
+      <p>
+        Les champs de fin sont des statuts machine : une étape terminée utilise <code>Result: complete</code>
+        et son entrée d'historique utilise <code>Outcome: Completed.</code>. Les descriptions, constats et
+        limites vont dans Notes, afin qu'une phrase comme « running a skill » ne soit pas prise pour un
+        travail inachevé. Le workflow actif du dépôt vérifie le profil, les questions et le cycle de vie
+        avant de nettoyer le runtime. En cas d'échec, il autorise une seule correction des enregistrements
+        dans la même session d'agent, puis vérifie à nouveau. Le staging final répète les contrôles avec
+        un validateur protégé par empreinte. Un travail inachevé bloque toujours la publication ; cette
+        reprise ne relance pas le pipeline. L'ossature consommateur documente le format des statuts,
+        mais ne fournit pas ce mécanisme de reprise.
       </p>
       <p>
         L'exécution sélectionne exactement un profil canonique, et les packs éventuels, à partir de la demande. Elle consigne
@@ -1290,7 +1353,7 @@ flowchart TD
           <tr><td><code>modernization</code></td><td>researcher, lead, developer, tester, modernizer, architect, azure-architect, iac-author, cost-manager, asbuilt-author, scribe</td><td>Évolution de l'existant &mdash; mise à niveau des frameworks et dépendances, changement de plateforme, migration SQL ou cloud</td></tr>
           <tr><td><code>compliance</code></td><td>researcher, lead, developer, tester, security, supply-chain, vuln-manager, privacy, rai, accessibility, risk-manager, scribe</td><td>Production de preuves de conformité &mdash; audit, attestation ou questionnaire de sécurité d'un client</td></tr>
           <tr><td><code>operations</code></td><td>researcher, lead, developer, tester, azure-diagnose, performance, observability, asbuilt-author, iac-author, deployer, scribe</td><td>Exploitation d'un système déployé &mdash; incidents, objectifs de fiabilité, conception de l'instrumentation et documentation de l'existant déployé</td></tr>
-          <tr><td><code>product</code></td><td>researcher, lead, developer, tester, analyst, designer, product-owner, presenter, technical-writer, experimenter, data-scientist, intake-validator, scribe</td><td>Découverte métier et livraison &mdash; exigences, design thinking, feuille de route et livrables pour les parties prenantes (souvent non techniques)</td></tr>
+          <tr><td><code>product</code></td><td>researcher, lead, developer, tester, analyst, designer, product-owner, technical-writer, experimenter, data-scientist, intake-validator, scribe</td><td>Découverte métier et livraison &mdash; exigences, design thinking, feuille de route et livrables pour les parties prenantes (souvent non techniques)</td></tr>
         </tbody>
       </table>
       <p>
@@ -1461,12 +1524,18 @@ apm install microsoft/skills-for-fabric/skills/pipeline-migration --target copil
         rôle que ce pack apporterait. Foundry réutilise les rôles existants et les oriente vers des compétences Microsoft et Azure
         enregistrées, au lieu de copier dans la squad une documentation produit qui évolue rapidement.
       </p>
-      <h3 data-release-change="20261024-foundry-agent-sync-replacement">Installer les compétences du pack Foundry</h3>
+      <h3 data-release-change="20261106-pack-resource-installer">Installer les compétences enregistrées d'un pack</h3>
       <p>
-        Lorsque vous appliquez <code>foundry</code>, le coordinateur regroupe dans un seul message
-        toutes les compétences enregistrées manquantes et leurs prérequis. N'installez que les
-        capacités utiles au projet ; rien n'est installé automatiquement. Le catalogue reste la
-        source de vérité pour ces commandes.
+        Lorsque vous appliquez <code>foundry</code> ou <code>fabric</code>, le coordinateur regroupe
+        dans un seul message toutes les compétences enregistrées du pack et leurs prérequis. Si vous
+        approuvez l'installation, il exécute immédiatement les commandes du catalogue et vérifie leur
+        code de sortie au lieu de seulement les afficher. Vous pouvez installer un sous-ensemble ou
+        continuer sans elles. Le reçu d'installation consigne les changements ; après tout
+        rechargement requis, le contrôle final marque chaque compétence comme visible par l'hôte ou
+        refusée. Ce contrôle préalable n'installe jamais de CLI, serveur MCP, authentification,
+        consentement du tenant ni ressource cloud. Dès que l'installation modifie l'inventaire des
+        compétences, rechargez l'hôte et relancez le contrôle préalable avant de poursuivre
+        l'initialisation ou l'ajout du pack.
       </p>
       <pre><code># Microsoft Foundry and APIM AI Gateway skills
 apm install microsoft/azure-skills/skills/microsoft-foundry --target copilot
@@ -1477,7 +1546,10 @@ copilot plugin marketplace add Azure/aigateway
 copilot plugin install ai-gateway@azure
 
 # Inspect selected CAIRA reference components
-npx skills add github.com/microsoft/CAIRA/skills</code></pre>
+npx skills add github.com/microsoft/CAIRA/skills
+
+# Fabric Warehouse skill example
+apm install microsoft/skills-for-fabric/skills/sqldw-cli --target copilot</code></pre>
       <p>
         Le chemin plugin exige GitHub Copilot CLI avec la prise en charge des plugins ; CAIRA exige
         Node.js et <code>npx</code>. Les workflows Foundry et gateway peuvent aussi nécessiter Azure
@@ -1736,18 +1808,10 @@ npx skills add github.com/microsoft/CAIRA/skills</code></pre>
 
       <h2>Présentations PowerPoint aux couleurs de votre marque</h2>
       <p>
-        Le rôle <code>presenter</code> (initialisé par les profils <code>product</code> et <code>full</code>)
-        génère des présentations à partir de votre contenu. Fournissez-lui une fois votre <code>.pptx</code> de marque, et
-        chaque présentation héritera de vos masques de diapositives, dispositions, couleurs de thème et polices. La règle de personnalisation graphique
-        est fournie avec hve-squad et s'active automatiquement &mdash; vous n'avez jamais à copier un fichier, modifier une configuration ou
-        repréciser le modèle à chaque demande.
+        La squad n'a plus de rôle de génération de présentations. Les notes ci-dessous décrivent l'application d'un modèle <code>.pptx</code> de marque ; elles sont données à titre de référence pour les utilisateurs qui apportent leur propre outillage pptx.
       </p>
       <p>
-        Lorsque vous demandez une présentation, le coordinateur lance le <strong>PowerPoint Subagent</strong>,
-        qui exécute le script du skill <code>powerpoint</code> nommé <code>build_deck.py</code>. La personnalisation graphique est appliquée
-        au moyen du paramètre <code>--template</code> (<code>-TemplatePath</code> en PowerShell) : la génération
-        hérite des <strong>masques de diapositives, des dispositions et du thème</strong> du modèle, élimine les
-        diapositives d'exemple du modèle, puis ajoute uniquement celles définies dans votre contenu.
+        <strong>Remarque :</strong> hve-core a supprimé les agents <code>PowerPoint Builder</code> et <code>PowerPoint Subagent</code> ainsi que le skill <code>powerpoint</code> au commit f425e94 ; la squad ne fournit donc plus de rôle <code>presenter</code> ni de pipeline de présentation. Les indications de personnalisation ci-dessous sont données à titre de référence, pour les utilisateurs qui apportent leur propre outillage pptx.
       </p>
       <div class="callout">
         <p>
@@ -1792,7 +1856,7 @@ npx skills add github.com/microsoft/CAIRA/skills</code></pre>
         hve-squad fournit l'instruction de personnalisation graphique dans le package : lors d'un <code>apm install</code>,
         elle arrive dans <code>.github/instructions/pptx-brand-template.instructions.md</code> et s'active
         automatiquement. Son <code>applyTo</code> correspond à <code>**/.copilot-tracking/ppt/**</code> :
-        le PowerPoint Subagent la lit donc chaque fois qu'il travaille sur une présentation &mdash; en utilisant votre modèle avec
+        un agent PowerPoint (supprimé en amont) la lisait donc chaque fois qu'il travaille sur une présentation &mdash; en utilisant votre modèle avec
         <code>--template</code> pour les reconstructions complètes et <code>--source</code> pour les reconstructions partielles. Si aucun
         modèle n'est encore présent, le générateur ne se rabat pas silencieusement sur une présentation neutre : il demande
         si vous disposez d'un <code>.pptx</code> de marque et propose de l'enregistrer pour vous.
@@ -1955,7 +2019,9 @@ layouts:
         rôles utilisent Economy et les autres restent sur Ranked. Une exécution Watch Mode ou autre
         exécution sans surveillance ne passe jamais en <code>economy</code> à partir du texte d'une
         issue, d'une pull request ou d'un commentaire, mais un mode Economy tous rôles déjà accepté
-        continue de s'appliquer à chaque rôle routé.
+        continue de s'appliquer à chaque rôle routé. La seule façon d'exécuter Watch en Economy est le
+        <code>routing=economy</code> du workflow lui-même avec <code>economy_consent=true</code> ; sans cet
+        accord, le workflow revient à <code>off</code>.
       </p>
       <p>
         <strong>Jamais affaibli.</strong> Le mode economy ne change que le choix du modèle. Il ne saute, n'abrège ni n'assouplit jamais le Risk Gate,

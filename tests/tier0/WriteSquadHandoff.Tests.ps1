@@ -1868,6 +1868,30 @@ Describe 'Write-SquadHandoff.ps1 derives omitted payload fields' {
         (Invoke-LedgerCheck -Root $root -Counts 'Squad Researcher=1;Squad Scribe=1').ExitCode | Should -Be 0
     }
 
+    It 'rejects a merged multi-stage hand-off under autopilot but accepts it elsewhere' {
+        $root = New-Root
+        $before = Get-TreeHash $root
+        $payload = New-MinimalPayload
+        $payload.mode = 'autopilot'
+        $payload.historyRecords += [ordered]@{ agent = 'Squad Reviewer'; request = 'Review the fixture-topic survey.'; deliverable = 'reviews/2026-09-27-fixture-review.md'; outcome = 'Reviewed.' }
+        $payload.stateAdvance.activeRoles = @('Squad Researcher', 'Squad Reviewer')
+        $result = Invoke-Writer -Root $root -Payload $payload
+        $result.ExitCode | Should -Be 1 -Because $result.Output
+        ($result.Output -replace '\r?\n\s*\|?\s*', ' ') | Should -Match 'one hand-off per stage'
+        Get-TreeHash $root | Should -Be $before
+        $payload.mode = 'interactive'
+        (Invoke-Writer -Root $root -Payload $payload).Output | Should -Not -Match 'one hand-off per stage'
+    }
+
+    It 'persists -Mode autopilot from the single-dispatch form over a recorded interactive mode' {
+        $root = New-Root
+        $payload = New-MinimalPayload
+        $record = $payload.historyRecords[0]
+        $result = Invoke-Writer -Root $root -Quiet -Dispatch ([ordered]@{ RunId = $payload.runId; Agent = $record.agent; Request = $record.request; Deliverable = $record.deliverable; Outcome = $record.outcome; Mode = 'autopilot' })
+        $result.ExitCode | Should -Be 0 -Because $result.Output
+        (Get-Content -LiteralPath (Join-Path $root 'state.json') -Raw | ConvertFrom-Json).mode | Should -Be 'autopilot'
+    }
+
     It 'keeps the state mode, prices the orchestration at the session model, and derives a passedModel as cli-pinned' {
         $root = New-Root
         $statePath = Join-Path $root 'state.json'

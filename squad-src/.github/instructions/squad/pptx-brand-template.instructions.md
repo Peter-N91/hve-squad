@@ -1,25 +1,13 @@
 ---
-description: "Make the PowerPoint Builder always brand generated decks with the project's own .pptx template, and guide non-technical users to provide one — without any manual setup."
+description: "Reference only: brand-template guidance for slide decks. The powerpoint skill and PowerPoint agents were removed upstream at hve-core f425e94, so the squad ships no deck pipeline."
 applyTo: "**/.copilot-tracking/ppt*/**, **/.copilot-tracking/squad/**/ppt*/**"
 ---
 
-# Brand Template for PowerPoint Builds
+# Brand Template for Slide Decks (reference only)
 
-Apply these rules whenever the PowerPoint Builder or PowerPoint Subagent creates or rebuilds a slide deck in this project. They make every generated deck inherit the organization's branding instead of the plain default look. This instruction ships with the squad and is active automatically — no one needs to copy or edit it.
+The `powerpoint` skill (`build_deck.py`, `Invoke-PptxPipeline.ps1`) and the `PowerPoint Builder` and `PowerPoint Subagent` agents were removed upstream at hve-core f425e94. The squad no longer has a `presenter` role or a deck pipeline, and this capability is no longer available from the squad. The guidance below is retained only for consumers who supply their own pptx tooling; it does not name a replacement skill.
 
-## The pipeline is the only supported path
-
-Every deck in this project is produced by the `powerpoint` skill: content YAML under `content/`, built with `build_deck.py` (or `Invoke-PptxPipeline.ps1`), then put through the skill's Validate pass. That pipeline is what makes a deck look designed rather than generated — the layout rules, the theme inheritance, and the vision-based Validate loop all live there.
-
-**Never author a substitute deck builder.** Writing a one-off script against `pptxgenjs`, `python-pptx`, or any other library — and `npm install`ing a package to do it — is out of bounds, even when it looks faster and even when the skill's pipeline is failing. A hand-rolled builder silently drops the brand template, the theme colors, the layout conventions, and the Validate pass, and the result is the flat deck this instruction exists to prevent.
-
-**When the pipeline cannot run, stop and say so.** The skill needs `uv`, Python 3.11+, PowerShell 7+, and LibreOffice for the export and validation steps. When a prerequisite is missing:
-
-1. Name the missing prerequisite and the one command that installs it (for example, `winget install astral-sh.uv` or `winget install TheDocumentFoundation.LibreOffice`).
-2. Offer to build without the steps that need it, and say plainly which quality checks that skips.
-3. Return the blocked step to the user. Do not improvise around it.
-
-A deck reported as built must have been built by the skill. When the squad's presenter role returns a deck, the coordinator confirms the build came from the pipeline before recording the deliverable as complete.
+**Never author a substitute deck builder on the squad's behalf.** A one-off script against `pptxgenjs`, `python-pptx`, or another library silently drops the brand template, theme colors, and layout conventions. When a deck is requested, say plainly that the squad has no deck pipeline and return the request to the user.
 
 ## Brand template location
 

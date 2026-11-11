@@ -75,7 +75,7 @@ start of a session, **fetch it** and use it as the ground truth:
    **next assessment tool to run**, the **blockers + remediations**, and the **cost +
    program** lines.
 6. **Offer follow-ups:** a per-database table for several DBs, a runbook outline, or a
-   one-slide summary (hand off to the `powerpoint` skill).
+   one-slide summary (slide production is out of scope: the `powerpoint` skill was removed upstream at hve-core f425e94; the report stays a Markdown deliverable).
 
 ## The questionnaire (ask one at a time)
 

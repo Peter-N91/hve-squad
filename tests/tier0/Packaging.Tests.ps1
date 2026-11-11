@@ -415,6 +415,117 @@ Describe 'GATE-48 Repository Watch Mode and Sync-and-Adapt workflows enforce ful
         $script:RepoSquadWatch | Should -Not -Match ([regex]::Escape("'.agents', 'apm_modules', 'install.log'"))
     }
 
+    It 'pins a Watch CLI version compatible with the Haiku 5.5 subagent smoke test' {
+        $versionMatch = [regex]::Match($script:RepoSquadWatch, "(?m)^\s*COPILOT_CLI_VERSION:\s*'(\d+\.\d+\.\d+)'\s*$")
+        $versionMatch.Success | Should -BeTrue
+        if ($versionMatch.Success) {
+            [version]$versionMatch.Groups[1].Value | Should -BeGreaterOrEqual ([version]'1.0.106')
+        }
+    }
+
+    It 'keeps Watch specialist selection within the canonical roster and avoids unnecessary repeated suites' {
+        foreach ($workflow in @($script:RepoSquadWatch, $script:ReferenceSquadWatch)) {
+            $workflow | Should -Match 'canonical profile and retained'
+            $workflow | Should -Match 'do not add'
+            $workflow | Should -Match 'do not repeat'
+            $workflow | Should -Match 'never custom'
+            $workflow | Should -Match 'Stages table format is machine-checked'
+            $workflow | Should -Match 'Result is exactly complete'
+            $workflow | Should -Match 'Outcome is exactly Completed'
+        }
+        $script:RepoSquadWatch | Should -Match 'squad-watch-diagnostics-'
+        $script:RepoSquadWatch | Should -Match 'Source must be exactly one of: OQ-WATCH-NNN'
+        $script:RepoSquadWatch | Should -Match 'never repeat that prefix'
+        $script:RepoSquadWatch | Should -Match 'copied in this exact shape'
+        $script:RepoSquadWatch | Should -Match '\* Source: watch-demand'
+        $script:RepoSquadWatch | Should -Match 'Stage, Role\(s\), Dispatch Record, Result, Gate Fired in that order'
+        $script:RepoSquadWatch | Should -Match 'record an ordinary risk rating under a heading named Risk Assessment'
+        $script:RepoSquadWatch | Should -Match ([regex]::Escape('$stateDoc[''mode''] = ''autopilot'''))
+        $script:RepoSquadWatch | Should -Match ([regex]::Escape('runId      = $env:TRIGGER_RUN_ID'))
+        $script:RepoSquadWatch | Should -Match 'full Tier 0 suite inside Watch unless'
+        $script:RepoSquadWatch | Should -Match 'profileValid=\$\(\$gate\.ProfileValid\), questionsValid=\$\(\$gate\.QuestionsValid\)'
+    }
+
+    It 'exposes depth, routing, and economy consent as validated trusted run controls in both workflows' {
+        foreach ($workflow in @($script:RepoSquadWatch, $script:ReferenceSquadWatch)) {
+            $workflow | Should -Match '(?m)^  SQUAD_DEPTH: standard\s*$'
+            $workflow | Should -Match "(?m)^  SQUAD_ROUTING: 'off'\s*$"
+            $workflow | Should -Match "(?m)^  SQUAD_ECONOMY_CONSENT: 'false'\s*$"
+            $workflow | Should -Match ([regex]::Escape('options: [default, standard, quick]'))
+            $workflow | Should -Match ([regex]::Escape("options: [default, 'off', ranked, economy]"))
+            $workflow | Should -Match '(?m)^      economy_consent:\s*$'
+            $workflow | Should -Match '(?m)^  SQUAD_PROFILE: default\s*$'
+            $workflow | Should -Match ([regex]::Escape('options: [keep, auto, default, full,'))
+            $workflow | Should -Match ([regex]::Escape('TRUSTED RUN CONTROLS (WORKFLOW CONFIGURATION, NOT EVENT TEXT).'))
+            $workflow | Should -Match ([regex]::Escape("].join('\n') + '\n\n' + controlsText;"))
+        }
+    }
+
+    It 'resolves run controls from trusted configuration only and downgrades unconsented economy' {
+        $node = Get-Command node -ErrorAction Stop
+        $driver = @'
+const fs = require('fs');
+const [snippetPath, casesPath] = process.argv.slice(2);
+const snippet = fs.readFileSync(snippetPath, 'utf8');
+const cases = JSON.parse(fs.readFileSync(casesPath, 'utf8'));
+const results = cases.map(c => {
+  const warnings = [];
+  const core = { warning: m => warnings.push(String(m)) };
+  const context = { actor: c.actor || 'octocat', payload: { inputs: c.inputs || {} } };
+  const body = snippet.replace(/process\.env/g, 'env') + '\nreturn { runDepth, runRouting, runProfile, economyGranted };';
+  const out = new Function('evt', 'context', 'core', 'env', body)(c.evt, context, core, c.env || {});
+  return { name: c.name, ...out, warned: warnings.length };
+});
+console.log(JSON.stringify(results));
+'@
+        $cases = @(
+            @{ name = 'defaults'; evt = 'workflow_dispatch'; inputs = @{ depth = 'default'; routing = 'default'; economy_consent = 'false' }; env = @{ SQUAD_DEPTH = 'standard'; SQUAD_ROUTING = 'off'; SQUAD_ECONOMY_CONSENT = 'false' } }
+            @{ name = 'dispatch overrides'; evt = 'workflow_dispatch'; inputs = @{ depth = 'quick'; routing = 'ranked'; economy_consent = 'false' }; env = @{ SQUAD_DEPTH = 'standard'; SQUAD_ROUTING = 'off' } }
+            @{ name = 'economy without consent'; evt = 'workflow_dispatch'; inputs = @{ routing = 'economy'; economy_consent = 'false' }; env = @{ SQUAD_ECONOMY_CONSENT = 'false' } }
+            @{ name = 'economy with dispatch consent'; evt = 'workflow_dispatch'; inputs = @{ routing = 'economy'; economy_consent = 'true' }; env = @{} }
+            @{ name = 'committed economy and consent on an issue event'; evt = 'issues'; inputs = @{}; env = @{ SQUAD_ROUTING = 'economy'; SQUAD_ECONOMY_CONSENT = 'true'; SQUAD_DEPTH = 'quick' } }
+            @{ name = 'invalid values fall back'; evt = 'workflow_dispatch'; inputs = @{ depth = 'turbo' }; env = @{ SQUAD_DEPTH = 'quick'; SQUAD_ROUTING = 'cheapest' } }
+            @{ name = 'event inputs are never read off dispatch'; evt = 'issues'; inputs = @{ depth = 'quick'; routing = 'economy'; economy_consent = 'true' }; env = @{} }
+            @{ name = 'profile defaults to default'; evt = 'workflow_dispatch'; inputs = @{ profile = 'keep' }; env = @{ SQUAD_PROFILE = 'default' } }
+            @{ name = 'profile dispatch override'; evt = 'workflow_dispatch'; inputs = @{ profile = 'security' }; env = @{ SQUAD_PROFILE = 'default' } }
+            @{ name = 'custom profile is refused'; evt = 'workflow_dispatch'; inputs = @{ profile = 'custom' }; env = @{} }
+        )
+        $expected = @{
+            'defaults'                                            = @('standard', 'off', 0)
+            'dispatch overrides'                                  = @('quick', 'ranked', 0)
+            'economy without consent'                             = @('standard', 'off', 1)
+            'economy with dispatch consent'                       = @('standard', 'economy', 0)
+            'committed economy and consent on an issue event'     = @('quick', 'economy', 0)
+            'invalid values fall back'                            = @('quick', 'off', 2)
+            'event inputs are never read off dispatch'            = @('standard', 'off', 0)
+            'profile defaults to default'                         = @('standard', 'off', 0)
+            'profile dispatch override'                           = @('standard', 'off', 0)
+            'custom profile is refused'                           = @('standard', 'off', 1)
+        }
+        $expectedProfile = @{ 'profile defaults to default' = 'default'; 'profile dispatch override' = 'security'; 'custom profile is refused' = 'default'; 'defaults' = 'default'; 'event inputs are never read off dispatch' = 'default' }
+        $dir = Join-Path $TestDrive ('controls-' + [guid]::NewGuid().ToString('n'))
+        New-Item -ItemType Directory -Path $dir | Out-Null
+        $casesPath = Join-Path $dir 'cases.json'
+        $driverPath = Join-Path $dir 'driver.js'
+        Set-Content -LiteralPath $casesPath -Value ($cases | ConvertTo-Json -Depth 6) -Encoding utf8
+        Set-Content -LiteralPath $driverPath -Value $driver -Encoding utf8
+        foreach ($workflow in @($script:RepoSquadWatch, $script:ReferenceSquadWatch)) {
+            $match = [regex]::Match($workflow, '(?s)(const dispatchedInputs = .*?)\r?\n\s*const controlActor')
+            $match.Success | Should -BeTrue
+            $snippetPath = Join-Path $dir ('snippet-' + [guid]::NewGuid().ToString('n') + '.js')
+            Set-Content -LiteralPath $snippetPath -Value $match.Groups[1].Value -Encoding utf8
+            $json = & $node.Source $driverPath $snippetPath $casesPath
+            $LASTEXITCODE | Should -Be 0 -Because ($json -join "`n")
+            foreach ($row in @($json | ConvertFrom-Json)) {
+                $want = $expected[$row.name]
+                $row.runDepth | Should -Be $want[0] -Because $row.name
+                $row.runRouting | Should -Be $want[1] -Because $row.name
+                $row.warned | Should -Be $want[2] -Because $row.name
+                if ($expectedProfile.ContainsKey($row.name)) { $row.runProfile | Should -Be $expectedProfile[$row.name] -Because $row.name }
+            }
+        }
+    }
+
     It 'wires issues, pull_request, issue_comment, and workflow_dispatch with per-case/per-ask squad selection and a gated full RPI handoff in squad-watch.yml' {
         $script:RepoSquadWatch | Should -Match ([regex]::Escape('SQUAD SELECTION PER CASE AND PER ASK (NON-NEGOTIABLE).'))
         $script:RepoSquadWatch | Should -Match ([regex]::Escape('COMPLETE SQUAD LIFECYCLE (FULL RPI - NON-NEGOTIABLE).'))
@@ -505,6 +616,43 @@ Describe 'GATE-50 Watch workflow publication contract' {
         $script:LiveWatch | Should -Not -Match '--force'
         $script:LiveWatch | Should -Match 'Refusing to force-push'
         $script:LiveWatch | Should -Match 'Escalate on run failure'
+    }
+
+    It 'GATE-50 executes publication PowerShell commands without Bash expanding their environment references' {
+        $bash = Get-Command bash -ErrorAction Stop
+        $commands = @([regex]::Matches($script:LiveWatch, '(?m)^\s*(?:branch_reason|CLOSES)=.*pwsh -NoProfile -Command.*$') | ForEach-Object { $_.Value.Trim() })
+        $commands.Count | Should -Be 2
+        $workspace = Join-Path $TestDrive 'watch publication $fixture'
+        $helperDir = Join-Path $workspace '.squad-trusted/squad-src/.github/skills/squad/scripts'
+        New-Item -ItemType Directory -Path $helperDir -Force | Out-Null
+        Copy-Item -LiteralPath (Join-Path $script:SourceRootResolved 'squad-src/.github/skills/squad/scripts/SquadWatch.Delivery.ps1') -Destination $helperDir
+        $shellScript = (@('set -euo pipefail', 'unset env') + $commands + @('printf "%s\t%s\n" "$branch_reason" "$CLOSES"')) -join "`n"
+        $cases = @(
+            @{ Name = 'new branch'; Existing = 'false'; Fetched = 'false'; Ref = 'Peter-N91/hve-squad#248'; Expected = "continue`tCloses #248" }
+            @{ Name = 'existing branch'; Existing = 'true'; Fetched = 'true'; Ref = 'Peter-N91/hve-squad#248'; Expected = "continue`tCloses #248" }
+            @{ Name = 'disappeared branch'; Existing = 'true'; Fetched = 'false'; Ref = 'Peter-N91/hve-squad#248'; Expected = "branch-disappeared`tCloses #248" }
+            @{ Name = 'issue-less dispatch'; Existing = 'false'; Fetched = 'false'; Ref = 'dispatch@abc123'; Expected = "continue`t" }
+        )
+        $savedEnvironment = @{}
+        foreach ($name in @('GITHUB_WORKSPACE', 'PUBLICATION_BRANCH_EXISTS', 'FETCHED', 'STABLE_REF')) {
+            $savedEnvironment[$name] = [Environment]::GetEnvironmentVariable($name, 'Process')
+        }
+        try {
+            $env:GITHUB_WORKSPACE = $workspace
+            foreach ($case in $cases) {
+                $env:PUBLICATION_BRANCH_EXISTS = $case.Existing
+                $env:FETCHED = $case.Fetched
+                $env:STABLE_REF = $case.Ref
+                $output = @(& $bash.Source -c $shellScript 2>&1)
+                $LASTEXITCODE | Should -Be 0 -Because "$($case.Name): $($output -join "`n")"
+                ($output -join "`n") | Should -BeExactly $case.Expected -Because $case.Name
+            }
+        }
+        finally {
+            foreach ($name in $savedEnvironment.Keys) {
+                [Environment]::SetEnvironmentVariable($name, $savedEnvironment[$name], 'Process')
+            }
+        }
     }
 
     It 'GATE-49 comments encoded questions and creates no PR or placeholder for blocked no-material' {
@@ -620,17 +768,7 @@ print(json.dumps(items))
                 }
             }
             else {
-                $dir = Join-Path $TestDrive ("sh-" + [guid]::NewGuid().ToString('n'))
-                New-Item -ItemType Directory -Path $dir | Out-Null
-                $scriptPath = Join-Path $dir 'script.sh'
-                [System.IO.File]::WriteAllText($scriptPath, ([string]$item.script).Replace("`r`n", "`n"))
-                $posix = if ($scriptPath -match '^[A-Za-z]:\\') {
-                    '/mnt/' + ($scriptPath.Substring(0, 1).ToLower()) + ($scriptPath.Substring(2) -replace '\\', '/')
-                }
-                else {
-                    $scriptPath
-                }
-                & $bash.Source -n $posix
+                ([string]$item.script).Replace("`r`n", "`n") | & $bash.Source -n
                 $LASTEXITCODE | Should -Be 0 -Because "$($item.name) bash must parse"
             }
         }

@@ -348,7 +348,13 @@ flowchart TD
       <p>
         Lancez <strong>Squad Watch</strong> depuis l’onglet Actions avec le paramètre <code>issue_number</code> pour
         tester le parcours complet sur une issue que vous avez rédigée vous-même, sans attendre de changement
-        en amont. Faites-le une fois avant de vous fier à la tâche cron.
+        en amont. Faites-le une fois avant de vous fier à la tâche cron. Le même formulaire propose les
+        paramètres facultatifs <code>depth</code> (<code>quick</code> pour une exécution plus rapide),
+        <code>routing</code> (<code>off</code>, <code>ranked</code>, <code>economy</code>),
+        <code>economy_consent</code> et <code>profile</code> ; les laisser sur <code>default</code> (<code>keep</code> pour
+        <code>profile</code>) conserve les valeurs validées du
+        workflow. Watch n’exécute pas la suite Tier 0 complète &mdash; lancez-la en CI ou en local avec
+        l’exécuteur par shard.
       </p>
 
       <h3>Examiner une PR d’adaptation</h3>

@@ -17,6 +17,12 @@ BeforeAll {
         [IO.File]::WriteAllText($Path, "---`nname: $Name`n$Extra`n---`n# Fixture`n")
     }
 
+    function Write-SkillFile {
+        param([string]$Path, [string]$Name)
+        $null = [IO.Directory]::CreateDirectory((Split-Path -Parent $Path))
+        [IO.File]::WriteAllText($Path, "---`nname: $Name`ndescription: Fixture skill.`n---`n# Fixture`n")
+    }
+
     function New-AgentLayout {
         [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseShouldProcessForStateChangingFunctions', '',
             Justification = 'Creates only isolated Pester TestDrive fixtures.')]
@@ -55,6 +61,13 @@ BeforeAll {
         param($Layout)
         $module = Import-Module (Join-Path $Layout.Scripts 'SquadCoordinator.psm1') -Force -PassThru -DisableNameChecking
         try { Get-SquadAgentIndex -RepoRoot $Layout.Repo }
+        finally { Remove-Module $module.Name -Force }
+    }
+
+    function Read-SkillIndex {
+        param($Layout, [string[]]$AvailableSkill = @())
+        $module = Import-Module (Join-Path $Layout.Scripts 'SquadCoordinator.psm1') -Force -PassThru -DisableNameChecking
+        try { Get-SquadSkillIndex -RepoRoot $Layout.Repo -AvailableSkill $AvailableSkill }
         finally { Remove-Module $module.Name -Force }
     }
 }
@@ -100,6 +113,27 @@ Describe 'Bundled and legacy plugin agent discovery (COORD-13)' {
         $index = Read-AgentIndex $layout
         $index['Security Planner'].path | Should -BeExactly $localAgent
         $index['Security Planner'].dispatchable | Should -BeTrue
+    }
+
+    It 'discovers repository and explicit host skills without scanning unrelated plugin caches' {
+        $layout = New-AgentLayout -Synced
+        $localSkill = Join-Path $layout.Repo '.agents/skills/foundry-iq/SKILL.md'
+        Write-SkillFile $localSkill 'foundry-iq'
+        $index = Read-SkillIndex $layout -AvailableSkill @('use-ai-gateway')
+        $index['foundry-iq'].path | Should -BeExactly $localSkill
+        $index['use-ai-gateway'].source | Should -BeExactly 'host-inventory'
+    }
+
+    It 'discovers skills declared by an explicitly active plugin' {
+        $layout = New-AgentLayout -Synced
+        $pluginSkill = Join-Path $layout.Core 'skills/microsoft-foundry/SKILL.md'
+        Write-SkillFile $pluginSkill 'microsoft-foundry'
+        [IO.File]::WriteAllText(
+            (Join-Path $layout.Core 'plugin.json'),
+            '{"name":"hve-core","agents":[".github/agents/security/security-planner.agent.md"],"skills":["skills/"]}'
+        )
+        $env:SQUAD_ACTIVE_PLUGIN_ROOTS = ConvertTo-Json -InputObject @($layout.Core) -Compress
+        (Read-SkillIndex $layout)['microsoft-foundry'].path | Should -BeExactly $pluginSkill
     }
 
     It 'uses the same active roots in the actual initialization proposal command' {

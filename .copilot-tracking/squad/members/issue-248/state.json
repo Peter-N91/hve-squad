@@ -1,0 +1,46 @@
+{
+  "schemaVersion": "1.4",
+  "updated": "2026-11-10T23:41:34Z",
+  "turn": 8,
+  "mode": "autopilot",
+  "activeRoles": [],
+  "openEscalations": [],
+  "currentRun": {
+    "sessionModel": "auto",
+    "modelOverrides": {},
+    "estCostUsd": 16.8725,
+    "estCreditsTotal": 1687.25,
+    "costPreflight": {
+      "runId": "",
+      "roundId": "",
+      "ceilingUsd": null,
+      "evaluatedSpendUsd": 0,
+      "remainingUsd": null,
+      "plannedDispatches": 0,
+      "projectedCostUsd": 0,
+      "reserveMultiplier": 3.0,
+      "admissionCostUsd": 0,
+      "confidence": "not-applicable",
+      "basis": "not-requested",
+      "decision": "not-requested",
+      "reason": "No cost ceiling configured."
+    }
+  },
+  "notify": {
+    "approvalChannel": "in-chat",
+    "enabled": false,
+    "email": "",
+    "github": {
+      "handle": "",
+      "repo": ""
+    }
+  },
+  "trigger": {
+    "source": "workflow_dispatch",
+    "ref": "Peter-N91/hve-squad#248",
+    "eventId": "workflow_dispatch:42922858257",
+    "actor": "Peter-N91",
+    "receivedAt": "2026-11-10T23:22:51.275Z",
+    "runId": "autopilot-run-42922858257"
+  }
+}
