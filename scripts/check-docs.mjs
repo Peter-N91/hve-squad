@@ -6,8 +6,10 @@ import { dirname, resolve } from "node:path";
 import { load } from "cheerio";
 import { buildPages, diagramSource, readSource, repositoryRoot } from "./docs-content.mjs";
 import { localizeDiagram } from "./diagram-locales.mjs";
+import { validateMermaidLicenses } from "./mermaid-licenses.mjs";
 
 const output = resolve(repositoryRoot, "_site");
+validateMermaidLicenses({ repositoryRoot, outputRoot: output });
 const normalized = value => value.replace(/\s+/g, " ").trim();
 const renderedDocuments = new Map();
 const pages = buildPages();

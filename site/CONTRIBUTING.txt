@@ -27,6 +27,7 @@ Source notices
   Use -Detailed to list fixture/data, generated and third-party exclusions.
   The audit checks tracked first-party release sources, not built _site output.
   Do not add headers to JSON payloads, third-party notices or installed copies.
+  Git attribute/ignore rules and CODEOWNERS are metadata, not source-header targets.
 
 Port 4176 is the main-site development preview. Pagefind indexes refresh during
 docs:build; restart docs:dev after content edits to refresh search. Pull requests

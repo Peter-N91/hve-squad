@@ -8,8 +8,8 @@
 .SYNOPSIS
     Audits copyright headers in tracked first-party release sources.
 .DESCRIPTION
-    Classifies tracked source files and explicit data, fixture, generated and
-    third-party exclusions. Checks exact notices at the language-aware header
+    Classifies tracked source files and explicit metadata, data, fixture,
+    generated and third-party exclusions. Checks exact notices at the language-aware header
     position without modifying files or inspecting installed/generated copies.
 .PARAMETER RepoRoot
     Repository checkout to audit.
@@ -67,9 +67,12 @@ function Get-SourceHeaderInventory {
     if ($LASTEXITCODE -ne 0) { throw 'git ls-files failed.' }
     $extensions = '.ps1', '.psm1', '.psd1', '.py', '.sh', '.js', '.mjs', '.css', '.html', '.svg', '.njk', '.md', '.yml', '.yaml'
     foreach ($path in ($paths | Sort-Object -Unique)) {
-        if ($path -notmatch '^(scripts|tests|squad-src|site|docs|benchmarks)/|^\.github/(workflows|ISSUE_TEMPLATE)/|^\.github/(pull_request_template\.md|dependabot\.yml)$|^\.changes/unreleased/20261111-microsoft-release-readiness\.md$|^(eleventy\.config\.js|PSScriptAnalyzerSettings\.psd1|apm\.yml|\.gitignore|\.gitattributes)$') { continue }
+        if ($path -notmatch '^(scripts|tests|squad-src|site|docs|benchmarks)/|^\.github/(workflows|ISSUE_TEMPLATE)/|^\.github/(pull_request_template\.md|dependabot\.yml|CODEOWNERS)$|^\.changes/unreleased/20261111-microsoft-release-readiness\.md$|^(eleventy\.config\.js|PSScriptAnalyzerSettings\.psd1|apm\.yml|\.gitignore|\.gitattributes)$') { continue }
         $extension = [IO.Path]::GetExtension($path).ToLowerInvariant()
-        $reason = if ($path -match '(^|/)fixtures/|^tests/tier2/live-benchmark/tasks/') {
+        $reason = if ($path -in '.gitignore', '.gitattributes', '.github/CODEOWNERS') {
+            'Git metadata; not first-party source code'
+        }
+        elseif ($path -match '(^|/)fixtures/|^tests/tier2/live-benchmark/tasks/') {
             'Fixture or benchmark task payload; preserve exact bytes'
         }
         elseif ($path -match '^squad-src/\.github/skills/sql-migration-advisor/') {
@@ -77,6 +80,9 @@ function Get-SourceHeaderInventory {
         }
         elseif ($path -match '^docs/assets/fonts/') {
             'Third-party font asset or OFL notice'
+        }
+        elseif ($path -eq 'site/assets/vendor/mermaid-THIRD-PARTY-NOTICES.txt') {
+            'Third-party license/notice text; preserve upstream rights'
         }
         elseif ($path -eq 'benchmarks/efficiency/badge.svg') {
             'Generated benchmark badge, not authored SVG'
@@ -99,7 +105,7 @@ function Get-SourceHeaderInventory {
         elseif ($extension -in '.mp4', '.woff2') {
             'Binary media asset'
         }
-        elseif ($extension -notin $extensions -and $path -notin '.gitignore', '.gitattributes') {
+        elseif ($extension -notin $extensions) {
             'Plain text or sentinel without a source comment syntax'
         }
         else { $null }

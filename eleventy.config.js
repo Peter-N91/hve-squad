@@ -3,9 +3,13 @@
 // Builds the static documentation site, including recorded benchmark summaries.
 // AI cost: none; reads checked-in content and evidence without collecting new observations.
 import { validatePublicInputs } from "./scripts/docs-inputs.mjs";
+import { validateMermaidLicenses } from "./scripts/mermaid-licenses.mjs";
 
 export default function (config) {
   validatePublicInputs();
+  validateMermaidLicenses();
+  config.addWatchTarget("site/assets/vendor");
+  config.addWatchTarget("scripts/mermaid-licenses.mjs");
   config.addWatchTarget("docs");
   config.addWatchTarget("scripts/docs-content.mjs");
   config.addWatchTarget("scripts/docs-release.mjs");

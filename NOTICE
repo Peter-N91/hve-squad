@@ -93,6 +93,15 @@ Mermaid 12.2.0
   EPL-2.0, and MPL-2.0 OR Apache-2.0 licensed components. These are not relicensed
   under this project's MIT license. The site preserves embedded bundle notices
   and publishes Mermaid's license at assets/vendor/mermaid-LICENSE.txt.
+  Complete versioned dependency license, copyright and attribution texts are
+  published at assets/vendor/mermaid-THIRD-PARTY-NOTICES.txt. The accompanying
+  assets/vendor/mermaid-runtime-licenses.json records all 66 embedded dependency
+  identities, exact supplier license expressions, public provenance and hashes
+  binding the unchanged runtime, build-only source map and retained legal text.
+  These files are maintained under site/assets/vendor in this repository.
+  Alternative license terms are retained without choosing a branch. This
+  inventory is not legal clearance; human review of applicable license and
+  source-availability obligations remains pending.
 
 Pagefind 1.5.2
   https://github.com/CloudCannon/pagefind
