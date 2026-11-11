@@ -48,7 +48,7 @@ Licensed under the MIT license.
     <div class="container">
       <h2>Common issues</h2>
       <h3>CLI or App cannot find the coordinator or a specialist</h3>
-      <p>Confirm that the single <code>hve-squad</code> plugin is installed and enabled in the client you are using. Select the coordinator agent, not a similarly named skill, then ask for <code>squad-doctor</code>. Refresh the <code>hve-squad</code> marketplace, update or reinstall the plugin, and start a fresh session. A terminal update does not update an app using another <code>COPILOT_HOME</code>.</p>
+      <p data-release-change="20261106-squad-doctor">Confirm that the single <code>hve-squad</code> plugin is installed and enabled in the client you are using. Select <strong>Squad Doctor</strong> directly and request <code>check</code>. Request <code>repair</code> to approve supported script fixes; unknown failures remain explicit blockers. If the agent or a required domain is missing, refresh the <code>hve-squad</code> marketplace, update or reinstall the plugin, and start a fresh session. A terminal update does not update an app using another <code>COPILOT_HOME</code>.</p>
 
       <h3>VS Code reports bundled HVE Core agents missing</h3>
       <p>The current plugin reads every Squad and HVE Core agent from its own <code>plugin.json</code>; it does not depend on VS Code exposing sibling cache paths. Open the installed plugin details and confirm that <code>.github/plugin/hve-core-source.json</code> exists, then update or reinstall <code>hve-squad</code> from <code>Peter-N91/hve-squad#plugin</code> and start a fresh Copilot session.</p>

@@ -1,5 +1,5 @@
 ---
-description: "Federation runtime: member scheduling, validated root writes and lifecycle policy."
+description: "Federation mechanics and lifecycle."
 ---
 <!--
 Copyright (c) Microsoft Corporation.
@@ -8,10 +8,12 @@ Licensed under the MIT license.
 
 # Federation Runtime
 
-Success is isolated member work with dependency ordering and two-level proof.
-Federation is additive; scripts/autopilot grant no approval or specialist result.
+Verify isolated member work, dependencies and two-level proof. Federation is
+additive; scripts/autopilot grant no approval or specialist result.
 
 ## Detect and Load Only Active Policy
+
+Doctor requests/runtime failures: stop work; use `doctor.md` before Init/planning.
 
 Run `Get-SquadDispatchBrief.ps1 -RepoRoot <repo> -SquadRoot <root> -AsJson`.
 Forward trusted `routing=` via `-RequestedModelRouting <mode>`.

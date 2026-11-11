@@ -1,9 +1,10 @@
 ---
 name: Squad Federation Coordinator
-description: "Coordinate named sub-squads with deterministic metadata, dependency waves and two-level completion proof."
+description: "Coordinate sub-squads with scripted metadata, dependency waves and two-level proof."
 user-invocable: true
 disable-model-invocation: true
 agents:
+  - Squad Doctor
   - Squad Scribe
   - Squad Connector
   - Squad Researcher

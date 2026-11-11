@@ -94,6 +94,9 @@ for (const lang of ['en', 'fr']) {
       ['/squad request="Review this" mode=autopilot cost-ceiling=20', 'Squad Coordinator', 'request="Review this" mode=autopilot cost-ceiling=20'],
       ['/squad-coach', 'Squad Coach', locales[lang].defaultRequests['/squad-coach']],
       ['/squad-coach request="Help me choose a setup"', 'Squad Coach', 'request="Help me choose a setup"'],
+      ['/squad-doctor', 'Squad Doctor', locales[lang].defaultRequests['/squad-doctor']],
+      ['/squad-doctor check', 'Squad Doctor', 'check'],
+      ['/squad-doctor repair squadRoot=.copilot-tracking/squad/members/api issue="rates missing"', 'Squad Doctor', 'repair squadRoot=.copilot-tracking/squad/members/api issue="rates missing"'],
       ['/squad-connector-builder', 'Squad Connector Builder', locales[lang].defaultRequests['/squad-connector-builder']],
       ['/squad-connector-builder mode=template destination=.', 'Squad Connector Builder', 'mode=template destination=.'],
       ['/squad-external-agent-builder', 'Squad External Agent Builder', locales[lang].defaultRequests['/squad-external-agent-builder']],
@@ -133,6 +136,7 @@ test('default request translations retain their original English and French word
   assert.deepEqual(locales.en.defaultRequests, {
     '/squad': 'Initialize the squad.',
     '/squad-coach': 'Help me choose the simplest HVE Squad setup for my goal.',
+    '/squad-doctor': 'Check the Squad installation after this upgrade.',
     '/squad-connector-builder': 'Help me scaffold a Squad Connector.',
     '/squad-external-agent-builder': 'Help me create or adapt an external agent for HVE Squad.',
     '/squad-federation': 'Initialize the federation.',
@@ -142,6 +146,7 @@ test('default request translations retain their original English and French word
   assert.deepEqual(locales.fr.defaultRequests, {
     '/squad': 'Initialise la squad.',
     '/squad-coach': 'Aide-moi à choisir la configuration HVE Squad la plus simple pour mon objectif.',
+    '/squad-doctor': "Vérifie l'installation Squad après cette mise à jour.",
     '/squad-connector-builder': 'Aide-moi à préparer un Squad Connector.',
     '/squad-external-agent-builder': 'Aide-moi à créer ou adapter un agent externe pour HVE Squad.',
     '/squad-federation': 'Initialise la fédération.',
@@ -193,7 +198,7 @@ test('unknown, partial, mixed, unterminated and comment-only snippets remain who
   const examples = [
     'gh issue comment 42 --body "/squad review"',
     '.github/skills/squad/squad-watch.workflow.yml',
-    '/squad-doctor',
+    '/squad-doctor-extra',
     '/squadron request="unknown"',
     '/squad-documentary request="unknown"',
     '/squad/init',

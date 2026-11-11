@@ -110,13 +110,15 @@ copilot</code></pre>
         <pre><code>copilot plugin marketplace update hve-squad
 copilot plugin update hve-squad</code></pre>
         <h3>Vérifier la disponibilité des agents</h3>
-        <p>Demandez au coordinateur d'exécuter <code>squad-doctor</code>. Des domaines HVE Core absents indiquent désormais une installation <code>hve-squad</code> obsolète, désactivée ou incomplète : mettez à jour ou réinstallez ce plugin unique, puis démarrez une nouvelle session. N'installez pas un second plugin <code>hve-core</code>.</p>
+        <p data-release-change="20261106-squad-doctor">Après chaque mise à jour, sélectionnez directement <strong>Squad Doctor</strong> dans une nouvelle session ; demandez <code>check</code>, puis <code>repair</code> pour confirmer les corrections prises en charge. Aucune initialisation n'est requise. Le Doctor exécute des scripts déterministes, vérifie le runtime, sept domaines HVE Core et l'état des squads et membres, puis répare les tables de tarifs absentes ou invalides avec sauvegarde et nouvelle vérification. Les défauts non pris en charge restent bloquants ; il n'invente pas d'historique et ne réinstalle pas de plugins. Les coordinateurs peuvent invoquer ce même agent après un échec du runtime.</p>
+        <pre data-release-change="20261106-squad-doctor"><code>/squad-doctor check</code></pre>
+        <p>Des domaines HVE Core absents indiquent une installation <code>hve-squad</code> obsolète, désactivée ou incomplète : mettez à jour ou réinstallez ce plugin unique, puis démarrez une nouvelle session. N'installez pas un second plugin <code>hve-core</code>.</p>
       </section>
       <section data-host="app">
         <h2>Copilot App</h2>
         <p data-release-change="20261106-in-repo-self-contained-plugin">Ouvrez votre projet dans l'application GitHub Copilot et connectez-vous. Dans <strong>Customize → Plugins</strong>, ajoutez le marketplace <code>Peter-N91/hve-squad#plugin</code> et installez <code>hve-squad</code>.</p>
         <p>Vérifiez le plugin dans l'application elle-même. Une installation depuis un terminal peut utiliser un autre <code>COPILOT_HOME</code> et ne prouve pas que l'application dispose de la même installation. Cherchez <strong>Squad Coordinator</strong>, éventuellement répertorié sous le nom <code>hve-squad:squad-coordinator</code>.</p>
-        <p>Utilisez l'action de mise à jour des plugins de l'application. La mise à jour remplace ensemble la squad et le contenu HVE Core épinglé. N'installez pas un second plugin <code>hve-core</code>.</p>
+        <p data-release-change="20261106-squad-doctor">Utilisez l'action de mise à jour des plugins de l'application. La mise à jour remplace ensemble la squad et le contenu HVE Core épinglé. Démarrez une nouvelle session, sélectionnez <strong>Squad Doctor</strong> et demandez <code>check</code>, puis <code>repair</code> pour confirmer les corrections scriptées. N'installez pas un second plugin <code>hve-core</code>.</p>
       </section>
       <section data-host="vscode">
       <h2>VS Code</h2>
@@ -126,7 +128,7 @@ copilot plugin update hve-squad</code></pre>
       <p>Exécutez <strong>Chat: Manage Plugin Marketplaces</strong>, ajoutez <code>Peter-N91/hve-squad#plugin</code>, puis ouvrez <strong>Chat: Open Customizations → Plugins</strong> et installez <code>hve-squad</code>. Démarrez une nouvelle session Copilot après l'installation.</p>
       <p>Le plugin installé possède une seule racine et une seule version : les agents Squad et HVE Core, les skills, les règles et les hooks sont mis à jour ensemble. Il ne contient aucun serveur MCP ; l'absence de Node ou de <code>npx</code> ne peut donc pas empêcher son chargement.</p>
       <h3>Mettre à jour</h3>
-      <p>Ouvrez <strong>Chat: Open Customizations → Plugins</strong> et choisissez <strong>Check for and Apply Updates</strong>. Démarrez une nouvelle session, puis exécutez <code>squad-doctor</code>. N'installez pas le plugin officiel <code>hve-core</code> à côté de HVE Squad.</p>
+      <p data-release-change="20261106-squad-doctor">Ouvrez <strong>Chat: Open Customizations → Plugins</strong> et choisissez <strong>Check for and Apply Updates</strong>. Démarrez une nouvelle session, sélectionnez <strong>Squad Doctor</strong> et demandez <code>check</code>, puis <code>repair</code> pour confirmer les corrections scriptées. N'installez pas le plugin officiel <code>hve-core</code> à côté de HVE Squad.</p>
 
       <h3>Solution de repli — installer le package dans le dépôt avec APM</h3>
       <p>Utilisez cette méthode uniquement lorsque les personnalisations doivent être copiées dans le dépôt plutôt qu'installées comme plugin utilisateur ou d'espace de travail.</p>

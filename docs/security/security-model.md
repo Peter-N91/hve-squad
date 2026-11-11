@@ -19,7 +19,11 @@ versions, reporting process, and broader scope remain in the
 
 | Skill | Model | Classification | Current scope |
 |---|---|---|---|
-| squad | [Squad Skill Security Model](../../squad-src/.github/skills/squad/SECURITY.md) | Required: parses separately controlled connector results, local input files, lifecycle/roster/verdict plans, host usage logs, and persisted exact-session snapshots | Persisted work-role defaults, protected coordinators/Scribe, host-bounded actual-unit model routing, hash-bound verdict/roster/federation transactions, cumulative exact per-role native token/credit accounting with unique APM/plugin agent-name canonicalization, digest-bound legacy empty-coverage migration, promotion journal preservation, bounded active-tail bootstrap and completed-session refresh, history-prefix and identity deduplication, file exchange, and persistence |
+| squad | [Squad Skill Security Model](../../squad-src/.github/skills/squad/SECURITY.md) | Required: parses separately controlled connector results, local input files, lifecycle/roster/verdict plans, host usage logs, and persisted exact-session snapshots | Persisted work-role defaults, protected coordinators/Scribe, host-bounded actual-unit model routing, hash-bound verdict/roster/federation transactions, cumulative exact per-role native token/credit accounting with unique APM/plugin agent-name canonicalization, digest-bound legacy empty-coverage migration, promotion journal preservation, bounded active-tail bootstrap and completed-session refresh, history-prefix and identity deduplication, file exchange, persistence, and confirmed script-only Doctor rate repairs |
+
+Doctor adds confirmed, shared-lock rate repairs with content-addressed backups
+and rechecks; unsupported repairs stay blocked. Its host dispatchable-agent
+inventory is caller-supplied, not proof that an agent or hook actually executed.
 
 Primary residual gaps are unauthenticated file-drop producers, consumer-owned
 runner/replay lifecycle, host-dependent worktree isolation, and filesystem/content
