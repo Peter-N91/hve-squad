@@ -2207,7 +2207,9 @@ $(Format-WatchSelectionMarkdown)
         $cases = @(
             @{ Name = 'default'; Packs = @(); Installed = @(); Roles = @($catalog.Profiles['default']); Ok = $true }
             @{ Name = 'security'; Packs = @(); Installed = @(); Roles = @($catalog.Profiles['security']); Ok = $true }
-            @{ Name = 'default'; Packs = @('power-platform'); Installed = @('power-platform'); Roles = @($catalog.Profiles['default'] + $catalog.Packs['power-platform']); Ok = $true }
+            @{ Name = 'default'; Packs = @('power-platform'); Installed = @('power-platform'); Skills = @(); Roles = @($catalog.Profiles['default'] + $catalog.Packs['power-platform']); Ok = $false }
+            @{ Name = 'default'; Packs = @('power-platform'); Installed = @('power-platform'); Skills = @($catalog.PackSkills['power-platform'] | Where-Object { $_ -ne 'add-skill' }); Roles = @($catalog.Profiles['default'] + $catalog.Packs['power-platform']); Ok = $false }
+            @{ Name = 'default'; Packs = @('power-platform'); Installed = @('power-platform'); Skills = @($catalog.PackSkills['power-platform']); Roles = @($catalog.Profiles['default'] + $catalog.Packs['power-platform']); Ok = $true }
             @{ Name = 'default'; Packs = @('foundry'); Installed = @('foundry'); Skills = @(); Roles = @($catalog.Profiles['default'] + $catalog.Packs['foundry']); Ok = $false }
             @{ Name = 'default'; Packs = @('foundry'); Installed = @('foundry'); Skills = @($catalog.PackSkills['foundry']); Roles = @($catalog.Profiles['default'] + $catalog.Packs['foundry']); Ok = $true }
             @{ Name = 'security'; Packs = @(); Installed = @(); Roles = @($catalog.Profiles['security'] | Where-Object { $_ -ne 'privacy' }); Ok = $false }
@@ -2221,6 +2223,10 @@ $(Format-WatchSelectionMarkdown)
             }
             elseif (-not $case.Ok -and $case.Roles -contains 'hacker') {
                 $resolved.Ok | Should -BeTrue
+            }
+            elseif (-not $case.Ok -and $case.Packs -contains 'power-platform') {
+                $resolved.Ok | Should -BeFalse
+                $resolved.Reason | Should -Match '^pack-skill-not-visible:power-platform:'
             }
             elseif (-not $case.Ok -and $case.Packs -contains 'foundry') {
                 $resolved.Ok | Should -BeFalse
