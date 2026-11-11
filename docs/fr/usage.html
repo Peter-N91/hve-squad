@@ -1439,8 +1439,9 @@ flowchart TD
       </p>
       <p data-release-change="20261104-official-source-packs">
         Les travaux pris en charge sur Power Pages, les applications pilotées par modèle, Dataverse et
-        le SDK Agents .NET sélectionnent la charte locale. L'architecture Power Platform plus large,
-        Copilot Studio, les connecteurs, les agents déclaratifs, TypeSpec et l'intégration MCP
+        le SDK Agents .NET sélectionnent la charte locale. La préversion, approuvée séparément, ajoute
+        le YAML de connaissances et l'import de compétences Copilot Studio en local.
+        L'architecture Power Platform plus large, les autres travaux Copilot Studio, les connecteurs, les agents déclaratifs, TypeSpec et l'intégration MCP
         sélectionnent encore l'alternative communautaire lorsque cet agent est installé. Power Automate,
         cloud flow, canvas app, DLP policy et solution ALM sélectionnent <code>Power Platform Expert</code>.
         Microsoft Graph, Graph SDK et Graph permission scope sélectionnent <code>MCP M365 Agent Expert</code>.
@@ -1456,12 +1457,12 @@ flowchart TD
         les compétences enregistrées avec ce changement ; les formes de plugin complet ont été rejetées
         lorsqu'elles tirent des hooks, des agents supplémentaires ou un consentement de tenant.
       </p>
-      <pre data-release-change="20261104-official-source-packs"><code>apm install microsoft/power-platform-skills/plugins/power-pages/skills/plan-alm/SKILL.md --target copilot
-apm install microsoft/power-platform-skills/plugins/model-apps/skills/app-builder/SKILL.md --target copilot
-apm install microsoft/power-platform-skills/plugins/mcp-apps/skills/generate-codeful-mcp-tool/SKILL.md --target copilot
-apm install microsoft/power-platform-skills/plugins/mcp-apps/skills/generate-mcp-app-ui/SKILL.md --target copilot
-apm install microsoft/Dataverse-skills/.github/plugins/dataverse/skills/dv-overview/SKILL.md --target copilot
-apm install microsoft/Dataverse-skills/.github/plugins/dataverse/skills/dv-connect/SKILL.md --target copilot
+      <pre data-release-change="20261104-official-source-packs"><code>apm install microsoft/power-platform-skills/plugins/power-pages/skills/plan-alm#8021d27d517d81963da22e728125a26c9ecfbbe1 --target copilot
+apm install microsoft/power-platform-skills/plugins/model-apps/skills/app-builder#8021d27d517d81963da22e728125a26c9ecfbbe1 --target copilot
+apm install microsoft/power-platform-skills/plugins/mcp-apps/skills/generate-codeful-mcp-tool#8021d27d517d81963da22e728125a26c9ecfbbe1 --target copilot
+apm install microsoft/power-platform-skills/plugins/mcp-apps/skills/generate-mcp-app-ui#8021d27d517d81963da22e728125a26c9ecfbbe1 --target copilot
+apm install microsoft/Dataverse-skills/.github/plugins/dataverse/skills/dv-overview#27e6f6a3fef23075ede87d8e5f028cde29e0130e --target copilot
+apm install microsoft/Dataverse-skills/.github/plugins/dataverse/skills/dv-connect#27e6f6a3fef23075ede87d8e5f028cde29e0130e --target copilot
 apm install microsoft/Agents/agent-plugins/agents-for-net/skills/agents-sdk-to-prod/SKILL.md --target copilot
 apm install microsoft/Agents/agent-plugins/agents-for-net/skills/agents-sdk-dotnet-otel/SKILL.md --target copilot
 apm install microsoft/Agents/agent-plugins/agents-sdk-common/skills/agents-sdk-provision/SKILL.md --target copilot
@@ -1496,6 +1497,148 @@ apm install microsoft/skills-for-fabric/skills/pipeline-migration --target copil
         Tous deux conseillent et rédigent des fichiers ; aucun n'exécute <code>pac</code> sur votre tenant ni ne publie de
         connecteur : rien n'atteint donc un environnement actif sans votre intervention.
       </p>
+      <section data-release-change="20261111-power-platform-pack-parity">
+        <h3 id="power-platform-setup">Configurer Power Platform avec l'aide de Squad</h3>
+        <p>
+          Vous n'avez pas à choisir vous-même les noms techniques des paquets. Ouvrez votre projet
+          dans l'hôte où Squad est installé, puis envoyez cette demande. Un pack ajoute de
+          l'expertise ; ce n'est ni une licence Power Platform, ni un environnement connecté, ni une
+          autorisation de publier.
+        </p>
+        <pre><code>/squad request="Set up the Power Platform pack. Explain what will be installed, ask before installing, and leave the Copilot Studio preview out unless I approve it." pack=power-platform</code></pre>
+        <ol>
+          <li>
+            <strong>Choisissez le nécessaire.</strong> Squad présente les ressources absentes et
+            explique les travaux qu'elles permettent. L'ensemble officiel existant comprend six
+            compétences pour la planification Power Pages, la création d'applications pilotées par
+            modèle, Dataverse et les outils/widgets MCP. Vous pouvez choisir les six, un sous-ensemble,
+            les compléments communautaires, ou continuer sans eux. Les deux compétences Copilot
+            Studio en préversion sont un choix séparé, pas une condition d'utilisation du pack.
+          </li>
+          <li>
+            <strong>Approuvez l'installation, pas l'accès au tenant.</strong> Squad utilise
+            <code>Install-SquadPackResources.ps1</code> pour vos choix approuvés. Vous devez voir les
+            commandes réelles et un reçu, pas seulement un conseil d'installation. Un reçu
+            <code>PASS</code> confirme l'installation des fichiers ;
+            <code>PLANNED</code> signifie que rien n'a été installé. Si une commande échoue ou si vous
+            annulez, Squad garde la ressource absente et explique le remède. Il n'installe pas de CLI,
+            ne configure pas MCP, ne vous connecte pas et n'accorde aucun consentement à votre place.
+          </li>
+          <li>
+            <strong>Conservez les fichiers de support.</strong> Certaines compétences existantes ont
+            besoin de fichiers partagés hors de leur dossier. Squad les vérifie avant utilisation.
+            Avec votre accord séparé, il peut récupérer les sources exactes ci-dessous dans le
+            dossier ignoré des dépendances, sans activer leurs hooks, leur configuration MCP ou leurs
+            compétences supplémentaires. Si un dossier existe déjà, Squad vérifie sa révision et son
+            contenu au lieu de l'écraser.
+          </li>
+          <li>
+            <strong>Rechargez et vérifiez.</strong> Rechargez ou redémarrez l'hôte après installation,
+            puis demandez une nouvelle vérification à Squad. Squad utilise la liste réelle de
+            compétences de l'hôte, pas le reçu seul, et enregistre chaque ressource comme
+            <code>available</code> ou <code>declined</code>. Des fichiers de support ou prérequis
+            absents bloquent toujours le travail concerné. Une compétence visible ne prouve pas la
+            connexion au tenant.
+          </li>
+          <li>
+            <strong>Commencez par les fichiers locaux.</strong> Les chartes PP conseillent et rédigent
+            des fichiers uniquement. Un flux amont qui exige la conversation principale vous est
+            renvoyé. Créer ou cloner un agent cloud, se connecter à un tenant, synchroniser, migrer,
+            importer une solution et publier sont des actions séparées, pas des conséquences de la
+            configuration.
+          </li>
+        </ol>
+        <h4>Solution manuelle : compétences existantes et fichiers de support</h4>
+        <p>
+          Si Squad ne peut pas exécuter l'installateur, ouvrez un terminal à la racine de votre
+          projet. Vérifiez la présence de Git, APM et Node.js ; la préversion exige Node.js 18 ou
+          ultérieur. Si un outil manque, arrêtez-vous et suivez le
+          <a href="getting-started.html">guide de démarrage</a> et les
+          <a href="https://nodejs.org/en/download">instructions d'installation de Node.js</a>, ou
+          demandez à Squad les étapes pour votre système. N'approuvez pas d'installations globales
+          sans rapport. Parmi les six commandes PP épinglées plus haut, exécutez seulement celles
+          que vous avez choisies. Elles ciblent des dossiers : ajouter <code>/SKILL.md</code> rend
+          ces commandes APM invalides.
+        </p>
+        <p>
+          Pour les fichiers partagés, exécutez les commandes suivantes seulement si les dossiers de
+          destination n'existent pas. Ce sont des sources, pas des plugins activés. La révision
+          affichée par chaque dernière commande doit correspondre à l'identifiant complet du commit
+          précédent. Indiquez à Squad ces racines de support :
+          <code>plugins/power-pages/</code>, <code>plugins/model-apps/</code>,
+          <code>plugins/mcp-apps/</code> et <code>.github/plugins/dataverse/</code>
+          dans les sources correspondantes. Ne commitez pas ces dossiers.
+        </p>
+        <pre><code>git clone --config core.longpaths=true --filter=blob:none --no-checkout https://github.com/microsoft/power-platform-skills.git apm_modules/.squad-pack-support/power-platform-skills-8021d27
+git -C apm_modules/.squad-pack-support/power-platform-skills-8021d27 checkout --detach 8021d27d517d81963da22e728125a26c9ecfbbe1
+git -C apm_modules/.squad-pack-support/power-platform-skills-8021d27 rev-parse HEAD
+git clone --config core.longpaths=true --filter=blob:none --no-checkout https://github.com/microsoft/Dataverse-skills.git apm_modules/.squad-pack-support/dataverse-skills-27e6f6a
+git -C apm_modules/.squad-pack-support/dataverse-skills-27e6f6a checkout --detach 27e6f6a3fef23075ede87d8e5f028cde29e0130e
+git -C apm_modules/.squad-pack-support/dataverse-skills-27e6f6a rev-parse HEAD</code></pre>
+        <h4>Préversion Copilot Studio facultative : un plugin complet</h4>
+        <p>
+          Cette option expérimentale/en cours de développement provient du
+          <a href="https://github.com/microsoft/copilot-studio-plugin">dépôt du plugin Copilot Studio de Microsoft</a>,
+          avec un support via les GitHub Issues du projet uniquement, sans garantie de préparation
+          à la production. Elle permet d'ajouter des fichiers de
+          connaissances ou d'importer une compétence vérifiée dans un <em>agent à boucle agentique
+          existant, déjà cloné localement</em>. Ces chartes PP ne prennent pas en charge les rubriques
+          des agents Standard et ne migrent aucun agent. Si vous ignorez votre modèle d'agent,
+          laissez d'abord Squad vérifier l'espace de travail local.
+        </p>
+        <p>
+          L'approbation installe l'ensemble épinglé : huit compétences, quatre agents, deux commandes
+          de prompt, des scripts/références partagés et un hook de démarrage. Seuls
+          <code>add-knowledge</code> et <code>add-skill</code> sont admis pour PP. Le hook peut exécuter
+          <code>npm install</code> pour <code>keytar</code> et
+          <code>@azure/msal-node-extensions</code> et écrire un index local de chemins. Cette
+          configuration au démarrage exige un accord séparé ; Squad n'exécute pas le hook pour
+          terminer l'installation. Si l'hôte ne peut pas empêcher l'exécution d'un hook non approuvé,
+          refusez cette préversion sur cet hôte. Le pack PP ordinaire reste utilisable.
+        </p>
+        <p>
+          Après votre choix explicite de la préversion et la décision sur ce hook, Squad peut
+          installer l'ensemble une seule fois via l'une des deux ressources en préversion. Pour
+          une installation manuelle, exécutez cette unique commande épinglée, puis rechargez l'hôte.
+          N'installez pas les deux fichiers de compétence isolés : il manquerait les schémas et
+          scripts partagés.
+        </p>
+        <pre><code>apm install microsoft/copilot-studio-plugin#4014ae689d1228d86cb3aaab938b1e66f8e2e10d --target copilot</code></pre>
+        <p>
+          La racine complète de support est <code>apm_modules/microsoft/copilot-studio-plugin/</code>.
+          Squad y vérifie <code>reference/knowledge-schema.md</code>,
+          <code>reference/skill-schema.md</code> et <code>scripts/add-skill.js</code> ; la configuration
+          au démarrage n'est pas nécessaire pour les trouver. La création locale n'autorise ni une
+          pré-vérification SharePoint/OneDrive authentifiée, ni l'exécution d'une compétence importée,
+          ni la synchronisation cloud, ni la publication.
+        </p>
+        <h4>Compléments communautaires et alternatives pour les travaux plus larges</h4>
+        <p>
+          Les trois compétences communautaires sont aussi proposées dans la vérification PP. Les
+          deux agents communautaires restent des alternatives facultatives pour les travaux plus
+          larges ; Squad propose leur remède d'installation exact si nécessaire, sans substituer
+          silencieusement une charte locale. Pour une installation manuelle, exécutez seulement les
+          lignes utiles ci-dessous, puis rechargez et demandez une vérification à Squad. Les outils
+          de validation supplémentaires des connecteurs sont des prérequis, pas installés ici.
+        </p>
+        <pre><code>apm install github/awesome-copilot/skills/power-platform-architect#9db369d00f121542e1c99fd9b6cd6f707bade765 --target copilot
+apm install github/awesome-copilot/skills/power-platform-mcp-connector-suite#9db369d00f121542e1c99fd9b6cd6f707bade765 --target copilot
+apm install github/awesome-copilot/skills/mcp-copilot-studio-server-generator#9db369d00f121542e1c99fd9b6cd6f707bade765 --target copilot
+apm install github/awesome-copilot/agents/power-platform-expert.agent.md#9db369d00f121542e1c99fd9b6cd6f707bade765 --target copilot
+apm install github/awesome-copilot/agents/power-platform-mcp-integration-expert.agent.md#9db369d00f121542e1c99fd9b6cd6f707bade765 --target copilot</code></pre>
+        <h4>Si la configuration s'arrête</h4>
+        <table>
+          <thead><tr><th>Ce que vous voyez</th><th>Que faire</th></tr></thead>
+          <tbody>
+            <tr><td>Installateur ou prérequis introuvable</td><td>Gardez la ressource absente. Demandez à Squad les étapes pour l'outil nommé ; n'approuvez pas une installation globale sans limite.</td></tr>
+            <tr><td>Installé sur disque, mais absent de la liste de l'hôte</td><td>Rechargez l'hôte, rouvrez le même projet et relancez la vérification PP. Ne déclarez pas la ressource disponible à partir du reçu seul.</td></tr>
+            <tr><td>Script/schéma partagé absent ou mauvaise révision</td><td>Demandez à Squad de vérifier la racine de support et la révision épinglée ci-dessus. N'inventez pas de schéma et ne lancez pas un autre script de configuration.</td></tr>
+            <tr><td>Windows signale un chemin trop long</td><td>Utilisez l'option locale au dépôt des commandes de sources ci-dessus, ou un nouveau chemin de support plus court. N'écrasez pas un clone partiel et ne changez pas la configuration Git globale.</td></tr>
+            <tr><td>Espace de travail Standard ou demande de connexion/consentement</td><td>Arrêtez le travail en préversion. Conservez le modèle existant et utilisez l'alternative pour travaux plus larges ou une configuration approuvée séparément.</td></tr>
+            <tr><td>Installation annulée ou en échec</td><td>Conservez les fichiers terminés, signalez l'étape en échec et choisissez une nouvelle tentative approuvée ou refusez la ressource. Le reste du pack peut rester actif.</td></tr>
+          </tbody>
+        </table>
+      </section>
       <p>
         <code>m365-agent-architect</code> conçoit un agent déclaratif Microsoft 365 Copilot : ses
         capacités, la formulation de ses instructions et de ses amorces de conversation, et le choix de le

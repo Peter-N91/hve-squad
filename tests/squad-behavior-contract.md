@@ -249,7 +249,8 @@ Power Platform and M365 official jobs resolve to local charter Primaries
 (`Squad Power Platform Architect`, `Squad Power Platform Integrator`,
 `Squad M365 Agent Architect`, `Squad M365 Agent Integrator`). Those charters
 are `user-invocable: false`, `disable-model-invocation: false`, have no prompt
-binding, and name only the nine gated skills. Broad legacy cues select
+binding, and name the nine original gated skills plus the two separately approved
+PP preview jobs. Broad legacy cues outside those specific preview jobs select
 `Power Platform Expert`, `Power Platform MCP Integration Expert`,
 `Declarative Agents Architect`, and `MCP M365 Agent Expert`. Those community
 agents stay registered Alternates and are not blocklisted. No cue match keeps
@@ -284,6 +285,9 @@ registered and unchanged. No Fabric candidate is blocklisted.
 | SRC-05 | Supported official Power Platform and M365 jobs select the local Primary. Broad legacy cues select the named community Alternate only when that cue matches and the agent is installed and dispatchable | `squad-roster.instructions.md`, Pack cues; `New-SquadDispatchPlan.ps1` |
 | SRC-06 | `foundry` Adds includes `data-scientist`. Foundry-specific skills are squad-selected only while `foundry` is active. Removal does not hide a host-installed skill | `profiles-and-packs.md`; `squad-data-scientist.agent.md` |
 | SRC-07 | `fabric` reuses `data-scientist` and admits only the eight gated skills. Selection requires an active `fabric` pack. Current Power BI and `fabric-lakehouse` rows do not change, and no Fabric candidate is blocklisted | `fabric-blueprint.md`; PRF-25 |
+| SRC-08 | Every registered PP skill is in shared resource preflight only when `power-platform` is proposed. All six existing official installs use verified pinned directories, not `SKILL.md` paths. The two preview resources install one complete pinned bundle, not incomplete skill files | `power-platform-official-resources.md`; `roster-catalog.md`, Registered Pack Skills; `PackRegistry.Tests.ps1`; `CoordinatorRuntime.Tests.ps1` |
+| SRC-09 | Copilot Studio knowledge YAML and skill import use the existing PP owners only for explicitly approved preview work in an existing agentic-loop workspace. Declining a resource, pack absence/removal, missing support files, or missing approval stops its use. Standard schemas, extra bundle agents, evaluation and PAC cloud workflows are not silently admitted | PP charters and `power-platform-official-resources.md`; `PackRegistry.Tests.ps1`; `ExpandSquadRoster.Tests.ps1` |
+| SRC-10 | PP uses the same approval, selected-subset, receipt, reload and host-availability lifecycle as other resource packs. Every resource needs an explicit disposition; preview may be declined without preventing PP activation. No-pack proposals contain no PP resources. Installation does not grant prerequisite, startup-hook, authentication or tenant authority | `profiles-and-packs.md`, Pack Resource Preflight; `power-platform-official-resources.md`, Installation and readiness; `CoordinatorRuntime.Tests.ps1` |
 
 Tier 1 has one opt-in `pack-lifecycle` scenario. It is excluded from the default live matrix and
 requires `-Pack <registered-pack>`, so adding packs does not multiply paid requests. Provision it

@@ -5,7 +5,7 @@ license: MIT
 metadata:
   authors: "Peter-N91/hve-squad"
   spec_version: "1.0"
-  last_updated: "2026-10-24"
+  last_updated: "2026-11-11"
 ---
 
 # Squad Profiles and Packs
@@ -56,14 +56,17 @@ with its install command rather than seeded.
 
 A pack is proposed, never imposed. The coordinator offers one at Init when the repository carries the domain's signals **or the request itself names the domain**, and offers one mid-project when a request needs a role only that pack provides. Confirmed mid-project additions use the sealed `roster-expansion.md` transaction for a plain squad or one selected federation member; it adds no model consumption and preserves the existing ledger, state, rates, notifications, and history byte-for-byte. A pack is equally removable: dropping one removes only the roles it still owns — never a role the profile or another pack also contributes — and appends a decision rather than editing anything. The append-only `decisions.md` and `history/<agent>.md` are untouched by a removal, the removed member's row stays in `consumption.md` marked removed so the run total stays truthful, and deliverables already written stay on disk. See *Removing a Pack* in `.github/instructions/squad/squad-roster.instructions.md`.
 
-Seeded Selection Cues, copied from the cast catalog: Power Pages ALM planning, model-driven app building, or Dataverse overview → Squad Power Platform Architect; broader Power Platform architecture or Copilot Studio, Power Automate, cloud flow, canvas app, DLP policy, or solution ALM → Power Platform Expert. codeful MCP tool or UI generation, or Dataverse connection → Squad Power Platform Integrator; broader connector or integration work, custom connector, or connector certification → Power Platform MCP Integration Expert. .NET Agents SDK production readiness → Squad M365 Agent Architect; declarative agent, TypeSpec, API plugin, or broader M365 architecture, Microsoft 365 Copilot agent, agent manifest, or Agents Toolkit → Declarative Agents Architect. Agents SDK OpenTelemetry or provisioning → Squad M365 Agent Integrator; broader MCP-backed M365 integration, Microsoft Graph, Graph SDK, Graph permission scope, or MCP-backed Copilot agent → MCP M365 Agent Expert. No cue match keeps the Primary. A matched Alternate that is absent or not dispatchable escalates; do not substitute. Pack absence means the role is not seeded, so installed official skills are not squad-selected. Fabric Warehouse, Eventhouse, Spark, Dataflow, or an admitted migration selects the registered Fabric skills only while `fabric` is active. Host visibility is not selection.
+Seeded Selection Cues, copied from the cast catalog: Power Pages ALM planning, model-driven app building, Dataverse overview, or Copilot Studio knowledge YAML → Squad Power Platform Architect; broader Power Platform architecture or Copilot Studio, Power Automate, cloud flow, canvas app, DLP policy, or solution ALM → Power Platform Expert. codeful MCP tool or UI generation, Dataverse connection, or Copilot Studio skill import → Squad Power Platform Integrator; broader connector or integration work, custom connector, or connector certification → Power Platform MCP Integration Expert. Both specific Copilot Studio cues are preview: explicit approval and an existing agentic-loop workspace required; other Copilot Studio work keeps the broad Alternate. .NET Agents SDK production readiness → Squad M365 Agent Architect; declarative agent, TypeSpec, API plugin, or broader M365 architecture, Microsoft 365 Copilot agent, agent manifest, or Agents Toolkit → Declarative Agents Architect. Agents SDK OpenTelemetry or provisioning → Squad M365 Agent Integrator; broader MCP-backed M365 integration, Microsoft Graph, Graph SDK, Graph permission scope, or MCP-backed Copilot agent → MCP M365 Agent Expert. No cue match keeps the Primary. A matched Alternate that is absent or not dispatchable escalates; do not substitute. Pack absence means the role is not seeded, so installed official skills are not squad-selected. Fabric Warehouse, Eventhouse, Spark, Dataflow, or an admitted migration selects the registered Fabric skills only while `fabric` is active. Host visibility is not selection.
 
 ### Pack Resource Preflight
 
 | Resource pack | Registered skills |
 |---|---|
+| `power-platform` | plan-alm, app-builder, dv-overview, generate-codeful-mcp-tool, generate-mcp-app-ui, dv-connect, power-platform-architect, power-platform-mcp-connector-suite, mcp-copilot-studio-server-generator, add-knowledge, add-skill |
 | `foundry` | microsoft-foundry, use-ai-gateway, azure-aigateway, caira, foundry-iq, appinsights-instrumentation |
 | `fabric` | sqldw-cli, sqldb-cli, eventhouse-cli, eventstream-cli, spark-cli, dataflows-cli, databricks-migration, pipeline-migration |
+
+For `power-platform`, read [power-platform-official-resources.md](power-platform-official-resources.md) before asking to install resources, including during an Init proposal. Its core skills, optional community supplements, complete support files, and separately approved preview bundle are distinct choices; a generic install-all answer without that disclosure is not preview approval.
 
 After packs are selected, rerun `Get-SquadInitContext.ps1 -Pack <packs>` and
 inspect `packResources`. It reports each registered pack skill, whether the
@@ -94,7 +97,7 @@ An explicit `pack=` hint wins; otherwise either repository signals or the reques
 
 | Pack | Repository signals |
 |------|--------------------|
-| `power-platform` | `.cdsproj`, `solution.xml`, a `pac` CLI configuration, a canvas app `.msapp`, or a Dataverse solution folder |
+| `power-platform` | `.cdsproj`, `solution.xml`, a `pac` CLI configuration, a canvas app `.msapp`, a Dataverse solution folder, `agent.mcs.yml`, or Copilot Studio `settings.mcs.yml` with `template: cliagent-*`. Follow the PP guidance for core skills versus the separately approved preview bundle; neither a signal nor pack acceptance approves preview setup |
 | `m365-copilot` | A `declarativeAgent.json` or `manifest.json` Copilot agent manifest, `m365agents.yml`, `teamsapp.yml`, `appPackage/`, or `main.tsp` importing `@microsoft/typespec-m365-copilot` |
 | `aws` | CloudFormation, including `template.yaml` with `AWS::Serverless`; `cdk.json`, `samconfig.toml`, `serverless.yml`, `.aws/`, or Terraform's `hashicorp/aws` provider |
 | `foundry` | SDK dependencies (`azure-ai-projects`, `azure-ai-agents`, `Azure.AI.Projects`, `Azure.AI.Agents.Persistent`, `@azure/ai-projects`, `@azure/ai-agents`), `azure.yaml` using the `azure.ai.agents` azd extension, or `AZURE_AI_PROJECT_ENDPOINT` / a `services.ai.azure.com/api/projects` URL in configuration or `.env` templates. Select `foundry-iq` and `appinsights-instrumentation` only when this pack is active |
