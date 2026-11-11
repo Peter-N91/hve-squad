@@ -1277,6 +1277,7 @@ Describe 'Pack Alternate resolution uses the dispatch plan' {
         $payloadPath = Join-Path $repo 'pack-init.json'
         $choices = New-Choices
         $choices.packs = @('power-platform')
+        $choices.resourceDecisions = Get-PackResourceDecisions -Repo $repo -Packs @('power-platform')
         $choices.runId = 'pp-pack'
         Write-FixtureJson $choicesPath $choices
         $prepared = Invoke-Local 'Get-SquadInitContext.ps1' $repo @('-RepoRoot', $repo, '-ChoicesPath', $choicesPath, '-PayloadPath', $payloadPath)
@@ -1413,6 +1414,7 @@ Describe 'Pack Alternate resolution uses the dispatch plan' {
         $payloadPath = Join-Path $repo 'both-pack-init.json'
         $choices = New-Choices
         $choices.packs = @('power-platform', 'm365-copilot')
+        $choices.resourceDecisions = Get-PackResourceDecisions -Repo $repo -Packs @('power-platform')
         $choices.runId = 'both-packs'
         Write-FixtureJson $choicesPath $choices
         $prepared = Invoke-Local 'Get-SquadInitContext.ps1' $repo @('-RepoRoot', $repo, '-ChoicesPath', $choicesPath, '-PayloadPath', $payloadPath)
