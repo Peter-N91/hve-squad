@@ -1,3 +1,5 @@
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT license.
 name: Tier 1 Behavior
 
 # Live behavioral runs of the squad against fixture repositories.

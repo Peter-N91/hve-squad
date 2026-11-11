@@ -1,3 +1,5 @@
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT license.
 # OpenSSF Scorecard supply-chain posture analysis. Results are published to the
 # public OpenSSF API, which is what backs the Scorecard badge in README.md, and
 # kept as a build artifact.

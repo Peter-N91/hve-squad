@@ -2,6 +2,10 @@
 title: Squad Connector 1.1 role-mode binding examples
 description: Copyable roster examples for automatic work-role replacement and an additive GCP assessor, keeping coordinators and Scribe internal.
 ---
+<!--
+Copyright (c) Microsoft Corporation.
+Licensed under the MIT license.
+-->
 
 # Connector 1.1 Role-Mode Bindings
 

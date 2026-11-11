@@ -1,3 +1,5 @@
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT license.
 """Azure internal web app LLD diagram (reference template).
 
 Renders a low-level design diagram with real Azure icons for an internal

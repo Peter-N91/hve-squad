@@ -2,6 +2,10 @@
 description: "Compact squad safety floor: native delegation, scoped single-writer state, proof, attribution and human gates."
 applyTo: '**'
 ---
+<!--
+Copyright (c) Microsoft Corporation.
+Licensed under the MIT license.
+-->
 
 # Squad Agent Floor
 

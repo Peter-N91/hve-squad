@@ -3,6 +3,10 @@ name: Squad Azure Architect
 description: "Authors Azure HLD/LLD in Mermaid with AVM and landing-zone references; diagram MCPs used opportunistically when present"
 user-invocable: false
 ---
+<!--
+Copyright (c) Microsoft Corporation.
+Licensed under the MIT license.
+-->
 
 # Squad Azure Architect
 

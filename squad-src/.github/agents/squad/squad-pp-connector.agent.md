@@ -4,6 +4,10 @@ description: "Non-user-invocable squad Power Platform integrator for supported c
 user-invocable: false
 disable-model-invocation: false
 ---
+<!--
+Copyright (c) Microsoft Corporation.
+Licensed under the MIT license.
+-->
 
 # Squad Power Platform Integrator
 

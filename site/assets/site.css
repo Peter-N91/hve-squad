@@ -1,35 +1,7 @@
-@font-face {
-  font-family: "Manrope";
-  src: url("../fonts/Manrope-Variable.woff2") format("woff2");
-  font-style: normal;
-  font-weight: 200 800;
-  font-display: swap;
-}
-
-@font-face {
-  font-family: "Source Sans 3";
-  src: url("../fonts/SourceSans3-Variable.woff2") format("woff2");
-  font-style: normal;
-  font-weight: 200 900;
-  font-display: swap;
-}
-
-@font-face {
-  font-family: "Source Sans 3";
-  src: url("../fonts/SourceSans3-Italic-Variable.woff2") format("woff2");
-  font-style: italic;
-  font-weight: 200 900;
-  font-display: swap;
-}
-
-@font-face {
-  font-family: "JetBrains Mono";
-  src: url("../fonts/JetBrainsMono-Variable.woff2") format("woff2");
-  font-style: normal;
-  font-weight: 100 800;
-  font-display: swap;
-}
-
+/*
+Copyright (c) Microsoft Corporation.
+Licensed under the MIT license.
+*/
 :root {
   color-scheme: light;
   --slate-50: #f8fafc;

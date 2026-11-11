@@ -1,3 +1,5 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT license.
 (() => {
   const figures = [...document.querySelectorAll(".diagram")];
   if (!figures.length) return;

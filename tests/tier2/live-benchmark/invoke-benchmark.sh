@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Copyright (c) 2026 Microsoft Corporation. All rights reserved.
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT license.
 # SPDX-License-Identifier: MIT
 #
 # Starts Invoke-Benchmark.ps1 from bash once PowerShell 7.4 or newer (pwsh) is confirmed.

@@ -2,6 +2,10 @@
 title: Sample consumer coordinator (pseudo-script)
 description: Illustrative, non-executable description of an external coordinator honoring the Squad Connector contract. Never run by any test or tool in this repository.
 ---
+<!--
+Copyright (c) Microsoft Corporation.
+Licensed under the MIT license.
+-->
 
 # Sample Consumer Coordinator
 

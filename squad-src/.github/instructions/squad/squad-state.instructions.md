@@ -2,6 +2,10 @@
 description: "Squad state layout and mapping of squad coordination tools to HVE Core mechanisms"
 applyTo: '**/.copilot-tracking/squad/**/state.json'
 ---
+<!--
+Copyright (c) Microsoft Corporation.
+Licensed under the MIT license.
+-->
 
 # Squad State Conventions
 

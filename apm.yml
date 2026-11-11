@@ -1,3 +1,5 @@
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT license.
 name: hve-squad
 version: 0.20.0
 description: APM package for hve-core and squad together

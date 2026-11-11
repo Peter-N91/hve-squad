@@ -1,8 +1,48 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT license.
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import test from "node:test";
 import { load } from "cheerio";
-import { assembleContent, embedConnectorTemplates, enhanceContent, headingIds, readLocales, pageOrder, readSource } from "../../scripts/docs-content.mjs";
+import nunjucks from "nunjucks";
+import { assembleContent, buildPages, embedConnectorTemplates, enhanceContent, headingIds, readLocales, pageOrder, readSource } from "../../scripts/docs-content.mjs";
+
+test("shared pages load Google Fonts without local binaries or a JavaScript font dependency", () => {
+  const environment = new nunjucks.Environment(new nunjucks.FileSystemLoader(
+    fileURLToPath(new URL("../../site/_includes/", import.meta.url))));
+  environment.addFilter("jsonScript", value => JSON.stringify(value).replace(/</g, "\\u003c"));
+  const template = readFileSync(new URL("../../site/pages.njk", import.meta.url), "utf8")
+    .replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n/, "");
+  for (const doc of buildPages().filter(page => page.slug === "index")) {
+    const $ = load(environment.renderString(template, { doc }));
+    const links = $('link[rel="stylesheet"]').toArray().map(element => $(element).attr("href"));
+    const url = new URL(links.find(href => href.startsWith("https://fonts.googleapis.com/")));
+    assert.equal(url.pathname, "/css2");
+    assert.deepEqual(url.searchParams.getAll("family"), [
+      "JetBrains Mono:wght@100..800",
+      "Manrope:wght@200..800",
+      "Source Sans 3:ital,wght@0,200..900;1,200..900",
+    ]);
+    assert.equal(url.searchParams.get("display"), "swap");
+    assert.equal($('link[rel="preconnect"][href="https://fonts.gstatic.com"][crossorigin]').length, 1);
+    assert.equal($('link[rel="preload"][as="font"], [href$=".woff2"], [src$=".woff2"]').length, 0);
+    assert.equal($('script[src*="fonts.googleapis.com"], script[src*="fonts.gstatic.com"]').length, 0);
+    assert.equal($('.site-footer a[href="https://policies.google.com/privacy"]').text(),
+      doc.language === "fr" ? "Confidentialité Google" : "Google privacy");
+    assert($("main").text().trim(), "Content must be delivered independently of fonts and JavaScript.");
+  }
+});
+
+test("Google Fonts failure leaves system-font fallbacks and no hidden-content dependency", () => {
+  const css = readFileSync(new URL("../../site/assets/site.css", import.meta.url), "utf8");
+  assert.doesNotMatch(css, /@font-face|\.woff2\b/i);
+  assert.match(css, /--sans:\s*"Source Sans 3",\s*"Segoe UI",\s*sans-serif;/);
+  assert.match(css, /--display:\s*"Manrope",\s*"Segoe UI",\s*sans-serif;/);
+  assert.match(css, /--mono:\s*"JetBrains Mono",\s*Consolas,\s*monospace;/);
+  const template = readFileSync(new URL("../../site/pages.njk", import.meta.url), "utf8");
+  assert.doesNotMatch(template + css, /fonts-loading|fonts-loaded|document\.fonts|visibility:\s*hidden/);
+});
 
 test("every declared language has the complete navigation and UI contract", () => {
   const locales = readLocales();

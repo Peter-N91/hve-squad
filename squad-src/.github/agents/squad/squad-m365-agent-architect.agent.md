@@ -4,6 +4,10 @@ description: "Non-user-invocable squad architect for supported .NET Agents SDK p
 user-invocable: false
 disable-model-invocation: false
 ---
+<!--
+Copyright (c) Microsoft Corporation.
+Licensed under the MIT license.
+-->
 
 # Squad M365 Agent Architect
 

@@ -1,6 +1,10 @@
 ---
 description: "Compact coordinator turn contract: script-backed metadata, native work, gated scheduling and verified persistence."
 ---
+<!--
+Copyright (c) Microsoft Corporation.
+Licensed under the MIT license.
+-->
 
 # Coordinator Runtime
 

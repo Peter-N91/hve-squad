@@ -2,6 +2,10 @@
 description: "Reference only: brand-template guidance for slide decks. The powerpoint skill and PowerPoint agents were removed upstream at hve-core f425e94, so the squad ships no deck pipeline."
 applyTo: "**/.copilot-tracking/ppt*/**, **/.copilot-tracking/squad/**/ppt*/**"
 ---
+<!--
+Copyright (c) Microsoft Corporation.
+Licensed under the MIT license.
+-->
 
 # Brand Template for Slide Decks (reference only)
 

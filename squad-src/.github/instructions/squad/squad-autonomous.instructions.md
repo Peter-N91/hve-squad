@@ -2,6 +2,10 @@
 description: "Opt-in auto-validated autonomy tier with re-validation cap, divergence detection, and mandatory escalation triggers"
 applyTo: '**/.copilot-tracking/squad/**/history/autonomous-loop-*.md'
 ---
+<!--
+Copyright (c) Microsoft Corporation.
+Licensed under the MIT license.
+-->
 
 # Squad Autonomous Conventions
 

@@ -4,6 +4,10 @@ about: Suggest a sanitized, broadly applicable learning to add to the shared squ
 title: "[learning] "
 labels: shared-learning
 ---
+<!--
+Copyright (c) Microsoft Corporation.
+Licensed under the MIT license.
+-->
 
 ## Scenario or trigger
 

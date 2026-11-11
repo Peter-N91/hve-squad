@@ -1,6 +1,10 @@
 ---
 description: "Cold federation compatibility procedure for hosts without coordinator scripts."
 ---
+<!--
+Copyright (c) Microsoft Corporation.
+Licensed under the MIT license.
+-->
 
 # Squad Federation Coordinator
 

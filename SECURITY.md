@@ -1,8 +1,26 @@
-# Security Policy
+---
+title: Security policy
+description: Microsoft security reporting instructions and the hve-squad security scope.
+---
+
+<!-- BEGIN MICROSOFT SECURITY.MD V1.0.0 BLOCK -->
+
+## Security
+
+Microsoft takes the security of our software products and services seriously, which
+includes all source code repositories in our GitHub organizations.
+
+**Please do not report security vulnerabilities through public GitHub issues.**
+
+For security reporting information, locations, contact information, and policies,
+please review the latest guidance for Microsoft repositories at
+[https://aka.ms/SECURITY.md](https://aka.ms/SECURITY.md).
+
+<!-- END MICROSOFT SECURITY.MD BLOCK -->
 
 ## Supported versions
 
-hve-squad is a solo-maintained, pre-1.0 project. Only the latest published
+hve-squad is a pre-1.0 project. Only the latest published
 release receives security fixes. Older tags are kept for reproducibility and are
 not patched. See [CHANGELOG.md](CHANGELOG.md) for what shipped in each version.
 
@@ -12,34 +30,17 @@ not patched. See [CHANGELOG.md](CHANGELOG.md) for what shipped in each version.
 | Rolling `-pre` tag   | Best effort |
 | Any earlier tag      | No        |
 
-## Reporting a vulnerability
-
-**Do not open a public issue for a security vulnerability.**
-
-Report it privately through GitHub Security Advisories:
-[Report a vulnerability](https://github.com/Peter-N91/hve-squad/security/advisories/new).
-
-Please include:
-
-- The affected version or commit.
-- The component involved (agent, prompt, instruction, skill, workflow, or script).
-- Reproduction steps and the impact you observed.
-- Any suggested mitigation.
-
-You can expect an acknowledgement within 5 business days and a status update
-within 10 business days. Fixes ship in the next release; the advisory is
-published once a fix is available. Coordinated disclosure is appreciated.
-
-Vulnerabilities in a dependency (most notably
-[microsoft/hve-core](https://github.com/microsoft/hve-core)) should be reported
-to that project. If the issue is in how hve-squad composes or deploys a
-dependency, report it here.
-
 ## Threat model and scope
 
 hve-squad is a distribution and composition layer for AI agent assets. It ships
-markdown assets, PowerShell build scripts, and CI workflows. It does not run a
-service and holds no user data or secrets.
+markdown assets, PowerShell build scripts, and CI workflows; the repository does
+not operate a hosted inference service. When used, agents and helpers can
+process repository/task content and write local state, histories, usage
+accounting, and notification contacts. Watch workflows can publish selected
+artifacts through pull requests, and optional notifications send configured
+payloads to GitHub or a webhook. Host/model-provider processing and consumer
+data-handling responsibilities remain separate. Do not treat local state or
+generated histories as safe to publish without review.
 
 In scope:
 
@@ -64,17 +65,17 @@ Out of scope:
 
 ## Security practices in this repository
 
-Every change to `main` goes through pull request validation plus these
-automated controls:
+The repository provides pull request validation and these automated workflows:
 
 - **CodeQL** static analysis on the Python surface.
 - **Checkov** infrastructure-as-code scanning.
 - **Zizmor** GitHub Actions security analysis, reported to the Security tab.
 - **OpenSSF Scorecard** supply-chain posture analysis, published publicly.
-- **Tiered conformance testing** (Tier 0 conformance, Tier 1 behaviour,
-  Tier 2 semantic) over the shipped agent assets.
+- **Tier 0 conformance testing** over the shipped agent assets. Tier 1
+  behavioural and Tier 2 semantic testing are available as manual runs.
 - **Dependabot** weekly updates for GitHub Actions.
 
-All third-party GitHub Actions are pinned to a full commit SHA, workflows
-declare an empty top-level `permissions: {}` and grant the minimum token scope
-per job, and checkouts use `persist-credentials: false`.
+Third-party GitHub Actions are pinned to full commit SHAs, workflows declare
+token permissions explicitly with job-level scopes, and checkouts use
+`persist-credentials: false`. These controls do not replace the destination
+organization's required reviews, branch protection, SDL, or release approval.

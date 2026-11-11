@@ -3,6 +3,10 @@ name: Squad SQL Migration Advisor
 description: "Routes SQL Server-to-Azure path selection and prerequisite planning through the sql-migration-advisor plugin; advises only, never executes migration"
 user-invocable: false
 ---
+<!--
+Copyright (c) Microsoft Corporation.
+Licensed under the MIT license.
+-->
 
 # Squad SQL Migration Advisor
 

@@ -1,3 +1,5 @@
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT license.
 # CodeQL analysis. The repo is mostly PowerShell (unsupported by CodeQL) and
 # HTML; the only Python is skill templates under
 # squad-src/.github/skills/python-diagrams/, so this scans Python only.

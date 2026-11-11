@@ -1,3 +1,7 @@
+<!--
+Copyright (c) Microsoft Corporation.
+Licensed under the MIT license.
+-->
 # Blind Judge Rubric
 
 You are grading anonymised deliverables. Each `samples/S<n>.diff` is the full change one

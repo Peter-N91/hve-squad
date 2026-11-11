@@ -2,6 +2,10 @@
 description: "Squad roster schema, casting and profile conventions"
 applyTo: '**/.copilot-tracking/squad/**/team.md'
 ---
+<!--
+Copyright (c) Microsoft Corporation.
+Licensed under the MIT license.
+-->
 
 # Squad Roster Conventions
 

@@ -1,3 +1,5 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT license.
 // Builds the static documentation site, including recorded benchmark summaries.
 // AI cost: none; reads checked-in content and evidence without collecting new observations.
 import { validatePublicInputs } from "./scripts/docs-inputs.mjs";
@@ -16,12 +18,15 @@ export default function (config) {
   config.addPassthroughCopy({ "docs/assets/logo.svg": "assets/logo.svg" });
   config.addPassthroughCopy({ "docs/assets/favicon.svg": "assets/favicon.svg" });
   config.addPassthroughCopy({ "docs/.nojekyll": ".nojekyll" });
+  config.addPassthroughCopy({ "LICENSE.TXT": "LICENSE.TXT" });
+  config.addPassthroughCopy({ "NOTICE": "NOTICE" });
   config.addPassthroughCopy({ "docs/assets/hve-squad-single-squad.mp4": "assets/hve-squad-single-squad.mp4" });
   config.addPassthroughCopy({ "docs/assets/hve-squad-federation.mp4": "assets/hve-squad-federation.mp4" });
   config.addPassthroughCopy({ "docs/templates": "templates" });
   config.addPassthroughCopy({ "docs/squad-governance-report-2026-08-04.html": "squad-governance-report-2026-08-04.html" });
   config.addPassthroughCopy({ "node_modules/mermaid/dist/mermaid.min.js": "assets/vendor/mermaid.min.js" });
   config.addPassthroughCopy({ "node_modules/mermaid/LICENSE": "assets/vendor/mermaid-LICENSE.txt" });
+  config.addPassthroughCopy({ "node_modules/pagefind/LICENSE/LICENSE": "assets/vendor/pagefind-LICENSE.txt" });
   config.addFilter("jsonScript", value => JSON.stringify(value).replace(/</g, "\\u003c"));
   return {
     dir: { input: "site", output: "_site", includes: "_includes", data: "_data" },

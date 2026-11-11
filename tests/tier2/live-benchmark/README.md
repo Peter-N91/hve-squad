@@ -1,6 +1,10 @@
 ---
 description: "Inventory benchmarks and the unattended squad efficiency regression exercise"
 ---
+<!--
+Copyright (c) Microsoft Corporation.
+Licensed under the MIT license.
+-->
 
 # Live benchmark harness
 

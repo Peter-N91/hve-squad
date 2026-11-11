@@ -1,3 +1,7 @@
+<!--
+Copyright (c) Microsoft Corporation.
+Licensed under the MIT license.
+-->
 <!-- markdownlint-disable-file MD041 -- GitHub PR templates are injected verbatim into the PR description, so they cannot start with a top-level heading or YAML frontmatter. -->
 <!--
 Title convention: type(scope): short description

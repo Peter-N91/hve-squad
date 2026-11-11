@@ -7,6 +7,10 @@ metadata:
   spec_version: "1.0"
   last_updated: "2026-08-14"
 ---
+<!--
+Copyright (c) Microsoft Corporation.
+Licensed under the MIT license.
+-->
 
 # Squad Federation Seed Templates
 

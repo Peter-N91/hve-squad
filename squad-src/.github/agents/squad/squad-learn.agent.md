@@ -5,6 +5,10 @@ user-invocable: true
 disable-model-invocation: true
 argument-hint: "[target=upstream|tenant] [learning=...]"
 ---
+<!--
+Copyright (c) Microsoft Corporation.
+Licensed under the MIT license.
+-->
 
 # Squad Learn
 

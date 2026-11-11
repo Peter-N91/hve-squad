@@ -7,6 +7,10 @@ metadata:
   spec_version: "1.0"
   last_updated: "2026-06-22"
 ---
+<!--
+Copyright (c) Microsoft Corporation.
+Licensed under the MIT license.
+-->
 
 # Squad Tenant-Internal Learnings
 

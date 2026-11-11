@@ -3,6 +3,10 @@ name: Squad As-Built Author
 description: "Documents deployed Azure infrastructure after a successful deploy as drop-in as-built artifacts (resource inventory, compliance matrix, operations runbook, backup and DR plan); strictly read-only and never deploys, mutates resources, or authors IaC"
 user-invocable: false
 ---
+<!--
+Copyright (c) Microsoft Corporation.
+Licensed under the MIT license.
+-->
 
 # Squad As-Built Author
 

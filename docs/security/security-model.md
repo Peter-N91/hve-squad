@@ -3,6 +3,10 @@ title: Security model registry
 description: Index of scoped STRIDE models for shipped HVE Squad skill scripts.
 ms.date: 2026-10-28
 ---
+<!--
+Copyright (c) Microsoft Corporation.
+Licensed under the MIT license.
+-->
 
 ## Scope
 

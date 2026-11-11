@@ -4,6 +4,10 @@ description: "Non-user-invocable squad devil's advocate that pressure-tests plan
 user-invocable: false
 model: Claude Sonnet 5.5 (copilot)
 ---
+<!--
+Copyright (c) Microsoft Corporation.
+Licensed under the MIT license.
+-->
 
 # Squad Challenger
 

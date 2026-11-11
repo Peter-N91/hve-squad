@@ -1,3 +1,5 @@
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT license.
 version: 2
 updates:
   - package-ecosystem: "github-actions"

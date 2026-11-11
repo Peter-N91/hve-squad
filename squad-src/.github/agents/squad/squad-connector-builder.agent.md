@@ -4,6 +4,10 @@ description: "Interactively prepares or templates a contract-compatible Squad Co
 user-invocable: true
 agents: []
 ---
+<!--
+Copyright (c) Microsoft Corporation.
+Licensed under the MIT license.
+-->
 
 # Squad Connector Builder
 

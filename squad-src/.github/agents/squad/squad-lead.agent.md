@@ -4,6 +4,10 @@ description: "Non-user-invocable squad planner that turns research findings into
 user-invocable: false
 model: Claude Sonnet 5.5 (copilot)
 ---
+<!--
+Copyright (c) Microsoft Corporation.
+Licensed under the MIT license.
+-->
 
 # Squad Lead
 

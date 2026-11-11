@@ -2,6 +2,10 @@
 description: "Opt-in autopilot mode: a full research→plan→implement→review pipeline that runs end-to-end with human gates only on impactful actions and final-outcome validation"
 applyTo: '**/.copilot-tracking/squad/**/history/autopilot-run-*.md'
 ---
+<!--
+Copyright (c) Microsoft Corporation.
+Licensed under the MIT license.
+-->
 
 # Squad Autopilot Conventions
 

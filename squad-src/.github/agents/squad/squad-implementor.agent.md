@@ -4,6 +4,10 @@ description: "Non-user-invocable squad implementer that executes an approved pla
 user-invocable: false
 model: Claude Sonnet 5.5 (copilot)
 ---
+<!--
+Copyright (c) Microsoft Corporation.
+Licensed under the MIT license.
+-->
 
 # Squad Implementor
 

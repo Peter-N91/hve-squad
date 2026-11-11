@@ -7,6 +7,10 @@ metadata:
   spec_version: "1.1"
   last_updated: "2026-08-19"
 ---
+<!--
+Copyright (c) Microsoft Corporation.
+Licensed under the MIT license.
+-->
 
 # Squad Gates and Modes
 

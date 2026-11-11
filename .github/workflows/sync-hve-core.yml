@@ -1,3 +1,5 @@
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT license.
 name: Sync and Adapt
 
 # Runs every morning at 06:00 UTC or on demand.

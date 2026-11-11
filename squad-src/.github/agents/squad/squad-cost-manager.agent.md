@@ -6,6 +6,10 @@ model: Claude Haiku 5.5 (copilot)
 agents:
   - Squad Researcher
 ---
+<!--
+Copyright (c) Microsoft Corporation.
+Licensed under the MIT license.
+-->
 
 # Squad Cost Manager
 

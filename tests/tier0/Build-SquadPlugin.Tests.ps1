@@ -1,5 +1,6 @@
 #Requires -Modules Pester
-# Copyright (c) 2026 Microsoft Corporation. All rights reserved.
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT license.
 # SPDX-License-Identifier: MIT
 
 [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSReviewUnusedParameter', 'SourceRoot',
@@ -40,6 +41,8 @@ BeforeAll {
     Set-Content -LiteralPath $hveSkill -Value "---`nname: secure-by-design`ndescription: Fixture skill`n---`n# Secure by design`n" -Encoding utf8NoBOM
     Set-Content -LiteralPath $hveExtension -Value '{"name":"hve-core-fixture"}' -Encoding utf8NoBOM
     Set-Content -LiteralPath (Join-Path $script:HveCoreRoot 'LICENSE') -Value 'MIT fixture' -Encoding utf8NoBOM
+    Set-Content -LiteralPath (Join-Path $script:HveCoreRoot 'NOTICE') -Value 'Upstream notice fixture' -Encoding utf8NoBOM
+    Set-Content -LiteralPath (Join-Path $script:HveCoreRoot 'THIRD-PARTY-NOTICES') -Value 'Upstream third-party fixture' -Encoding utf8NoBOM
     $hveManifest = [ordered]@{
         name = 'hve-core'; version = '0.0.0-test'
         agents = @('.github/agents/security/security-planner.agent.md')
@@ -105,6 +108,34 @@ BeforeAll {
 Describe 'PKG-14 Plugin host discovery and hook commands' -Tag 'Unit' {
     It 'builds the plugin distribution successfully' {
         $script:BuildExitCode | Should -Be 0 -Because ($script:BuildOutput -join "`n")
+    }
+
+    It 'ships the canonical root license and keeps upstream legal material separate and unchanged' {
+        foreach ($legalFile in @('LICENSE.TXT', 'NOTICE')) {
+            $expected = Get-Content -LiteralPath (Join-Path $script:SourceRootResolved $legalFile) -Raw
+            $actual = Get-Content -LiteralPath (Join-Path $script:OutputRoot $legalFile) -Raw
+            $actual | Should -BeExactly ($expected.TrimEnd() + "`n")
+        }
+        Test-Path -LiteralPath (Join-Path $script:OutputRoot 'LICENSE') | Should -BeFalse
+        foreach ($legalFile in @('LICENSE', 'NOTICE', 'THIRD-PARTY-NOTICES')) {
+            (Get-FileHash -LiteralPath (Join-Path $script:OutputRoot "third-party/hve-core/$legalFile")).Hash |
+                Should -BeExactly (Get-FileHash -LiteralPath (Join-Path $script:HveCoreRoot $legalFile)).Hash
+        }
+    }
+
+    It 'keeps prompt budgets sensitive to everything except the exact leading legal notice' {
+        $notice = "<!--`nCopyright (c) Microsoft Corporation.`nLicensed under the MIT license.`n-->`n"
+        $frontmatter = "---`nname: Fixture`ndescription: Fixture prompt`n---`n"
+        $body = "<!-- An ordinary comment still counts. -->`n# Fixture`n"
+        foreach ($case in @(
+                @{ Actual = $notice + $body; Expected = $body }
+                @{ Actual = $frontmatter + $notice + $body; Expected = $frontmatter + $body }
+                @{ Actual = $body + $notice; Expected = $body + $notice }
+                @{ Actual = $notice.Replace('MIT license.', 'another license.') + $body; Expected = $notice.Replace('MIT license.', 'another license.') + $body }
+            )) {
+            Get-SquadContractByteCount -Text ($case.Actual -replace "`n", "`r`n") |
+                Should -Be ([Text.Encoding]::UTF8.GetByteCount($case.Expected))
+        }
     }
 
     It 'ships bundled-plugin discovery and both coordinator entry contracts' {
@@ -180,9 +211,8 @@ Describe 'PKG-14 Plugin host discovery and hook commands' -Tag 'Unit' {
         New-Item -ItemType Directory -Path $historicalRoot -Force | Out-Null
         Copy-Item -LiteralPath (Join-Path $script:SourceRootResolved 'squad-src') -Destination $historicalRoot -Recurse
         Copy-Item -LiteralPath (Join-Path $script:SourceRootResolved 'apm.yml') -Destination $historicalRoot
-        foreach ($legalFile in @('LICENSE', 'NOTICE')) {
-            Copy-Item -LiteralPath (Join-Path $script:SourceRootResolved $legalFile) -Destination $historicalRoot
-        }
+        Copy-Item -LiteralPath (Join-Path $script:SourceRootResolved 'LICENSE.TXT') -Destination (Join-Path $historicalRoot 'LICENSE')
+        Copy-Item -LiteralPath (Join-Path $script:SourceRootResolved 'NOTICE') -Destination $historicalRoot
         $coachPaths = @(
             'squad-src/.github/agents/squad/squad-coach.agent.md'
             'squad-src/.github/prompts/squad/squad-coach.prompt.md'

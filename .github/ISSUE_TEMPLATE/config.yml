@@ -1,8 +1,10 @@
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT license.
 blank_issues_enabled: true
 contact_links:
   - name: Report a security vulnerability
-    url: https://github.com/Peter-N91/hve-squad/security/advisories/new
-    about: Report privately through GitHub Security Advisories. Do not open a public issue.
+    url: https://aka.ms/SECURITY.md
+    about: Follow Microsoft's security reporting guidance. Do not open a public issue.
   - name: Documentation
     url: https://peter-n91.github.io/hve-squad/
     about: Getting started, usage, maintaining, and troubleshooting guides.

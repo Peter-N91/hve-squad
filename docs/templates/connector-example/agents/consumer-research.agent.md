@@ -4,6 +4,10 @@ description: "Research approved repository and organization sources using consum
 user-invocable: true
 agents: []
 ---
+<!--
+Copyright (c) Microsoft Corporation.
+Licensed under the MIT license.
+-->
 
 # Consumer Research Agent
 

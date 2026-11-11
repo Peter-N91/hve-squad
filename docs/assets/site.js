@@ -1,3 +1,5 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT license.
 (() => {
   const readPreference = (key, fallback) => {
     try { return localStorage.getItem(`hve-docs-${key}`) || fallback; }

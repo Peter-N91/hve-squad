@@ -1,3 +1,8 @@
+---
+title: hve-squad
+description: A GitHub Copilot plugin composing HVE Core and Squad agents, skills, rules, and hooks.
+---
+
 <p align="center">
   <img src="docs/assets/logo.svg" alt="hve-squad logo" width="120" height="120" />
 </p>
@@ -25,7 +30,7 @@
   <a href="https://scorecard.dev/viewer/?uri=github.com/Peter-N91/hve-squad"><img src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fapi.scorecard.dev%2Fprojects%2Fgithub.com%2FPeter-N91%2Fhve-squad&query=%24.score&label=openssf%20scorecard&suffix=%20%2F%2010&color=brightgreen" alt="OpenSSF Scorecard" /></a>
   <a href="https://www.bestpractices.dev/projects/14231"><img src="https://www.bestpractices.dev/projects/14231/badge" alt="OpenSSF Best Practices" /></a>
   <a href="https://github.com/Peter-N91/hve-squad/releases/latest"><img src="https://img.shields.io/github/v/release/Peter-N91/hve-squad?sort=semver" alt="Latest release" /></a>
-  <a href="./LICENSE"><img src="https://img.shields.io/github/license/Peter-N91/hve-squad" alt="License" /></a>
+  <a href="./LICENSE.TXT"><img src="https://img.shields.io/github/license/Peter-N91/hve-squad" alt="License" /></a>
   <a href="https://peter-n91.github.io/hve-squad/"><img src="https://img.shields.io/badge/docs-peter--n91.github.io%2Fhve--squad-blue" alt="Documentation" /></a>
 </p>
 <!-- markdownlint-enable MD013 MD033 -->
@@ -392,34 +397,77 @@ to try a fix before it ships; pin a released version for anything you depend on.
 
 ## Security
 
-Every change to `main` runs CodeQL, Checkov, Zizmor, OpenSSF Scorecard, and a
-three-tier conformance suite over the shipped agent assets. Third-party GitHub
-Actions are pinned to full commit SHAs and workflows run with least-privilege
-tokens.
+Repository workflows provide CodeQL, Checkov, Zizmor, OpenSSF Scorecard, and
+static package conformance checks. Behavioral and semantic test tiers are
+available separately; see [CONTRIBUTING.md](CONTRIBUTING.md) for what runs
+automatically and what requires a manual run. Third-party GitHub Actions are
+pinned to full commit SHAs and workflow token permissions are declared
+explicitly.
 
-To report a vulnerability, use
-[private security advisories](https://github.com/Peter-N91/hve-squad/security/advisories/new)
-rather than a public issue. See [SECURITY.md](SECURITY.md) for the threat model,
-scope, and response times.
+Do not report vulnerabilities through public GitHub issues. Follow
+[Microsoft's security reporting guidance](https://aka.ms/SECURITY.md).
+See [SECURITY.md](SECURITY.md) for the reporting policy and project scope.
+
+## Contributing
+
+Contributions are subject to the
+[Microsoft Contributor License Agreement](https://cla.opensource.microsoft.com/).
+See [CONTRIBUTING.md](CONTRIBUTING.md) for contribution, build, and test instructions.
+
+This project has adopted the
+[Microsoft Open Source Code of Conduct](https://opensource.microsoft.com/codeofconduct/).
+For more information, see [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) and the
+[Code of Conduct FAQ](https://opensource.microsoft.com/codeofconduct/faq/), or
+contact [opencode@microsoft.com](mailto:opencode@microsoft.com) with questions
+or comments.
+
+## Trademarks
+
+This project may contain trademarks or logos for projects, products, or services.
+Authorized use of Microsoft trademarks or logos is subject to and must follow
+[Microsoft's Trademark & Brand Guidelines](https://www.microsoft.com/en-us/legal/intellectualproperty/trademarks/usage/general).
+Use of Microsoft trademarks or logos in modified versions of this project must
+not cause confusion or imply Microsoft sponsorship. Any use of third-party
+trademarks or logos are subject to those third-party's policies.
+
+## Privacy and external services
+
+The documentation website loads Manrope, Source Sans 3, and JetBrains Mono from
+Google Fonts. Visiting the site can make browser requests to
+`fonts.googleapis.com` and `fonts.gstatic.com`, subject to
+[Google's Privacy Policy](https://policies.google.com/privacy).
+If these services are unavailable or blocked, the site uses system fallback
+fonts.
+
+The plugin runs through your selected Copilot host and model providers; their
+privacy and data-collection settings apply separately. Squad runtime artifacts
+can contain task information, and optional notification features send configured
+payloads to GitHub or a webhook. Review those destinations and avoid including
+secrets or personal information in public artifacts or notifications.
 
 ## License
 
-This project is licensed under the MIT License. See [LICENSE](LICENSE) for details.
+Copyright (c) Microsoft Corporation.
+
+This project is licensed under the MIT License. See [LICENSE.TXT](LICENSE.TXT) for details.
 
 The MIT License covers the original work in this repository (the `squad-src/`
 tree, `docs/`, `scripts/`, and package metadata). It does not extend to the
 third-party dependencies this package composes, which retain their own
-licenses. See [NOTICE](NOTICE) for attribution details.
+licenses. Documentation fonts also retain their own licenses. See [NOTICE](NOTICE)
+for attribution details.
 
 ## Acknowledgements
 
 hve-squad is a distribution and composition layer built on top of
 [microsoft/hve-core](https://github.com/microsoft/hve-core), which is licensed
-under the MIT License (© Microsoft Corporation). Dependencies are declared in
-[apm.yml](apm.yml) and fetched at install time into `apm_modules/` (not
-redistributed in this repository).
+under the MIT License (© Microsoft Corporation). The plugin bundles the pinned
+HVE Core content and its upstream notices. The APM fallback declares dependencies
+in [apm.yml](apm.yml) and fetches them at install time into `apm_modules/`.
 
 Some `hve-core` skill content is derived from OWASP Foundation publications and
 is licensed under [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/);
 those skills carry their own attribution. See [NOTICE](NOTICE) for the full
-third-party attribution and trademark notice.
+third-party attribution and trademark notice, including selected
+[github/awesome-copilot](https://github.com/github/awesome-copilot) resources,
+the adapted SQL migration advisor skill, and documentation fonts.

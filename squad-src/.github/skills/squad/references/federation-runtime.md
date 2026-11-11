@@ -1,6 +1,10 @@
 ---
 description: "Federation runtime: member scheduling, validated root writes and lifecycle policy."
 ---
+<!--
+Copyright (c) Microsoft Corporation.
+Licensed under the MIT license.
+-->
 
 # Federation Runtime
 

@@ -1,3 +1,5 @@
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT license.
 # PSScriptAnalyzer lint for the PowerShell surface.
 #
 # PSScriptAnalyzer is the standard FLOSS linter for PowerShell. It runs over the

@@ -1,3 +1,5 @@
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT license.
 name: Release Prep
 
 # Turns the fragments collected in .changes/unreleased/ into a release.

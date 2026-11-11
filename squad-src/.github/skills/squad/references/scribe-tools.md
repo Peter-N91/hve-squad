@@ -2,6 +2,10 @@
 name: squad-scribe-tools
 description: "Configure Scribe tools for a consumer project; consult only when changing tool access or adding a persistence adapter."
 ---
+<!--
+Copyright (c) Microsoft Corporation.
+Licensed under the MIT license.
+-->
 
 # Scribe Tool Configuration
 

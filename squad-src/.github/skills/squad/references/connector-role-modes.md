@@ -7,6 +7,10 @@ metadata:
   spec_version: "1.1"
   last_updated: "2026-10-21"
 ---
+<!--
+Copyright (c) Microsoft Corporation.
+Licensed under the MIT license.
+-->
 
 # Squad Connector Role Modes (Contract 1.1)
 

@@ -1,3 +1,5 @@
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT license.
 name: Release
 
 # Triggered explicitly by Release Prep, or manually for a hotfix/direct release.
