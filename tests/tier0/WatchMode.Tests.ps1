@@ -450,6 +450,7 @@ BeforeAll {
         ReceivedAt = '2026-10-19T08:00:00Z'
     }
     $script:WatchWorkflow = Get-Content -LiteralPath (Join-Path $script:SourceRootResolved '.github/workflows/squad-watch.yml') -Raw
+    # The pinned fixture import must not leak its catalog paths into later tests.
     Import-Module $script:WatchModule -Force
 }
 
@@ -989,6 +990,220 @@ Describe 'GATE-48 Watch Mode lifecycle handoff gate' {
         $script:WatchWorkflow | Should -Match ([regex]::Escape('triggerReceivedAt: ${{ steps.prep.outputs.triggerReceivedAt }}'))
         $script:WatchWorkflow | Should -Match ([regex]::Escape('-ReceivedAt $env:TRIGGER_RECEIVED_AT'))
         $script:WatchWorkflow | Should -Not -Match ([regex]::Escape("'.agents', 'apm_modules', 'install.log'"))
+    }
+}
+
+Describe 'GATE-48 Watch workflow handoff preflight and record repair' {
+    BeforeAll {
+        $extractor = @'
+import json, sys, yaml
+from pathlib import Path
+workflow = yaml.safe_load(Path(sys.argv[1]).read_text(encoding="utf-8"))
+names = {"Prepare handoff validator", "Run the squad", "Stage changes for handoff"}
+print(json.dumps({step["name"]: step["run"] for step in workflow["jobs"]["interpret"]["steps"] if step.get("name") in names}))
+'@
+        $json = & python -c $extractor (Join-Path $script:SourceRootResolved '.github/workflows/squad-watch.yml')
+        if ($LASTEXITCODE -ne 0) { throw 'Could not extract Watch handoff steps.' }
+        $script:HandoffSteps = $json | ConvertFrom-Json -AsHashtable
+        $script:HandoffEnvironmentNames = @(
+            'RUNNER_TEMP', 'GITHUB_WORKSPACE', 'GITHUB_OUTPUT', 'GITHUB_STEP_SUMMARY',
+            'SUB_SQUAD', 'SOURCE_THREAD', 'SOURCE_THREAD_NUMBER', 'STABLE_REF',
+            'TRIGGER_RUN_ID', 'TRIGGER_SOURCE', 'TRIGGER_REF', 'TRIGGER_EVENT_ID',
+            'TRIGGER_ACTOR', 'TRIGGER_RECEIVED_AT', 'SQUAD_WATCH_TRUSTED_SHA',
+            'WATCH_MODULE_HASH', 'BASELINE_HASH', 'VALIDATOR_HASH', 'EXISTING_PR',
+            'PUBLICATION_BRANCH_EXISTS', 'COPILOT_GITHUB_TOKEN', 'SQUAD_PROMPT_FILE',
+            'MODEL_OVERRIDE', 'SQUAD_MODEL', 'RUN_KIND', 'WATCH_TEST_SCENARIO'
+        )
+    }
+
+    BeforeEach {
+        $script:SavedHandoffEnvironment = @{}
+        foreach ($environmentName in $script:HandoffEnvironmentNames) {
+            $script:SavedHandoffEnvironment[$environmentName] = [Environment]::GetEnvironmentVariable($environmentName, 'Process')
+        }
+    }
+
+    AfterEach {
+        foreach ($environmentName in $script:SavedHandoffEnvironment.Keys) {
+            [Environment]::SetEnvironmentVariable($environmentName, $script:SavedHandoffEnvironment[$environmentName], 'Process')
+        }
+        Import-Module $script:WatchModule -Force
+    }
+
+    It 'checks real evidence before cleanup, preserves narrative in Notes, and rechecks the protected validator at staging' {
+        $workspace = Join-Path $TestDrive 'preflight-workspace'
+        Initialize-WatchModeRepository -Repository $workspace
+        Set-WatchModeTestFile -Path (Join-Path $workspace 'app.txt') -Content 'before'
+        Save-WatchModeRepository -Repository $workspace
+        $baseline = New-WatchModeBaseline -Workspace $workspace
+        $member = New-CompleteWatchModeMember -Workspace $workspace -CouncilSkipped
+        $teamPath = Join-Path $member 'team.md'
+        Set-WatchModeTestFile -Path $teamPath -Content (
+            (Get-Content -LiteralPath $teamPath -Raw) -replace '(?m)^\| architect \|[^\r\n]*\r?\n', ''
+        )
+        Set-WatchModeTestFile -Path (Join-Path $member 'decisions.md') -Content @'
+# Squad Decisions
+
+## Watch Profile Selection 2026-10-19T08:00:00Z autopilot-run-fixture
+* Selected Profile: default
+* Selected Packs: none
+* Dropped Packs: none
+* Reason: Workflow-selected canonical profile.
+* Source: watch-demand
+* Demand Ref: Peter-N91/hve-squad#1
+* Notification: none
+'@
+        Set-WatchModeTestFile -Path (Join-Path $member 'watch-questions.json') -Content '{"rows":[]}'
+        Set-WatchModeTestFile -Path (Join-Path $workspace 'app.txt') -Content 'after'
+        $trusted = Join-Path $workspace '.squad-trusted'
+        Initialize-WatchModeRepository -Repository $trusted
+        foreach ($relative in @(
+                'squad-src/.github/skills/squad/scripts/SquadWatch.psm1'
+                'squad-src/.github/skills/squad/scripts/SquadWatch.Delivery.ps1'
+                'squad-src/.github/skills/squad/scripts/Assert-SquadWatchTrustedCheckout.ps1'
+                'squad-src/.github/skills/squad/scripts/Invoke-SquadWatchMarkedBody.ps1'
+                'squad-src/.github/skills/squad/references/profiles-and-packs.md'
+                'scripts/New-ChangeFragment.ps1'
+                'tests/lib/SquadInstall.psm1'
+            )) {
+            $target = Join-Path $trusted $relative
+            New-Item -ItemType Directory -Path (Split-Path -Parent $target) -Force | Out-Null
+            Copy-Item -LiteralPath (Join-Path $script:SourceRootResolved $relative) -Destination $target
+        }
+        Save-WatchModeRepository -Repository $trusted
+        $env:SQUAD_WATCH_TRUSTED_SHA = ((Invoke-WatchModeGit -Repository $trusted -Arguments @('rev-parse', 'HEAD')).Output -join '').Trim()
+        $env:WATCH_MODULE_HASH = (Get-FileHash -LiteralPath (Join-Path $trusted 'squad-src/.github/skills/squad/scripts/SquadWatch.psm1')).Hash.ToLowerInvariant()
+        $env:RUNNER_TEMP = Join-Path $TestDrive 'preflight-temp'
+        New-Item -ItemType Directory -Path $env:RUNNER_TEMP -Force | Out-Null
+        Copy-Item -LiteralPath $baseline.Path -Destination (Join-Path $env:RUNNER_TEMP 'squad-watch-baseline.json')
+        $env:BASELINE_HASH = $baseline.Hash
+        $env:GITHUB_WORKSPACE = $workspace
+        $env:GITHUB_OUTPUT = Join-Path $env:RUNNER_TEMP 'outputs.txt'
+        $env:GITHUB_STEP_SUMMARY = Join-Path $env:RUNNER_TEMP 'summary.md'
+        $env:SUB_SQUAD = 'issue-1'
+        $env:SOURCE_THREAD = $script:WatchTrigger.Ref
+        $env:SOURCE_THREAD_NUMBER = '1'
+        $env:STABLE_REF = $script:WatchTrigger.Ref
+        $env:TRIGGER_RUN_ID = 'autopilot-run-fixture'
+        $env:TRIGGER_SOURCE = $script:WatchTrigger.Source
+        $env:TRIGGER_REF = $script:WatchTrigger.Ref
+        $env:TRIGGER_EVENT_ID = $script:WatchTrigger.EventId
+        $env:TRIGGER_ACTOR = $script:WatchTrigger.Actor
+        $env:TRIGGER_RECEIVED_AT = $script:WatchTrigger.ReceivedAt
+        $env:EXISTING_PR = ''
+        $env:PUBLICATION_BRANCH_EXISTS = 'false'
+        & ([scriptblock]::Create($script:HandoffSteps['Prepare handoff validator']))
+        $validator = Join-Path $env:RUNNER_TEMP 'squad-watch-handoff.ps1'
+        $patch = Join-Path $env:RUNNER_TEMP 'squad-watch.patch'
+        $env:VALIDATOR_HASH = (Get-FileHash -LiteralPath $validator).Hash.ToLowerInvariant()
+        $historyPath = Join-Path $member 'history/Squad Researcher.md'
+        $summaryPath = Join-Path $member 'history/autopilot-run-fixture.md'
+        $narrative = 'Research artifact produced with a repoint recommendation (thin charter running hve-slides).'
+        $history = Get-Content -LiteralPath $historyPath -Raw
+        $summary = Get-Content -LiteralPath $summaryPath -Raw
+        Set-WatchModeTestFile -Path $historyPath -Content $history.Replace('* Outcome: Completed successfully.', "* Outcome: $narrative")
+        Set-WatchModeTestFile -Path $summaryPath -Content $summary.Replace(
+            '| research | researcher | `history/Squad Researcher.md` | complete | none |',
+            ('| research | researcher | `history/Squad Researcher.md` | {0} | none |' -f $narrative)
+        )
+        Push-Location $workspace
+        try {
+            { & $validator -ValidateOnly } | Should -Throw "*'research' stage result is not complete*"
+            Test-Path -LiteralPath $patch | Should -BeFalse
+            Set-WatchModeTestFile -Path $historyPath -Content $history.Replace(
+                '* Outcome: Completed successfully.',
+                "* Outcome: Completed.`n* Notes: $narrative"
+            )
+            Set-WatchModeTestFile -Path $summaryPath -Content ($summary + "`n## Notes`n`n$narrative`n")
+            { & $validator -ValidateOnly } | Should -Not -Throw
+            Test-Path -LiteralPath $patch | Should -BeFalse
+            (Get-Content -LiteralPath $env:GITHUB_OUTPUT -Raw) | Should -Not -Match 'hasChanges='
+            & ([scriptblock]::Create($script:HandoffSteps['Stage changes for handoff']))
+            Test-Path -LiteralPath $patch | Should -BeTrue
+            (Get-Content -LiteralPath $patch -Raw) | Should -Match ([regex]::Escape($narrative))
+            (Get-Content -LiteralPath $env:GITHUB_OUTPUT -Raw) | Should -Match 'hasMaterialChanges=true'
+            Remove-Item -LiteralPath $patch -Force
+            Set-WatchModeTestFile -Path $historyPath -Content $history.Replace('* Outcome: Completed successfully.', '* Outcome: Failed.')
+            { & $validator -ValidateOnly } | Should -Throw '*latest outcome is not complete*'
+            Test-Path -LiteralPath $patch | Should -BeFalse
+            Add-Content -LiteralPath $validator -Value '# changed after preparation'
+            { & ([scriptblock]::Create($script:HandoffSteps['Stage changes for handoff'])) } |
+                Should -Throw '*validator changed after preparation*'
+            Test-Path -LiteralPath $patch | Should -BeFalse
+        }
+        finally {
+            Pop-Location
+        }
+    }
+
+    It 'runs the actual headless control flow without a model: <Name>' -ForEach @(
+        @{ Name = 'valid records'; Scenario = 'valid'; Kind = 'dispatch'; ExitCode = 0; Calls = 1; Checks = 1 }
+        @{ Name = 'one successful record repair'; Scenario = 'repair'; Kind = 'dispatch'; ExitCode = 0; Calls = 2; Checks = 2 }
+        @{ Name = 'unresolved failure'; Scenario = 'blocked'; Kind = 'dispatch'; ExitCode = 1; Calls = 2; Checks = 2 }
+        @{ Name = 'CLI execution failure'; Scenario = 'cli-failure'; Kind = 'dispatch'; ExitCode = 42; Calls = 1; Checks = 0 }
+        @{ Name = 'changed validator'; Scenario = 'tampered'; Kind = 'dispatch'; ExitCode = 1; Calls = 1; Checks = 0 }
+        @{ Name = 'review-only run'; Scenario = 'valid'; Kind = 'pull_request'; ExitCode = 0; Calls = 1; Checks = 0 }
+    ) {
+        $root = Join-Path $TestDrive "runner $Name"
+        New-Item -ItemType Directory -Path $root -Force | Out-Null
+        $env:RUNNER_TEMP = $root.Replace('\', '/')
+        $env:SQUAD_PROMPT_FILE = (Join-Path $root 'prompt.txt').Replace('\', '/')
+        Set-WatchModeTestFile -Path $env:SQUAD_PROMPT_FILE -Content 'Fixture task.'
+        $validator = Join-Path $root 'squad-watch-handoff.ps1'
+        Set-WatchModeTestFile -Path $validator -Content 'fixture validator'
+        $env:VALIDATOR_HASH = (Get-FileHash -LiteralPath $validator).Hash.ToLowerInvariant()
+        $env:COPILOT_GITHUB_TOKEN = 'fixture-not-a-token'
+        $env:SQUAD_MODEL = 'fixture-model'
+        $env:MODEL_OVERRIDE = ''
+        $env:RUN_KIND = $Kind
+        $env:WATCH_TEST_SCENARIO = $Scenario
+        $stubs = @'
+copilot() {
+  local count=0 id="" resume=""
+  [[ ! -f "$RUNNER_TEMP/calls" ]] || count="$(cat "$RUNNER_TEMP/calls")"
+  count=$((count + 1))
+  printf '%s' "$count" > "$RUNNER_TEMP/calls"
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --session-id) id="$2"; shift 2 ;;
+      --resume=*) resume="${1#--resume=}"; shift ;;
+      *) shift ;;
+    esac
+  done
+  if [[ "$count" == 1 ]]; then
+    [[ -n "$id" && -z "$resume" ]] || return 91
+    printf '%s' "$id" > "$RUNNER_TEMP/session"
+  else
+    [[ -z "$id" && "$resume" == "$(cat "$RUNNER_TEMP/session")" ]] || return 92
+  fi
+  [[ "$WATCH_TEST_SCENARIO" != cli-failure ]] || return 42
+  if [[ "$WATCH_TEST_SCENARIO" == tampered ]]; then
+    printf 'changed' > "$RUNNER_TEMP/squad-watch-handoff.ps1"
+  fi
+}
+pwsh() {
+  local count=0
+  [[ ! -f "$RUNNER_TEMP/checks" ]] || count="$(cat "$RUNNER_TEMP/checks")"
+  count=$((count + 1))
+  printf '%s' "$count" > "$RUNNER_TEMP/checks"
+  [[ "$*" == *-ValidateOnly* ]] || return 93
+  if [[ "$WATCH_TEST_SCENARIO" == blocked || ( "$WATCH_TEST_SCENARIO" == repair && "$count" == 1 ) ]]; then
+    echo 'Fixture lifecycle handoff blocked.'
+    return 1
+  fi
+  echo 'Fixture preflight passed.'
+}
+'@
+        $output = @(& bash -c ($stubs + "`n" + $script:HandoffSteps['Run the squad']) 2>&1)
+        $LASTEXITCODE | Should -Be $ExitCode -Because ($output -join "`n")
+        [int](Get-Content -LiteralPath (Join-Path $root 'calls') -Raw) | Should -Be $Calls
+        $checkCount = if (Test-Path -LiteralPath (Join-Path $root 'checks')) {
+            [int](Get-Content -LiteralPath (Join-Path $root 'checks') -Raw)
+        } else { 0 }
+        $checkCount | Should -Be $Checks
+        if ($Kind -ne 'pull_request') {
+            (Get-Content -LiteralPath $env:SQUAD_PROMPT_FILE -Raw) | Should -Match 'FINAL HANDOFF PREFLIGHT'
+        }
     }
 }
 

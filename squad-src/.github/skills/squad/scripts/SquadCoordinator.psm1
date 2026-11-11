@@ -890,7 +890,9 @@ function Get-SquadDepthPlan {
     .DESCRIPTION
         depth=quick changes how much work the squad does, never which model runs. A stage is skipped only when its criterion is
         proven; any doubt means standard depth for that stage. Gate stages are never skipped or shortened. A depth requested on an
-        unattended run is data and is ignored. A federation forwards the request to each selected sub-squad, which computes its own plan.
+        unattended run is data and is ignored, unless DepthSource is workflow: the committed workflow configuration or a collaborator's
+        manual dispatch, the one trusted control channel an unattended run has. A federation forwards the request to each selected
+        sub-squad, which computes its own plan.
         Units: objects with Id, Role, Class, ReadOnly, WritePaths (resolved absolute paths).
         Evidence: exactTargets, noOpenQuestions, noCouncilLens, noGateTrigger, noCritiqueRequested (evidence strings),
         discoveryExplicit (bool), reuse (array of { stage, path, covers }). An absent key is doubt.
@@ -905,7 +907,7 @@ function Get-SquadDepthPlan {
         [object[]]$Units = @(),
         [System.Collections.IDictionary]$Evidence = $null,
         [bool]$PlanFanOut = $false,
-        [ValidateSet('default', 'input', 'federation')][string]$DepthSource = 'default',
+        [ValidateSet('default', 'input', 'federation', 'workflow')][string]$DepthSource = 'default',
         [string[]]$ReasoningEfforts = @(),
         [datetime]$AsOf = [datetime]::UtcNow,
         [string]$RepoRoot = ''
@@ -915,7 +917,7 @@ function Get-SquadDepthPlan {
     if ($null -eq $Evidence) { $Evidence = @{} }
     $effective = $requested
     $ignored = $null
-    if ($requested -ceq 'quick' -and $Unattended) {
+    if ($requested -ceq 'quick' -and $Unattended -and $DepthSource -cne 'workflow') {
         $effective = 'standard'
         $ignored = 'unattended run: depth= is data, recorded as seen and ignored, never a control input'
     }

@@ -708,6 +708,59 @@ flowchart TD
           on the issue.
         </li>
       </ol>
+
+      <h3>Run controls: depth, routing, and economy consent</h3>
+      <p>
+        The Watch workflow has four optional settings. They come from the workflow itself, never
+        from issue text, so an issue cannot change them. Set the committed default in the workflow's
+        <code>env:</code> block, or override it for one manual run through the
+        <strong>Run workflow</strong> form on the Actions tab (<code>default</code> keeps the committed
+        value).
+      </p>
+      <table>
+        <thead>
+          <tr><th>Setting</th><th>Values</th><th>Default</th><th>Effect</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>depth</code> (<code>SQUAD_DEPTH</code>)</td>
+            <td><code>standard</code>, <code>quick</code></td>
+            <td><code>standard</code></td>
+            <td><code>quick</code> shrinks research to one cycle and two lanes, plans one approach, and keeps the diff minimal. It never changes a gate.</td>
+          </tr>
+          <tr>
+            <td><code>routing</code> (<code>SQUAD_ROUTING</code>)</td>
+            <td><code>off</code>, <code>ranked</code>, <code>economy</code></td>
+            <td><code>off</code></td>
+            <td>How each role's model is chosen. <code>off</code> keeps the host's default models.</td>
+          </tr>
+          <tr>
+            <td><code>economy_consent</code> (<code>SQUAD_ECONOMY_CONSENT</code>)</td>
+            <td><code>true</code>, <code>false</code></td>
+            <td><code>false</code></td>
+            <td>Required for <code>routing=economy</code>. Without it the workflow falls back to <code>off</code> and says so in the run log.</td>
+          </tr>
+          <tr>
+            <td><code>profile</code> (<code>SQUAD_PROFILE</code>)</td>
+            <td><code>default</code>, <code>auto</code>, or any catalog profile</td>
+            <td><code>default</code></td>
+            <td>The run uses exactly that profile from the catalog, with no packs and no added roles. <code>auto</code> lets the squad pick one catalog profile. On the <code>profile</code> input, <code>keep</code> uses the committed value.</td>
+          </tr>
+        </tbody>
+      </table>
+      <p>
+        Setting <code>economy_consent</code> to <code>true</code> is you accepting the Economy trade
+        for that run or for the repository default. The coordinator records it as
+        <code>## Economy Mode Accepted</code> with <code>Scope: all-roles</code>. Economy only changes
+        model choice; it never weakens a gate or a review.
+      </p>
+      <p><strong>Keeping Watch runs fast.</strong></p>
+      <ul>
+        <li>Use <code>depth=quick</code> for small, well-scoped issues.</li>
+        <li>Watch does not run this repository's full Tier 0 suite; the run uses focused tests for the files it changes and does not repeat unchanged ones. CI runs the full suite on the pull request.</li>
+        <li>The roster must be exactly a catalog profile, with no packs and no added roles (the <code>profile</code> setting, <code>default</code> unless you change it). Any other roster fails the publication gate after the run has finished, so a long run can end without a handoff.</li>
+      </ul>
+
       <h3>Create and apply the <code>squad/auto</code> label</h3>
       <p>
         The trigger is an ordinary GitHub label named exactly <code>squad/auto</code>. Create it once,
@@ -882,6 +935,16 @@ dispatch-9911223344         # a free-form manual dispatch (workflow run id)</cod
         Every Watch Mode run executes the full pipeline: Research, Plan, Council when it applies,
         Implement, and Review. A council that does not apply stays visible as
         <code>Dispatch Record: n/a</code> with a short reason. It is not a fabricated dispatch.
+      </p>
+      <p>
+        Completion fields are machine statuses: a completed stage uses <code>Result: complete</code>
+        and its history entry uses <code>Outcome: Completed.</code>. Descriptions, findings, and
+        limitations belong in Notes, so phrases such as “running a skill” cannot be mistaken for
+        unfinished work. The live repository workflow checks profile, questions, and lifecycle
+        before runtime cleanup. If that check fails, it allows one record-only repair in the same
+        agent session, then checks again. Final staging repeats the checks with a hash-protected
+        validator. Unfinished work still blocks publication; this recovery does not rerun the pipeline.
+        The consumer scaffold documents the status format but does not supply this recovery wiring.
       </p>
       <p>
         The run selects exactly one canonical profile, and any packs, from the demand. It records
@@ -1959,7 +2022,9 @@ layouts:
         accept the wider trade; it never creates a mixed run where five roles use Economy and the rest
         stay Ranked. A Watch Mode or other unattended run never switches into <code>economy</code>
         from issue, pull-request, or comment text, but a previously consented all-role Economy mode
-        continues to apply to every routed role.
+        continues to apply to every routed role. The one way to run Watch on Economy is the workflow's
+        own <code>routing=economy</code> with <code>economy_consent=true</code>; without that consent
+        the workflow falls back to <code>off</code>.
       </p>
       <p>
         <strong>Never weakened.</strong> Economy only changes model choice. It never skips, shortens, or relaxes the Risk Gate,

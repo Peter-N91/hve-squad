@@ -369,7 +369,12 @@ flowchart TD
       <p>
         Run <strong>Squad Watch</strong> from the Actions tab with an <code>issue_number</code> input to
         exercise the whole path against an issue you wrote yourself, without waiting for an upstream
-        change. Do this once before relying on the cron.
+        change. Do this once before relying on the cron. The same form offers optional
+        <code>depth</code> (<code>quick</code> for a faster run), <code>routing</code>
+        (<code>off</code>, <code>ranked</code>, <code>economy</code>), <code>economy_consent</code> and
+        <code>profile</code> inputs; leaving them at <code>default</code> (<code>keep</code> for
+        <code>profile</code>) keeps the workflow's committed values. Watch does
+        not run the full Tier 0 suite &mdash; run it in CI or locally with the shard runner.
       </p>
 
       <h3>Reviewing an adaptation PR</h3>
