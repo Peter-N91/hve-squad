@@ -45,7 +45,6 @@ agents:
   - BRD Quality Reviewer
   - Squad Data Scientist
   - Experiment Designer
-  - PowerPoint Subagent
   - Code Review Functional
   - Code Review Standards
   - Code Review Security

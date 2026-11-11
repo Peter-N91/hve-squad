@@ -607,7 +607,7 @@ Init with each profile and assert the seeded roster holds exactly the documented
 | PRF-07 | `modernization` | researcher, lead, developer, tester, modernizer, architect, azure-architect, iac-author, cost-manager, asbuilt-author, scribe |
 | PRF-08 | `compliance` | researcher, lead, developer, tester, security, supply-chain, vuln-manager, privacy, rai, accessibility, risk-manager, scribe |
 | PRF-09 | `operations` | researcher, lead, developer, tester, azure-diagnose, performance, observability, asbuilt-author, iac-author, deployer, scribe |
-| PRF-10 | `product` | researcher, lead, developer, tester, analyst, designer, product-owner, presenter, technical-writer, experimenter, data-scientist, intake-validator, scribe |
+| PRF-10 | `product` | researcher, lead, developer, tester, analyst, designer, product-owner, technical-writer, experimenter, data-scientist, intake-validator, scribe |
 | PRF-11 | `full` | the full 32-role set, and **only** it — no opt-in pack roles |
 
 | ID | Assertion |

@@ -92,8 +92,7 @@
           <tr><td>Exigences (BRD / PRD)</td><td>analyst (BRD Builder)</td><td>Transforme la découverte en un document d'exigences métier prêt à être approuvé.</td></tr>
           <tr><td>Feuille de route + backlog</td><td>product-owner (Functional Planner)</td><td>Organise le travail en une hiérarchie validée d'éléments de travail orientés objectifs.</td></tr>
           <tr><td>Validation peu coûteuse</td><td>experimenter (Experiment Designer)</td><td>Conçoit une expérimentation minimale viable pour l'hypothèse la plus risquée avant toute réalisation.</td></tr>
-          <tr><td>Présentation de direction</td><td>presenter (PowerPoint Subagent)</td><td>Une synthèse de tout le parcours, prête pour le conseil d'administration.</td></tr>
-          <tr><td>Recherche → Planification → Implémentation → Revue</td><td>researcher, lead, developer, tester</td><td>L'ossature méthodologique, intégrée au profil <code>product</code> aux côtés des spécialistes.</td></tr>
+                    <tr><td>Recherche → Planification → Implémentation → Revue</td><td>researcher, lead, developer, tester</td><td>L'ossature méthodologique, intégrée au profil <code>product</code> aux côtés des spécialistes.</td></tr>
         </tbody>
       </table>
 
@@ -121,7 +120,7 @@
         <p>
           <strong>Sans Azure, sans dépense, sans code.</strong> Chaque étape de cette démo produit un
           document métier. Elle peut donc être exécutée en direct sans risque devant un client non
-          technique — rien à déployer, rien à casser. Les rôles PowerPoint et documentation assurent
+          technique — rien à déployer, rien à casser. Le rôle documentation assure
           la transformation des productions de la squad en livrables qu'un client lit réellement.
         </p>
       </div>
@@ -214,7 +213,7 @@
       <h2>Étape 6 — Présentation de direction</h2>
       <pre><code>/squad request="Build an executive summary deck of the whole initiative: the problem, the journey, the requirements, the roadmap, and the experiment — for a non-technical leadership audience."</code></pre>
       <p>
-        Le <code>presenter</code> (PowerPoint Subagent) assemble une présentation prête pour le conseil
+        <strong>Remarque :</strong> le rôle <code>presenter</code> et le PowerPoint Subagent ont été supprimés avec hve-core f425e94 ; cette étape ne lance plus de générateur de présentation et reste un parcours historique. Auparavant, il assemblait une présentation prête pour le conseil
         d'administration à partir des livrables déjà produits par la squad. Le <strong>suivi
         systématique de revue (Review Follow-Through)</strong> sollicite ensuite <code>tester</code>
         pour vérifier la présentation par rapport aux livrables sources : le livrable final est donc
@@ -232,7 +231,7 @@
       <ul>
         <li><strong>Initialisation</strong> — propose le profil <code>product</code> et attend votre confirmation.</li>
         <li><strong>Recherche → Planification</strong> — découverte (researcher + designer), puis plan de la feuille de route (lead).</li>
-        <li><strong>Implémentation</strong> — analyst, product-owner, experimenter et presenter rédigent le BRD, le backlog, l'expérimentation et la présentation.</li>
+        <li><strong>Implémentation</strong> — analyst, product-owner, et experimenter rédigent le BRD, le backlog et l'expérimentation.</li>
         <li><strong>Revue</strong> — <code>tester</code> valide chaque livrable par rapport à la découverte et aux exigences.</li>
         <li><strong>Validation du résultat final</strong> — envoie une notification au contact que vous avez enregistré et attend votre accord avant de déclarer l'initiative terminée.</li>
       </ul>
@@ -257,7 +256,7 @@
           <tr><th>Si…</th><th>Alors…</th></tr>
         </thead>
         <tbody>
-          <tr><td>Un rôle n'est pas sollicité</td><td>Vérifiez que l'agent auquel il correspond est installé — le profil <code>product</code> associe <code>analyst</code>, <code>designer</code>, <code>product-owner</code>, <code>experimenter</code>, <code>presenter</code> et <code>technical-writer</code> aux agents HVE Core déployés.</td></tr>
+          <tr><td>Un rôle n'est pas sollicité</td><td>Vérifiez que l'agent auquel il correspond est installé — le profil <code>product</code> associe <code>analyst</code>, <code>designer</code>, <code>product-owner</code>, <code>experimenter</code> et <code>technical-writer</code> aux agents HVE Core déployés (le rôle <code>presenter</code> a été supprimé avec hve-core f425e94).</td></tr>
           <tr><td>La demande nécessite une revue de sécurité / coûts / architecture</td><td>La squad propose d'ajouter ces rôles ou de passer au profil <code>full</code> — acceptez, et le conseil se réunit.</td></tr>
           <tr><td>Aucun dépôt GitHub pour approuver depuis un téléphone</td><td>Conservez le canal par défaut <code>in-chat</code> et approuvez dans la session — rien ne bloque.</td></tr>
           <tr><td>L'outillage rencontre un problème en direct</td><td>Passez à une exécution préenregistrée du même scénario sur un cas neutre — le parcours est identique, la présentation ne perd donc jamais son fil.</td></tr>
