@@ -13,6 +13,7 @@
   const commands = [
     '/squad',
     '/squad-coach',
+    '/squad-doctor',
     '/squad-connector-builder',
     '/squad-external-agent-builder',
     '/squad-federation',
@@ -53,7 +54,7 @@
       console.warn('Could not save the host preference; it applies only to this page.', error);
     }
   };
-  const commandPattern = /^[ \t]*(\/squad(?:-coach|-connector-builder|-external-agent-builder|-federation|-document|-governance-report|-learn)?)(?=\s|$)[ \t]?(.*)$/;
+  const commandPattern = /^[ \t]*(\/squad(?:-coach|-doctor|-connector-builder|-external-agent-builder|-federation|-document|-governance-report|-learn)?)(?=\s|$)[ \t]?(.*)$/;
   const parseExample = text => {
     const requests = [];
     let current;

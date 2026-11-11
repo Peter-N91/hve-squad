@@ -104,13 +104,15 @@ copilot</code></pre>
         <pre><code>copilot plugin marketplace update hve-squad
 copilot plugin update hve-squad</code></pre>
         <h3>Check agent availability</h3>
-        <p>Ask the coordinator to run <code>squad-doctor</code>. Missing HVE Core domains now indicate a stale, disabled, or incomplete <code>hve-squad</code> installation: update or reinstall this one plugin and start a fresh session. Do not install a second <code>hve-core</code> plugin.</p>
+        <p data-release-change="20261106-squad-doctor">Select <strong>Squad Doctor</strong> directly after every upgrade, in a fresh session; request <code>check</code>, then <code>repair</code> to confirm supported fixes. No squad initialization is required. The Doctor runs deterministic scripts, checks runtime files, seven HVE Core domains and existing squad/member state, and repairs missing or invalid rate tables with backups and rechecks. Unsupported faults remain blockers; it does not invent history or reinstall plugins. Coordinators can invoke this same agent when runtime checks fail.</p>
+        <pre data-release-change="20261106-squad-doctor"><code>/squad-doctor check</code></pre>
+        <p>Missing HVE Core domains indicate a stale, disabled, or incomplete <code>hve-squad</code> installation: update or reinstall this one plugin and start a fresh session. Do not install a second <code>hve-core</code> plugin.</p>
       </section>
       <section data-host="app">
         <h2>Copilot App</h2>
         <p data-release-change="20261106-in-repo-self-contained-plugin">Open your project in the GitHub Copilot app and sign in. In <strong>Customize → Plugins</strong>, add the marketplace <code>Peter-N91/hve-squad#plugin</code> and install <code>hve-squad</code>.</p>
         <p>Verify the plugin inside the app itself. A terminal installation can use another <code>COPILOT_HOME</code> and does not prove that the app has the same installation. Look for <strong>Squad Coordinator</strong>, possibly listed as <code>hve-squad:squad-coordinator</code>.</p>
-        <p>Use the app's plugin update action to refresh the plugin. The update replaces both Squad and the bundled pinned HVE Core content together. Do not install a second <code>hve-core</code> plugin.</p>
+        <p data-release-change="20261106-squad-doctor">Use the app's plugin update action to refresh the plugin. The update replaces both Squad and the bundled pinned HVE Core content together. Start a fresh session, select <strong>Squad Doctor</strong> and request <code>check</code>, then <code>repair</code> for confirmed script-supported fixes. Do not install a second <code>hve-core</code> plugin.</p>
       </section>
       <section data-host="vscode">
       <h2>VS Code</h2>
@@ -120,7 +122,7 @@ copilot plugin update hve-squad</code></pre>
       <p>Run <strong>Chat: Manage Plugin Marketplaces</strong>, add <code>Peter-N91/hve-squad#plugin</code>, then open <strong>Chat: Open Customizations → Plugins</strong> and install <code>hve-squad</code>. Start a fresh Copilot session after installation.</p>
       <p>The installed plugin has one root and one version: Squad agents, HVE Core agents, skills, rules, and hooks update together. It contains no MCP server, so a missing Node or <code>npx</code> cannot prevent the plugin from loading.</p>
       <h3>Update</h3>
-      <p>Open <strong>Chat: Open Customizations → Plugins</strong> and choose <strong>Check for and Apply Updates</strong>. Start a fresh session, then run <code>squad-doctor</code>. Do not install the official <code>hve-core</code> plugin alongside HVE Squad.</p>
+      <p data-release-change="20261106-squad-doctor">Open <strong>Chat: Open Customizations → Plugins</strong> and choose <strong>Check for and Apply Updates</strong>. Start a fresh session, select <strong>Squad Doctor</strong> and request <code>check</code>; request <code>repair</code> to confirm script-supported fixes. Do not install the official <code>hve-core</code> plugin alongside HVE Squad.</p>
 
       <h3>Fallback — install the package into the repository with APM</h3>
       <p>Use this route only when the customizations must be copied into the repository rather than installed as a user or workspace plugin.</p>

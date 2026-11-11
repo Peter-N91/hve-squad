@@ -50,6 +50,7 @@ function Get-Tier0TestPlan {
                 'WriteSquadVerdict.Tests.ps1'
                 'BoundedLane.Tests.ps1'
                 'SquadCoach.Tests.ps1'
+                'SquadDoctor.Tests.ps1'
                 'ConnectorDispatch.Tests.ps1'
                 'GovernanceReport.Tests.ps1'
             )

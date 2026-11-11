@@ -16,6 +16,7 @@
     "squad-data-scientist.agent.md": "Claude Sonnet 5.5 (copilot)",
     "squad-deployer.agent.md": null,
     "squad-document.agent.md": null,
+    "squad-doctor.agent.md": null,
     "squad-external-agent-builder.agent.md": null,
     "squad-federation-coordinator.agent.md": null,
     "squad-governance-report.agent.md": null,

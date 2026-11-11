@@ -1,9 +1,10 @@
 ---
 name: Squad Coordinator
-description: "Route squad work to HVE Core agents with script-backed initialization, scheduling, persistence and completion proof."
+description: "Route work to HVE Core agents with scripted Init, scheduling, persistence and completion proof."
 user-invocable: true
 disable-model-invocation: true
 agents:
+  - Squad Doctor
   - Squad Scribe
   - Squad Connector
   - Squad Researcher
