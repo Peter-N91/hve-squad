@@ -337,7 +337,7 @@ Describe 'Deterministic fresh Init' -Tag 'Unit' {
     }
 
     It 'derives only permitted coordinator session attribution for <Session>' -ForEach @(
-        @{ Session = 'GPT-5.4'; Identity = 'GPT-5.4'; Source = 'session-inherited'; Price = 'GPT-5.4'; Basis = 'estimated'; CacheWrite = 0 }
+        @{ Session = 'GPT-5.3-Codex'; Identity = 'GPT-5.3-Codex'; Source = 'session-inherited'; Price = 'GPT-5.3-Codex'; Basis = 'estimated'; CacheWrite = 0 }
         @{ Session = ''; Identity = 'unknown'; Source = 'unresolved'; Price = 'Claude Sonnet 4.6'; Basis = 'tier-default'; CacheWrite = 24000 }
         @{ Session = 'Claude Opus 5 (Copilot)'; Identity = 'Claude Opus 5 (Copilot)'; Source = 'session-inherited'; Price = 'Claude Opus 5'; Basis = 'estimated'; CacheWrite = 24000 }
     ) {

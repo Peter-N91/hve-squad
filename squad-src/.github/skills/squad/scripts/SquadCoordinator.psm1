@@ -517,8 +517,7 @@ function New-SquadOrchestrationConsumption {
     )
     $concrete = $SessionModel.Trim() -notin @('', 'auto', 'unknown', 'fast', 'default', 'extended')
     $model = if ($concrete) { $SessionModel } else { 'unknown' }
-    $key = ($model -replace '\s*\((?:copilot|github|anthropic|openai)\)\s*$', '' -replace '[\s_]+', '-').ToLowerInvariant()
-    if ($key -in @('hydrafusion', 'hydrafusion-balance', 'hydrafusion-efficiency')) { $key = 'hydrafusion-max' }
+    $key = ConvertTo-SquadModelKey $model
     $own = @($modelTables[0].Rows | Where-Object { $key -in @(($_['Model (as routed)'] -replace '\s+', '-').ToLowerInvariant(), $_['Model ID'].Trim('`').ToLowerInvariant()) } | Select-Object -First 1)
     $tier = if ($own.Count) { $own[0].Tier } else { $FallbackTier }
     $fallback = @($fallbackTables[0].Rows | Where-Object { $_.Tier -eq $tier })
@@ -527,7 +526,7 @@ function New-SquadOrchestrationConsumption {
     $priceRows = @($modelTables[0].Rows | Where-Object { $_['Model (as routed)'] -eq $price })
     if ($priceRows.Count -ne 1) { throw 'Missing orchestration price row.' }
     $turns, $base, $growth, $output = $sizes
-    $factor = if ($key -eq 'hydrafusion-max') { 0.35 } else { 1.0 }
+    $factor = if ($key -eq 'hydrafusion-max') { 0.35 } elseif ($key -eq 'hydrafusion') { 0.55 } else { 1.0 }
     $gross = $turns * ($base + $growth * ($turns - 1) / 2.0) * $factor
     [ordered]@{
         model = $model; model_source = $(if ($concrete) { 'session-inherited' } else { 'unresolved' })
@@ -542,7 +541,9 @@ function ConvertTo-SquadModelKey {
     param([AllowEmptyString()][AllowNull()][string]$Value)
     if (-not $Value) { return '' }
     $key = ($Value.Trim().Trim('`') -replace '\s*\((?:copilot|github|anthropic|openai)\)\s*$', '' -replace '[\s_]+', '-').ToLowerInvariant()
-    if ($key -in @('hydrafusion', 'hydrafusion-balance', 'hydrafusion-efficiency')) { return 'hydrafusion-max' }
+    if ($key -in @('fusion', 'copilot-fusion', 'fusion-standard', 'copilot-fusion-standard', 'hydrafusion-standard', 'hydrafusion-efficiency')) { return 'fusion-standard' }
+    if ($key -in @('hydrafusion', 'fusion-high', 'copilot-fusion-high', 'hydrafusion-high', 'hydrafusion-balance')) { return 'hydrafusion' }
+    if ($key -in @('hydrafusion-max', 'fusion-max', 'copilot-fusion-max')) { return 'hydrafusion-max' }
     $key
 }
 
@@ -642,7 +643,7 @@ function Get-SquadDispatchReservation {
         $prices[$name] = $value
     }
 
-    $tokenFactor = if ($modelKey -eq 'hydrafusion-max') { [decimal]0.35 } else { [decimal]1 }
+    $tokenFactor = if ($modelKey -eq 'hydrafusion-max') { [decimal]0.35 } elseif ($modelKey -eq 'hydrafusion') { [decimal]0.55 } else { [decimal]1 }
     $gross = [decimal]$turns * ([decimal]$base + [decimal]$growth * ($turns - 1) / 2) * $tokenFactor
     $inputTokens = [long][Math]::Round([double]($gross * [decimal]0.20))
     $cached = [long][Math]::Round([double]($gross * [decimal]0.80))

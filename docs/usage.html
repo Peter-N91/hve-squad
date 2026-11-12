@@ -1450,7 +1450,8 @@ flowchart TD
       </p>
       <p data-release-change="20261104-official-source-packs">
         Supported Power Pages, model-driven app, Dataverse, and .NET Agents SDK jobs select the local
-        charter. Broader Power Platform architecture, Copilot Studio, connector work, declarative agents,
+        charter. The separately approved preview adds local Copilot Studio knowledge YAML and skill import.
+        Broader Power Platform architecture, other Copilot Studio work, connector work, declarative agents,
         TypeSpec, and MCP-backed integration still select the community Alternate when that agent is
         installed. Power Automate, cloud flow, canvas app, DLP policy, and solution ALM select
         <code>Power Platform Expert</code>. Microsoft Graph, Graph SDK, and Graph permission scope select
@@ -1465,12 +1466,12 @@ flowchart TD
         commands for the skills registered with this change; whole-plugin forms were rejected where they
         pull hooks, extra agents, or tenant consent.
       </p>
-      <pre data-release-change="20261104-official-source-packs"><code>apm install microsoft/power-platform-skills/plugins/power-pages/skills/plan-alm/SKILL.md --target copilot
-apm install microsoft/power-platform-skills/plugins/model-apps/skills/app-builder/SKILL.md --target copilot
-apm install microsoft/power-platform-skills/plugins/mcp-apps/skills/generate-codeful-mcp-tool/SKILL.md --target copilot
-apm install microsoft/power-platform-skills/plugins/mcp-apps/skills/generate-mcp-app-ui/SKILL.md --target copilot
-apm install microsoft/Dataverse-skills/.github/plugins/dataverse/skills/dv-overview/SKILL.md --target copilot
-apm install microsoft/Dataverse-skills/.github/plugins/dataverse/skills/dv-connect/SKILL.md --target copilot
+      <pre data-release-change="20261104-official-source-packs"><code>apm install microsoft/power-platform-skills/plugins/power-pages/skills/plan-alm#8021d27d517d81963da22e728125a26c9ecfbbe1 --target copilot
+apm install microsoft/power-platform-skills/plugins/model-apps/skills/app-builder#8021d27d517d81963da22e728125a26c9ecfbbe1 --target copilot
+apm install microsoft/power-platform-skills/plugins/mcp-apps/skills/generate-codeful-mcp-tool#8021d27d517d81963da22e728125a26c9ecfbbe1 --target copilot
+apm install microsoft/power-platform-skills/plugins/mcp-apps/skills/generate-mcp-app-ui#8021d27d517d81963da22e728125a26c9ecfbbe1 --target copilot
+apm install microsoft/Dataverse-skills/.github/plugins/dataverse/skills/dv-overview#27e6f6a3fef23075ede87d8e5f028cde29e0130e --target copilot
+apm install microsoft/Dataverse-skills/.github/plugins/dataverse/skills/dv-connect#27e6f6a3fef23075ede87d8e5f028cde29e0130e --target copilot
 apm install microsoft/Agents/agent-plugins/agents-for-net/skills/agents-sdk-to-prod/SKILL.md --target copilot
 apm install microsoft/Agents/agent-plugins/agents-for-net/skills/agents-sdk-dotnet-otel/SKILL.md --target copilot
 apm install microsoft/Agents/agent-plugins/agents-sdk-common/skills/agents-sdk-provision/SKILL.md --target copilot
@@ -1505,6 +1506,135 @@ apm install microsoft/skills-for-fabric/skills/pipeline-migration --target copil
         Both advise and author files; neither runs <code>pac</code> against your tenant or publishes a
         connector, so nothing reaches a live environment without you doing it.
       </p>
+      <section data-release-change="20261111-power-platform-pack-parity">
+        <h3 id="power-platform-setup">Power Platform setup, with help from Squad</h3>
+        <p>
+          You do not need to choose technical package names yourself. Open your project in the host
+          where Squad is installed, then send this request. A pack adds expertise; it is not a
+          Power Platform licence, a connected environment, or permission to publish.
+        </p>
+        <pre><code>/squad request="Set up the Power Platform pack. Explain what will be installed, ask before installing, and leave the Copilot Studio preview out unless I approve it." pack=power-platform</code></pre>
+        <ol>
+          <li>
+            <strong>Choose what you need.</strong> Squad lists the missing resources and explains the
+            jobs they enable. The existing official set has six skills for Power Pages planning,
+            model-driven app authoring, Dataverse, and MCP tools/widgets. You can install all six,
+            select a subset, add the community supplements, or continue without them. The two
+            Copilot Studio preview skills are a separate choice, not a condition of using the pack.
+          </li>
+          <li>
+            <strong>Approve installation, not tenant access.</strong> Squad uses
+            <code>Install-SquadPackResources.ps1</code> for your approved selections. You should see
+            the actual commands and a receipt, not just advice to install them later. A
+            <code>PASS</code> receipt means the payload installation succeeded;
+            <code>PLANNED</code> means nothing was installed. If a command fails or you cancel,
+            Squad keeps the resource missing and explains the remedy. It does not install a CLI,
+            configure MCP, sign in, or grant consent for you.
+          </li>
+          <li>
+            <strong>Keep the support files.</strong> Some existing skills need shared files outside
+            their skill directory. Squad checks those files before using them. With your separate
+            approval, it can fetch the exact source snapshots below into the ignored dependency
+            folder, without activating their hooks, MCP configuration, or extra skills. If a folder
+            already exists, Squad checks its revision and contents instead of overwriting it.
+          </li>
+          <li>
+            <strong>Reload and verify.</strong> Reload or restart the host after installation, then
+            ask Squad to check again. Squad uses the host's actual skill list, not the install
+            receipt alone, and records each resource as <code>available</code> or
+            <code>declined</code>. Missing support files or prerequisites still block the affected
+            job. A visible skill is not proof of tenant connectivity.
+          </li>
+          <li>
+            <strong>Start with local files.</strong> The PP charters advise and author files only.
+            An upstream workflow that requires the main conversation is handed back to you.
+            Creating or cloning a cloud agent, connecting to a tenant, synchronizing, migrating,
+            importing a solution, and publishing are separate actions, not consequences of setup.
+          </li>
+        </ol>
+        <h4>Manual fallback: existing skills and support files</h4>
+        <p>
+          If Squad cannot run the installer, open a terminal at your project root. Check that Git,
+          APM, and Node.js are available; the preview requires Node.js 18 or later. If one is missing,
+          stop and follow <a href="getting-started.html">Getting started</a> and the
+          <a href="https://nodejs.org/en/download">Node.js installation instructions</a>, or ask Squad
+          for steps for your operating system. Do not approve unrelated global installations.
+          Run only the six pinned PP commands in the command block above that you actually chose.
+          They target directories: adding <code>/SKILL.md</code> makes these APM commands invalid.
+        </p>
+        <p>
+          For the shared support files, run the following only when the destination folders do not
+          exist. These are source checkouts, not activated plugins. The revision printed by each
+          final command must match the preceding full commit ID. Give Squad these support roots:
+          <code>plugins/power-pages/</code>, <code>plugins/model-apps/</code>,
+          <code>plugins/mcp-apps/</code>, and <code>.github/plugins/dataverse/</code>
+          inside the corresponding checkout. Keep the checkouts uncommitted.
+        </p>
+        <pre><code>git clone --config core.longpaths=true --filter=blob:none --no-checkout https://github.com/microsoft/power-platform-skills.git apm_modules/.squad-pack-support/power-platform-skills-8021d27
+git -C apm_modules/.squad-pack-support/power-platform-skills-8021d27 checkout --detach 8021d27d517d81963da22e728125a26c9ecfbbe1
+git -C apm_modules/.squad-pack-support/power-platform-skills-8021d27 rev-parse HEAD
+git clone --config core.longpaths=true --filter=blob:none --no-checkout https://github.com/microsoft/Dataverse-skills.git apm_modules/.squad-pack-support/dataverse-skills-27e6f6a
+git -C apm_modules/.squad-pack-support/dataverse-skills-27e6f6a checkout --detach 27e6f6a3fef23075ede87d8e5f028cde29e0130e
+git -C apm_modules/.squad-pack-support/dataverse-skills-27e6f6a rev-parse HEAD</code></pre>
+        <h4>Optional Copilot Studio preview: a complete plugin bundle</h4>
+        <p>
+          This is an experimental/WIP option from
+          <a href="https://github.com/microsoft/copilot-studio-plugin">Microsoft's Copilot Studio plugin repository</a>,
+          with support through upstream GitHub Issues only, not a production-readiness guarantee.
+          It is useful for adding knowledge files or importing a
+          reviewed skill into an <em>existing, locally cloned agentic-loop agent</em>. It does not
+          support Standard-agent topics through these PP charters, and it does not migrate an agent.
+          If you are unsure which agent model you have, let Squad check the local workspace first.
+        </p>
+        <p>
+          Approval installs the complete pinned payload: eight skills, four agents, two command
+          prompts, shared scripts/references, and a startup hook. Only <code>add-knowledge</code>
+          and <code>add-skill</code> are admitted PP jobs. The hook can run <code>npm install</code>
+          for <code>keytar</code> and <code>@azure/msal-node-extensions</code> and write a local
+          plugin-path index. This needs separate approval before startup setup; Squad does not run
+          the hook to complete installation. If the host cannot keep an unapproved hook from
+          running, decline the preview there. You can still use the ordinary PP pack.
+        </p>
+        <p>
+          Once you explicitly choose the preview and resolve that hook decision, Squad can install
+          its bundle once through either preview resource entry. For a manual installation, run
+          this single pinned command once, then reload the host. Do not install the two isolated
+          skill files: their shared schemas and scripts would be missing.
+        </p>
+        <pre><code>apm install microsoft/copilot-studio-plugin#4014ae689d1228d86cb3aaab938b1e66f8e2e10d --target copilot</code></pre>
+        <p>
+          The complete support root is <code>apm_modules/microsoft/copilot-studio-plugin/</code>.
+          Squad checks <code>reference/knowledge-schema.md</code>, <code>reference/skill-schema.md</code>,
+          and <code>scripts/add-skill.js</code> there; startup setup is not needed to find them.
+          Local authoring does not authorize an authenticated SharePoint/OneDrive access pre-check,
+          executing an imported skill, cloud synchronization, or publication.
+        </p>
+        <h4>Optional community supplements and broad-work Alternates</h4>
+        <p>
+          The three community skills are also selectable in PP preflight. The two community agents
+          remain optional Alternates for broader work; Squad offers their exact installation remedy
+          when needed and does not silently substitute a local charter. If you choose a manual
+          installation, run only the relevant lines below, then reload and ask Squad to verify.
+          Additional connector validation tools are prerequisites, not installed by these commands.
+        </p>
+        <pre><code>apm install github/awesome-copilot/skills/power-platform-architect#9db369d00f121542e1c99fd9b6cd6f707bade765 --target copilot
+apm install github/awesome-copilot/skills/power-platform-mcp-connector-suite#9db369d00f121542e1c99fd9b6cd6f707bade765 --target copilot
+apm install github/awesome-copilot/skills/mcp-copilot-studio-server-generator#9db369d00f121542e1c99fd9b6cd6f707bade765 --target copilot
+apm install github/awesome-copilot/agents/power-platform-expert.agent.md#9db369d00f121542e1c99fd9b6cd6f707bade765 --target copilot
+apm install github/awesome-copilot/agents/power-platform-mcp-integration-expert.agent.md#9db369d00f121542e1c99fd9b6cd6f707bade765 --target copilot</code></pre>
+        <h4>If setup stops</h4>
+        <table>
+          <thead><tr><th>What you see</th><th>What to do</th></tr></thead>
+          <tbody>
+            <tr><td>Installer or prerequisite not found</td><td>Keep the resource missing. Ask Squad for the named tool's setup steps; do not approve a blanket install.</td></tr>
+            <tr><td>Installed on disk, but not in the host's skill list</td><td>Reload the host, reopen the same project, and rerun PP preflight. Do not mark the resource available from the receipt alone.</td></tr>
+            <tr><td>Missing shared script/schema or wrong source revision</td><td>Ask Squad to check the support root and pinned revision above. Do not guess a schema or run an unrelated setup script.</td></tr>
+            <tr><td>Windows reports a path is too long</td><td>Use the repository-local long-path option in the snapshot commands above, or choose a shorter new support-folder path. Do not overwrite a partial checkout or change global Git settings.</td></tr>
+            <tr><td>Standard-agent workspace or a sign-in/consent request</td><td>Stop the preview job. Keep the existing agent model and use the broad-work Alternate or a separately approved setup path.</td></tr>
+            <tr><td>Cancelled or failed installation</td><td>Keep completed files, report the failed step, and choose an approved retry or decline that resource. The rest of the pack can remain active.</td></tr>
+          </tbody>
+        </table>
+      </section>
       <p>
         <code>m365-agent-architect</code> designs a Microsoft 365 Copilot declarative agent: what it
         should be able to do, how its instructions and conversation starters read, and whether it is

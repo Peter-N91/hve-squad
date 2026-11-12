@@ -339,11 +339,21 @@ function Get-ExistingOperatorRow {
     .SYNOPSIS
         Rows of the existing file's per-model table that the template does not list. Only a
         table with every structural column is read; any other shape carries no operator rows.
+        Historical retired rows (`—` Model ID with `(retired)`) and rows whose Model ID is
+        already governed by the template under a newer display name are skipped on reseed.
     #>
     param([string]$ExistingContent, [string]$SeedBlock)
 
     if (-not $ExistingContent) { return @() }
     $templateRates = Get-TemplateModelRates -SeedBlock $SeedBlock
+    $templateIds = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+    foreach ($tTable in (Get-MarkdownTableLocal -Content $SeedBlock)) {
+        if ('Model ID' -notin $tTable.Header) { continue }
+        foreach ($tRow in $tTable.Rows) {
+            $tid = ([string]$tRow['Model ID']).Trim()
+            if ($tid -and $tid -ne '—') { [void]$templateIds.Add($tid) }
+        }
+    }
     $table = @(Get-MarkdownTableLocal -Content $ExistingContent | Where-Object {
             $header = $_.Header
             'Model (as routed)' -in $header -and @($RateColumns + 'Model ID' + 'Tier' | Where-Object { $_ -notin $header }).Count -eq 0
@@ -352,7 +362,9 @@ function Get-ExistingOperatorRow {
 
     @($table.Rows | Where-Object {
             $name = $_['Model (as routed)']
-            $name -and $name -notmatch '^\(additional\)' -and -not $templateRates.ContainsKey($name)
+            $idCell = ([string]$_['Model ID']).Trim()
+            $isRetiredPlaceholder = ($idCell -eq '—' -and $name -match '(?i)\(retired\)$')
+            $name -and $name -notmatch '^\(additional\)' -and -not $templateRates.ContainsKey($name) -and -not $isRetiredPlaceholder -and -not $templateIds.Contains($idCell)
         })
 }
 

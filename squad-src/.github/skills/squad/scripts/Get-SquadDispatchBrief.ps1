@@ -385,12 +385,24 @@ foreach ($agent in $agentIndex.Values) {
 $isModelRow = { param($r) $r.Count -ge 7 -and $r[0] -ne 'Model (as routed)' -and $r[2] -notmatch '^\d' -and $r[3] -match '^\d' }
 $rates = @(Get-TableRows (Join-Path $SquadRoot 'consumption-rates.md') | Where-Object { & $isModelRow $_ }) +
 @(Get-TableRows (Join-Path $refs 'consumption-rates-template.md') | Where-Object { & $isModelRow $_ })
+function ConvertTo-BriefModelKey {
+    param([string]$Model)
+    if (-not $Model) { return '' }
+    $key = ($Model.ToLowerInvariant().Trim().Trim('`') -replace '\s*\((?:copilot|github|anthropic|openai)\)\s*$', '' -replace '[\s_]+', '-')
+    if ($key -in @('fusion', 'copilot-fusion', 'fusion-standard', 'copilot-fusion-standard', 'hydrafusion-standard', 'hydrafusion-efficiency')) { return 'fusion-standard' }
+    if ($key -in @('hydrafusion', 'fusion-high', 'copilot-fusion-high', 'hydrafusion-high', 'hydrafusion-balance')) { return 'hydrafusion' }
+    if ($key -in @('hydrafusion-max', 'fusion-max', 'copilot-fusion-max')) { return 'hydrafusion-max' }
+    $key
+}
 function Find-Rate {
     param([string]$Model)
     if (-not $Model) { return $null }
-    $key = $Model.ToLowerInvariant().Trim()
-    if ($key -in @('hydrafusion', 'hydrafusion-balance', 'hydrafusion-efficiency')) { $key = 'hydrafusion-max' }
-    foreach ($row in $rates) { if ($row[0].ToLowerInvariant() -eq $key -or $row[1].ToLowerInvariant() -eq $key) { return $row } }
+    $key = ConvertTo-BriefModelKey $Model
+    foreach ($row in $rates) {
+        $nameKey = ConvertTo-BriefModelKey $row[0]
+        $idKey = ConvertTo-BriefModelKey $row[1]
+        if ($nameKey -eq $key -or ($idKey -and $idKey -eq $key)) { return $row }
+    }
     $null
 }
 
@@ -420,8 +432,9 @@ function New-Consumption {
     param([string]$Model, [string]$Source, [string]$Class)
     $floor = if ($estimator.ContainsKey($Class)) { $estimator[$Class] } else { $estimator['implementation'] }
     $t, $base, $growth, $perTurn = $floor
-    $isHydra = ($Model -match '(?i)^hydrafusion')
-    $tokenFactor = if ($isHydra) { 0.35 } else { 1.0 }
+    $modelKey = ConvertTo-BriefModelKey $Model
+    $isHydra = ($modelKey -in @('fusion-standard', 'hydrafusion', 'hydrafusion-max'))
+    $tokenFactor = if ($modelKey -eq 'hydrafusion-max') { 0.35 } elseif ($modelKey -eq 'hydrafusion') { 0.55 } else { 1.0 }
     $gross = $t * ($base + $growth * ($t - 1) / 2) * $tokenFactor
     $rate = Find-Rate $Model
     [ordered]@{

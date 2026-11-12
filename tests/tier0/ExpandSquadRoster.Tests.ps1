@@ -173,6 +173,15 @@ BeforeAll {
                         $decisions[$resource] = 'declined'
                     }
                 }
+                elseif ($pack -eq 'power-platform') {
+                    foreach ($resource in @(
+                            'plan-alm', 'app-builder', 'dv-overview', 'generate-codeful-mcp-tool',
+                            'generate-mcp-app-ui', 'dv-connect', 'power-platform-architect',
+                            'power-platform-mcp-connector-suite', 'mcp-copilot-studio-server-generator',
+                            'add-knowledge', 'add-skill')) {
+                        $decisions[$resource] = 'declined'
+                    }
+                }
             }
             if ($decisions.Count) { $Choices.resourceDecisions = $decisions }
         }
@@ -972,6 +981,9 @@ Describe 'All-present registered pack expansion' {
         }
         $plan.Result.ExitCode | Should -Be 0 -Because $plan.Result.Output
         (@($plan.Receipt.addedRoles | Sort-Object) -join ',') | Should -BeExactly 'pp-architect,pp-connector'
+        $plan.Receipt.packResources.Count | Should -Be 11
+        $plan.Receipt.packResources['add-knowledge'] | Should -BeExactly 'declined'
+        $plan.Receipt.packResources['add-skill'] | Should -BeExactly 'declined'
         (Invoke-Expansion -Repo $repo -Plan $plan).ExitCode | Should -Be 0
         $teamPath = Join-Path $root 'team.md'
         $applied = [IO.File]::ReadAllText($teamPath)
@@ -981,6 +993,9 @@ Describe 'All-present registered pack expansion' {
         $applied | Should -Match 'broader Power Platform architecture or Copilot Studio'
         $applied | Should -Match 'Squad Power Platform Integrator'
         $applied | Should -Match 'Power Platform MCP Integration Expert'
+        $applied | Should -Match 'Copilot Studio knowledge YAML'
+        $applied | Should -Match 'Copilot Studio skill import'
+        $applied | Should -Match 'preview'
 
         $removed = $applied -replace '(?m)^Packs: power-platform\r?\n', ''
         $removed = [regex]::Replace($removed, '(?m)^\| pp-(architect|connector) \|.*\r?\n', '')

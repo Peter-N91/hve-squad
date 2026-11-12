@@ -356,7 +356,7 @@ Describe 'Quick depth model-routing independence' {
         $base = @{
             squadRoot = $root
             sessionModel = 'gpt-5.6-sol'
-            availableModels = @('gpt-5.6-sol', 'gpt-5.4', 'claude-haiku-5.5')
+            availableModels = @('gpt-5.6-sol', 'gpt-5.6-terra', 'claude-haiku-5.5')
             units = @(
                 @{ id = 'work'; role = 'developer'; writePaths = @('src/work.ps1') }
                 @{ id = 'review'; role = 'tester'; dependsOn = @('work'); readOnly = $true }

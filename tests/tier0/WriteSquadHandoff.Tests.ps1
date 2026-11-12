@@ -1898,16 +1898,16 @@ Describe 'Write-SquadHandoff.ps1 derives omitted payload fields' {
         $statePath = Join-Path $root 'state.json'
         ((Get-Content -LiteralPath $statePath -Raw) -replace '"mode": "interactive"', '"mode": "autopilot"') | Set-Content -LiteralPath $statePath -Encoding utf8NoBOM -NoNewline
         $payload = New-MinimalPayload
-        $payload.historyRecords[0].passedModel = 'gpt-5.4-mini'
+        $payload.historyRecords[0].passedModel = 'mai-code-1.1-flash'
         $payload.stateAdvance.sessionModel = 'Claude Haiku 4.5'
         $result = Invoke-Writer -Root $root -Payload $payload
         $result.ExitCode | Should -Be 0 -Because $result.Output
         (Get-Content -LiteralPath $statePath -Raw | ConvertFrom-Json).mode | Should -Be 'autopilot'
 
         $block = Get-Block -Root $root -Agent 'Squad Researcher'
-        $block.model | Should -Be 'gpt-5.4-mini'
+        $block.model | Should -Be 'mai-code-1.1-flash'
         $block.model_source | Should -Be 'cli-pinned'
-        $block.priced_as | Should -Be 'GPT-5.4 mini'
+        $block.priced_as | Should -Be 'MAI-Code-1.1-Flash'
         $block.model_tier | Should -Be 'fast'
         $block.cache_write_tokens | Should -Be 0
 

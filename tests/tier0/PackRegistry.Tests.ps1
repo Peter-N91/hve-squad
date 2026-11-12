@@ -312,7 +312,14 @@ Describe 'Power Platform and M365 official selection' -Tag 'Unit' {
             $row[0][5].Trim() | Should -Match ([regex]::Escape($expected[$name]))
             $row[0][6].Trim() | Should -Match 'apm install .+ --target copilot'
             $row[0][7].Trim() | Should -Be 'MIT'
-            $row[0][10].Trim() | Should -Be '2026-11-04'
+            if ($row[0][1].Trim() -in @('pp-architect', 'pp-connector')) {
+                $row[0][10].Trim() | Should -Be '2026-11-11'
+                $row[0][6].Trim() | Should -Match '#[a-f0-9]{40} --target copilot'
+                $row[0][6].Trim() | Should -Not -Match '/SKILL\.md'
+            }
+            else {
+                $row[0][10].Trim() | Should -Be '2026-11-04'
+            }
             $row[0][8].Trim() | Should -Match 'Do not auto-install'
         }
 
@@ -338,10 +345,12 @@ Describe 'Power Platform and M365 official selection' -Tag 'Unit' {
             @{ Role = 'pp-architect'; Request = 'Power Pages ALM planning for a site'; Agent = 'Squad Power Platform Architect' }
             @{ Role = 'pp-architect'; Request = 'model-driven app building for claims'; Agent = 'Squad Power Platform Architect' }
             @{ Role = 'pp-architect'; Request = 'Dataverse overview of the tables'; Agent = 'Squad Power Platform Architect' }
+            @{ Role = 'pp-architect'; Request = 'Copilot Studio knowledge YAML for a cloned agentic-loop agent'; Agent = 'Squad Power Platform Architect' }
             @{ Role = 'pp-architect'; Request = 'broader Power Platform architecture for this tenant'; Agent = 'Power Platform Expert' }
             @{ Role = 'pp-architect'; Request = 'Copilot Studio topic design'; Agent = 'Power Platform Expert' }
             @{ Role = 'pp-connector'; Request = 'generate a codeful MCP tool'; Agent = 'Squad Power Platform Integrator' }
             @{ Role = 'pp-connector'; Request = 'Dataverse connection diagnostics'; Agent = 'Squad Power Platform Integrator' }
+            @{ Role = 'pp-connector'; Request = 'Copilot Studio skill import into this CLI-agent workspace'; Agent = 'Squad Power Platform Integrator' }
             @{ Role = 'pp-connector'; Request = 'broader connector or integration work and certification'; Agent = 'Power Platform MCP Integration Expert' }
             @{ Role = 'm365-agent-architect'; Request = '.NET Agents SDK production readiness review'; Agent = 'Squad M365 Agent Architect' }
             @{ Role = 'm365-agent-architect'; Request = 'declarative agent with a TypeSpec manifest'; Agent = 'Declarative Agents Architect' }
@@ -355,9 +364,9 @@ Describe 'Power Platform and M365 official selection' -Tag 'Unit' {
             @{ Role = 'pp-architect'; Request = 'review this pull request'; Agent = 'Squad Power Platform Architect' }
         )
         $phrases = @(
-            'Power Pages ALM planning, model-driven app building, or Dataverse overview → Squad Power Platform Architect'
+            'Power Pages ALM planning, model-driven app building, Dataverse overview, or Copilot Studio knowledge YAML → Squad Power Platform Architect'
             'broader Power Platform architecture or Copilot Studio, Power Automate, cloud flow, canvas app, DLP policy, or solution ALM → Power Platform Expert'
-            'codeful MCP tool or UI generation, or Dataverse connection → Squad Power Platform Integrator'
+            'codeful MCP tool or UI generation, Dataverse connection, or Copilot Studio skill import → Squad Power Platform Integrator'
             'broader connector or integration work, custom connector, or connector certification → Power Platform MCP Integration Expert'
             '.NET Agents SDK production readiness → Squad M365 Agent Architect'
             'declarative agent, TypeSpec, API plugin, or broader M365 architecture, Microsoft 365 Copilot agent, agent manifest, or Agents Toolkit → Declarative Agents Architect'
@@ -406,6 +415,84 @@ Describe 'Power Platform and M365 official selection' -Tag 'Unit' {
             foreach ($prompt in $prompts) {
                 $prompt | Should -Not -Match ('(?m)^agent:\s*' + [regex]::Escape($name) + '\s*$')
             }
+        }
+    }
+
+    It 'offers every PP skill through shared preflight and keeps preview installation complete and optional (SRC-08)' {
+        $rows = @(Get-MarkdownTableRows `
+                -Body (Get-MarkdownSectionBody -Body $script:RosterCatalogBody -Heading 'Registered External Cast') `
+                -HeaderCell 'Role')
+        $ppSkills = @($rows | Where-Object {
+                $_[1].Trim() -in @('pp-architect', 'pp-connector') -and $_[4].Trim() -eq 'skill'
+            })
+        $mapped = @(
+            Get-MarkdownTableRows `
+                -Body (Get-MarkdownSectionBody -Body $script:RosterCatalogBody -Heading 'Registered Pack Skills') `
+                -HeaderCell 'Pack' |
+                Where-Object { $_[1].Trim() -eq 'power-platform' } |
+                ForEach-Object { $_[2].Trim().Trim('`') } |
+                Sort-Object
+        )
+        $mapped | Should -HaveCount 11
+        $mapped -join ',' | Should -BeExactly (@($ppSkills | ForEach-Object { $_[3].Trim().Trim('`') } | Sort-Object) -join ',')
+        $profileRow = @(Get-MarkdownTableRows -Body $script:ProfilesBody -HeaderCell 'Resource pack' |
+                Where-Object { $_[1].Trim().Trim('`') -eq 'power-platform' })[0]
+        @($profileRow[2] -split ',' | ForEach-Object { $_.Trim() } | Sort-Object) -join ',' |
+            Should -BeExactly ($mapped -join ',')
+
+        foreach ($name in @('add-knowledge', 'add-skill')) {
+            $row = @($ppSkills | Where-Object { $_[3].Trim().Trim('`') -eq $name })
+            $row | Should -HaveCount 1
+            $row[0][5].Trim() | Should -BeExactly ('`microsoft/copilot-studio-plugin` (`vendor-official`), `skills/{0}/SKILL.md`' -f $name)
+            $row[0][6].Trim() | Should -BeExactly '`apm install microsoft/copilot-studio-plugin#4014ae689d1228d86cb3aaab938b1e66f8e2e10d --target copilot`'
+            $row[0][8] | Should -Match 'Preview/WIP'
+            $row[0][8] | Should -Match 'explicit preview approval'
+            $row[0][8] | Should -Match 'startup'
+            $row[0][7].Trim() | Should -BeExactly 'MIT'
+            $row[0][10].Trim() | Should -BeExactly '2026-11-11'
+        }
+        @($ppSkills | Where-Object { $_[3].Trim().Trim('`') -in @(
+                    'create-agent', 'clone-agent', 'pull-agent', 'push-agent', 'publish-agent', 'delete-agent'
+                ) }) | Should -BeNullOrEmpty
+    }
+
+    It 'guards PP preview selection, support files and setup authority in both charters and guidance (SRC-09)' {
+        $guidance = Get-Content -LiteralPath (Join-Path $script:ReferenceRoot 'power-platform-official-resources.md') -Raw
+        $guidance | Should -Match 'Host visibility is not selection'
+        $guidance | Should -Match 'declined resource stays unavailable'
+        $guidance | Should -Match 'Preview is not the default'
+        $guidance | Should -Match 'all eight skills, four agents, two command prompts'
+        $guidance | Should -Match 'SessionStart'
+        $guidance | Should -Match 'npm install'
+        $guidance | Should -Match 'separate.*approval'
+        $guidance | Should -Match 'cannot keep unapproved hooks from running, do not install'
+        $guidance | Should -Match 'complete.*support|support.*complete'
+        $guidance | Should -Match 'source snapshot'
+        $guidance | Should -Match 'not registered squad capabilities'
+        $guidance | Should -Match 'https://peter-n91\.github\.io/hve-squad/usage\.html#power-platform-setup'
+        $script:ProfilesBody | Should -Match '(?s)For `power-platform`, read \[power-platform-official-resources\.md\].*?before asking to install resources'
+
+        foreach ($name in @('squad-pp-architect', 'squad-pp-connector')) {
+            $charter = Get-Content -LiteralPath (Join-Path $SourceRoot "squad-src/.github/agents/squad/$name.agent.md") -Raw
+            $charter | Should -Match 'only while this pack is active'
+            $charter | Should -Match 'user explicitly approved the preview'
+            $charter | Should -Match 'decision is not `declined`'
+            $charter | Should -Match 'missing support files is not ready'
+            $charter | Should -Match 'Do not write squad state'
+        }
+        $cast = @(Get-MarkdownTableRows `
+                -Body (Get-MarkdownSectionBody -Body $script:RosterCatalogBody -Heading 'Cast Catalog') `
+                -HeaderCell 'Role')
+        foreach ($role in @('pp-architect', 'pp-connector')) {
+            @($cast | Where-Object { $_[1].Trim() -eq $role })[0][4] | Should -Match 'preview: explicit approval'
+        }
+        foreach ($docs in @($script:EnglishDocs, $script:FrenchDocs)) {
+            $docs | Should -Match 'id="power-platform-setup"'
+            $docs | Should -Match 'copilot-studio-plugin#4014ae689d1228d86cb3aaab938b1e66f8e2e10d'
+            $docs | Should -Match 'npm install'
+            $docs | Should -Match 'rev-parse HEAD'
+            $docs | Should -Match 'git clone --config core.longpaths=true'
+            $docs | Should -Match 'apm install github/awesome-copilot/agents/power-platform-expert\.agent\.md#9db369d00f121542e1c99fd9b6cd6f707bade765 --target copilot'
         }
     }
 }

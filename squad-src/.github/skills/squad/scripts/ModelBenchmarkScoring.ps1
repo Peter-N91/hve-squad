@@ -76,46 +76,88 @@ function Get-SquadBenchmarkPolicy {
 
 function Get-SquadBenchmarkModelSpec {
     [CmdletBinding()]
-    param()
+    param(
+        [string]$CatalogPath = (Join-Path $PSScriptRoot '../references/model-catalog.md')
+    )
+
+    $knownOverrides = @{
+        'gpt-5.3-codex'        = @{ Display = 'GPT-5.3 Codex'; VersionRegex = '^gpt-5\.3-codex(_|$)' }
+        'gpt-5.4'              = @{ Display = 'GPT-5.4'; VersionRegex = '^gpt-5\.4(-2026-03-05)?(_|$)' }
+        'gpt-5.4-mini'         = @{ Display = 'GPT-5.4 Mini'; VersionRegex = '^gpt-5\.4-mini(-2026-03-17)?(_|$)' }
+        'gpt-5-mini'           = @{ Display = 'GPT-5 mini'; VersionRegex = '^gpt-5-mini(-2025-08-07)?(_|$)' }
+        'gpt-5.4-nano'         = @{ Display = 'GPT-5.4 Nano'; VersionRegex = '^gpt-5\.4-nano(-2026-03-17)?(_|$)' }
+        'claude-opus-4.8-fast' = @{ Display = 'Claude Opus 4.8'; VersionRegex = '^claude-opus-4-8(_|$)'; AliasOf = 'claude-opus-4.8' }
+        'claude-sonnet-4'      = @{ Display = 'Claude Sonnet 4'; VersionRegex = '^claude-sonnet-4-20250514(_|$)' }
+        'claude-haiku-4.5'     = @{ Display = 'Claude Haiku 4.5'; VersionRegex = '^claude-haiku-4-5(-20251001)?(_|$)' }
+        'fusion-standard'      = @{ Display = 'Copilot Fusion Standard'; VersionRegex = '^$'; AliasOf = 'gpt-6.1-terra' }
+        'hydrafusion'          = @{ Display = 'Copilot Fusion High'; VersionRegex = '^$'; AliasOf = 'gpt-6.1-terra' }
+        'hydrafusion-max'      = @{ Display = 'Copilot Fusion Max'; VersionRegex = '^$'; AliasOf = 'gpt-6.1-sol' }
+    }
+
+    if ($CatalogPath -and (Test-Path -LiteralPath $CatalogPath -PathType Leaf)) {
+        $raw = Get-Content -LiteralPath $CatalogPath -Raw
+        $specs = [ordered]@{}
+        $header = $null
+        foreach ($line in ($raw -split '\r?\n')) {
+            if ($line -notmatch '^\s*\|') { $header = $null; continue }
+            if ($line -match '^\s*\|[\s\-:|]+\|\s*$') { continue }
+            $cells = @(($line.Trim().Trim('|') -split '\|') | ForEach-Object { $_.Trim().Trim('`').Trim() })
+            if (-not $header) { $header = $cells; continue }
+            if ('Catalog ID' -notin $header -or 'Capability class' -notin $header -or 'Display name' -notin $header) { continue }
+            $cid = $cells[[array]::IndexOf($header, 'Catalog ID')]
+            $disp = $cells[[array]::IndexOf($header, 'Display name')]
+            if (-not $cid -or $specs.Contains($cid)) { continue }
+            if ($knownOverrides.ContainsKey($cid)) {
+                $specs[$cid] = @{} + $knownOverrides[$cid]
+            }
+            else {
+                $verPattern = if ($cid -like 'claude-*') {
+                    '^' + [regex]::Escape(($cid -replace '\.', '-')) + '(_|$)'
+                }
+                else {
+                    '^' + [regex]::Escape($cid) + '(_|$)'
+                }
+                $specs[$cid] = @{ Display = $disp; VersionRegex = $verPattern }
+            }
+        }
+        if ($specs.Count -gt 0) { return $specs }
+    }
 
     [ordered]@{
-        'gpt-5.6-sol' = @{ Display = 'GPT-5.6 Sol'; VersionRegex = '^gpt-5\.6-sol(_|$)' }
-        'gpt-6.1-sol' = @{ Display = 'GPT-6.1 Sol'; VersionRegex = '^gpt-6\.1-sol(_|$)' }
-        'gpt-6-sol' = @{ Display = 'GPT-6 Sol'; VersionRegex = '^gpt-6-sol(_|$)' }
-        'gpt-6-astra' = @{ Display = 'GPT-6 Astra'; VersionRegex = '^gpt-6-astra(_|$)' }
-        'gpt-5.5' = @{ Display = 'GPT-5.5'; VersionRegex = '^gpt-5\.5(_|$)' }
-        'gpt-5.4' = @{ Display = 'GPT-5.4'; VersionRegex = '^gpt-5\.4(-2026-03-05)?(_|$)' }
-        'gpt-5.6-terra' = @{ Display = 'GPT-5.6 Terra'; VersionRegex = '^gpt-5\.6-terra(_|$)' }
-        'gpt-5.3-codex' = @{ Display = 'GPT-5.3 Codex'; VersionRegex = '^gpt-5\.3-codex(_|$)' }
-        'gpt-5.4-mini' = @{ Display = 'GPT-5.4 Mini'; VersionRegex = '^gpt-5\.4-mini(-2026-03-17)?(_|$)' }
-        'gpt-5-mini' = @{ Display = 'GPT-5 mini'; VersionRegex = '^gpt-5-mini(-2025-08-07)?(_|$)' }
-        'gpt-5.4-nano' = @{ Display = 'GPT-5.4 Nano'; VersionRegex = '^gpt-5\.4-nano(-2026-03-17)?(_|$)' }
-        'gpt-6-luna' = @{ Display = 'GPT-6 Luna'; VersionRegex = '^gpt-6-luna(_|$)' }
-        'gpt-5.6-luna' = @{ Display = 'GPT-5.6 Luna'; VersionRegex = '^gpt-5\.6-luna(_|$)' }
-        'claude-opus-5.5' = @{ Display = 'Claude Opus 5.5'; VersionRegex = '^claude-opus-5-5(_|$)' }
-        'claude-opus-5' = @{ Display = 'Claude Opus 5'; VersionRegex = '^claude-opus-5(_|$)' }
-        'claude-opus-4.8' = @{ Display = 'Claude Opus 4.8'; VersionRegex = '^claude-opus-4-8(_|$)' }
-        'claude-opus-4.7' = @{ Display = 'Claude Opus 4.7'; VersionRegex = '^claude-opus-4-7(_|$)' }
+        'gpt-5.6-sol'          = @{ Display = 'GPT-5.6 Sol'; VersionRegex = '^gpt-5\.6-sol(_|$)' }
+        'gpt-6.1-sol'          = @{ Display = 'GPT-6.1 Sol'; VersionRegex = '^gpt-6\.1-sol(_|$)' }
+        'gpt-6.1-terra'        = @{ Display = 'GPT-6.1 Terra'; VersionRegex = '^gpt-6\.1-terra(_|$)' }
+        'gpt-6-sol'            = @{ Display = 'GPT-6 Sol'; VersionRegex = '^gpt-6-sol(_|$)' }
+        'gpt-6-astra'          = @{ Display = 'GPT-6 Astra'; VersionRegex = '^gpt-6-astra(_|$)' }
+        'gpt-5.6-terra'        = @{ Display = 'GPT-5.6 Terra'; VersionRegex = '^gpt-5\.6-terra(_|$)' }
+        'gpt-5.3-codex'        = @{ Display = 'GPT-5.3 Codex'; VersionRegex = '^gpt-5\.3-codex(_|$)' }
+        'gpt-5.4-nano'         = @{ Display = 'GPT-5.4 Nano'; VersionRegex = '^gpt-5\.4-nano(-2026-03-17)?(_|$)' }
+        'gpt-6-luna'           = @{ Display = 'GPT-6 Luna'; VersionRegex = '^gpt-6-luna(_|$)' }
+        'gpt-5.6-luna'         = @{ Display = 'GPT-5.6 Luna'; VersionRegex = '^gpt-5\.6-luna(_|$)' }
+        'claude-opus-5.5'      = @{ Display = 'Claude Opus 5.5'; VersionRegex = '^claude-opus-5-5(_|$)' }
+        'claude-opus-5'        = @{ Display = 'Claude Opus 5'; VersionRegex = '^claude-opus-5(_|$)' }
+        'claude-opus-4.8'      = @{ Display = 'Claude Opus 4.8'; VersionRegex = '^claude-opus-4-8(_|$)' }
         'claude-opus-4.8-fast' = @{ Display = 'Claude Opus 4.8'; VersionRegex = '^claude-opus-4-8(_|$)'; AliasOf = 'claude-opus-4.8' }
-        'claude-fable-5.1' = @{ Display = 'Claude Fable 5.1'; VersionRegex = '^claude-fable-5-1(_|$)' }
-        'claude-fable-5' = @{ Display = 'Claude Fable 5'; VersionRegex = '^claude-fable-5(_|$)' }
-        'claude-sonnet-5.5' = @{ Display = 'Claude Sonnet 5.5'; VersionRegex = '^claude-sonnet-5-5(_|$)' }
-        'claude-sonnet-5' = @{ Display = 'Claude Sonnet 5'; VersionRegex = '^claude-sonnet-5(_|$)' }
-        'claude-sonnet-4.6' = @{ Display = 'Claude Sonnet 4.6'; VersionRegex = '^claude-sonnet-4-6(_|$)' }
-        'claude-sonnet-4' = @{ Display = 'Claude Sonnet 4'; VersionRegex = '^claude-sonnet-4-20250514(_|$)' }
-        'claude-haiku-5.5' = @{ Display = 'Claude Haiku 5.5'; VersionRegex = '^claude-haiku-5-5(_|$)' }
-        'claude-haiku-4.5' = @{ Display = 'Claude Haiku 4.5'; VersionRegex = '^claude-haiku-4-5(-20251001)?(_|$)' }
-        'gemini-3.8-flash' = @{ Display = 'Gemini 3.8 Flash'; VersionRegex = '^gemini-3\.8-flash(_|$)' }
-        'gemini-3.7-flash' = @{ Display = 'Gemini 3.7 Flash'; VersionRegex = '^gemini-3\.7-flash(_|$)' }
-        'gemini-3.6-flash' = @{ Display = 'Gemini 3.6 Flash'; VersionRegex = '^gemini-3\.6-flash(_|$)' }
-        'gemini-3.5-flash' = @{ Display = 'Gemini 3.5 Flash'; VersionRegex = '^gemini-3\.5-flash(_|$)' }
-        'grok-4.7' = @{ Display = 'Grok 4.7'; VersionRegex = '^grok-4\.7(_|$)' }
-        'grok-4.6' = @{ Display = 'Grok 4.6'; VersionRegex = '^grok-4\.6(_|$)' }
-        'grok-4.5' = @{ Display = 'Grok 4.5'; VersionRegex = '^grok-4\.5(_|$)' }
-        'kimi-k3' = @{ Display = 'Kimi K3'; VersionRegex = '^kimi-k3(_|$)' }
-        'kimi-k2.7-code' = @{ Display = 'Kimi K2.7 Code'; VersionRegex = '^kimi-k2\.7-code(_|$)' }
-        'mai-code-1.1-flash' = @{ Display = 'MAI-Code-1.1-Flash'; VersionRegex = '^mai-code-1\.1-flash(_|$)' }
-        'hydrafusion-max' = @{ Display = 'GPT-6.1 Sol'; VersionRegex = '^gpt-6\.1-sol(_|$)'; AliasOf = 'gpt-6.1-sol' }
+        'claude-fable-5.2'     = @{ Display = 'Claude Fable 5.2'; VersionRegex = '^claude-fable-5-2(_|$)' }
+        'claude-fable-5.1'     = @{ Display = 'Claude Fable 5.1'; VersionRegex = '^claude-fable-5-1(_|$)' }
+        'claude-fable-5'       = @{ Display = 'Claude Fable 5'; VersionRegex = '^claude-fable-5(_|$)' }
+        'claude-sonnet-5.5'    = @{ Display = 'Claude Sonnet 5.5'; VersionRegex = '^claude-sonnet-5-5(_|$)' }
+        'claude-sonnet-5'      = @{ Display = 'Claude Sonnet 5'; VersionRegex = '^claude-sonnet-5(_|$)' }
+        'claude-sonnet-4.6'    = @{ Display = 'Claude Sonnet 4.6'; VersionRegex = '^claude-sonnet-4-6(_|$)' }
+        'claude-sonnet-4'      = @{ Display = 'Claude Sonnet 4'; VersionRegex = '^claude-sonnet-4-20250514(_|$)' }
+        'claude-haiku-5.5'     = @{ Display = 'Claude Haiku 5.5'; VersionRegex = '^claude-haiku-5-5(_|$)' }
+        'claude-haiku-4.5'     = @{ Display = 'Claude Haiku 4.5'; VersionRegex = '^claude-haiku-4-5(-20251001)?(_|$)' }
+        'gemini-4-argon'       = @{ Display = 'Gemini 4 Argon'; VersionRegex = '^gemini-4-argon(_|$)' }
+        'gemini-4-carbon'      = @{ Display = 'Gemini 4 Carbon'; VersionRegex = '^gemini-4-carbon(_|$)' }
+        'gemini-3.8-flash'     = @{ Display = 'Gemini 3.8 Flash'; VersionRegex = '^gemini-3\.8-flash(_|$)' }
+        'grok-4.7'             = @{ Display = 'Grok 4.7'; VersionRegex = '^grok-4\.7(_|$)' }
+        'grok-4.6'             = @{ Display = 'Grok 4.6'; VersionRegex = '^grok-4\.6(_|$)' }
+        'grok-4.5'             = @{ Display = 'Grok 4.5'; VersionRegex = '^grok-4\.5(_|$)' }
+        'kimi-k3'              = @{ Display = 'Kimi K3'; VersionRegex = '^kimi-k3(_|$)' }
+        'mai-code-1.1-flash'   = @{ Display = 'MAI-Code-1.1-Flash'; VersionRegex = '^mai-code-1\.1-flash(_|$)' }
+        'fusion-standard'      = @{ Display = 'Copilot Fusion Standard'; VersionRegex = '^$'; AliasOf = 'gpt-6.1-terra' }
+        'hydrafusion'          = @{ Display = 'Copilot Fusion High'; VersionRegex = '^$'; AliasOf = 'gpt-6.1-terra' }
+        'hydrafusion-max'      = @{ Display = 'Copilot Fusion Max'; VersionRegex = '^$'; AliasOf = 'gpt-6.1-sol' }
     }
 }
 
