@@ -241,6 +241,105 @@ Describe 'Compact confirmed initialization (COORD-01..03)' {
         $fabricResource.installed | Should -BeTrue
     }
 
+    It 'lists PP resources only for its active proposal and distinguishes disk from host visibility (SRC-08)' {
+        $repo = New-FixtureRepo
+        Write-FixtureText (Join-Path $repo '.agents/skills/add-knowledge/SKILL.md') "---`nname: add-knowledge`ndescription: Fixture.`n---`n"
+        $without = Invoke-Local 'Get-SquadInitContext.ps1' $repo @('-RepoRoot', $repo)
+        $without.ExitCode | Should -Be 0 -Because $without.Output
+        @(($without.Output | ConvertFrom-Json).packResources) | Should -BeNullOrEmpty
+
+        $withPack = Invoke-Local 'Get-SquadInitContext.ps1' $repo @('-RepoRoot', $repo, '-Pack', 'power-platform')
+        $withPack.ExitCode | Should -Be 0 -Because $withPack.Output
+        $context = $withPack.Output | ConvertFrom-Json
+        @($context.packResources) | Should -HaveCount 11
+        @($context.members.role | Sort-Object) | Should -Be @('pp-architect', 'pp-connector')
+        $knowledge = @($context.packResources | Where-Object resource -eq 'add-knowledge')[0]
+        $knowledge.installedOnDisk | Should -BeTrue
+        $knowledge.hostVisible | Should -BeFalse
+        $knowledge.installed | Should -BeFalse
+        $knowledge.installOrEntry | Should -Match 'apm install microsoft/copilot-studio-plugin#4014ae689d1228d86cb3aaab938b1e66f8e2e10d --target copilot'
+        @($context.packResources | Where-Object resource -eq 'add-skill')[0].roles | Should -Be @('pp-connector')
+
+        $visible = Invoke-Local 'Get-SquadInitContext.ps1' $repo @(
+            '-RepoRoot', $repo, '-Pack', 'power-platform', '-AvailableSkill', 'add-knowledge'
+        )
+        $visible.ExitCode | Should -Be 0 -Because $visible.Output
+        $available = @(($visible.Output | ConvertFrom-Json).packResources | Where-Object resource -eq 'add-knowledge')[0]
+        $available.installed | Should -BeTrue
+        Test-Path -LiteralPath (Join-Path $repo '.copilot-tracking') | Should -BeFalse
+    }
+
+    It 'requires every PP disposition while allowing the preview to be declined (SRC-10)' {
+        $repo = New-FixtureRepo
+        $data = Get-SquadInitData -RepoRoot $repo
+        $index = 0
+        foreach ($cast in $data.cast) {
+            $primary = $cast['Primary Agent (`name:`)']
+            if ($primary -notmatch '^[A-Za-z]' -or $primary -match '[/\\:]') { continue }
+            Write-FixtureText (Join-Path $repo '.github/agents' "fixture-$index.agent.md") "---`nname: $primary`n---`n"
+            $index++
+        }
+        $choices = New-Choices
+        $choices.packs = @('power-platform')
+        { New-SquadInitPayload -Choices $choices -RepoRoot $repo } | Should -Throw '*resourceDecisions*'
+        $choices.resourceDecisions = Get-PackResourceDecisions -Repo $repo -Packs @('power-platform')
+        $choices.resourceDecisions.Remove('add-skill')
+        { New-SquadInitPayload -Choices $choices -RepoRoot $repo } | Should -Throw '*Missing pack resource decision: add-skill*'
+        $choices.resourceDecisions['add-skill'] = 'declined'
+        $choices.resourceDecisions['add-knowledge'] = 'available'
+        { New-SquadInitPayload -Choices $choices -RepoRoot $repo } | Should -Throw '*not visible*'
+        $choices.resourceDecisions['add-knowledge'] = 'declined'
+
+        $payload = New-SquadInitPayload -Choices $choices -RepoRoot $repo
+        $payload.packResources.Count | Should -Be 11
+        $payload.packResources['add-knowledge'] | Should -BeExactly 'declined'
+        $payload.packResources['add-skill'] | Should -BeExactly 'declined'
+        @($payload.roster | Where-Object { $_.Role -like 'pp-*' } | ForEach-Object Role | Sort-Object) |
+            Should -Be @('pp-architect', 'pp-connector')
+        @($payload.roster | Where-Object { $_['Agent Name (Primary)'] -like 'Copilot Studio*' }) | Should -BeNullOrEmpty
+
+        $choices.availableSkills = @('add-knowledge', 'add-skill')
+        $choices.resourceDecisions['add-knowledge'] = 'available'
+        $accepted = New-SquadInitPayload -Choices $choices -RepoRoot $repo
+        $accepted.packResources['add-knowledge'] | Should -BeExactly 'available'
+        $accepted.packResources['add-skill'] | Should -BeExactly 'declined'
+        $choices.resourceDecisions['create-agent'] = 'available'
+        { New-SquadInitPayload -Choices $choices -RepoRoot $repo } | Should -Throw '*Unknown pack resource decision: create-agent*'
+    }
+
+    It 'previews PP directory and complete-bundle installs and honors a selected subset without writes (SRC-10)' {
+        $repo = New-FixtureRepo
+        $before = Get-FixtureHash $repo
+        $unconfirmed = Invoke-Local 'Install-SquadPackResources.ps1' $repo @(
+            '-RepoRoot', $repo, '-Pack', 'power-platform', '-WhatIf'
+        )
+        $unconfirmed.ExitCode | Should -Be 1
+        $unconfirmed.Output | Should -Match 'requires explicit confirmation'
+
+        $all = Invoke-Local 'Install-SquadPackResources.ps1' $repo @(
+            '-RepoRoot', $repo, '-Pack', 'power-platform', '-Confirmed', '-WhatIf'
+        )
+        $all.ExitCode | Should -Be 0 -Because $all.Output
+        $allLine = @($all.Output -split '\r?\n' | Where-Object { $_ -match '^\{"schemaVersion"' })[-1]
+        $allReceipt = $allLine | ConvertFrom-Json
+        $allReceipt.status | Should -BeExactly 'PLANNED'
+        @($allReceipt.resources) | Should -HaveCount 11
+        @($allReceipt.resources.commands) -join "`n" | Should -Not -Match '/SKILL\.md'
+        @($allReceipt.resources.commands) -join "`n" | Should -Match 'plan-alm#8021d27d517d81963da22e728125a26c9ecfbbe1 --target copilot'
+
+        $subset = Invoke-Local 'Install-SquadPackResources.ps1' $repo @(
+            '-RepoRoot', $repo, '-Pack', 'power-platform', '-Resource', 'add-knowledge',
+            '-Confirmed', '-WhatIf'
+        )
+        $subset.ExitCode | Should -Be 0 -Because $subset.Output
+        $subsetLine = @($subset.Output -split '\r?\n' | Where-Object { $_ -match '^\{"schemaVersion"' })[-1]
+        $subsetReceipt = $subsetLine | ConvertFrom-Json
+        @($subsetReceipt.resources) | Should -HaveCount 1
+        $subsetReceipt.resources[0].commands | Should -Be @('apm install microsoft/copilot-studio-plugin#4014ae689d1228d86cb3aaab938b1e66f8e2e10d --target copilot')
+        $subsetReceipt.prerequisitesInstalled | Should -BeFalse
+        Get-FixtureHash $repo | Should -BeExactly $before
+    }
+
     It 'requires pack resource dispositions and persists the accepted Foundry activation' {
         $repo = New-FixtureRepo
         $data = Get-SquadInitData -RepoRoot $repo
@@ -1178,6 +1277,7 @@ Describe 'Pack Alternate resolution uses the dispatch plan' {
         $payloadPath = Join-Path $repo 'pack-init.json'
         $choices = New-Choices
         $choices.packs = @('power-platform')
+        $choices.resourceDecisions = Get-PackResourceDecisions -Repo $repo -Packs @('power-platform')
         $choices.runId = 'pp-pack'
         Write-FixtureJson $choicesPath $choices
         $prepared = Invoke-Local 'Get-SquadInitContext.ps1' $repo @('-RepoRoot', $repo, '-ChoicesPath', $choicesPath, '-PayloadPath', $payloadPath)
@@ -1314,6 +1414,7 @@ Describe 'Pack Alternate resolution uses the dispatch plan' {
         $payloadPath = Join-Path $repo 'both-pack-init.json'
         $choices = New-Choices
         $choices.packs = @('power-platform', 'm365-copilot')
+        $choices.resourceDecisions = Get-PackResourceDecisions -Repo $repo -Packs @('power-platform')
         $choices.runId = 'both-packs'
         Write-FixtureJson $choicesPath $choices
         $prepared = Invoke-Local 'Get-SquadInitContext.ps1' $repo @('-RepoRoot', $repo, '-ChoicesPath', $choicesPath, '-PayloadPath', $payloadPath)
