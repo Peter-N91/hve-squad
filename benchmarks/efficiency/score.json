@@ -1,43 +1,43 @@
 {
   "schema": "benchmark-score-v1",
   "scenario": "task-cli-cold-start",
-  "measuredAt": "2026-10-26T16:26:36Z",
+  "measuredAt": "2026-11-12T18:02:49Z",
   "source": {
-    "commit": "3bf61f082aa96ff195caba6d68efc7bb22c62e36",
-    "squadSourceHash": "19670b6ad9395846fef577c0c367be5d4fc951ebe0fa7e3c5029b0e835dfce0c",
+    "commit": "6d178b059ff1cac5134c831207f32360ed1e267b",
+    "squadSourceHash": "a307835b4384c73821a3c4919b85eeb25726e5d5fadcb1acfae3dbb878144ac4",
     "uncommittedChanges": false
   },
   "environment": {
     "model": "claude-sonnet-5.5",
-    "cli": "GitHub Copilot CLI 1.0.104-3. Run 'copilot update' to check for updates.",
-    "powershell": "7.6.7"
+    "cli": "GitHub Copilot CLI 1.0.106-9. Run 'copilot update' to check for updates.",
+    "powershell": "7.7.0"
   },
   "runs": {
-    "requested": 1,
-    "scored": 1,
-    "failed": 0
+    "requested": 3,
+    "scored": 2,
+    "failed": 1
   },
   "summary": {
-    "quality": 82.0,
+    "quality": 81.5,
     "dimensions": {
-      "businessClarity": 16.0,
-      "scopeFidelity": 15.0,
-      "acceptanceCriteria": 17.0,
-      "traceability": 18.0,
-      "risksAndDecisions": 16.0
+      "businessClarity": 17.0,
+      "scopeFidelity": 18.0,
+      "acceptanceCriteria": 16.5,
+      "traceability": 15.0,
+      "risksAndDecisions": 15.0
     },
-    "functional": 1,
+    "functional": 3,
     "workflow": 0,
     "criticalHighFindings": 0,
-    "averageSeconds": 1308.813,
-    "averageCredits": 496.355651,
+    "averageSeconds": 1362.393,
+    "averageCredits": 320.31289875,
     "activity": {
-      "scribeDispatches": 1.0,
-      "scribeModelRequests": 3.0,
-      "scribeSeconds": 11.481,
-      "scribeCredits": 0.37845,
-      "coordinatorModelRequests": 46.0,
-      "authorModelRequests": 40.0
+      "scribeDispatches": 0.0,
+      "scribeModelRequests": 0.0,
+      "scribeSeconds": 0.0,
+      "scribeCredits": 0.0,
+      "coordinatorModelRequests": 45.5,
+      "authorModelRequests": 7.0
     }
   },
   "trials": [
@@ -46,28 +46,91 @@
       "scored": true,
       "quality": 82.0,
       "dimensions": {
-        "businessClarity": 16.0,
-        "scopeFidelity": 15.0,
+        "businessClarity": 18.0,
+        "scopeFidelity": 18.0,
         "acceptanceCriteria": 17.0,
-        "traceability": 18.0,
-        "risksAndDecisions": 16.0
+        "traceability": 14.0,
+        "risksAndDecisions": 15.0
       },
       "functional": true,
       "workflow": false,
       "criticalHighFindings": 0,
-      "seconds": 1308.813,
-      "credits": 496.355651,
+      "seconds": 1467.4560000000001,
+      "credits": 335.28284399999995,
       "failedChecks": [
-        "requirements/reviewOutcome"
+        "init/scribeHistory",
+        "requirements/scribeHistory",
+        "requirements/reviewOutcome",
+        "requirements/stateVerifier",
+        "build/stateVerifier"
       ],
       "note": "",
       "activity": {
-        "scribeDispatches": 1.0,
-        "scribeModelRequests": 3.0,
-        "scribeSeconds": 11.481,
-        "scribeCredits": 0.37845,
-        "coordinatorModelRequests": 46.0,
-        "authorModelRequests": 40.0
+        "scribeDispatches": 0.0,
+        "scribeModelRequests": 0.0,
+        "scribeSeconds": 0.0,
+        "scribeCredits": 0.0,
+        "coordinatorModelRequests": 44.0,
+        "authorModelRequests": 6.0
+      }
+    },
+    {
+      "run": 2,
+      "scored": false,
+      "quality": null,
+      "dimensions": null,
+      "functional": true,
+      "workflow": false,
+      "criticalHighFindings": null,
+      "seconds": 1965.296,
+      "credits": null,
+      "failedChecks": [
+        "init/scribeHistory",
+        "requirements/scribeHistory",
+        "requirements/reviewOutcome",
+        "requirements/stateVerifier",
+        "build/stateVerifier"
+      ],
+      "note": "the judge result is missing or invalid",
+      "activity": {
+        "scribeDispatches": 0.0,
+        "scribeModelRequests": 0.0,
+        "scribeSeconds": 0.0,
+        "scribeCredits": 0.0,
+        "coordinatorModelRequests": 48.0,
+        "authorModelRequests": 7.0
+      }
+    },
+    {
+      "run": 3,
+      "scored": true,
+      "quality": 81.0,
+      "dimensions": {
+        "businessClarity": 16.0,
+        "scopeFidelity": 18.0,
+        "acceptanceCriteria": 16.0,
+        "traceability": 16.0,
+        "risksAndDecisions": 15.0
+      },
+      "functional": true,
+      "workflow": false,
+      "criticalHighFindings": 0,
+      "seconds": 1257.3300000000002,
+      "credits": 305.3429535,
+      "failedChecks": [
+        "init/scribeHistory",
+        "requirements/scribeHistory",
+        "requirements/stateVerifier",
+        "build/stateVerifier"
+      ],
+      "note": "",
+      "activity": {
+        "scribeDispatches": 0.0,
+        "scribeModelRequests": 0.0,
+        "scribeSeconds": 0.0,
+        "scribeCredits": 0.0,
+        "coordinatorModelRequests": 47.0,
+        "authorModelRequests": 8.0
       }
     }
   ]
