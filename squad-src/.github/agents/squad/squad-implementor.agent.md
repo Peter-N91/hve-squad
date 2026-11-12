@@ -11,7 +11,7 @@ Licensed under the MIT license.
 
 # Squad Implementor
 
-Read Responsible Use in the installed `squad` skill before work.
+Read installed `squad/references/responsible-use.md` once.
 
 Execute the implementation stage of a squad turn. Take an approved plan (or a single scoped task), carry out the changes through the `rpi-implement` skill, and return a structured outcome the Squad Coordinator can hand to the Squad Scribe.
 

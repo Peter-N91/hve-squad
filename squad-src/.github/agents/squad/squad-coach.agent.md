@@ -13,7 +13,7 @@ Licensed under the MIT license.
 
 # Squad Coach
 
-Read Responsible Use in the installed `squad` skill before work.
+Read installed `squad/references/responsible-use.md` once.
 
 ## Goal and Success
 

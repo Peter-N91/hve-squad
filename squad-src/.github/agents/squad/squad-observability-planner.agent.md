@@ -11,7 +11,7 @@ Licensed under the MIT license.
 
 # Squad Observability Planner
 
-Read Responsible Use in the installed `squad` skill before work.
+Read installed `squad/references/responsible-use.md` once.
 
 Design what a system emits and what it is called. Produce an instrumentation plan — spans, metrics, structured logs, their attributes, their cardinality budget, and their PII handling — grounded in the `telemetry-foundations` skill, and return it to the Squad Coordinator.
 

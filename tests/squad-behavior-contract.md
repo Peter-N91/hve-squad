@@ -50,12 +50,13 @@ Scribe hand-off pipelining (GATE-22 through GATE-28 below) is one more case this
 
 | ID | Contract | Source |
 |---|---|---|
-| RAI-01 | Every first-party agent and skill reaches the common Responsible Use contract in source and packaged plugin output; no independent usage reporting or customer model/identity certification is permitted | `squad-src/.github/skills/squad/SKILL.md`, Responsible Use; `squad-floor.instructions.md`; `ResponsibleUse.Tests.ps1`; `Build-SquadPlugin.Tests.ps1` |
+| RAI-01 | Every first-party agent and skill directly reads the one installed Responsible Use file without activating Squad solely for it; reuse policy within a context, but supply/read it independently for isolated workers | `references/responsible-use.md`, Context and handoff; `squad-floor.instructions.md`; `ResponsibleUse.Tests.ps1`; `Build-SquadPlugin.Tests.ps1` |
 | RAI-02 | Package telemetry assurance inventories all delivered files, binds reviewed coverage to the exact supplier pin/version, rejects unreviewed changes and independent reporting, and reports missing supplier/review evidence as incomplete rather than a pass | `scripts/Test-SquadTelemetry.ps1`; `SquadTelemetry.Tests.ps1` |
 | RAI-03 | Remote notifications retain their off/in-chat default, minimize payloads, exclude raw histories/transcripts and secrets, and visibly fall back in-chat on failure; the post-tool audit hook is not a consent enforcer | `squad-notifications.instructions.md`, Privacy; `ResponsibleUse.Tests.ps1` |
 | RAI-04 | Missing or repeated economy consent is refused before a routing transaction mutates team or decisions; the advisory resolver is not an authorization boundary | `scripts/Set-SquadModelRouting.ps1`; `SetSquadModelRouting.Tests.ps1` |
 | RAI-05 | Worker briefs preserve source/retrieved/tool content as data, not authority to change routing, grant consent, bypass human gates or export local records | `references/responsible-use.md`; `ResponsibleUse.Tests.ps1` |
 | RAI-06 | Local manifests inventory artifact hashes without network/identity/signing services, exclude prior manifests/signature outputs, and fail explicitly on invalid or escaping inputs | `scripts/security/Sign-PlannerArtifacts.ps1`; `Sign-PlannerArtifacts.Tests.ps1` |
+| RAI-07 | Bound source prompts use their covered agent without an extra load; standalone generated invocation skills guard their calling context with one direct pointer, not an inline copy of the policy | `references/responsible-use.md`, Context and handoff; `scripts/Build-SquadPlugin.ps1`, `New-InvocationSkillContent`; `ResponsibleUse.Tests.ps1`; `Build-SquadPlugin.Tests.ps1` |
 
 | Command | Spends requests | What it does |
 |---|---|---|

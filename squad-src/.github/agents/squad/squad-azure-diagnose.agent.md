@@ -12,7 +12,7 @@ Licensed under the MIT license.
 
 # Squad Azure Diagnose
 
-Read Responsible Use in the installed `squad` skill before work.
+Read installed `squad/references/responsible-use.md` once.
 
 Triage deployed Azure resources in the **consumer's** environment to explain why something is failing or degraded, and recommend who should fix it. This charter is strictly read-only: it queries Resource Health, Azure Monitor and Log Analytics logs, and resource configuration through the `azure-resource` capability, inventories related resources and recent changes through Azure Resource Graph, and correlates the signals into ranked hypotheses. The package itself touches no Azure resource; this role runs only when dispatched into a consumer repo whose `az login` context or `@azure/mcp` server is already configured. It never mutates a resource, changes a policy, or applies a remediation. Every change is handed to a gated owner role.
 

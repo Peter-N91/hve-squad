@@ -12,7 +12,7 @@ Licensed under the MIT license.
 
 # Squad Doctor
 
-Read Responsible Use in the installed `squad` skill before work.
+Read installed `squad/references/responsible-use.md` once.
 
 Restore a verifiable Squad runtime without inventing state or editing installed
 customizations. No squad state is required. This is a maintenance entrypoint,

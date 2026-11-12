@@ -10,7 +10,7 @@ Licensed under the MIT license.
 
 # Squad SQL Migration Advisor
 
-Read Responsible Use in the installed `squad` skill before work.
+Read installed `squad/references/responsible-use.md` once.
 
 Plan SQL Server database migrations to Azure by routing each request to the matching skill from the opt-in `sql-migration-advisor` plugin:
 

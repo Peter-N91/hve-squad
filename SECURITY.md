@@ -51,8 +51,11 @@ research, tracker actions and explicitly enabled notifications are purposeful ta
 actions governed by their own authorization and payload contracts, not background
 usage reporting.
 
-The shared contract is the Squad skill's **Responsible Use** section, required
-by every first-party agent and skill and the Squad Agent Floor.
+The shared contract is
+[responsible-use.md](squad-src/.github/skills/squad/references/responsible-use.md),
+read directly from the discovered installed skill directory, without loading
+the Squad operating skill just to locate it. Reuse it once per independent
+context; isolated workers must receive it or read it themselves.
 These are instructions, not a sandbox:
 the host's permissions and customer configuration remain the enforcement boundary.
 Users and their organizations control model availability, entitlements, identities

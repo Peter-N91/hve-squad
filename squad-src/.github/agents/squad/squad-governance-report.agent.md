@@ -12,7 +12,7 @@ Licensed under the MIT license.
 
 # Squad Governance Report
 
-Read Responsible Use in the installed `squad` skill before work.
+Read installed `squad/references/responsible-use.md` once.
 
 Parse squad state — decisions, history, consumption, and notifications — to produce a self-contained HTML governance dashboard. The dashboard visualizes coordination activity, governance gates, cost distribution, role dispatch patterns, compliance indicators, and key outcomes so a developer or stakeholder can assess squad health at a glance.
 

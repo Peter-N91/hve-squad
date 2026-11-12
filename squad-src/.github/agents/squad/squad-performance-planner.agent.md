@@ -11,7 +11,7 @@ Licensed under the MIT license.
 
 # Squad Performance Planner
 
-Read Responsible Use in the installed `squad` skill before work.
+Read installed `squad/references/responsible-use.md` once.
 
 Turn a workload's vague "it should be fast and reliable" expectations into measurable service level indicators, service level objectives, error budgets, a characterized load model, a test matrix, and a reliability backlog. Run the `performance-slo-planner` skill against the assigned scope and return the plan path plus the decisions the Squad Coordinator must route.
 

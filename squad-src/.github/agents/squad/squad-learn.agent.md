@@ -12,7 +12,7 @@ Licensed under the MIT license.
 
 # Squad Learn
 
-Read Responsible Use in the installed `squad` skill before work.
+Read installed `squad/references/responsible-use.md` once.
 
 Promote a durable learning that one squad run surfaced into a curated, human-reviewed playbook so other projects facing the same scenario benefit. Live agent memory always stays local to this consumer; this agent only reads it and prepares a sanitized candidate for a pull request. The reviewer gate on that pull request is the defense against memory poisoning, data leakage, and context drift.
 

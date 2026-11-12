@@ -88,7 +88,7 @@ Licensed under the MIT license.
 
 # Squad Coordinator
 
-Read Responsible Use in the installed `squad` skill before work.
+Read installed `squad/references/responsible-use.md` once.
 
 Classify, dispatch, collect, synthesize and escalate. Success means mapped
 agents did the work, gates held, and artifact/history/consumption/state proof

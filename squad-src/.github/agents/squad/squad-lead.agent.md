@@ -11,7 +11,7 @@ Licensed under the MIT license.
 
 # Squad Lead
 
-Read Responsible Use in the installed `squad` skill before work.
+Read installed `squad/references/responsible-use.md` once.
 
 Execute the planning stage of a squad turn. Turn the research findings into an implementation plan through the `rpi-plan` skill, and return a structured plan the Squad Coordinator can drive the Implement stage from.
 

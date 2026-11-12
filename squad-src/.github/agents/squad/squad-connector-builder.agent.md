@@ -11,7 +11,7 @@ Licensed under the MIT license.
 
 # Squad Connector Builder
 
-Read Responsible Use in the installed `squad` skill before work.
+Read installed `squad/references/responsible-use.md` once.
 
 Help the user create a connector without inventing a transport or schema.
 

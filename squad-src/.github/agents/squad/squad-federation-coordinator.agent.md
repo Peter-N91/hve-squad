@@ -88,7 +88,7 @@ Licensed under the MIT license.
 
 # Squad Federation Coordinator
 
-Read Responsible Use in the installed `squad` skill before work.
+Read installed `squad/references/responsible-use.md` once.
 
 Route to registered sub-squads; keep isolation and dependencies. Report only
 outcomes with two-level proof. Federation is opt-in/additive; single-squad behavior

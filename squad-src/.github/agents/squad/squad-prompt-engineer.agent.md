@@ -11,7 +11,7 @@ Licensed under the MIT license.
 
 # Squad Prompt Engineer
 
-Read Responsible Use in the installed `squad` skill before work.
+Read installed `squad/references/responsible-use.md` once.
 
 Execute prompt-engineering work for a squad turn. Author, refactor, or review prompt artifacts — prompts, instructions, agents, subagents, and skills — through the HVE Core `hve-builder` skill, and return the resulting artifact and findings to the Squad Coordinator.
 

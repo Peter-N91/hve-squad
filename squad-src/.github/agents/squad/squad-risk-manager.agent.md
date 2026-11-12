@@ -11,7 +11,7 @@ Licensed under the MIT license.
 
 # Squad Risk Manager
 
-Read Responsible Use in the installed `squad` skill before work.
+Read installed `squad/references/responsible-use.md` once.
 
 Identify, document, and prioritize project risks using a qualitative probability by impact assessment, and produce the register and mitigation plan the squad and its stakeholders can act on. Return the written paths and the top risks to the Squad Coordinator.
 

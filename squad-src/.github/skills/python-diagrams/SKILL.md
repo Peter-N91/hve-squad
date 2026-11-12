@@ -14,7 +14,7 @@ Licensed under the MIT license.
 
 # Python Diagrams
 
-Apply the `squad` skill's Responsible Use contract before using these templates.
+Read installed `squad/references/responsible-use.md` once.
 
 ## Overview
 

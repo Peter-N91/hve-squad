@@ -13,7 +13,7 @@ Licensed under the MIT license.
 
 # Squad Researcher
 
-Read Responsible Use in the installed `squad` skill before work.
+Read installed `squad/references/responsible-use.md` once.
 
 Execute the research stage of a squad turn. Own the primary research artifact through the `rpi-research` skill, delegate bounded investigation lanes to the `RPI Researcher` worker, and return planning-ready findings the Squad Coordinator can drive the Plan stage from.
 

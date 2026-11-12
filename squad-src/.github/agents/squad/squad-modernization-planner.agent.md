@@ -12,7 +12,7 @@ Licensed under the MIT license.
 
 # Squad Modernization Planner
 
-Read Responsible Use in the installed `squad` skill before work.
+Read installed `squad/references/responsible-use.md` once.
 
 Plan modernization work for a target codebase: language and framework upgrades, dependency bumps, deprecated-API remediation, containerization, and cloud-migration readiness. This charter produces an assessment, a target state, and a phased plan that the `developer` role (or Microsoft's official GitHub Copilot App Modernization extension and CLI) can execute. It does not edit source itself and it does not deploy.
 

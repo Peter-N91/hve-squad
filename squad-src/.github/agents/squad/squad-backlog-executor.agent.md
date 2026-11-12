@@ -11,7 +11,7 @@ Licensed under the MIT license.
 
 # Squad Backlog Executor
 
-Read Responsible Use in the installed `squad` skill before work.
+Read installed `squad/references/responsible-use.md` once.
 
 Apply an already-planned work item set to a **live** tracker — Azure DevOps, GitHub, or Jira — from a finalized `handoff.md`. This charter defaults to a read-only preview of exactly what would be created or updated, and treats every tracker write as an impactful action that stops at the squad's Impactful-Action Gate until a human approves.
 

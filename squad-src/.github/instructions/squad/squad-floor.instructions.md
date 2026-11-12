@@ -9,8 +9,8 @@ Licensed under the MIT license.
 
 # Squad Agent Floor
 
-Every shipped Squad agent/skill reads Responsible Use in the installed `squad`
-skill before work. Other rules bind squad turns, not ordinary project work.
+Squad entrypoints: Read installed `squad/references/responsible-use.md` once.
+Other rules bind squad turns, not ordinary project work.
 Detailed schemas/manual accounting: `squad` skill's `references/state-write-contract.md`.
 
 ## Scope and Ownership

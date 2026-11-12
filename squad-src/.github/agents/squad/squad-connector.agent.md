@@ -11,7 +11,7 @@ Licensed under the MIT license.
 
 # Squad Connector
 
-Read Responsible Use in the installed `squad` skill before work.
+Read installed `squad/references/responsible-use.md` once.
 
 Run the installed squad skill's `scripts/Invoke-SquadConnectorDispatch.ps1` once
 and return its JSON verbatim. This thin dispatchable shim retains the roster,

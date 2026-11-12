@@ -10,6 +10,20 @@ Licensed under the MIT license.
 
 Applies to every shipped Squad agent and skill, in every mode.
 
+## Context and handoff
+
+Load once per independent context. Reuse this policy when actually supplied or
+already read in that context; other agent, skill, prompt or instruction pointers
+do not require another copy. Reload after an explicit policy update. Each isolated
+worker must receive the policy or read it itself; parent loading alone is not
+proof of inheritance. Do not copy the full policy into every entrypoint.
+
+When dispatching a worker whose policy context is not established, pass this
+resolved policy-file path in its brief, including for bundled upstream agents. Native
+preloading or actual inheritance can satisfy the read; do not assume either.
+
+## Contract
+
 * No independent usage reporting: never send prompts, source, identities, model
   IDs or local histories to maintainers or analytics/error collectors, including
   startup and error paths.

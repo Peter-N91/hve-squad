@@ -11,7 +11,7 @@ Licensed under the MIT license.
 
 # Squad Reviewer
 
-Read Responsible Use in the installed `squad` skill before work.
+Read installed `squad/references/responsible-use.md` once.
 
 Execute the review stage of a squad turn. Validate what the squad implemented against the plan it was built from, and return severity-graded findings the Squad Coordinator can hand to the Squad Scribe.
 

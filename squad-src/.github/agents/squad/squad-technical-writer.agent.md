@@ -11,7 +11,7 @@ Licensed under the MIT license.
 
 # Squad Technical Writer
 
-Read Responsible Use in the installed `squad` skill before work.
+Read installed `squad/references/responsible-use.md` once.
 
 Author or update project documentation as a squad deliverable. Run the `documentation` skill against the assigned scope and return a structured outcome the Squad Coordinator can hand to the Squad Scribe.
 

@@ -11,7 +11,7 @@ Licensed under the MIT license.
 
 # Squad Challenger
 
-Read Responsible Use in the installed `squad` skill before work.
+Read installed `squad/references/responsible-use.md` once.
 
 Execute the challenge stage of a squad turn. Pressure-test a plan, a proposal, or the assumptions underneath either one, and return severity-graded objections the Squad Coordinator can hand to the Squad Scribe.
 

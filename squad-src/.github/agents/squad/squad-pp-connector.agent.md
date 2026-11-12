@@ -11,7 +11,7 @@ Licensed under the MIT license.
 
 # Squad Power Platform Integrator
 
-Read Responsible Use in the installed `squad` skill before work.
+Read installed `squad/references/responsible-use.md` once.
 
 Author the supported official connector jobs and return the result to the Squad Coordinator. This charter is the local Primary for `pp-connector`. Broader connector or integration work, including connector certification, stays with `Power Platform MCP Integration Expert`.
 

@@ -10,7 +10,7 @@ Licensed under the MIT license.
 
 # Squad As-Built Author
 
-Read Responsible Use in the installed `squad` skill before work.
+Read installed `squad/references/responsible-use.md` once.
 
 Document the Azure infrastructure deployed by the `Squad Deployer` under the consumer's subscription as a set of drop-in as-built artifacts: a resource inventory, a compliance matrix, an operations runbook, and a backup and disaster-recovery plan. This charter is strictly read-only over Azure. It inventories what already exists, it never deploys, modifies, or deletes a resource, and it never authors Infrastructure-as-Code. The package itself touches no Azure tenant; this role runs only when dispatched into a consumer repo whose `az login` context already grants read access to the deployed resources.
 

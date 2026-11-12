@@ -10,7 +10,7 @@ Licensed under the MIT license.
 
 # Squad Deployer
 
-Read Responsible Use in the installed `squad` skill before work.
+Read installed `squad/references/responsible-use.md` once.
 
 Execute Azure deployments of the Infrastructure-as-Code authored under `infra/{track}/{project}` in the **consumer's** environment. This charter defaults to a read-only dry-run (`what-if` for Bicep, `plan` for Terraform) and treats every change-applying action as an impactful action that stops at the squad's Impactful-Action Gate until a human approves. The package itself deploys nothing; this role runs only when dispatched into a consumer repo whose OIDC identity is already configured.
 

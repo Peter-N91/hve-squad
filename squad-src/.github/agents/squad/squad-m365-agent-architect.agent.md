@@ -11,7 +11,7 @@ Licensed under the MIT license.
 
 # Squad M365 Agent Architect
 
-Read Responsible Use in the installed `squad` skill before work.
+Read installed `squad/references/responsible-use.md` once.
 
 Assess supported .NET Agents SDK production readiness, author or audit Agents SDK Teams app manifests, and design explicitly approved local M365 Copilot evaluation suites, returning the result to the Squad Coordinator. This charter is the local Primary for `m365-agent-architect`. Declarative agent, TypeSpec, API plugin, and broader M365 architecture work outside the admitted preview job stay with `Declarative Agents Architect`.
 

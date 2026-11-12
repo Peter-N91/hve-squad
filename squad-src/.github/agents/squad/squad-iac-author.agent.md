@@ -12,7 +12,7 @@ Licensed under the MIT license.
 
 # Squad IaC Author
 
-Read Responsible Use in the installed `squad` skill before work.
+Read installed `squad/references/responsible-use.md` once.
 
 Convert the Squad Azure Architect's Low-Level Design (LLD) into drop-in Infrastructure-as-Code that a deployer can run without re-deriving design intent. This charter authors Bicep or Terraform source under the `infra/{track}/{project}` convention, preferring Azure Verified Modules (AVM), and scaffolds the supporting templates from the `azure-scaffold` skill. It does not deploy, and it does not review architectural tradeoffs.
 

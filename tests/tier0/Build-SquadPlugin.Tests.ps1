@@ -110,7 +110,7 @@ Describe 'PKG-14 Plugin host discovery and hook commands' -Tag 'Unit' {
         $script:BuildExitCode | Should -Be 0 -Because ($script:BuildOutput -join "`n")
     }
 
-    It 'ships the shared Responsible Use contract and its link from every first-party agent (RAI-01)' {
+    It 'ships one directly addressed Responsible Use contract for every first-party agent (RAI-01)' {
         $skill = [IO.File]::ReadAllText((Join-Path $script:OutputRoot 'skills/squad/SKILL.md'))
         $skill | Should -Match '## Responsible Use'
         $skill | Should -Match '\[Responsible Use\]\(references/responsible-use\.md\)'
@@ -118,7 +118,22 @@ Describe 'PKG-14 Plugin host discovery and hook commands' -Tag 'Unit' {
             Should -Match 'No independent usage reporting'
         foreach ($agent in Get-ChildItem (Join-Path $script:OutputRoot 'agents/squad') -Filter '*.agent.md') {
             [IO.File]::ReadAllText($agent.FullName) |
-                Should -Match 'Read Responsible Use in the installed `squad` skill before work\.'
+                Should -Match 'Read installed `squad/references/responsible-use\.md` once\.'
+        }
+        @(Get-ChildItem (Join-Path $script:OutputRoot 'skills') -Filter 'responsible-use.md' -Recurse).Count |
+            Should -Be 1
+    }
+
+    It 'guards every standalone invocation context without copying policy text (RAI-07)' {
+        $invocations = @(Get-ChildItem (Join-Path $script:OutputRoot 'skills/squad/invocations') -Filter 'SKILL.md' -Recurse)
+        $invocations.Count | Should -BeGreaterThan 0
+        foreach ($invocation in $invocations) {
+            $body = [IO.File]::ReadAllText($invocation.FullName)
+            [regex]::Matches($body, 'Read installed `squad/references/responsible-use\.md` once\.').Count |
+                Should -Be 1
+            $body | Should -Not -Match 'No independent usage reporting'
+            Test-Path -LiteralPath (Join-Path $script:OutputRoot 'skills/squad/references/responsible-use.md') |
+                Should -BeTrue
         }
     }
 

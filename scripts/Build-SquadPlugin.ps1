@@ -1147,6 +1147,13 @@ Perform this as a direct file-write action — it is a mechanical copy-and-rewri
 '@
     }
 
+    # Invocation skills also run in a caller context distinct from their workers.
+    $heading = [regex]::new('(?m)^(# [^\r\n]+)\r?$')
+    foreach ($name in @($skills.Keys)) {
+        $skills[$name] = $heading.Replace($skills[$name],
+            '$1' + "`n`n" + 'Read installed `squad/references/responsible-use.md` once.', 1)
+    }
+
     $agents = @(Get-SourceFileList -Source $Source -RepoRoot $RepoRoot -RelativeDir 'squad-src/.github/agents/squad')
     $prompts = @(Get-SourceFileList -Source $Source -RepoRoot $RepoRoot -RelativeDir 'squad-src/.github/prompts/squad')
     $conditionalEntrypoints = @(

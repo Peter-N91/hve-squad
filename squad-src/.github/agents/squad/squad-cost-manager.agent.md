@@ -13,7 +13,7 @@ Licensed under the MIT license.
 
 # Squad Cost Manager
 
-Read Responsible Use in the installed `squad` skill before work.
+Read installed `squad/references/responsible-use.md` once.
 
 Produce indicative Azure cost estimates and apply Microsoft Well-Architected Cost Optimization guidance to a proposed workload. Delegate all pricing lookups to the Squad Researcher so the charter stays markdown-only and free of embedded rate cards, then synthesize an estimate, a confidence band, explicit assumptions, lower-cost alternatives, and CO checklist findings for the Squad Coordinator to consume. Separately, review the squad's own AI spend (Copilot AI credits and model tokens) against the value it delivered, using the FinOps unit-economics measures the ledger records.
 
