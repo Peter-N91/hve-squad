@@ -195,7 +195,13 @@ function ConvertTo-CanonicalModelIdLocal {
         return ''
     }
     $id = ($Value.Trim().ToLowerInvariant() -replace '\s*\((?:copilot|github|anthropic|openai)\)\s*$', '' -replace '[\s_]+', '-')
-    if ($id -in @('hydrafusion', 'hydrafusion-balance', 'hydrafusion-efficiency')) {
+    if ($id -in @('fusion', 'copilot-fusion', 'fusion-standard', 'copilot-fusion-standard', 'hydrafusion-standard', 'hydrafusion-efficiency')) {
+        return 'fusion-standard'
+    }
+    if ($id -in @('hydrafusion', 'fusion-high', 'copilot-fusion-high', 'hydrafusion-high', 'hydrafusion-balance')) {
+        return 'hydrafusion'
+    }
+    if ($id -in @('hydrafusion-max', 'fusion-max', 'copilot-fusion-max')) {
         return 'hydrafusion-max'
     }
     return $id

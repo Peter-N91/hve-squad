@@ -523,27 +523,49 @@ function Get-RateTableLocal {
     }
 
     if ($byModel.Count -gt 0) {
-        if (-not $byNormalized.ContainsKey('hydrafusion-max')) {
-            $hfRate = @{
-                input                  = 0.80
-                cached                 = 0.05
-                cache_write            = 1.00
-                output                 = 4.00
-                pricedAsName           = 'HydraFusion Max'
-                tier                   = 'default'
-                long_context_threshold = 272000.0
-                lc_input               = 1.60
-                lc_cached              = 0.10
-                lc_cache_write         = 2.00
-                lc_output              = 6.00
+        $fusionFallbacks = @(
+            @{
+                Key = 'fusion-standard'; Name = 'Copilot Fusion Standard'; Tier = 'fast'
+                Input = 0.40; Cached = 0.025; CacheWrite = 0.50; Output = 2.00
+                LcInput = 0.80; LcCached = 0.05; LcCacheWrite = 1.00; LcOutput = 3.00
+                Aliases = @('Copilot Fusion Standard', 'fusion-standard', 'fusion', 'copilot-fusion', 'copilot-fusion-standard', 'hydrafusion-standard', 'hydrafusion-efficiency')
             }
-            $byModel['HydraFusion Max'] = $hfRate
-            $byModel['hydrafusion-max'] = $hfRate
-            $byNormalized['hydrafusion-max'] = $hfRate
-        }
-        $hfResolved = $byNormalized['hydrafusion-max']
-        foreach ($alias in @('HydraFusion', 'hydrafusion', 'hydrafusion-max')) {
-            if (-not $byModel.ContainsKey($alias)) { $byModel[$alias] = $hfResolved }
+            @{
+                Key = 'hydrafusion'; Name = 'Copilot Fusion High'; Tier = 'default'
+                Input = 0.60; Cached = 0.04; CacheWrite = 0.75; Output = 3.00
+                LcInput = 1.20; LcCached = 0.08; LcCacheWrite = 1.50; LcOutput = 4.50
+                Aliases = @('Copilot Fusion High', 'HydraFusion', 'hydrafusion', 'fusion-high', 'copilot-fusion-high', 'hydrafusion-high', 'hydrafusion-balance')
+            }
+            @{
+                Key = 'hydrafusion-max'; Name = 'Copilot Fusion Max'; Tier = 'default'
+                Input = 0.80; Cached = 0.05; CacheWrite = 1.00; Output = 4.00
+                LcInput = 1.60; LcCached = 0.10; LcCacheWrite = 2.00; LcOutput = 6.00
+                Aliases = @('Copilot Fusion Max', 'HydraFusion Max', 'hydrafusion-max', 'fusion-max', 'copilot-fusion-max')
+            }
+        )
+        foreach ($spec in $fusionFallbacks) {
+            if (-not $byNormalized.ContainsKey($spec.Key)) {
+                $fRate = @{
+                    input                  = $spec.Input
+                    cached                 = $spec.Cached
+                    cache_write            = $spec.CacheWrite
+                    output                 = $spec.Output
+                    pricedAsName           = $spec.Name
+                    tier                   = $spec.Tier
+                    long_context_threshold = 272000.0
+                    lc_input               = $spec.LcInput
+                    lc_cached              = $spec.LcCached
+                    lc_cache_write         = $spec.LcCacheWrite
+                    lc_output              = $spec.LcOutput
+                }
+                $byModel[$spec.Name] = $fRate
+                $byModel[$spec.Key] = $fRate
+                $byNormalized[$spec.Key] = $fRate
+            }
+            $fResolved = $byNormalized[$spec.Key]
+            foreach ($alias in $spec.Aliases) {
+                if (-not $byModel.ContainsKey($alias)) { $byModel[$alias] = $fResolved }
+            }
         }
     }
 
@@ -560,7 +582,9 @@ function ConvertTo-RateKeyLocal {
     param([AllowEmptyString()][string]$Value)
     $text = ($Value -replace '`', '' -replace '\((copilot|preview)\)', '').Trim().ToLowerInvariant()
     $key = ($text -replace '[\s_]+', '-' -replace '-{2,}', '-').Trim('-')
-    if ($key -in @('hydrafusion', 'hydrafusion-balance', 'hydrafusion-efficiency')) { return 'hydrafusion-max' }
+    if ($key -in @('fusion', 'copilot-fusion', 'fusion-standard', 'copilot-fusion-standard', 'hydrafusion-standard', 'hydrafusion-efficiency')) { return 'fusion-standard' }
+    if ($key -in @('hydrafusion', 'fusion-high', 'copilot-fusion-high', 'hydrafusion-high', 'hydrafusion-balance')) { return 'hydrafusion' }
+    if ($key -in @('hydrafusion-max', 'fusion-max', 'copilot-fusion-max')) { return 'hydrafusion-max' }
     return $key
 }
 
@@ -3366,7 +3390,7 @@ function Get-ExactLedgerUsageLocal {
     $roleRows = @($rows | Where-Object Label -ne 'orchestration')
     $baseline = $BaselineModel
     if (-not $baseline) {
-        $candidateModels = @($roleRows | ForEach-Object Models | Where-Object { (ConvertTo-RateKeyLocal $_) -notin @('hydrafusion-max', 'unknown') } | Select-Object -Unique)
+        $candidateModels = @($roleRows | ForEach-Object Models | Where-Object { (ConvertTo-RateKeyLocal $_) -notin @('fusion-standard', 'hydrafusion', 'hydrafusion-max', 'unknown') } | Select-Object -Unique)
         if ($candidateModels.Count -eq 0 -and $Rates.ByNormalized.ContainsKey('claude-sonnet-4.6')) {
             $candidateModels = @('claude-sonnet-4.6')
         }
@@ -3563,7 +3587,7 @@ function Merge-ExactSessionUsageLocal {
     $roleRows = @($rows | Where-Object Label -ne 'orchestration')
     $baseline = $BaselineModel
     if (-not $baseline) {
-        $candidateModels = @($roleRows | ForEach-Object Models | Where-Object { (ConvertTo-RateKeyLocal $_) -notin @('hydrafusion-max', 'unknown') } | Select-Object -Unique)
+        $candidateModels = @($roleRows | ForEach-Object Models | Where-Object { (ConvertTo-RateKeyLocal $_) -notin @('fusion-standard', 'hydrafusion', 'hydrafusion-max', 'unknown') } | Select-Object -Unique)
         if ($candidateModels.Count -eq 0 -and $Rates.ByNormalized.ContainsKey('claude-sonnet-4.6')) {
             $candidateModels = @('claude-sonnet-4.6')
         }
