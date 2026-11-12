@@ -1,5 +1,6 @@
 #!/usr/bin/env pwsh
-# Copyright (c) 2026 Microsoft Corporation. All rights reserved.
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT license.
 # SPDX-License-Identifier: MIT
 #Requires -Version 7.0
 
@@ -933,6 +934,10 @@ function Format-CatalogMarkdownLocal {
             '  spec_version: "1.1"'
             "  last_updated: `"$StampDate`""
             '---'
+            '<!--'
+            'Copyright (c) Microsoft Corporation.'
+            'Licensed under the MIT license.'
+            '-->'
             ''
             '# Squad Model Catalog'
             ''
@@ -1183,6 +1188,10 @@ function Format-RatesTemplateMarkdownLocal {
             '  spec_version: "1.0"'
             "  last_updated: `"$StampDate`""
             '---'
+            '<!--'
+            'Copyright (c) Microsoft Corporation.'
+            'Licensed under the MIT license.'
+            '-->'
             ''
             '# Squad Consumption Rates Template'
             ''

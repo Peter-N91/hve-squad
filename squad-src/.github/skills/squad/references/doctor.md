@@ -1,6 +1,10 @@
 ---
 description: "Deterministic Squad Doctor checks, allowlisted repairs, receipts, and coordinator recovery."
 ---
+<!--
+Copyright (c) Microsoft Corporation.
+Licensed under the MIT license.
+-->
 
 # Squad Doctor Runtime
 

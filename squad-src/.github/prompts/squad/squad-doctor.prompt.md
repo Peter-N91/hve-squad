@@ -3,6 +3,10 @@ description: "Check Squad after an upgrade or diagnose a runtime failure with de
 agent: Squad Doctor
 argument-hint: "[check|repair] [squadRoot=<path>] [issue=<failure>] [scope=<domain>]"
 ---
+<!--
+Copyright (c) Microsoft Corporation.
+Licensed under the MIT license.
+-->
 
 # Squad Doctor
 

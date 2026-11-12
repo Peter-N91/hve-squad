@@ -22,6 +22,7 @@ BeforeAll {
     $script:RosterPath = Join-Path $repoRoot 'squad-src/.github/instructions/squad/squad-roster.instructions.md'
     $script:RosterCatalogPath = Join-Path $script:ReferencesRoot 'roster-catalog.md'
     $script:AgentsRoot = Join-Path $repoRoot 'squad-src/.github/agents/squad'
+    $script:LegalNoticePattern = '\A---\r?\n[\s\S]*?\r?\n---\r?\n<!--\r?\nCopyright \(c\) Microsoft Corporation\.\r?\nLicensed under the MIT license\.\r?\n-->\r?\n'
     . (Join-Path $script:ReferencesRoot '../scripts/ModelBenchmarkScoring.ps1')
 
     # Mirrors $script:ConsumptionFields in SquadState.psm1: field order is contractual,
@@ -2286,6 +2287,7 @@ Describe 'Capability-first Ranked and qualified cost-first Economy (SQ-33b..d, S
         $generated = & $script:SyncScript -SnapshotPath $fixture.Benchmarks -OutputPath $output -AsOf ([datetime]'2026-10-19')
         $generated.ScoringPolicy | Should -Be 'squad-capability-v3'
         $view = Get-Content -LiteralPath $output -Raw
+        $view | Should -Match $script:LegalNoticePattern
         @(Get-SquadBenchmarkRowsFromMarkdown -Content $view) | ConvertTo-Json -Depth 8 |
             Should -BeExactly (@(Get-SquadBenchmarkRowsFromMarkdown -Content $original) | ConvertTo-Json -Depth 8)
         $fixture.Benchmarks = $output
@@ -2835,6 +2837,9 @@ Describe 'Sync-ModelCatalog.ps1 and standalone benchmark dataset fallbacks' {
 
         $catContent = Get-Content -LiteralPath $outCat -Raw
         $ratesContent = Get-Content -LiteralPath $outRates -Raw
+        foreach ($content in @($catContent, $ratesContent)) {
+            $content | Should -Match $script:LegalNoticePattern
+        }
         $catContent | Should -Match '\*\*Retrieved: 2026-11-11\*\*'
         $ratesContent | Should -Match 'Observed-on: 2026-11-11\.'
         $catContent | Should -Match '\| `frontier-next-9\.0` \| advertised \| Frontier Next 9\.0 \| GA \| frontier-reasoning \| 1M \| configurable \|'
@@ -2887,6 +2892,7 @@ Describe 'Sync-ModelCatalog.ps1 and standalone benchmark dataset fallbacks' {
         $res = @(& $script:BenchmarkSyncScript -ArchivePath $dir -OutputPath $outBench -CatalogPath $catPath -AsOf ([datetime]'2026-11-11') -EpochVersion 'fixture-v2')[-1]
         $res.Updated | Should -BeTrue
         $raw = Get-Content -LiteralPath $outBench -Raw
+        $raw | Should -Match $script:LegalNoticePattern
         $raw | Should -Match '\| `claude-fable-5\.2` \| DeepSWE \|'
         $raw | Should -Match '\| `gemini-4-argon` \| HLE \|'
         $raw | Should -Match '\| `gemini-4-carbon` \| SWE-Bench verified \|'
