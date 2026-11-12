@@ -1,6 +1,10 @@
 ---
 description: "Coordinator mechanics and native work."
 ---
+<!--
+Copyright (c) Microsoft Corporation.
+Licensed under the MIT license.
+-->
 
 # Coordinator Runtime
 

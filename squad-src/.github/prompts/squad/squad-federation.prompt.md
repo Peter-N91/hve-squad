@@ -3,6 +3,10 @@ description: "Hands a request to the Squad Federation Coordinator, which routes 
 agent: Squad Federation Coordinator
 argument-hint: "request=... [squad=<name>] [init] [promote] [watch=...] [profile=...] [discovery=quick|standard|deep|skip] [tier=...] [owner=...] [execution=original|connector:<binding-id>|both] [mode=autonomous|autopilot] [cost-ceiling=<positive USD|unset>] [routing=off|ranked|economy|manual] [depth=quick|standard]"
 ---
+<!--
+Copyright (c) Microsoft Corporation.
+Licensed under the MIT license.
+-->
 
 # Squad Federation
 

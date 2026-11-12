@@ -1,3 +1,5 @@
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT license.
 name: Tier 2 Semantic
 
 # Scores Tier 1 runs against the golden baselines captured from the last good release.

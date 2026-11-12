@@ -4,6 +4,10 @@ description: "Non-user-invocable squad prompt engineer that authors, refactors, 
 user-invocable: false
 model: Claude Sonnet 5.5 (copilot)
 ---
+<!--
+Copyright (c) Microsoft Corporation.
+Licensed under the MIT license.
+-->
 
 # Squad Prompt Engineer
 

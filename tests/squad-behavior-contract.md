@@ -1,6 +1,10 @@
 ---
 description: "Squad behavior contracts and regression coverage across installed package tiers"
 ---
+<!--
+Copyright (c) Microsoft Corporation.
+Licensed under the MIT license.
+-->
 
 # Squad Behavior Contract and Regression Test Plan
 

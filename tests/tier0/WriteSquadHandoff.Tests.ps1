@@ -1,5 +1,6 @@
 #Requires -Modules Pester
-# Copyright (c) 2026 Microsoft Corporation. All rights reserved.
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT license.
 # SPDX-License-Identifier: MIT
 
 # AI cost: none; runs local payload writes and rollback/ledger checks against fixtures.
@@ -2073,7 +2074,7 @@ Describe 'Write-SquadHandoff.ps1 compact all-mode Scribe read set (H1, WRT-08)' 
     It 'ships the compact writer contract with quiet invocation and explicit failure handling' {
         Test-Path -LiteralPath $script:EconomyScribePath -PathType Leaf | Should -BeTrue
         $text = (Get-Content -LiteralPath $script:EconomyScribePath -Raw) -replace "`r`n", "`n"
-        [System.Text.Encoding]::UTF8.GetByteCount($text) | Should -BeLessOrEqual 3072
+        Get-SquadContractByteCount -Text $text | Should -BeLessOrEqual 3072
         $text | Should -Match ([regex]::Escape('pwsh -NoProfile -File <skill>/scripts/Write-SquadHandoff.ps1 -SquadRoot <squadRoot> -RunId run-01 -Agent "Squad Researcher"'))
         $text | Should -Match ([regex]::Escape('`-PayloadPath`/`-PayloadJson`'))
         $text | Should -Match '\-Quiet'
@@ -2086,7 +2087,7 @@ Describe 'Write-SquadHandoff.ps1 compact all-mode Scribe read set (H1, WRT-08)' 
 
     It 'the Scribe charter stays below 3,000 bytes and points ordinary writes to the compact contract' {
         $path = Join-Path $PackageRoot '.github/agents/squad-scribe.agent.md'
-        [System.Text.Encoding]::UTF8.GetByteCount((Get-Content -LiteralPath $path -Raw)) | Should -BeLessThan 3000
+        Get-SquadContractByteCount -Text (Get-Content -LiteralPath $path -Raw) | Should -BeLessThan 3000
         $scribe = @($script:HandoffModel.SquadAgents | Where-Object Name -eq 'squad-scribe.agent.md')[0].Body
         $scribe | Should -Match 'references/economy-scribe\.md'
         $scribe | Should -Match 'ordinary'

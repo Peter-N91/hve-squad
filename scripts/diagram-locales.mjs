@@ -1,3 +1,5 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT license.
 const french = {
   concepts: [[
     ['Squad Coach<br/>advice only, no state', 'Squad Coach<br/>conseils uniquement, aucun état'],

@@ -1,3 +1,5 @@
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT license.
 name: Publish Plugin
 
 # Manual only. Stable and preview distributions are generated into branches in

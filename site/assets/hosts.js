@@ -1,3 +1,5 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT license.
 (() => {
   // The shell embeds { host: <host-locales.json> } in #site-ui.
   // Load this deferred script before site.js, which owns code IDs and copy controls.

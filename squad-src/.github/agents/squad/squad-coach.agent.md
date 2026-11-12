@@ -6,6 +6,10 @@ disable-model-invocation: true
 argument-hint: "[request=...] [host=vscode|cli|app]"
 tools: ["read", "search"]
 ---
+<!--
+Copyright (c) Microsoft Corporation.
+Licensed under the MIT license.
+-->
 
 # Squad Coach
 

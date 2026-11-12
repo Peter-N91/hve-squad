@@ -5,6 +5,10 @@ license: MIT
 metadata:
   authors: "consumer-owned"
 ---
+<!--
+Copyright (c) Microsoft Corporation.
+Licensed under the MIT license.
+-->
 
 # {{ENDPOINT_NAME}} skill
 

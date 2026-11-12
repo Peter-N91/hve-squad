@@ -2,6 +2,10 @@
 description: "Squad routing rules mapping request patterns to roles, autonomy tiers, and parallel eligibility"
 applyTo: '**/.copilot-tracking/squad/**/routing.md'
 ---
+<!--
+Copyright (c) Microsoft Corporation.
+Licensed under the MIT license.
+-->
 
 # Squad Routing Conventions
 

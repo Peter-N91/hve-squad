@@ -7,6 +7,10 @@ metadata:
   spec_version: "1.0"
   last_updated: "2026-11-11"
 ---
+<!--
+Copyright (c) Microsoft Corporation.
+Licensed under the MIT license.
+-->
 
 # Power Platform Official Resources
 

@@ -1,3 +1,7 @@
+<!--
+Copyright (c) Microsoft Corporation.
+Licensed under the MIT license.
+-->
 # Squad Connector mailboxes
 
 Each child directory is a file-drop mailbox for one connector. HVE Squad owns

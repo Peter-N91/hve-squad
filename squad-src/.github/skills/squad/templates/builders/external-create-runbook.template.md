@@ -1,3 +1,7 @@
+<!--
+Copyright (c) Microsoft Corporation.
+Licensed under the MIT license.
+-->
 # `{{ENDPOINT_NAME}}` external endpoint runbook
 
 This consumer-owned `{{ENDPOINT_KIND}}` was scaffolded for connector

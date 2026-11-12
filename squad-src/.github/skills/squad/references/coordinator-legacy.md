@@ -1,6 +1,10 @@
 ---
 description: "Cold compatibility procedure for hosts without the coordinator scripts."
 ---
+<!--
+Copyright (c) Microsoft Corporation.
+Licensed under the MIT license.
+-->
 
 # Squad Coordinator
 

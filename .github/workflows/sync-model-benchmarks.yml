@@ -1,3 +1,5 @@
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT license.
 name: Sync Model Catalog, Rates, and Benchmarks
 
 # Runs every morning at 06:30 UTC or on demand.

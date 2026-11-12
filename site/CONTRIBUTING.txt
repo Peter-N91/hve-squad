@@ -1,5 +1,17 @@
 HVE SQUAD DOCUMENTATION
 
+Contributions and security
+  Contributions are subject to the Microsoft Contributor License Agreement:
+  https://cla.opensource.microsoft.com/
+  Complete any required CLA before acceptance. For Microsoft-hosted pull requests,
+  follow the CLA bot's status check or comment; maintainers must verify the CLA
+  before acceptance if the check is missing.
+  Follow the Microsoft Open Source Code of Conduct:
+  https://opensource.microsoft.com/codeofconduct/
+  Do not report vulnerabilities in public issues. Follow Microsoft's guidance:
+  https://aka.ms/SECURITY.md
+  Root CONTRIBUTING.md and SECURITY.md are the canonical project policies.
+
 The main documentation site shares the Eleventy/Pagefind foundation, blue/cyan/
 green identity and fonts already adopted by the plugin documentation. MCP and MAF
 share the shell with their distinct product palettes.
@@ -9,6 +21,13 @@ Local development (Node.js 22+)
   npm run docs:test
   npm run docs:build
   npm run docs:dev
+
+Source notices
+  pwsh -File scripts/Test-SourceHeaders.ps1
+  Use -Detailed to list fixture/data, generated and third-party exclusions.
+  The audit checks tracked first-party release sources, not built _site output.
+  Do not add headers to JSON payloads, third-party notices or installed copies.
+  Git attribute/ignore rules and CODEOWNERS are metadata, not source-header targets.
 
 Port 4176 is the main-site development preview. Pagefind indexes refresh during
 docs:build; restart docs:dev after content edits to refresh search. Pull requests
@@ -39,7 +58,11 @@ Appearance
   Badge field #0F172A, blue agent nodes #60A5FA, green execution #4ADE80
   Light interactive accent #2563EB; dark interactive accent #60A5FA
   Manrope headings; Source Sans 3 prose and true italics; JetBrains Mono code
-  Fonts and Mermaid are self-hosted with their redistribution licence notices.
+  Fonts use Google Fonts CSS2 with display=swap; no font JavaScript is required.
+  Google receives font stylesheet/font requests when readers load the site.
+  If Google is unreachable or blocked, the existing Segoe UI/sans-serif and
+  Consolas/monospace fallback stacks keep all content available.
+  Mermaid remains self-hosted. The three font OFL notices remain available.
 
 Reader behavior
 System/Light/Dark persists using hve-docs-theme, shared with sibling sites.

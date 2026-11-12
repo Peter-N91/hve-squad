@@ -1,3 +1,5 @@
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT license.
 name: PR Validation
 
 # Keeps release state out of pull requests.

@@ -3,6 +3,10 @@ name: squad-scribe-cold-charter
 description: "Full legacy Scribe charter for unsupported verdict fallback, memory, notifications, repairs, summaries, and unsupported operations."
 license: MIT
 ---
+<!--
+Copyright (c) Microsoft Corporation.
+Licensed under the MIT license.
+-->
 
 # Squad Scribe Cold Charter
 

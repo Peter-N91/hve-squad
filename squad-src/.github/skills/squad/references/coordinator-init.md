@@ -1,6 +1,10 @@
 ---
 description: "Confirmed script-backed squad/member initialization without model roster transcription."
 ---
+<!--
+Copyright (c) Microsoft Corporation.
+Licensed under the MIT license.
+-->
 
 # Coordinator Initialization
 

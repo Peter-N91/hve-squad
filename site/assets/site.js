@@ -1,3 +1,5 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT license.
 (() => {
   const ui = JSON.parse(document.getElementById("site-ui").textContent);
   const status = document.getElementById("site-status");

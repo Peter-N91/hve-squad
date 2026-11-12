@@ -3,6 +3,10 @@ name: Squad Deployer
 description: "Runs Azure deployments in the consumer's environment strictly behind the squad Impactful-Action Gate; defaults to dry-run (what-if / plan) and never applies without explicit human approval"
 user-invocable: false
 ---
+<!--
+Copyright (c) Microsoft Corporation.
+Licensed under the MIT license.
+-->
 
 # Squad Deployer
 

@@ -4,6 +4,10 @@ description: "{{DESCRIPTION}}"
 user-invocable: false
 agents: []
 ---
+<!--
+Copyright (c) Microsoft Corporation.
+Licensed under the MIT license.
+-->
 
 # {{WORKER_NAME}}
 

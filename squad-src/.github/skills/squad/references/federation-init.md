@@ -7,6 +7,10 @@ metadata:
   spec_version: "1.0"
   last_updated: "2026-10-25"
 ---
+<!--
+Copyright (c) Microsoft Corporation.
+Licensed under the MIT license.
+-->
 
 # Deterministic Federation Init
 

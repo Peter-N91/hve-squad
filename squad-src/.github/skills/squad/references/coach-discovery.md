@@ -1,3 +1,7 @@
+<!--
+Copyright (c) Microsoft Corporation.
+Licensed under the MIT license.
+-->
 # Coach Source Discovery
 
 The Coach learns workflows from the selected installation, not from a maintained list of features. Read this contract; read the discovered sources only as needed for the user's demand.

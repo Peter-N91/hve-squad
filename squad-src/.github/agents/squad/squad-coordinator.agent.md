@@ -81,6 +81,10 @@ agents:
   - aws-serverless-architect
   - AWS Incident Triage
 ---
+<!--
+Copyright (c) Microsoft Corporation.
+Licensed under the MIT license.
+-->
 
 # Squad Coordinator
 

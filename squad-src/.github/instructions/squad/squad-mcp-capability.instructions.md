@@ -2,6 +2,10 @@
 description: "Capability-aware MCP routing for squad dispatched roles, with named fallbacks when an MCP is absent"
 applyTo: '**/.copilot-tracking/squad/**/team.md'
 ---
+<!--
+Copyright (c) Microsoft Corporation.
+Licensed under the MIT license.
+-->
 
 # Squad MCP Capability Conventions
 

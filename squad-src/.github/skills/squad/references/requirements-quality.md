@@ -3,6 +3,10 @@ name: squad-requirements-quality
 description: "Read only for BRD/PRD or requirements authoring/review, not startup or code-only reviews."
 license: MIT
 ---
+<!--
+Copyright (c) Microsoft Corporation.
+Licensed under the MIT license.
+-->
 
 # Requirements Document Quality
 

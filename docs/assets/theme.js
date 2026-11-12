@@ -1,3 +1,5 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT license.
 (() => {
   const param = new URLSearchParams(window.location.search).get('scoutTheme');
   let saved;

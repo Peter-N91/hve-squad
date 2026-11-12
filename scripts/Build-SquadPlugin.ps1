@@ -1,5 +1,6 @@
 #!/usr/bin/env pwsh
-# Copyright (c) 2026 Microsoft Corporation. All rights reserved.
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT license.
 # SPDX-License-Identifier: MIT
 #Requires -Version 7.4
 
@@ -418,7 +419,9 @@ function Copy-HveCorePluginContent {
         }
     }
 
-    foreach ($legalFile in @('LICENSE', 'NOTICE', 'THIRD-PARTY-NOTICES')) {
+    foreach ($legalFile in @(Get-ChildItem -LiteralPath $resolvedRoot -File |
+                Where-Object Name -In @('LICENSE', 'LICENSE.TXT', 'NOTICE', 'THIRD-PARTY-NOTICES') |
+                Select-Object -ExpandProperty Name)) {
         $sourcePath = Join-Path $resolvedRoot $legalFile
         if (-not (Test-Path -LiteralPath $sourcePath -PathType Leaf)) { continue }
         $targetRelative = "third-party/hve-core/$legalFile"
@@ -1372,9 +1375,22 @@ Installation, update, preview-channel, and verification instructions:
 https://peter-n91.github.io/hve-squad/getting-started.html
 "@
         Write-TextFile -Path (Join-Path $OutputRoot 'README.md') -Content ($readme + "`n") -DryRun:$DryRun
-        foreach ($legalFile in @('LICENSE', 'NOTICE')) {
-            $content = Get-SourceFileContent -Source $source -RepoRoot $RepoRoot -RelativePath $legalFile
-            Write-TextFile -Path (Join-Path $OutputRoot $legalFile) -Content ($content.TrimEnd() + "`n") -DryRun:$DryRun
+        $licensePath = 'LICENSE.TXT'
+        if ($source.Mode -eq 'Source') {
+            $hasCanonicalLicense = Test-Path -LiteralPath (Join-Path $source.SourceRoot $licensePath) -PathType Leaf
+        }
+        else {
+            & git -C $RepoRoot cat-file -e "$($source.Ref):$licensePath" 2>$null
+            $hasCanonicalLicense = $LASTEXITCODE -eq 0
+        }
+        # Older immutable tags predate the rename; retain their original license text.
+        if (-not $hasCanonicalLicense) { $licensePath = 'LICENSE' }
+        foreach ($legalFile in @(
+                @{ Source = $licensePath; Target = 'LICENSE.TXT' }
+                @{ Source = 'NOTICE'; Target = 'NOTICE' }
+            )) {
+            $content = Get-SourceFileContent -Source $source -RepoRoot $RepoRoot -RelativePath $legalFile.Source
+            Write-TextFile -Path (Join-Path $OutputRoot $legalFile.Target) -Content ($content.TrimEnd() + "`n") -DryRun:$DryRun
         }
 
         if (-not $DryRun) {

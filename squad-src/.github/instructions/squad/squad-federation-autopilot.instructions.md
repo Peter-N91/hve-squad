@@ -2,6 +2,10 @@
 description: "Opt-in federation-level autopilot: a meta-pipeline that orders sub-squad autopilot runs under one set of federation gates, aggregating their gates, verdicts, and cost to the federation level"
 applyTo: '**/.copilot-tracking/squad/history/autopilot-run-*.md'
 ---
+<!--
+Copyright (c) Microsoft Corporation.
+Licensed under the MIT license.
+-->
 
 # Squad Federation Autopilot Conventions
 

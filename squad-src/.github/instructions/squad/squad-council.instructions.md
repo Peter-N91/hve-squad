@@ -2,6 +2,10 @@
 description: "Pre-implementation council protocol with parallel dispatch, most-restrictive-wins synthesis, and durable Council Verdict"
 applyTo: '**/.copilot-tracking/squad/**/decisions.md'
 ---
+<!--
+Copyright (c) Microsoft Corporation.
+Licensed under the MIT license.
+-->
 
 # Squad Council Conventions
 

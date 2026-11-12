@@ -3,6 +3,29 @@ title: Contributing to hve-squad
 description: How changes reach the hve-squad package and how to promote a sanitized shared learning through the fork and pull request review gate.
 ---
 
+## Contributor License Agreement
+
+This project welcomes contributions and suggestions. All contributions are
+subject to the [Microsoft Contributor License Agreement (CLA)](https://cla.opensource.microsoft.com/),
+declaring that you have the right to, and actually do, grant us the rights to
+use your contribution. Any required CLA must be completed before a contribution
+is accepted.
+
+For pull requests to the Microsoft-hosted repository, a CLA bot determines
+whether you need to provide a CLA and decorates the pull request with a status
+check or comment. Follow the bot's instructions. You only need to complete this
+once across repositories using the Microsoft CLA. If the check is missing,
+maintainers must verify the CLA before accepting the contribution.
+
+## Code of conduct
+
+This project has adopted the
+[Microsoft Open Source Code of Conduct](https://opensource.microsoft.com/codeofconduct/).
+See [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) and the
+[Code of Conduct FAQ](https://opensource.microsoft.com/codeofconduct/faq/), or
+contact [opencode@microsoft.com](mailto:opencode@microsoft.com) with questions
+or comments.
+
 ## Reporting a bug
 
 Open an issue at
@@ -12,13 +35,13 @@ what you expected against what happened, and steps to reproduce. Squad state
 (`team.md` or `federation.md`, plus the relevant `history/` entry) is usually
 what pins a routing or ledger defect down, so include it when you can.
 
-Issues are triaged by a maintainer. There is no service-level agreement on a
-solo-maintained project, but a report that reproduces gets a response.
+Issues are triaged by a maintainer. There is no service-level agreement, but
+a report that reproduces helps maintainers investigate.
 
 Two things do not belong in a public issue:
 
-* **Security vulnerabilities.** Report them privately through
-  [security advisories](https://github.com/Peter-N91/hve-squad/security/advisories/new).
+* **Security vulnerabilities.** Follow
+  [Microsoft's security reporting guidance](https://aka.ms/SECURITY.md).
   See [SECURITY.md](SECURITY.md).
 * **Defects in an upstream dependency.**
   [microsoft/hve-core](https://github.com/microsoft/hve-core/issues) owns the

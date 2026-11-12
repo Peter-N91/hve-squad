@@ -1,5 +1,6 @@
 #Requires -Modules Pester
-# Copyright (c) 2026 Microsoft Corporation. All rights reserved.
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT license.
 # SPDX-License-Identifier: MIT
 
 # AI cost: none; inspects source and built-package contents locally.
@@ -74,6 +75,7 @@ BeforeDiscovery {
 }
 
 BeforeAll {
+    Import-Module (Join-Path $PSScriptRoot 'SquadPackage.psm1') -Force
     $script:SourceRootResolved = (Resolve-Path -LiteralPath $SourceRoot).Path
     $script:BuildScript = Join-Path $script:SourceRootResolved 'scripts/Build-SquadPlugin.ps1'
     $script:PluginOutputRoot = Join-Path $TestDrive 'd7-plugin-output'
@@ -226,7 +228,7 @@ BeforeAll {
         'squad-src/.github/agents/squad/squad-scribe.agent.md'
     ) + @($script:ScribeHotCoreReferenceFiles | ForEach-Object { "squad-src/.github/skills/squad/references/$_" })
     $script:ScribeHotCoreBytes = ($script:ScribeHotCoreFiles | ForEach-Object {
-            [Text.Encoding]::UTF8.GetByteCount(([IO.File]::ReadAllText((Join-Path $script:SourceRootResolved $_)) -replace "`r`n", "`n"))
+            Get-SquadContractByteCount -Text ([IO.File]::ReadAllText((Join-Path $script:SourceRootResolved $_)))
         } | Measure-Object -Sum).Sum
     $script:ScribeColdCoreFiles = @(
         'squad-src/.github/agents/squad/squad-scribe.agent.md'
@@ -234,7 +236,7 @@ BeforeAll {
         'scribe-cold-charter.md', '00-index.md', 'scribe-procedure.md', 'entry-schemas.md', 'scribe-payload-template.md'
     ) | ForEach-Object { if ($_ -like 'squad-src/*') { $_ } else { "squad-src/.github/skills/squad/references/$_" } }
     $script:ScribeColdCoreBytes = ($script:ScribeColdCoreFiles | ForEach-Object {
-            [Text.Encoding]::UTF8.GetByteCount(([IO.File]::ReadAllText((Join-Path $script:SourceRootResolved $_)) -replace "`r`n", "`n"))
+            Get-SquadContractByteCount -Text ([IO.File]::ReadAllText((Join-Path $script:SourceRootResolved $_)))
         } | Measure-Object -Sum).Sum
 
     $baselinePath = Join-Path $script:SourceRootResolved 'tests/tier0/baselines/prefill-baseline.json'
@@ -364,13 +366,13 @@ Describe 'D7-5 Ordinary hot contract shrinks while legacy cold protections remai
 
     It 'keeps the pinned Scribe agent below 3000 normalized UTF-8 bytes' {
         $path = Join-Path $script:SourceRootResolved 'squad-src/.github/agents/squad/squad-scribe.agent.md'
-        [Text.Encoding]::UTF8.GetByteCount(([IO.File]::ReadAllText($path) -replace "`r`n", "`n")) | Should -BeLessThan 3000
+        Get-SquadContractByteCount -Text ([IO.File]::ReadAllText($path)) | Should -BeLessThan 3000
     }
 
     It 'keeps agent plus ordinary contract within 6 KiB' {
         $script:ScribeHotCoreBytes | Should -BeLessOrEqual 6144
         $path = Join-Path $script:SourceRootResolved 'squad-src/.github/skills/squad/references/economy-scribe.md'
-        [Text.Encoding]::UTF8.GetByteCount(([IO.File]::ReadAllText($path) -replace "`r`n", "`n")) | Should -BeLessOrEqual 3072
+        Get-SquadContractByteCount -Text ([IO.File]::ReadAllText($path)) | Should -BeLessOrEqual 3072
     }
 
     It 'measured the BEFORE baseline scribe/plugin-cli figure' {

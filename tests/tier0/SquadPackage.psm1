@@ -1,4 +1,5 @@
-# Copyright (c) 2026 Microsoft Corporation. All rights reserved.
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT license.
 # SPDX-License-Identifier: MIT
 
 # Builds the model of an installed hve-squad package that the Tier 0 suite asserts on.
@@ -43,6 +44,25 @@ $script:OptInExternalAgents = @(
     'aws-serverless-architect'
     'AWS Incident Triage'
 )
+
+function Get-SquadContractByteCount {
+    <#
+    .SYNOPSIS
+        Measures LF-normalized prompt bytes against pre-notice contract baselines.
+    .DESCRIPTION
+        Removes only the exact leading legal notice, after any frontmatter.
+        Other comments, metadata and prompt content still count toward the budget.
+    .PARAMETER Text
+        Complete Markdown source, including metadata and comments.
+    #>
+    [CmdletBinding()]
+    [OutputType([int])]
+    param([Parameter(Mandatory)][AllowEmptyString()][string]$Text)
+
+    $normalized = $Text -replace "`r`n", "`n"
+    $normalized = $normalized -replace '(?s)\A(---\n.*?\n---\n)?<!--\nCopyright \(c\) Microsoft Corporation\.\nLicensed under the MIT license\.\n-->\n', '$1'
+    return [Text.Encoding]::UTF8.GetByteCount($normalized)
+}
 
 function Read-SquadArtifact {
     <#
@@ -355,4 +375,4 @@ function Get-SquadCastCatalogRoles {
     return @($roles | Sort-Object -Unique)
 }
 
-Export-ModuleMember -Function Read-SquadArtifact, Get-SquadPackageModel, Get-MarkdownTableRows, Get-SquadRosterRoles, Get-SquadCastCatalogRoles
+Export-ModuleMember -Function Get-SquadContractByteCount, Read-SquadArtifact, Get-SquadPackageModel, Get-MarkdownTableRows, Get-SquadRosterRoles, Get-SquadCastCatalogRoles

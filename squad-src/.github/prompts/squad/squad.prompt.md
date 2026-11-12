@@ -3,6 +3,10 @@ description: "Hands a request to the Squad Coordinator, which routes it to a cas
 agent: Squad Coordinator
 argument-hint: "request=... [profile=default|full|security|design|accessibility|architecture|azure|modernization|compliance|operations|product] [pack=power-platform|m365-copilot|aws|foundry|fabric] [discovery=quick|standard|deep|skip] [tier=...] [owner=...] [execution=original|connector:<binding-id>|both] [mode=autonomous|autopilot] [cost-ceiling=<positive USD|unset>] [routing=off|ranked|economy|manual] [depth=quick|standard]"
 ---
+<!--
+Copyright (c) Microsoft Corporation.
+Licensed under the MIT license.
+-->
 
 # Squad
 

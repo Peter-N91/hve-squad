@@ -4,6 +4,10 @@ description: "Non-user-invocable squad Power Platform architect for Power Pages 
 user-invocable: false
 disable-model-invocation: false
 ---
+<!--
+Copyright (c) Microsoft Corporation.
+Licensed under the MIT license.
+-->
 
 # Squad Power Platform Architect
 

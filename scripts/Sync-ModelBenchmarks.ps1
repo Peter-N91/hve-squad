@@ -1,5 +1,6 @@
 #!/usr/bin/env pwsh
-# Copyright (c) 2026 Microsoft Corporation. All rights reserved.
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT license.
 # SPDX-License-Identifier: MIT
 #Requires -Version 7.0
 
@@ -693,7 +694,14 @@ function Get-BenchmarkSnapshotContentLocal {
         '  authors: "Peter-N91/hve-squad"'
         '  spec_version: "1.0"'
         "  last_updated: `"$date`""
-        '---', '', '# Squad Model Benchmarks Knowledge Base', ''
+        '---'
+        '<!--'
+        'Copyright (c) Microsoft Corporation.'
+        'Licensed under the MIT license.'
+        '-->'
+        ''
+        '# Squad Model Benchmarks Knowledge Base'
+        ''
         '**Pinned, reviewed evidence; runtime stays offline.** Generation does not verify or refresh source records. See [model-scoring.md](model-scoring.md) for policy, date semantics, panels, qualification and limitations.'
         ''
         "* **Generated: $date**"

@@ -4,6 +4,10 @@ description: Consumer onboarding for connector folders, replacing work roles, re
 ms.topic: how-to
 ms.date: 2026-10-15
 ---
+<!--
+Copyright (c) Microsoft Corporation.
+Licensed under the MIT license.
+-->
 
 ## Example: your researcher and implementation coordinator
 

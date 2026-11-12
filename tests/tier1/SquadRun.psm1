@@ -1,4 +1,5 @@
-# Copyright (c) 2026 Microsoft Corporation. All rights reserved.
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT license.
 # SPDX-License-Identifier: MIT
 
 # Drives a real, headless squad run and reduces what it left on disk to an observation.

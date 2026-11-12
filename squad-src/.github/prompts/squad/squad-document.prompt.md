@@ -3,6 +3,10 @@ description: "Searches squad state and artifacts to answer a user's question or 
 agent: Squad Document
 argument-hint: "request=... [format={md|html|pdf|docx}] [outputPath=<path>] [squad=<name>]"
 ---
+<!--
+Copyright (c) Microsoft Corporation.
+Licensed under the MIT license.
+-->
 
 # Squad Document
 

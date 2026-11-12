@@ -2,6 +2,10 @@
 title: Consumer connector roster and routing example
 description: Automatic research and implementation connector defaults for autopilot, an optional implementation workflow, and extra GCP, .NET practices, and data-quality members.
 ---
+<!--
+Copyright (c) Microsoft Corporation.
+Licensed under the MIT license.
+-->
 
 # Consumer Connector Team
 

@@ -1,6 +1,10 @@
 ---
 description: "Federation mechanics and lifecycle."
 ---
+<!--
+Copyright (c) Microsoft Corporation.
+Licensed under the MIT license.
+-->
 
 # Federation Runtime
 

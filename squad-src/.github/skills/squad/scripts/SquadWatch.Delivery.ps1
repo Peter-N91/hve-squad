@@ -1,4 +1,5 @@
-# Copyright (c) 2026 Microsoft Corporation. All rights reserved.
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT license.
 # SPDX-License-Identifier: MIT
 
 # Watch Mode delivery contracts loaded by SquadWatch.psm1. Mechanics stay here so

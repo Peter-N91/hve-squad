@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Copyright (c) 2026 Microsoft Corporation. All rights reserved.
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT license.
 # SPDX-License-Identifier: MIT
 
 # preToolUse (matcher: bash|powershell) — Impactful-Action Gate backstop.

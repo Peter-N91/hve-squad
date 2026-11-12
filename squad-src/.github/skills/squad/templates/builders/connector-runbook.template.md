@@ -1,3 +1,7 @@
+<!--
+Copyright (c) Microsoft Corporation.
+Licensed under the MIT license.
+-->
 # `{{CONNECTOR_ID}}` connector runbook
 
 ## Generated files

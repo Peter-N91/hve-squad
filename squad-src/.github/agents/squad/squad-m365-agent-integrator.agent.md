@@ -4,6 +4,10 @@ description: "Non-user-invocable squad integrator for supported Agents SDK OpenT
 user-invocable: false
 disable-model-invocation: false
 ---
+<!--
+Copyright (c) Microsoft Corporation.
+Licensed under the MIT license.
+-->
 
 # Squad M365 Agent Integrator
 

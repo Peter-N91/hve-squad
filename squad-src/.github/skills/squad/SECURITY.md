@@ -7,6 +7,10 @@ ms.date: 2026-11-02
 keywords: [squad, connectors, security, STRIDE]
 estimated_reading_time: 6
 ---
+<!--
+Copyright (c) Microsoft Corporation.
+Licensed under the MIT license.
+-->
 <!-- markdownlint-disable-file -->
 # Squad Skill Security Model
 

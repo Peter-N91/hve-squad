@@ -5,6 +5,10 @@ user-invocable: true
 agents: []
 argument-hint: "[check|repair] [squadRoot=<path>] [issue=<failure>]"
 ---
+<!--
+Copyright (c) Microsoft Corporation.
+Licensed under the MIT license.
+-->
 
 # Squad Doctor
 
