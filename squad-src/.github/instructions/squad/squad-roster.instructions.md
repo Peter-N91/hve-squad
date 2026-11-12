@@ -322,9 +322,7 @@ A compliance-plus-Power-Platform project is therefore `profile=compliance pack=p
 
 #### Removing a Pack
 
-A pack is removable, and removing one is a roster change like any other rather than a special operation. A user who no longer works on a vertical should not carry its roles, its routing rows, or its context.
-
-Removal is safe for the record because of how squad state is already split. `decisions.md` and `history/<agent>.md` are **append-only**: removing a pack appends a new decision and edits nothing, and every dispatch a removed role ever ran stays in its history file. `team.md` and `routing.md` use replace semantics, so their rows come out cleanly. Nothing that happened is unwritten.
+A pack is removable like any other roster change; drop it when the project leaves that vertical. `decisions.md` and `history/<agent>.md` are **append-only**: removal appends one decision and edits no prior dispatch. `team.md` and `routing.md` use replace semantics, so their rows come out cleanly.
 
 Five rules keep a removal honest:
 
@@ -347,6 +345,7 @@ Optional `Guidance` files go only to the accepted pack's roles and the methodolo
 | `aws`            | aws-architect, aws-diagnose |          | Built on AWS — Lambda and serverless, ECS or EKS, CDK, SAM, CloudFormation, Organizations and landing zones, or a live AWS workload to triage | Opt-in. Both roles rest on registered external agents; the install commands are in *Registered External Cast* |
 | `foundry`        | architect, azure-architect, deployer, prompt-engineer, security, rai, observability, cost-manager, data-scientist | `foundry-blueprint.md`; `foundry-platform-options.md` | Designing or delivering a Microsoft Foundry agentic AI project | Opt-in. Reuses existing roles and registered external skills; adds no replacement agent |
 | `fabric` | data-scientist | `fabric-blueprint.md` | Warehouse, Eventhouse, Spark, or Dataflow beyond the primer | Opt-in. No new role |
+| `dotnet` | modernizer, tester, performance, developer | `dotnet-platform-options.md` | .NET upgrades, NuGet CPM, test/API review, perf, or EF Core/ASP.NET | Opt-in. No new role |
 
 **AWS is a pack while `azure` is a profile, and that asymmetry is deliberate.** `azure` predates the pack mechanism and stays a profile by the decision recorded in *Profile or Pack*: this repository's work is intrinsically Azure-shaped, so an Azure squad behaves as the dominant team shape rather than as an addition to one. AWS is new capability, so the three tests govern it, and all three say pack — it carries no methodology spine, it is not incoherent alongside any profile, and it answers "what is it built on". The practical consequence is the one the tests intend: a multi-cloud project takes `profile=azure` plus `pack=aws` and gets both, where two competing profiles would have forced a false choice. An AWS-only project takes whichever profile matches its *work* — usually `architecture` or `default` — plus the pack. Carrying the `aws` pack says the squad can reason about AWS; it does not imply general multi-cloud capability, and it says nothing at all about Google Cloud, which has no coverage anywhere (see the `gcp` row in the *Cast Catalog*).
 
@@ -360,6 +359,7 @@ Optional `Guidance` files go only to the accepted pack's roles and the methodolo
 | One estate spanning Azure and AWS                                | `azure`        | `aws`                         |
 | Planning a Microsoft Foundry support assistant                   | `azure`        | `foundry`                     |
 | Fabric Warehouse work | `azure` | `fabric` |
+| Modernizing and tuning a .NET service | `modernization` | `dotnet` |
 | On call for a live AWS workload                                  | `operations`   | `aws`                         |
 | A Microsoft 365 Copilot agent that handles personal data         | `security`     | `m365-copilot`                |
 | A Power Platform solution fronted by an M365 Copilot agent       | `default`      | `power-platform`, `m365-copilot` |

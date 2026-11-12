@@ -440,6 +440,95 @@ Describe 'Compact confirmed initialization (COORD-01..03)' {
         Get-FixtureHash $repo | Should -BeExactly $before
     }
 
+    It 'lists .NET resources only for its active proposal and distinguishes disk from host visibility (SRC-14)' {
+        $repo = New-FixtureRepo
+        Write-FixtureText (Join-Path $repo '.agents/skills/migrate-dotnet10-to-dotnet11/SKILL.md') "---`nname: migrate-dotnet10-to-dotnet11`ndescription: Fixture.`n---`n"
+        $without = Invoke-Local 'Get-SquadInitContext.ps1' $repo @('-RepoRoot', $repo)
+        $without.ExitCode | Should -Be 0 -Because $without.Output
+        @(($without.Output | ConvertFrom-Json).packResources) | Should -BeNullOrEmpty
+
+        $withPack = Invoke-Local 'Get-SquadInitContext.ps1' $repo @('-RepoRoot', $repo, '-Pack', 'dotnet')
+        $withPack.ExitCode | Should -Be 0 -Because $withPack.Output
+        $context = $withPack.Output | ConvertFrom-Json
+        @($context.packResources) | Should -HaveCount 20
+        @($context.members | ForEach-Object role | Sort-Object) | Should -Be @('developer', 'modernizer', 'performance', 'tester')
+        $preview = @($context.packResources | Where-Object resource -eq 'migrate-dotnet10-to-dotnet11')[0]
+        $preview.installedOnDisk | Should -BeTrue
+        $preview.hostVisible | Should -BeFalse
+        $preview.installed | Should -BeFalse
+        $preview.installOrEntry | Should -Match 'apm install dotnet/skills/plugins/dotnet-upgrade/skills/migrate-dotnet10-to-dotnet11#2877c712edc20643b72f64e2983b168e6661d607 --target copilot'
+        @($context.packResources | Where-Object resource -eq 'exp-mock-usage-analysis')[0].roles | Should -Be @('tester')
+
+        $visible = Invoke-Local 'Get-SquadInitContext.ps1' $repo @(
+            '-RepoRoot', $repo, '-Pack', 'dotnet', '-AvailableSkill', 'migrate-dotnet10-to-dotnet11'
+        )
+        $visible.ExitCode | Should -Be 0 -Because $visible.Output
+        $available = @(($visible.Output | ConvertFrom-Json).packResources | Where-Object resource -eq 'migrate-dotnet10-to-dotnet11')[0]
+        $available.installed | Should -BeTrue
+        Test-Path -LiteralPath (Join-Path $repo '.copilot-tracking') | Should -BeFalse
+    }
+
+    It 'requires every .NET disposition while allowing preview skills to be declined and previews pinned directory installs (SRC-16)' {
+        $repo = New-FixtureRepo
+        $data = Get-SquadInitData -RepoRoot $repo
+        $index = 0
+        foreach ($cast in $data.cast) {
+            $primary = $cast['Primary Agent (`name:`)']
+            if ($primary -notmatch '^[A-Za-z]' -or $primary -match '[/\\:]') { continue }
+            Write-FixtureText (Join-Path $repo '.github/agents' "fixture-$index.agent.md") "---`nname: $primary`n---`n"
+            $index++
+        }
+        $choices = New-Choices
+        $choices.packs = @('dotnet')
+        { New-SquadInitPayload -Choices $choices -RepoRoot $repo } | Should -Throw '*resourceDecisions*'
+        $choices.resourceDecisions = Get-PackResourceDecisions -Repo $repo -Packs @('dotnet')
+        $choices.resourceDecisions.Remove('exp-mock-usage-analysis')
+        { New-SquadInitPayload -Choices $choices -RepoRoot $repo } | Should -Throw '*Missing pack resource decision: exp-mock-usage-analysis*'
+        $choices.resourceDecisions['exp-mock-usage-analysis'] = 'declined'
+        $choices.resourceDecisions['migrate-dotnet10-to-dotnet11'] = 'available'
+        { New-SquadInitPayload -Choices $choices -RepoRoot $repo } | Should -Throw '*not visible*'
+        $choices.resourceDecisions['migrate-dotnet10-to-dotnet11'] = 'declined'
+
+        $payload = New-SquadInitPayload -Choices $choices -RepoRoot $repo
+        $payload.packResources.Count | Should -Be 20
+        $payload.packResources['migrate-dotnet10-to-dotnet11'] | Should -BeExactly 'declined'
+        $payload.packResources['exp-mock-usage-analysis'] | Should -BeExactly 'declined'
+        @($payload.roster | ForEach-Object Role | Sort-Object) |
+            Should -Be @('developer', 'lead', 'modernizer', 'performance', 'researcher', 'scribe', 'tester')
+
+        $choices.availableSkills = @('migrate-dotnet10-to-dotnet11', 'exp-mock-usage-analysis')
+        $choices.resourceDecisions['migrate-dotnet10-to-dotnet11'] = 'available'
+        $accepted = New-SquadInitPayload -Choices $choices -RepoRoot $repo
+        $accepted.packResources['migrate-dotnet10-to-dotnet11'] | Should -BeExactly 'available'
+        $accepted.packResources['exp-mock-usage-analysis'] | Should -BeExactly 'declined'
+        $choices.resourceDecisions['setup-local-sdk'] = 'available'
+        { New-SquadInitPayload -Choices $choices -RepoRoot $repo } | Should -Throw '*Unknown pack resource decision: setup-local-sdk*'
+
+        $before = Get-FixtureHash $repo
+        $all = Invoke-Local 'Install-SquadPackResources.ps1' $repo @(
+            '-RepoRoot', $repo, '-Pack', 'dotnet', '-Confirmed', '-WhatIf'
+        )
+        $all.ExitCode | Should -Be 0 -Because $all.Output
+        $allLine = @($all.Output -split '\r?\n' | Where-Object { $_ -match '^\{"schemaVersion"' })[-1]
+        $allReceipt = $allLine | ConvertFrom-Json
+        $allReceipt.status | Should -BeExactly 'PLANNED'
+        @($allReceipt.resources) | Should -HaveCount 20
+        (@($allReceipt.resources | ForEach-Object commands) -join "`n") | Should -Not -Match '/SKILL\.md'
+        (@($allReceipt.resources | ForEach-Object commands) -join "`n") | Should -Match 'migrate-dotnet9-to-dotnet10#2877c712edc20643b72f64e2983b168e6661d607 --target copilot'
+
+        $subset = Invoke-Local 'Install-SquadPackResources.ps1' $repo @(
+            '-RepoRoot', $repo, '-Pack', 'dotnet', '-Resource', 'exp-mock-usage-analysis',
+            '-Confirmed', '-WhatIf'
+        )
+        $subset.ExitCode | Should -Be 0 -Because $subset.Output
+        $subsetLine = @($subset.Output -split '\r?\n' | Where-Object { $_ -match '^\{"schemaVersion"' })[-1]
+        $subsetReceipt = $subsetLine | ConvertFrom-Json
+        @($subsetReceipt.resources) | Should -HaveCount 1
+        $subsetReceipt.resources[0].commands | Should -Be @('apm install dotnet/skills/plugins/dotnet-experimental/skills/exp-mock-usage-analysis#2877c712edc20643b72f64e2983b168e6661d607 --target copilot')
+        $subsetReceipt.prerequisitesInstalled | Should -BeFalse
+        Get-FixtureHash $repo | Should -BeExactly $before
+    }
+
     It 'requires pack resource dispositions and persists the accepted Foundry activation' {
         $repo = New-FixtureRepo
         $data = Get-SquadInitData -RepoRoot $repo
