@@ -181,6 +181,16 @@ BeforeAll {
                         $decisions[$resource] = 'declined'
                     }
                 }
+                elseif ($pack -eq 'm365-copilot') {
+                    foreach ($resource in @(
+                            'agents-sdk-to-prod', 'teams-app-manifest', 'agents-sdk-dotnet-otel',
+                            'agents-sdk-typescript-otel', 'agents-sdk-python-otel', 'agents-sdk-provision',
+                            'declarative-agents', 'typespec-create-agent', 'typespec-create-api-plugin',
+                            'msgraph-sdk', 'mcp-create-declarative-agent', 'mcp-deploy-manage-agents',
+                            'm365-agent-evaluator', 'ui-widget-developer')) {
+                        $decisions[$resource] = 'declined'
+                    }
+                }
             }
             if ($decisions.Count) { $Choices.resourceDecisions = $decisions }
         }
@@ -1013,5 +1023,52 @@ Describe 'All-present registered pack expansion' {
         $after | Should -Match '(?m)^Packs: power-platform$'
         $after | Should -Match 'Squad Power Platform Architect'
         $after | Should -Match 'Power Platform Expert'
+    }
+
+    It 'applies, cold-removes, and reapplies m365-copilot without substituting Alternates (SRC-12)' {
+        $repo = New-RepoFixture
+        $root = Initialize-PlainSquad $repo
+        $before = [IO.File]::ReadAllText((Join-Path $root 'team.md'))
+        $before | Should -Not -Match 'm365-agent-architect'
+        $plan = New-ExpansionPlan -Repo $repo -Choices @{
+            confirmed = $true
+            runId = 'm365-apply'
+            packs = @('m365-copilot')
+        }
+        $plan.Result.ExitCode | Should -Be 0 -Because $plan.Result.Output
+        (@($plan.Receipt.addedRoles | Sort-Object) -join ',') | Should -BeExactly 'm365-agent-architect,m365-agent-integrator'
+        $plan.Receipt.packResources.Count | Should -Be 14
+        $plan.Receipt.packResources['m365-agent-evaluator'] | Should -BeExactly 'declined'
+        $plan.Receipt.packResources['ui-widget-developer'] | Should -BeExactly 'declined'
+        (Invoke-Expansion -Repo $repo -Plan $plan).ExitCode | Should -Be 0
+        $teamPath = Join-Path $root 'team.md'
+        $applied = [IO.File]::ReadAllText($teamPath)
+        $applied | Should -Match '(?m)^Packs: m365-copilot$'
+        $applied | Should -Match 'Squad M365 Agent Architect'
+        $applied | Should -Match 'Declarative Agents Architect'
+        $applied | Should -Match 'Agents SDK Teams manifest'
+        $applied | Should -Match 'M365 evaluation suite'
+        $applied | Should -Match 'Squad M365 Agent Integrator'
+        $applied | Should -Match 'MCP M365 Agent Expert'
+        $applied | Should -Match 'Copilot MCP widget server'
+        $applied | Should -Match 'preview'
+
+        $removed = $applied -replace '(?m)^Packs: m365-copilot\r?\n', ''
+        $removed = [regex]::Replace($removed, '(?m)^\| m365-agent-(architect|integrator) \|.*\r?\n', '')
+        [IO.File]::WriteAllText($teamPath, $removed, [Text.UTF8Encoding]::new($false))
+        [IO.File]::ReadAllText($teamPath) | Should -Not -Match 'm365-agent-architect'
+
+        $reapplied = New-ExpansionPlan -Repo $repo -Choices @{
+            confirmed = $true
+            runId = 'm365-reapply'
+            packs = @('m365-copilot')
+        }
+        $reapplied.Result.ExitCode | Should -Be 0 -Because $reapplied.Result.Output
+        (@($reapplied.Receipt.addedRoles | Sort-Object) -join ',') | Should -BeExactly 'm365-agent-architect,m365-agent-integrator'
+        (Invoke-Expansion -Repo $repo -Plan $reapplied).ExitCode | Should -Be 0
+        $after = [IO.File]::ReadAllText($teamPath)
+        $after | Should -Match '(?m)^Packs: m365-copilot$'
+        $after | Should -Match 'Squad M365 Agent Architect'
+        $after | Should -Match 'Declarative Agents Architect'
     }
 }
