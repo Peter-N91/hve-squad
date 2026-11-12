@@ -835,7 +835,7 @@ Describe 'Universal compact metadata and deterministic scheduling (COORD-04..06)
         Write-FixtureJson $path @{
             squadRoot = $fixture.Root
             sessionModel = 'gpt-5.6-sol'
-            availableModels = @('gpt-5.6-sol', 'gpt-5.4', 'claude-haiku-5.5')
+            availableModels = @('gpt-5.6-sol', 'gpt-5.6-terra', 'claude-haiku-5.5')
             units = @(@{ id = 'review'; role = 'tester'; readOnly = $true })
         }
         $before = Get-FixtureHash $fixture.Root

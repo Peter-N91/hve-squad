@@ -1,32 +1,35 @@
-name: Sync Model Benchmarks
+name: Sync Model Catalog, Rates, and Benchmarks
 
 # Runs every morning at 06:30 UTC or on demand.
 #
 # What it does:
-#   1. Runs scripts/Sync-ModelBenchmarks.ps1 to download the daily Epoch AI
+#   1. Runs scripts/Sync-ModelCatalog.ps1 against official GitHub Copilot docs
+#      (Supported AI models, Models and pricing, AI model comparison, and
+#      Copilot Fusion) to add newly released models, update token pricing,
+#      maintain Copilot Fusion effort levels (`fusion-standard`, `hydrafusion`,
+#      `hydrafusion-max`), and prune retired models from `model-catalog.md` and
+#      `consumption-rates-template.md` with synchronized dates.
+#   2. Runs scripts/Sync-ModelBenchmarks.ps1 to download the daily Epoch AI
 #      Benchmarking Hub dataset (CC BY 4.0) — and optionally enrich from the
 #      Artificial Analysis Free Data API when ARTIFICIAL_ANALYSIS_API_KEY is
 #      configured — extracting task-specific benchmark evaluations for the
-#      models declared in model-catalog.md.
-#   2. Verifies supported exact-model results against original publisher
+#      active models declared in model-catalog.md.
+#   3. Verifies supported exact-model results against original publisher
 #      records and methodology, separately from result and generation dates.
-#      The evidence digest includes verification facts and comparison panels.
-#      If it matches the committed
-#      squad-src/.github/skills/squad/references/model-benchmarks.md and the
-#      identical evidence check is younger than the 60-day renewal window
-#      (before 90-day verification expiration), the run exits cleanly
-#      without opening a noisy pull request.
-#   3. When benchmark scores or source versions change (or the 60-day refresh
-#      window is reached, or force=true), validates the updated snapshot with
-#      Pester (tests/tier1/ModelRouting.Tests.ps1) to guarantee provenance and
-#      routing invariants hold before proposing any change.
-#   4. Records a patch change fragment under .changes/unreleased/, pushes the
+#      When neither catalog/rates nor benchmark evidence changed (and snapshots
+#      remain younger than the 60-day renewal window before 90-day expiration),
+#      the run exits cleanly without opening a noisy pull request.
+#   4. When models, rates, or benchmark scores change (or the 60-day refresh
+#      window is reached, or force=true), validates hot-file budgets and the
+#      routing/provenance contract (`HotFileBudget.Tests.ps1` and
+#      `ModelRouting.Tests.ps1`) before proposing any change.
+#   5. Records a patch change fragment under .changes/unreleased/, pushes the
 #      branch `chore/sync-model-benchmarks`, and opens or updates a reviewed
 #      pull request against `main` (satisfying the reviewed-snapshot contract
 #      in issue #166).
 #
-# Runtime squad dispatches NEVER fetch benchmark data from the web; they read
-# the committed model-benchmarks.md knowledge base offline.
+# Runtime squad dispatches NEVER fetch catalog or benchmark data from the web;
+# they read the committed reference files offline.
 
 on:
   schedule:
@@ -35,7 +38,7 @@ on:
     # checkov:skip=CKV_GHA_7:Manual dispatch (write access required); dry_run is a typed boolean that gates publication directly.
     inputs:
       force:
-        description: 'Force snapshot refresh even if benchmark scores are unchanged'
+        description: 'Force snapshot refresh even if models, rates, and benchmark scores are unchanged'
         type: boolean
         default: false
       allow_coverage_reduction:
@@ -43,7 +46,7 @@ on:
         type: boolean
         default: false
       dry_run:
-        description: 'Compute and validate the snapshot without pushing a branch or opening a PR'
+        description: 'Compute and validate the snapshots without pushing a branch or opening a PR'
         type: boolean
         default: false
 
@@ -56,7 +59,7 @@ permissions:
 
 jobs:
   sync-benchmarks:
-    name: Refresh model-benchmarks.md knowledge base
+    name: Refresh model catalog, rates, and benchmarks
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -66,6 +69,34 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+
+      - name: Sync model catalog and consumption rates
+        id: catalog
+        shell: pwsh
+        env:
+          FORCE: ${{ inputs.force }}
+        run: |
+          $params = @{
+            GitHubOutput = $true
+          }
+          if ($env:FORCE -eq 'true') {
+            $params['Force'] = $true
+          }
+          $catResult = ./scripts/Sync-ModelCatalog.ps1 @params
+          @(
+            '### Model Catalog & Rates Sync'
+            ''
+            '| Field | Value |'
+            '| --- | --- |'
+            "| Updated | ``$($catResult.Updated)`` |"
+            "| Retrieved / Observed-on | ``$($catResult.Retrieved)`` |"
+            "| Active models | **$($catResult.ModelsCount)** |"
+            "| Added models | ``$(if ($catResult.AddedModels.Count) { $catResult.AddedModels -join ', ' } else { 'none' })`` |"
+            "| Retired models | ``$(if ($catResult.RetiredModels.Count) { $catResult.RetiredModels -join ', ' } else { 'none' })`` |"
+            "| Rates template bytes | ``$($catResult.RatesTemplateBytes)`` |"
+            "| Semantic digest | ``$($catResult.Digest)`` |"
+            ''
+          ) | Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY
 
       - name: Sync benchmark knowledge base
         id: sync
@@ -100,25 +131,41 @@ jobs:
           ) | Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY
 
       - name: Install Pester
-        if: steps.sync.outputs.updated == 'true'
+        if: steps.catalog.outputs.updated == 'true' || steps.sync.outputs.updated == 'true'
         shell: pwsh
         run: Install-Module Pester -RequiredVersion 5.7.1 -Force -Scope CurrentUser -SkipPublisherCheck
 
-      - name: Validate benchmark snapshot and routing contract
-        if: steps.sync.outputs.updated == 'true'
+      - name: Validate hot-file budget, catalog, rates, and routing contract
+        if: steps.catalog.outputs.updated == 'true' || steps.sync.outputs.updated == 'true'
         shell: pwsh
         run: |
+          $ErrorActionPreference = 'Stop'
+          Set-StrictMode -Version Latest
+          $env:TIER0_BASE_SHA = (git rev-parse HEAD).Trim()
+          $repoRoot = (Resolve-Path -LiteralPath '.').Path
+          $tier0Config = New-PesterConfiguration
+          $tier0Config.Run.Container = @(
+            New-PesterContainer -Path './tests/tier0/HotFileBudget.Tests.ps1' -Data @{ SourceRoot = $repoRoot }
+            New-PesterContainer -Path './tests/tier0/Performance.Tests.ps1' -Data @{ SourceRoot = $repoRoot }
+          )
+          $tier0Config.Run.PassThru = $true
+          $tier0Config.Output.Verbosity = 'Normal'
+          $tier0Res = Invoke-Pester -Configuration $tier0Config
+          if ($tier0Res.FailedCount -gt 0 -or $tier0Res.Result -ne 'Passed') {
+            throw "Tier 0 budget/contract checks failed ($($tier0Res.FailedCount) failure(s)); refusing to propose an invalid catalog or rates template."
+          }
+
           $config = New-PesterConfiguration
           $config.Run.Path = './tests/tier1/ModelRouting.Tests.ps1'
           $config.Run.PassThru = $true
           $config.Output.Verbosity = 'Normal'
           $res = Invoke-Pester -Configuration $config
           if ($res.FailedCount -gt 0 -or $res.Result -ne 'Passed') {
-            throw "ModelRouting.Tests.ps1 failed ($($res.FailedCount) failure(s)); refusing to propose an invalid benchmark snapshot."
+            throw "ModelRouting.Tests.ps1 failed ($($res.FailedCount) failure(s)); refusing to propose an invalid catalog or benchmark snapshot."
           }
 
       - name: Verify shared scoring and offline snapshot reproducibility
-        if: steps.sync.outputs.updated == 'true'
+        if: steps.catalog.outputs.updated == 'true' || steps.sync.outputs.updated == 'true'
         shell: pwsh
         run: |
           $path = './squad-src/.github/skills/squad/references/model-benchmarks.md'
@@ -128,10 +175,14 @@ jobs:
           }
 
       - name: Propose reviewed pull request
-        if: steps.sync.outputs.updated == 'true' && !inputs.dry_run
+        if: (steps.catalog.outputs.updated == 'true' || steps.sync.outputs.updated == 'true') && !inputs.dry_run
         shell: pwsh
         env:
           GH_TOKEN: ${{ secrets.SYNC_DEPS_TOKEN || secrets.GITHUB_TOKEN }}
+          CAT_RETRIEVED: ${{ steps.catalog.outputs.retrieved }}
+          CAT_MODELS: ${{ steps.catalog.outputs.models_count }}
+          CAT_ADDED: ${{ steps.catalog.outputs.added_models }}
+          CAT_RETIRED: ${{ steps.catalog.outputs.retired_models }}
           RETRIEVED: ${{ steps.sync.outputs.retrieved }}
           DIGEST: ${{ steps.sync.outputs.digest }}
           MODELS_COVERED: ${{ steps.sync.outputs.models_covered }}
@@ -139,47 +190,59 @@ jobs:
           REPO: ${{ github.repository }}
         run: |
           $branch = 'chore/sync-model-benchmarks'
+          $stamp = if ($env:CAT_RETRIEVED) { $env:CAT_RETRIEVED } else { $env:RETRIEVED }
           git config user.name 'github-actions[bot]'
           git config user.email 'github-actions[bot]@users.noreply.github.com'
           git remote set-url origin "https://x-access-token:$($env:GH_TOKEN)@github.com/$($env:REPO).git"
           git checkout -B $branch
 
-          $fragmentBody = "- Refreshed ``references/model-benchmarks.md`` knowledge base ($($env:SCORES_COUNT) score rows across $($env:MODELS_COVERED) models; digest ``$($env:DIGEST)``)."
+          $fragmentLines = @(
+            "- Refreshed ``model-catalog.md``, ``consumption-rates-template.md``, and ``model-benchmarks.md`` ($($env:CAT_MODELS) catalog models; $($env:SCORES_COUNT) score rows across $($env:MODELS_COVERED) benchmarked models; digest ``$($env:DIGEST)``)."
+          )
+          if ($env:CAT_ADDED) { $fragmentLines += "- Added newly supported Copilot models: ``$($env:CAT_ADDED)``." }
+          if ($env:CAT_RETIRED) { $fragmentLines += "- Pruned retired Copilot models from active routing and benchmark checks: ``$($env:CAT_RETIRED)``." }
           ./scripts/New-ChangeFragment.ps1 -Type Changed -Bump patch -Force `
-            -Title "sync model benchmarks $($env:RETRIEVED)" `
-            -Body $fragmentBody
+            -Title "sync model catalog and benchmarks $stamp" `
+            -Body ($fragmentLines -join "`n")
 
-          git add squad-src/.github/skills/squad/references/model-benchmarks.md .changes/unreleased
+          git add `
+            squad-src/.github/skills/squad/references/model-catalog.md `
+            squad-src/.github/skills/squad/references/consumption-rates-template.md `
+            squad-src/.github/skills/squad/references/model-benchmarks.md `
+            .changes/unreleased
           if ((git status --porcelain).Count -eq 0) {
             Write-Host '::notice::No working tree changes to commit.'
             return
           }
 
-          git commit -m "chore(benchmarks): sync model benchmark knowledge base ($($env:RETRIEVED))"
+          git commit -m "chore(models): sync model catalog, rates, and benchmarks ($stamp)"
           git push --force origin "refs/heads/$branch"
 
-          $prTitle = "chore(benchmarks): sync model benchmark knowledge base ($($env:RETRIEVED))"
+          $prTitle = "chore(models): sync model catalog, rates, and benchmarks ($stamp)"
           $prBody = @(
             '## Summary'
             ''
-            'Automated daily refresh of `squad-src/.github/skills/squad/references/model-benchmarks.md` from independent upstream benchmark sources (`epoch-ai`, `artificial-analysis`).'
+            'Automated refresh of `model-catalog.md`, `consumption-rates-template.md`, and `model-benchmarks.md` from official GitHub Copilot documentation and independent upstream benchmark sources (`epoch-ai`, `artificial-analysis`).'
             ''
-            "- **Retrieved**: ``$($env:RETRIEVED)``"
-            "- **Content digest**: ``$($env:DIGEST)``"
+            "- **Catalog / rates date**: ``$($env:CAT_RETRIEVED)`` ($($env:CAT_MODELS) active models)"
+            "- **Added models**: ``$(if ($env:CAT_ADDED) { $env:CAT_ADDED } else { 'none' })``"
+            "- **Retired models pruned**: ``$(if ($env:CAT_RETIRED) { $env:CAT_RETIRED } else { 'none' })``"
+            "- **Benchmark evidence retrieved**: ``$($env:RETRIEVED)``"
+            "- **Benchmark content digest**: ``$($env:DIGEST)``"
             "- **Independently evaluated catalog models**: $($env:MODELS_COVERED)"
             "- **Total benchmark score rows**: $($env:SCORES_COUNT)"
             ''
             '## Validation'
             ''
-            '- `Invoke-Pester -Path ./tests/tier1/ModelRouting.Tests.ps1`: **passed**'
+            '- `Invoke-Pester` (`HotFileBudget.Tests.ps1` + `ModelRouting.Tests.ps1`): **passed**'
           ) -join "`n"
 
           $existingPr = gh pr list --repo $env:REPO --head $branch --state open --json number --jq '.[0].number'
           if ($existingPr) {
             gh pr edit $existingPr --repo $env:REPO --title $prTitle --body $prBody
-            Write-Host "::notice::Updated open benchmark sync PR #$existingPr."
+            Write-Host "::notice::Updated open model sync PR #$existingPr."
           }
           else {
             $url = gh pr create --repo $env:REPO --base main --head $branch --title $prTitle --body $prBody
-            Write-Host "::notice::Opened benchmark sync PR: $url"
+            Write-Host "::notice::Opened model sync PR: $url"
           }

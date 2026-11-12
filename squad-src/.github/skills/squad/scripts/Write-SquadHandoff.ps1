@@ -687,7 +687,9 @@ function ConvertFrom-ModelPin {
     # 'Claude Haiku 4.5 (copilot)' and 'claude-haiku-4.5' both -> 'claude-haiku-4.5'; only a trailing vendor suffix is dropped, so '(fast mode)' stays part of the name.
     param([string]$Text)
     $key = (($Text.Trim().Trim('"', "'") -replace '\s*\((?:copilot|github|anthropic|openai)\)\s*$', '').Trim() -replace '\s+', '-').ToLowerInvariant()
-    if ($key -in @('hydrafusion', 'hydrafusion-balance', 'hydrafusion-efficiency')) { return 'hydrafusion-max' }
+    if ($key -in @('fusion', 'copilot-fusion', 'fusion-standard', 'copilot-fusion-standard', 'hydrafusion-standard', 'hydrafusion-efficiency')) { return 'fusion-standard' }
+    if ($key -in @('hydrafusion', 'fusion-high', 'copilot-fusion-high', 'hydrafusion-high', 'hydrafusion-balance')) { return 'hydrafusion' }
+    if ($key -in @('hydrafusion-max', 'fusion-max', 'copilot-fusion-max')) { return 'hydrafusion-max' }
     return $key
 }
 
@@ -869,7 +871,8 @@ function Get-DerivedConsumption {
     if (-not $priced) { $needsScribe.Add("$Where was omitted and model '$model' has no rate row and no '$tier' tier fallback row; the Scribe composes the block."); return $null }
     $pricedRow = @($RateRows | Where-Object { $_.Name -eq $priced }) | Select-Object -First 1
     $writesCache = ($pricedRow -and $pricedRow.CacheWrite -gt 0)
-    $tokenFactor = if ((ConvertFrom-ModelPin $model) -eq 'hydrafusion-max') { 0.35 } else { 1.0 }
+    $pinKey = ConvertFrom-ModelPin $model
+    $tokenFactor = if ($pinKey -eq 'hydrafusion-max') { 0.35 } elseif ($pinKey -eq 'hydrafusion') { 0.55 } else { 1.0 }
     $turns = [Math]::Max([long]$floors.Turns, $InternalToolCalls)
     $average = $floors.Base + $floors.Growth * ($turns - 1) / 2.0
     $gross = $turns * $average * $tokenFactor

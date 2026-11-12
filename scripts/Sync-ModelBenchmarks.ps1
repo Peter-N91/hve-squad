@@ -168,7 +168,7 @@ if (-not $CatalogPath) {
 
 $retrievedDate = $AsOf.ToString('yyyy-MM-dd', [System.Globalization.CultureInfo]::InvariantCulture)
 
-$catalogModelSpecs = Get-SquadBenchmarkModelSpec
+$catalogModelSpecs = Get-SquadBenchmarkModelSpec -CatalogPath $CatalogPath
 
 function Get-CatalogFitMap {
     param([Parameter(Mandatory)][string]$Path)
@@ -608,12 +608,13 @@ function Get-OnlineSciCodeVerificationLocal {
     $methodUri = 'https://artificialanalysis.ai/methodology/intelligence-benchmarking'
     $method = Invoke-WebRequest -Uri $methodUri -UseBasicParsing
     $methodHtml = [string]$method.Content
-    $section = [regex]::Match($methodHtml, '(?is)<h4\b[^>]*\bid=["'']scicode["''][^>]*>.*?(?=<h[234]\b|\z)').Value
+    $section = [regex]::Match($methodHtml, '(?is)<h[34]\b[^>]*\bid=["'']scicode["''][^>]*>.*?(?=<h[234]\b|\z)').Value
+    $sectionText = [regex]::Replace([System.Net.WebUtility]::HtmlDecode(($section -replace '<[^>]+>', ' ')), '\s+', ' ')
     $tableRow = [regex]::Match($methodHtml, '(?is)<tr\b[^>]*>(?:(?!</tr>).)*\bSciCode\b(?:(?!</tr>).)*</tr>').Value
     $tableText = [regex]::Replace([System.Net.WebUtility]::HtmlDecode(($tableRow -replace '<[^>]+>', ' ')), '\s+', ' ')
     $methodSupported = $section -match 'dataset v1\.0\.1' -and $section -match '300-second' -and
     $section -match 'scientist-annotated background' -and $section -match 'sub-problem level scoring' -and
-    $section -match 'pass@1' -and $tableText -match '288 subproblems \(test set\)\s+3\b'
+    $section -match 'pass@1' -and ($tableText -match '288 subproblems \(test set\)\s+3\b' -or $sectionText -match 'constituent up to and including v4\.3\.2')
     $methodHash = Get-SquadBenchmarkTextHash -Text $methodHtml
     $publisherRecords = @{}
     foreach ($row in $Rows) {
@@ -851,14 +852,39 @@ try {
         @()
     }
 
+    $deepswePath = Join-Path $extractRoot 'deepswe_external.csv'
+    $deepsweRows = @(if (Test-Path -LiteralPath $deepswePath -PathType Leaf) {
+            Import-Csv -LiteralPath $deepswePath
+        })
+
+    $hlePath = Join-Path $extractRoot 'hle_external.csv'
+    $hleRows = @(if (Test-Path -LiteralPath $hlePath -PathType Leaf) {
+            Import-Csv -LiteralPath $hlePath
+        })
+
+    $sweBenchPath = Join-Path $extractRoot 'swe_bench_verified.csv'
+    $sweBenchRows = @(if (Test-Path -LiteralPath $sweBenchPath -PathType Leaf) {
+            Import-Csv -LiteralPath $sweBenchPath
+        })
+
+    $terminalBenchPath = Join-Path $extractRoot 'terminalbench_external.csv'
+    $terminalBenchRows = @(if (Test-Path -LiteralPath $terminalBenchPath -PathType Leaf) {
+            Import-Csv -LiteralPath $terminalBenchPath
+        })
+
     if (-not $EpochVersion) {
-        $semanticLines = Get-NormalizedDataSetRecord -DataSets ([ordered]@{
-                processed = $procRows
-                eci       = $eciRows
-                scicode   = $scicodeRows
-                critpt    = $critptRows
-                gdpPdf    = $gdpPdfRows
-            })
+        $semanticDataSets = [ordered]@{
+            processed = $procRows
+            eci       = $eciRows
+            scicode   = $scicodeRows
+            critpt    = $critptRows
+            gdpPdf    = $gdpPdfRows
+        }
+        if ($deepsweRows.Count -gt 0) { $semanticDataSets['deepswe'] = $deepsweRows }
+        if ($hleRows.Count -gt 0) { $semanticDataSets['hle'] = $hleRows }
+        if ($sweBenchRows.Count -gt 0) { $semanticDataSets['sweBench'] = $sweBenchRows }
+        if ($terminalBenchRows.Count -gt 0) { $semanticDataSets['terminalBench'] = $terminalBenchRows }
+        $semanticLines = Get-NormalizedDataSetRecord -DataSets $semanticDataSets
         $semanticHash = Get-StringSha256 -Text ($semanticLines -join "`n")
         $EpochVersion = "archive-$($semanticHash.Substring(0, 16))"
     }
@@ -980,6 +1006,141 @@ try {
                 }
                 $scoreRows.Add($entry)
                 $modelEvalLookup[$catalogId][$evalSpec.EvalName] = $entry
+            }
+        }
+
+        # Standalone Epoch AI dataset fallbacks when evaluations are omitted from processed_data_for_eci.csv
+        if (-not $modelEvalLookup[$catalogId].Contains('SWE-Bench verified') -and $sweBenchRows.Count -gt 0) {
+            $sweBest = Get-BestVersionRow -Rows $sweBenchRows -VersionPattern $versionRegex -ScoreColumn 'mean_score'
+            if ($null -ne $sweBest -and $sweBest.Score -gt 0) {
+                $scoreVal = [decimal]$sweBest.Score
+                $source = Get-SourceDetailLocal `
+                    -RawSource '' `
+                    -DefaultId 'epoch-ai' `
+                    -DefaultName 'Epoch AI Benchmarking Hub' `
+                    -DefaultVersion $EpochVersion `
+                    -VersionHint '2024-08-13' `
+                    -RetrievedHint ([string]$sweBest.Row.'Release date')
+                $entry = [pscustomobject][ordered]@{
+                    CatalogId      = $catalogId
+                    Evaluation     = 'SWE-Bench verified'
+                    Category       = 'coding'
+                    Score          = $scoreVal.ToString('0.000#########################', [System.Globalization.CultureInfo]::InvariantCulture)
+                    NumericScore   = $scoreVal
+                    SourceId       = $source.Id
+                    SourceName     = $source.Name
+                    SourceVersion  = $source.Version
+                    ModelVersion   = [string]$sweBest.Row.'Model version'
+                    SourceUrl      = $source.Url
+                    Retrieved      = $source.Retrieved
+                    Provenance     = $source.Provenance
+                    License        = $source.License
+                    Redistribution = $source.Redistribution
+                    Status         = $source.Status
+                }
+                $scoreRows.Add($entry)
+                $modelEvalLookup[$catalogId]['SWE-Bench verified'] = $entry
+            }
+        }
+
+        if (-not $modelEvalLookup[$catalogId].Contains('DeepSWE') -and $deepsweRows.Count -gt 0) {
+            $deepBest = Get-BestVersionRow -Rows $deepsweRows -VersionPattern $versionRegex -ScoreColumn 'Pass@1'
+            if ($null -ne $deepBest -and $deepBest.Score -gt 0) {
+                $scoreVal = [decimal]$deepBest.Score
+                $deepSourceRaw = if ($deepBest.Row.PSObject.Properties['Source'] -and $deepBest.Row.Source) { [string]$deepBest.Row.Source } else { 'https://deepswe.datacurve.ai/' }
+                $source = Get-SourceDetailLocal `
+                    -RawSource $deepSourceRaw `
+                    -DefaultId 'deepswe-datacurve-ai' `
+                    -DefaultName 'deepswe.datacurve.ai' `
+                    -DefaultVersion '2026-05-26' `
+                    -VersionHint '2026-05-26' `
+                    -RetrievedHint ([string]$deepBest.Row.'Release date')
+                $entry = [pscustomobject][ordered]@{
+                    CatalogId      = $catalogId
+                    Evaluation     = 'DeepSWE'
+                    Category       = 'coding'
+                    Score          = $scoreVal.ToString('0.000#########################', [System.Globalization.CultureInfo]::InvariantCulture)
+                    NumericScore   = $scoreVal
+                    SourceId       = $source.Id
+                    SourceName     = $source.Name
+                    SourceVersion  = $source.Version
+                    ModelVersion   = [string]$deepBest.Row.'Model version'
+                    SourceUrl      = $source.Url
+                    Retrieved      = $source.Retrieved
+                    Provenance     = $source.Provenance
+                    License        = $source.License
+                    Redistribution = $source.Redistribution
+                    Status         = $source.Status
+                }
+                $scoreRows.Add($entry)
+                $modelEvalLookup[$catalogId]['DeepSWE'] = $entry
+            }
+        }
+
+        if (-not $modelEvalLookup[$catalogId].Contains('HLE') -and $hleRows.Count -gt 0) {
+            $hleBest = Get-BestVersionRow -Rows $hleRows -VersionPattern $versionRegex -ScoreColumn 'Accuracy'
+            if ($null -ne $hleBest -and $hleBest.Score -gt 0) {
+                $scoreVal = [decimal]$hleBest.Score
+                $source = Get-SourceDetailLocal `
+                    -RawSource '' `
+                    -DefaultId 'epoch-ai' `
+                    -DefaultName 'Epoch AI Benchmarking Hub' `
+                    -DefaultVersion $EpochVersion `
+                    -VersionHint $EpochVersion `
+                    -RetrievedHint ([string]$hleBest.Row.'Release date')
+                $entry = [pscustomobject][ordered]@{
+                    CatalogId      = $catalogId
+                    Evaluation     = 'HLE'
+                    Category       = 'scientific-reasoning'
+                    Score          = $scoreVal.ToString('0.000#########################', [System.Globalization.CultureInfo]::InvariantCulture)
+                    NumericScore   = $scoreVal
+                    SourceId       = $source.Id
+                    SourceName     = $source.Name
+                    SourceVersion  = $source.Version
+                    ModelVersion   = [string]$hleBest.Row.'Model version'
+                    SourceUrl      = $source.Url
+                    Retrieved      = $source.Retrieved
+                    Provenance     = $source.Provenance
+                    License        = $source.License
+                    Redistribution = $source.Redistribution
+                    Status         = $source.Status
+                }
+                $scoreRows.Add($entry)
+                $modelEvalLookup[$catalogId]['HLE'] = $entry
+            }
+        }
+
+        if (-not $modelEvalLookup[$catalogId].Contains('Terminal-Bench') -and $terminalBenchRows.Count -gt 0) {
+            $tbBest = Get-BestVersionRow -Rows $terminalBenchRows -VersionPattern $versionRegex -ScoreColumn 'Accuracy mean'
+            if ($null -ne $tbBest -and $tbBest.Score -gt 0) {
+                $scoreVal = [decimal]$tbBest.Score
+                $tbSourceRaw = if ($tbBest.Row.PSObject.Properties['Source'] -and $tbBest.Row.Source) { [string]$tbBest.Row.Source } else { 'https://www.tbench.ai/leaderboard/terminal-bench/2.0' }
+                $source = Get-SourceDetailLocal `
+                    -RawSource $tbSourceRaw `
+                    -DefaultId 'terminal-bench' `
+                    -DefaultName 'Terminal-Bench' `
+                    -DefaultVersion '2025-05-19' `
+                    -VersionHint '2025-05-19' `
+                    -RetrievedHint ([string]$tbBest.Row.'Release date')
+                $entry = [pscustomobject][ordered]@{
+                    CatalogId      = $catalogId
+                    Evaluation     = 'Terminal-Bench'
+                    Category       = 'coding'
+                    Score          = $scoreVal.ToString('0.000#########################', [System.Globalization.CultureInfo]::InvariantCulture)
+                    NumericScore   = $scoreVal
+                    SourceId       = $source.Id
+                    SourceName     = $source.Name
+                    SourceVersion  = $source.Version
+                    ModelVersion   = [string]$tbBest.Row.'Model version'
+                    SourceUrl      = $source.Url
+                    Retrieved      = $source.Retrieved
+                    Provenance     = $source.Provenance
+                    License        = $source.License
+                    Redistribution = $source.Redistribution
+                    Status         = $source.Status
+                }
+                $scoreRows.Add($entry)
+                $modelEvalLookup[$catalogId]['Terminal-Bench'] = $entry
             }
         }
 
@@ -1250,7 +1411,14 @@ try {
         throw "Benchmark refresh produced no usable independent model coverage; preserving the existing snapshot instead of replacing it."
     }
     if (-not $AllowCoverageReduction -and (Test-Path -LiteralPath $OutputPath -PathType Leaf)) {
-        $existingEvidenceKeys = @(Get-IndependentSnapshotEvidenceKey -Path $OutputPath)
+        $activeCatalogIds = [System.Collections.Generic.HashSet[string]]::new(
+            [string[]]@($catalogFit.Keys),
+            [System.StringComparer]::Ordinal
+        )
+        $existingEvidenceKeys = @(
+            Get-IndependentSnapshotEvidenceKey -Path $OutputPath |
+                Where-Object { $activeCatalogIds.Contains(($_ -split "`n", 2)[0]) }
+        )
         if ($existingEvidenceKeys.Count -gt 0) {
             $nextEvidenceKeys = [System.Collections.Generic.HashSet[string]]::new(
                 [string[]]@(

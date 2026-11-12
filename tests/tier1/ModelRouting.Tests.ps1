@@ -50,6 +50,20 @@ BeforeAll {
         $roles | Sort-Object -Unique
     }
 
+    function Get-SnapshotEvaluationDate {
+        <#
+        .SYNOPSIS
+            Returns the evaluation date (Generated, falling back to Retrieved) of a benchmark snapshot.
+        #>
+        param([Parameter(Mandatory)][string]$Content)
+
+        $genMatch = [regex]::Match($Content, '\*\*Generated:\s*(?<date>\d{4}-\d{2}-\d{2})\*\*')
+        if ($genMatch.Success) {
+            return $genMatch.Groups['date'].Value
+        }
+        [regex]::Match($Content, '\*\*Retrieved:\s*(?<date>\d{4}-\d{2}-\d{2})\*\*').Groups['date'].Value
+    }
+
     function New-FixtureEvidenceRow {
         param(
             [string]$Id, [string]$Evaluation, [string]$Score = '0.600',
@@ -118,10 +132,10 @@ BeforeAll {
             [Parameter(Mandatory)][string]$Path,
             [string]$Date = '2026-10-19',
             [System.Collections.IDictionary]$Scores = ([ordered]@{
-                    'gpt-5.4' = '0.600'
-                    'gpt-5.6-sol' = '0.700'
-                    'gpt-5-mini' = '0.100'
-                    'gpt-5.4-nano' = '0.200'
+                    'gpt-5.6-terra' = '0.600'
+                    'gpt-5.6-sol'   = '0.700'
+                    'gpt-5.6-luna'  = '0.100'
+                    'gpt-5.4-nano'  = '0.200'
                 })
         )
         $lines = @(
@@ -561,10 +575,10 @@ Describe 'Resolve-SquadModelRoute.ps1 ranks by fit, not by name (case l)' {
         $seedRaw = Get-Content -LiteralPath (Join-Path $script:ReferencesRoot 'seed-templates.md') -Raw
         $script:SeedTeam = [regex]::Match($seedRaw, '(?s)## team\.md.*?```markdown\r?\n(?<b>.*?)```').Groups['b'].Value
         $script:CliEnum = @(
-            'claude-sonnet-5', 'claude-opus-5', 'claude-opus-4.8', 'claude-opus-4.7', 'claude-haiku-5.5', 'claude-haiku-4.5', 'gpt-6-sol', 'gpt-6-luna'
-            'gpt-6-astra', 'gpt-5.6-sol', 'gpt-5.6-sol-fast', 'gpt-5.6-terra', 'gpt-5.6-luna', 'gpt-5.5', 'gpt-5.4', 'gpt-5.4-mini'
-            'gpt-5.3-codex', 'gpt-5-mini', 'mai-code-1.1-flash', 'gemini-3.8-flash', 'gemini-3.7-flash', 'gemini-3.6-flash'
-            'gemini-3.5-flash', 'grok-4.5', 'claude-sonnet-5.5', 'gpt-6.1-sol', 'grok-4.6', 'grok-4.7', 'claude-opus-5.5'
+            'claude-sonnet-5', 'claude-opus-5', 'claude-opus-4.8', 'claude-haiku-5.5', 'claude-haiku-4.5', 'gpt-6-sol', 'gpt-6-luna'
+            'gpt-6-astra', 'gpt-5.6-sol', 'gpt-5.6-sol-fast', 'gpt-5.6-terra', 'gpt-5.6-luna'
+            'gpt-5.3-codex', 'mai-code-1.1-flash', 'gemini-3.8-flash', 'gemini-4-argon', 'gemini-4-carbon'
+            'claude-sonnet-5.5', 'gpt-6.1-sol', 'gpt-6.1-terra', 'grok-4.6', 'grok-4.7', 'claude-opus-5.5', 'hydrafusion', 'hydrafusion-max'
         )
 
         function Initialize-RosterFixture {
@@ -578,7 +592,7 @@ Describe 'Resolve-SquadModelRoute.ps1 ranks by fit, not by name (case l)' {
         function Invoke-Resolver {
             param([Parameter(Mandatory)][string]$Root, [hashtable]$Extra = @{})
             $benchmarkRaw = Get-Content -LiteralPath (Join-Path $script:ReferencesRoot 'model-benchmarks.md') -Raw
-            $benchmarkDate = [regex]::Match($benchmarkRaw, '\*\*Retrieved:\s*(?<date>\d{4}-\d{2}-\d{2})\*\*').Groups['date'].Value
+            $benchmarkDate = Get-SnapshotEvaluationDate -Content $benchmarkRaw
             $parameters = @{ SquadRoot = $Root; AsOf = [datetime]$benchmarkDate }
             foreach ($key in $Extra.Keys) { $parameters[$key] = $Extra[$key] }
             & $script:Resolver @parameters | ConvertFrom-Json
@@ -639,10 +653,10 @@ Describe 'Resolve-SquadModelRoute.ps1 ranks by fit, not by name (case l)' {
                 '# Squad Roster', '', '## Members', ''
                 '| Role | Member Name | Agent Name (Primary) | Model Tier | Deliverable Root |'
                 '|------|-------------|----------------------|------------|------------------|'
-                '| technical-writer | | Fixture | fast | docs/ |'
+                '| lead | | Fixture | default | docs/ |'
             ) -join "`n")
-        $result = Invoke-Resolver -Root $root -Extra @{ AvailableModels = @('gemini-3.6-flash', 'gemini-3.7-flash', 'gemini-3.8-flash') }
-        $result.roles[0].suggested | Should -Be 'gemini-3.8-flash'
+        $result = Invoke-Resolver -Root $root -Extra @{ AvailableModels = @('claude-opus-4.8', 'claude-opus-5') }
+        $result.roles[0].suggested | Should -Be 'claude-opus-5'
     }
 
     It 'never offers or ranks an unevaluated id, but reports it' {
@@ -720,13 +734,15 @@ Describe 'Resolve-SquadModelRoute.ps1 economy mode (case n)' {
         $seedRaw = Get-Content -LiteralPath (Join-Path $script:ReferencesRoot 'seed-templates.md') -Raw
         $script:SeedTeam = [regex]::Match($seedRaw, '(?s)## team\.md.*?```markdown\r?\n(?<b>.*?)```').Groups['b'].Value
         $script:CliEnum = @(
-            'claude-sonnet-5', 'claude-opus-5', 'claude-opus-4.8', 'claude-opus-4.7', 'claude-haiku-5.5', 'claude-haiku-4.5', 'gpt-6-sol', 'gpt-6-luna'
-            'gpt-6-astra', 'gpt-5.6-sol', 'gpt-5.6-sol-fast', 'gpt-5.6-terra', 'gpt-5.6-luna', 'gpt-5.5', 'gpt-5.4', 'gpt-5.4-mini'
-            'gpt-5.3-codex', 'gpt-5-mini', 'mai-code-1.1-flash', 'gemini-3.8-flash', 'gemini-3.7-flash', 'gemini-3.6-flash'
-            'gemini-3.5-flash', 'grok-4.5', 'claude-sonnet-5.5', 'gpt-6.1-sol', 'grok-4.6', 'grok-4.7', 'claude-opus-5.5'
+            'claude-sonnet-5', 'claude-opus-5', 'claude-opus-4.8', 'claude-haiku-5.5', 'claude-haiku-4.5', 'gpt-6-sol', 'gpt-6-luna'
+            'gpt-6-astra', 'gpt-5.6-sol', 'gpt-5.6-sol-fast', 'gpt-5.6-terra', 'gpt-5.6-luna'
+            'gpt-5.3-codex', 'mai-code-1.1-flash', 'gemini-3.8-flash', 'gemini-4-argon', 'gemini-4-carbon'
+            'claude-sonnet-5.5', 'gpt-6.1-sol', 'gpt-6.1-terra', 'grok-4.6', 'grok-4.7', 'claude-opus-5.5'
         )
         $script:EconomyBenchmarks = New-PolicyBenchmarkFile -Path (Join-Path $TestDrive 'economy-policy.md') -Date '2026-10-15'
-        $script:EconomyQualifiedIds = @('gpt-5.4', 'gpt-5.6-sol')
+        $script:EconomyQualifiedIds = @('gpt-5.6-terra', 'gpt-5.6-sol')
+        $liveBenchmarkRaw = Get-Content -LiteralPath (Join-Path $script:ReferencesRoot 'model-benchmarks.md') -Raw
+        $script:LiveBenchmarkDate = [datetime](Get-SnapshotEvaluationDate -Content $liveBenchmarkRaw)
 
         function New-EconomyRoot {
             param([Parameter(Mandatory)][string]$Content, [string]$Under = $TestDrive)
@@ -750,7 +766,7 @@ Describe 'Resolve-SquadModelRoute.ps1 economy mode (case n)' {
 
         function Invoke-EconomyResolverRaw {
             param([Parameter(Mandatory)][string]$Root, [hashtable]$Extra = @{}, [string]$Script = $script:Resolver)
-            $parameters = @{ SquadRoot = $Root; AsOf = [datetime]'2026-10-01'; AvailableModels = $script:CliEnum }
+            $parameters = @{ SquadRoot = $Root; AsOf = $script:LiveBenchmarkDate; AvailableModels = $script:CliEnum }
             foreach ($key in $Extra.Keys) { $parameters[$key] = $Extra[$key] }
             try {
                 $output = (& $Script @parameters 2>&1 | Out-String)
@@ -1102,10 +1118,10 @@ Describe 'Resolve-SquadModelRoute.ps1 economy mode (case n)' {
 
         It 'prints the consent line in the table output' {
             $root = New-EconomyRoot -Content $script:ConsentTeam
-            $missing = @(& $script:Resolver -SquadRoot $root -AsOf ([datetime]'2026-10-15') -AvailableModels $script:CliEnum -Format markdown)
+            $missing = @(& $script:Resolver -SquadRoot $root -AsOf $script:LiveBenchmarkDate -AvailableModels $script:CliEnum -Format markdown)
             $missing | Should -Contain 'consent: missing'
             Set-Content -LiteralPath (Join-Path $root 'decisions.md') -Value $script:Accepted -Encoding utf8NoBOM
-            $recorded = @(& $script:Resolver -SquadRoot $root -AsOf ([datetime]'2026-10-15') -AvailableModels $script:CliEnum -Format markdown)
+            $recorded = @(& $script:Resolver -SquadRoot $root -AsOf $script:LiveBenchmarkDate -AvailableModels $script:CliEnum -Format markdown)
             $recorded | Should -Contain 'consent: recorded'
         }
 
@@ -1113,7 +1129,7 @@ Describe 'Resolve-SquadModelRoute.ps1 economy mode (case n)' {
             foreach ($mode in 'ranked', 'manual') {
                 $run = Invoke-EconomyResolver -Root $script:SeedRoot -Extra @{ Mode = $mode }
                 $run.PSObject.Properties.Name | Should -Not -Contain 'consent'
-                @(& $script:Resolver -SquadRoot $script:SeedRoot -AsOf ([datetime]'2026-10-15') -AvailableModels $script:CliEnum -Mode $mode -Format markdown) -join "`n" | Should -Not -Match 'consent'
+                @(& $script:Resolver -SquadRoot $script:SeedRoot -AsOf $script:LiveBenchmarkDate -AvailableModels $script:CliEnum -Mode $mode -Format markdown) -join "`n" | Should -Not -Match 'consent'
             }
             (Invoke-EconomyResolver -Root $script:SeedRoot).PSObject.Properties.Name | Should -Not -Contain 'consent'
         }
@@ -1129,10 +1145,10 @@ Describe 'model-benchmarks.md knowledge base and provenance contract (#166, case
         $seedRaw = Get-Content -LiteralPath (Join-Path $script:ReferencesRoot 'seed-templates.md') -Raw
         $script:SeedTeam = [regex]::Match($seedRaw, '(?s)## team\.md.*?```markdown\r?\n(?<b>.*?)```').Groups['b'].Value
         $script:CliEnum = @(
-            'claude-sonnet-5', 'claude-opus-5', 'claude-opus-4.8', 'claude-opus-4.7', 'claude-haiku-5.5', 'claude-haiku-4.5', 'gpt-6-sol', 'gpt-6-luna'
-            'gpt-6-astra', 'gpt-5.6-sol', 'gpt-5.6-sol-fast', 'gpt-5.6-terra', 'gpt-5.6-luna', 'gpt-5.5', 'gpt-5.4', 'gpt-5.4-mini'
-            'gpt-5.3-codex', 'gpt-5.4-nano', 'gpt-5-mini', 'mai-code-1.1-flash', 'gemini-3.8-flash', 'gemini-3.7-flash', 'gemini-3.6-flash'
-            'gemini-3.5-flash', 'grok-4.5', 'claude-sonnet-5.5', 'gpt-6.1-sol', 'grok-4.6', 'grok-4.7', 'claude-opus-5.5'
+            'claude-sonnet-5', 'claude-opus-5', 'claude-opus-4.8', 'claude-haiku-5.5', 'claude-haiku-4.5', 'gpt-6-sol', 'gpt-6-luna'
+            'gpt-6-astra', 'gpt-5.6-sol', 'gpt-5.6-sol-fast', 'gpt-5.6-terra', 'gpt-5.6-luna'
+            'gpt-5.3-codex', 'gpt-5.4-nano', 'mai-code-1.1-flash', 'gemini-3.8-flash', 'gemini-4-argon', 'gemini-4-carbon'
+            'claude-sonnet-5.5', 'gpt-6.1-sol', 'gpt-6.1-terra', 'grok-4.6', 'grok-4.7', 'claude-opus-5.5', 'hydrafusion', 'hydrafusion-max'
         )
 
         function New-BenchmarkRosterRoot {
@@ -1185,12 +1201,12 @@ Describe 'model-benchmarks.md knowledge base and provenance contract (#166, case
 
         It 'derives implementation fit from measured scores and routes the higher score even when it costs more' {
             $archive = New-SyncArchiveLocal -ProcessedRows @(
-                'gpt54,swe,0.100,SWE-Bench verified,2024-08-13,gpt-5.4,gpt-5.4,GPT-5.4,2026-10-19,'
+                'gpt56t,swe,0.100,SWE-Bench verified,2024-08-13,gpt-5.6-terra,gpt-5.6-terra,GPT-5.6 Terra,2026-10-19,'
                 'gpt56,swe,0.990,SWE-Bench verified,2024-08-13,gpt-5.6-sol,gpt-5.6-sol,GPT-5.6 Sol,2026-10-19,'
-                'gpt54,terminal,0.100,Terminal Bench,2025-05-19,gpt-5.4,gpt-5.4,GPT-5.4,2026-10-19,'
+                'gpt56t,terminal,0.100,Terminal Bench,2025-05-19,gpt-5.6-terra,gpt-5.6-terra,GPT-5.6 Terra,2026-10-19,'
                 'gpt56,terminal,0.990,Terminal Bench,2025-05-19,gpt-5.6-sol,gpt-5.6-sol,GPT-5.6 Sol,2026-10-19,'
             )
-            @('Model version,Score,Source', 'gpt-5.4,0.100,', 'gpt-5.6-sol,0.990,') |
+            @('Model version,Score,Source', 'gpt-5.6-terra,0.100,', 'gpt-5.6-sol,0.990,') |
                 Set-Content -LiteralPath (Join-Path $archive 'scicode_external.csv') -Encoding utf8NoBOM
             $output = Join-Path $TestDrive 'score-reversal.md'
             $result = @(& $script:SyncScript -ArchivePath $archive -OutputPath $output -CatalogPath $script:CatalogPath -AsOf ([datetime]'2026-10-19') -EpochVersion 'fixture-v1')[-1]
@@ -1205,19 +1221,19 @@ Describe 'model-benchmarks.md knowledge base and provenance contract (#166, case
             $fit = @($tables | Where-Object { 'Composite' -in $_.Header -and 'implementation' -in $_.Header })[0]
             $byId = @{}
             foreach ($row in $fit.Rows) { $byId[$row['Catalog ID']] = $row }
-            [int]$byId['gpt-5.4']['implementation'] | Should -Be 0
+            [int]$byId['gpt-5.6-terra']['implementation'] | Should -Be 0
             [int]$byId['gpt-5.6-sol']['implementation'] | Should -Be 3
 
-            $route = & $script:Resolver -SquadRoot (New-RoutingRootLocal) -AvailableModels @('gpt-5.4', 'gpt-5.6-sol') -Mode ranked -Role @('developer') -AsOf ([datetime]'2026-10-19') -BenchmarksPath $output | ConvertFrom-Json
+            $route = & $script:Resolver -SquadRoot (New-RoutingRootLocal) -AvailableModels @('gpt-5.6-terra', 'gpt-5.6-sol') -Mode ranked -Role @('developer') -AsOf ([datetime]'2026-10-19') -BenchmarksPath $output | ConvertFrom-Json
             $route.roles[0].suggested | Should -Be 'gpt-5.6-sol'
             $route.roles[0].capability | Should -Be 1
             $route.roles[0].rationale | Should -Match 'SciCode, Terminal-Bench'
         }
 
-        It 'preserves source provenance, consumes Artificial Analysis indices, and excludes synthetic Hydra solver proxies' {
+        It 'preserves source provenance, consumes Artificial Analysis indices, and excludes synthetic Copilot Fusion solver proxies' {
             $archive = New-SyncArchiveLocal -ProcessedRows @(
-                'gpt54,frontier,0.400,FrontierCode,2026-06-08,gpt-5.4,gpt-5.4,GPT-5.4,2026-10-18,https://cognition.com/frontiercode'
-                'gptmini,swe,0.900,SWE-Bench verified,2024-08-13,gpt-5-mini,gpt-5-mini,GPT-5 mini,2026-10-18,OpenAI'
+                'gpt56t,frontier,0.400,FrontierCode,2026-06-08,gpt-5.6-terra,gpt-5.6-terra,GPT-5.6 Terra,2026-10-18,https://cognition.com/frontiercode'
+                'gptluna,swe,0.900,SWE-Bench verified,2024-08-13,gpt-5.6-luna,gpt-5.6-luna,GPT-5.6 Luna,2026-10-18,OpenAI'
                 'gpt56,swe,0.800,SWE-Bench verified,2024-08-13,gpt-5.6-sol,gpt-5.6-sol,GPT-5.6 Sol,2026-10-18,vendor self-reported'
                 'gpt61,swe,0.850,SWE-Bench verified,2024-08-13,gpt-6.1-sol,gpt-6.1-sol,GPT-6.1 Sol,2026-10-18,unverified user submission'
                 'gpt6,swe,0.820,SWE-Bench verified,2024-08-13,gpt-6-sol,gpt-6-sol,GPT-6 Sol,2026-10-18,unverified Cognition user submission'
@@ -1227,7 +1243,7 @@ Describe 'model-benchmarks.md knowledge base and provenance contract (#166, case
                 intelligence_index_version = '4.3.2'
                 data = @(
                     @{
-                        slug = 'gpt-5.4'
+                        slug = 'gpt-5.6-terra'
                         evaluations = @{
                             artificial_analysis_intelligence_index = 98
                             artificial_analysis_coding_index = 99
@@ -1241,12 +1257,12 @@ Describe 'model-benchmarks.md knowledge base and provenance contract (#166, case
             $tables = @(Get-MarkdownTable -Content (Get-Content -LiteralPath $output -Raw))
             $scores = @($tables | Where-Object { 'Evaluation' -in $_.Header -and 'Provenance' -in $_.Header })[0]
 
-            $frontier = @($scores.Rows | Where-Object { $_['Catalog ID'] -eq 'gpt-5.4' -and $_['Evaluation'] -eq 'FrontierCode' })[0]
+            $frontier = @($scores.Rows | Where-Object { $_['Catalog ID'] -eq 'gpt-5.6-terra' -and $_['Evaluation'] -eq 'FrontierCode' })[0]
             $frontier['Source ID'] | Should -Be 'cognition-frontiercode'
             $frontier['Source version'] | Should -Be '2026-06-08'
             $frontier['Provenance'] | Should -Be 'independent'
 
-            $vendor = @($scores.Rows | Where-Object { $_['Catalog ID'] -eq 'gpt-5-mini' -and $_['Evaluation'] -eq 'SWE-Bench verified' })[0]
+            $vendor = @($scores.Rows | Where-Object { $_['Catalog ID'] -eq 'gpt-5.6-luna' -and $_['Evaluation'] -eq 'SWE-Bench verified' })[0]
             $vendor['Source ID'] | Should -Be 'openai'
             $vendor['Provenance'] | Should -Be 'self-reported'
 
@@ -1262,13 +1278,15 @@ Describe 'model-benchmarks.md knowledge base and provenance contract (#166, case
             $spoofedPublisher['Source ID'] | Should -Be 'unverified-cognition-user-submission'
             $spoofedPublisher['Provenance'] | Should -Be 'self-reported'
 
-            $aaCoding = @($scores.Rows | Where-Object { $_['Catalog ID'] -eq 'gpt-5.4' -and $_['Evaluation'] -eq 'Artificial Analysis Coding Index' })[0]
+            $aaCoding = @($scores.Rows | Where-Object { $_['Catalog ID'] -eq 'gpt-5.6-terra' -and $_['Evaluation'] -eq 'Artificial Analysis Coding Index' })[0]
             $aaCoding['Score'] | Should -Be '0.990'
             $aaCoding['Source version'] | Should -Be 'v4.3.2'
 
-            @($scores.Rows | Where-Object { $_['Catalog ID'] -eq 'hydrafusion-max' }).Count | Should -Be 0
+            foreach ($fusionId in 'fusion-standard', 'hydrafusion', 'hydrafusion-max') {
+                @($scores.Rows | Where-Object { $_['Catalog ID'] -eq $fusionId }).Count | Should -Be 0
+            }
             $fit = @($tables | Where-Object { 'Composite' -in $_.Header -and 'implementation' -in $_.Header })[0]
-            @($fit.Rows | Where-Object { $_['Catalog ID'] -eq 'gpt-5-mini' }).Count | Should -Be 0
+            @($fit.Rows | Where-Object { $_['Catalog ID'] -eq 'gpt-5.6-luna' }).Count | Should -Be 0
             @($fit.Rows | Where-Object { $_['Catalog ID'] -eq 'gpt-5.6-sol' }).Count | Should -Be 0
             @($fit.Rows | Where-Object { $_['Catalog ID'] -eq 'gpt-6.1-sol' }).Count | Should -Be 0
             @($fit.Rows | Where-Object { $_['Catalog ID'] -eq 'gpt-6-sol' }).Count | Should -Be 0
@@ -1288,7 +1306,7 @@ Describe 'model-benchmarks.md knowledge base and provenance contract (#166, case
             @{ Source = 'https://vals-ai/vendor-self-reported'; TrustedSource = 'https://www.vals.ai/benchmarks/proof_bench'; TrustedId = 'vals-ai' }
         ) {
             $archive = New-SyncArchiveLocal -ProcessedRows @(
-                "gpt54,swe,0.800,SWE-Bench verified,2024-08-13,gpt-5.4,gpt-5.4,GPT-5.4,2026-10-19,$TrustedSource"
+                "gpt56t,swe,0.800,SWE-Bench verified,2024-08-13,gpt-5.6-terra,gpt-5.6-terra,GPT-5.6 Terra,2026-10-19,$TrustedSource"
                 "gpt56,swe,0.990,SWE-Bench verified,2024-08-13,gpt-5.6-sol,gpt-5.6-sol,GPT-5.6 Sol,2026-10-19,$Source"
             )
             $output = Join-Path $TestDrive "$TrustedId-authority.md"
@@ -1297,7 +1315,7 @@ Describe 'model-benchmarks.md knowledge base and provenance contract (#166, case
 
             $tables = @(Get-MarkdownTable -Content (Get-Content -LiteralPath $output -Raw))
             $scores = @($tables | Where-Object { 'Evaluation' -in $_.Header -and 'Provenance' -in $_.Header })[0]
-            $trusted = @($scores.Rows | Where-Object { $_['Catalog ID'] -eq 'gpt-5.4' })[0]
+            $trusted = @($scores.Rows | Where-Object { $_['Catalog ID'] -eq 'gpt-5.6-terra' })[0]
             $trusted['Source ID'] | Should -Be $TrustedId
             $trusted['Provenance'] | Should -Be 'independent'
 
@@ -1323,13 +1341,13 @@ Describe 'model-benchmarks.md knowledge base and provenance contract (#166, case
             @{ Publisher = 'Surge AI GDP.pdf'; SourceId = 'surge-gdp-pdf' }
         ) {
             $archive = New-SyncArchiveLocal -ProcessedRows @(
-                "gpt54,swe,0.800,SWE-Bench verified,2024-08-13,gpt-5.4,gpt-5.4,GPT-5.4,2026-10-19,$Publisher"
+                "gpt56t,swe,0.800,SWE-Bench verified,2024-08-13,gpt-5.6-terra,gpt-5.6-terra,GPT-5.6 Terra,2026-10-19,$Publisher"
             )
             $output = Join-Path $TestDrive "$SourceId-publisher.md"
             & $script:SyncScript -ArchivePath $archive -OutputPath $output -CatalogPath $script:CatalogPath -ArtificialAnalysisApiKey '' -AsOf ([datetime]'2026-10-19') -EpochVersion 'fixture-v1' | Out-Null
             $tables = @(Get-MarkdownTable -Content (Get-Content -LiteralPath $output -Raw))
             $scores = @($tables | Where-Object { 'Evaluation' -in $_.Header -and 'Provenance' -in $_.Header })[0]
-            $row = @($scores.Rows | Where-Object { $_['Catalog ID'] -eq 'gpt-5.4' })[0]
+            $row = @($scores.Rows | Where-Object { $_['Catalog ID'] -eq 'gpt-5.6-terra' })[0]
             $row['Source ID'] | Should -Be $SourceId
             $row['Provenance'] | Should -Be 'independent'
         }
@@ -1347,7 +1365,7 @@ Describe 'model-benchmarks.md knowledge base and provenance contract (#166, case
 
         It 'includes source versions in change detection' {
             $archive = New-SyncArchiveLocal -ProcessedRows @(
-                'gpt54,swe,0.800,SWE-Bench verified,2024-08-13,gpt-5.4,gpt-5.4,GPT-5.4,2026-10-19,'
+                'gpt56t,swe,0.800,SWE-Bench verified,2024-08-13,gpt-5.6-terra,gpt-5.6-terra,GPT-5.6 Terra,2026-10-19,'
             )
             $output = Join-Path $TestDrive 'version-digest.md'
             $first = @(& $script:SyncScript -ArchivePath $archive -OutputPath $output -CatalogPath $script:CatalogPath -AsOf ([datetime]'2026-10-19') -EpochVersion 'fixture-v1')[-1]
@@ -1359,7 +1377,7 @@ Describe 'model-benchmarks.md knowledge base and provenance contract (#166, case
 
         It 'uses a stable semantic archive version across retrieval-only dates and persists source URL changes' {
             $archive = New-SyncArchiveLocal -ProcessedRows @(
-                'gpt54,frontier,0.800,FrontierCode,2026-06-08,gpt-5.4,gpt-5.4,GPT-5.4,2026-10-19,https://cognition.com/frontiercode'
+                'gpt56t,frontier,0.800,FrontierCode,2026-06-08,gpt-5.6-terra,gpt-5.6-terra,GPT-5.6 Terra,2026-10-19,https://cognition.com/frontiercode'
             )
             $output = Join-Path $TestDrive 'stable-version.md'
             $first = @(& $script:SyncScript -ArchivePath $archive -OutputPath $output -CatalogPath $script:CatalogPath -AsOf ([datetime]'2026-10-19'))[-1]
@@ -1375,7 +1393,7 @@ Describe 'model-benchmarks.md knowledge base and provenance contract (#166, case
             $day60.Digest | Should -Be $first.Digest
 
             $changedArchive = New-SyncArchiveLocal -ProcessedRows @(
-                'gpt54,frontier,0.800,FrontierCode,2026-06-08,gpt-5.4,gpt-5.4,GPT-5.4,2026-10-19,https://cognition.com/frontiercode-v2'
+                'gpt56t,frontier,0.800,FrontierCode,2026-06-08,gpt-5.6-terra,gpt-5.6-terra,GPT-5.6 Terra,2026-10-19,https://cognition.com/frontiercode-v2'
             )
             $changed = @(& $script:SyncScript -ArchivePath $changedArchive -OutputPath $output -CatalogPath $script:CatalogPath -AsOf ([datetime]'2026-10-20'))[-1]
             $changed.Updated | Should -BeTrue
@@ -1385,13 +1403,13 @@ Describe 'model-benchmarks.md knowledge base and provenance contract (#166, case
 
         It 'treats identical duplicate <DataSet> records as a semantic no-op' -ForEach @(
             @{ DataSet = 'processed'; File = 'processed_data_for_eci.csv'; Header = ''; Rows = @() }
-            @{ DataSet = 'eci'; File = 'eci_scores.csv'; Header = 'Model,eci'; Rows = @('GPT-5.4,160', 'GPT-5.6 Sol,150') }
-            @{ DataSet = 'scicode'; File = 'scicode_external.csv'; Header = 'Model version,Score,Source'; Rows = @('gpt-5.4,0.700,Artificial Analysis SciCode', 'gpt-5.6-sol,0.600,Artificial Analysis SciCode') }
-            @{ DataSet = 'critpt'; File = 'critpt_external.csv'; Header = 'Model version,Accuracy'; Rows = @('gpt-5.4,0.700', 'gpt-5.6-sol,0.600') }
-            @{ DataSet = 'gdpPdf'; File = 'gdp_pdf_external.csv'; Header = 'Model version,GDP.pdf score,Source link,Source,Last updated'; Rows = @('gpt-5.4,0.700,https://surgehq.ai/benchmarks/gdp-pdf,Surge AI GDP.pdf,', 'gpt-5.6-sol,0.600,https://surgehq.ai/benchmarks/gdp-pdf,Surge AI GDP.pdf,') }
+            @{ DataSet = 'eci'; File = 'eci_scores.csv'; Header = 'Model,eci'; Rows = @('GPT-5.6 Terra,160', 'GPT-5.6 Sol,150') }
+            @{ DataSet = 'scicode'; File = 'scicode_external.csv'; Header = 'Model version,Score,Source'; Rows = @('gpt-5.6-terra,0.700,Artificial Analysis SciCode', 'gpt-5.6-sol,0.600,Artificial Analysis SciCode') }
+            @{ DataSet = 'critpt'; File = 'critpt_external.csv'; Header = 'Model version,Accuracy'; Rows = @('gpt-5.6-terra,0.700', 'gpt-5.6-sol,0.600') }
+            @{ DataSet = 'gdpPdf'; File = 'gdp_pdf_external.csv'; Header = 'Model version,GDP.pdf score,Source link,Source,Last updated'; Rows = @('gpt-5.6-terra,0.700,https://surgehq.ai/benchmarks/gdp-pdf,Surge AI GDP.pdf,', 'gpt-5.6-sol,0.600,https://surgehq.ai/benchmarks/gdp-pdf,Surge AI GDP.pdf,') }
         ) {
             $archive = New-SyncArchiveLocal -ProcessedRows @(
-                'gpt54,swe,0.800,SWE-Bench verified,2024-08-13,gpt-5.4,gpt-5.4,GPT-5.4,2026-10-19,'
+                'gpt56t,swe,0.800,SWE-Bench verified,2024-08-13,gpt-5.6-terra,gpt-5.6-terra,GPT-5.6 Terra,2026-10-19,'
                 'gpt56,swe,0.600,SWE-Bench verified,2024-08-13,gpt-5.6-sol,gpt-5.6-sol,GPT-5.6 Sol,2026-10-19,'
             )
             $dataRoot = if ($DataSet -in @('processed', 'eci')) { Join-Path $archive 'epoch_capabilities_index' } else { $archive }
@@ -1423,7 +1441,7 @@ Describe 'model-benchmarks.md knowledge base and provenance contract (#166, case
 
         It 'does not rewrite when only the derived fit view crosses the 90-day row boundary' {
             $archive = New-SyncArchiveLocal -ProcessedRows @(
-                'gpt54,swe,0.900,SWE-Bench verified,2024-08-13,gpt-5.4,gpt-5.4,GPT-5.4,2026-07-21,'
+                'gpt56t,swe,0.900,SWE-Bench verified,2024-08-13,gpt-5.6-terra,gpt-5.6-terra,GPT-5.6 Terra,2026-07-21,'
                 'gpt56,swe,0.800,SWE-Bench verified,2024-08-13,gpt-5.6-sol,gpt-5.6-sol,GPT-5.6 Sol,2026-10-19,'
             )
             $output = Join-Path $TestDrive 'age-only-fit-change.md'
@@ -1436,17 +1454,17 @@ Describe 'model-benchmarks.md knowledge base and provenance contract (#166, case
 
         It 'normalizes padded model display names and rejects conflicting duplicate evaluations before mutation' {
             $archive = New-SyncArchiveLocal -ProcessedRows @(
-                'gpt54,swe,0.800,SWE-Bench verified,2024-08-13,gpt-5.4,gpt-5.4," GPT-5.4 ",2026-10-19,'
+                'gpt56t,swe,0.800,SWE-Bench verified,2024-08-13,gpt-5.6-terra,gpt-5.6-terra," GPT-5.6 Terra ",2026-10-19,'
             )
             $output = Join-Path $TestDrive 'normalized-display.md'
             $result = @(& $script:SyncScript -ArchivePath $archive -OutputPath $output -CatalogPath $script:CatalogPath -AsOf ([datetime]'2026-10-19') -EpochVersion 'fixture-v1')[-1]
             $result.ModelsCovered | Should -Be 1
-            Get-Content -LiteralPath $output -Raw | Should -Match '\| `gpt-5\.4` \| SWE-Bench verified \|'
+            Get-Content -LiteralPath $output -Raw | Should -Match '\| `gpt-5\.6-terra` \| SWE-Bench verified \|'
 
             $before = (Get-FileHash -LiteralPath $output).Hash
             $conflicting = New-SyncArchiveLocal -ProcessedRows @(
-                'gpt54,swe,0.200,SWE-Bench verified,2024-08-13,gpt-5.4,gpt-5.4,GPT-5.4,2026-10-19,'
-                'gpt54,swe,0.900,SWE-Bench verified,2024-08-13,gpt-5.4,gpt-5.4,GPT-5.4,2026-10-19,'
+                'gpt56t,swe,0.200,SWE-Bench verified,2024-08-13,gpt-5.6-terra,gpt-5.6-terra,GPT-5.6 Terra,2026-10-19,'
+                'gpt56t,swe,0.900,SWE-Bench verified,2024-08-13,gpt-5.6-terra,gpt-5.6-terra,GPT-5.6 Terra,2026-10-19,'
             )
             { & $script:SyncScript -ArchivePath $conflicting -OutputPath $output -CatalogPath $script:CatalogPath -AsOf ([datetime]'2026-10-19') } |
                 Should -Throw '*Conflicting benchmark rows*refusing row-order-dependent selection*'
@@ -1455,15 +1473,15 @@ Describe 'model-benchmarks.md knowledge base and provenance contract (#166, case
 
         It 'does not collapse distinct high-precision source scores into an identical duplicate' {
             $archive = New-SyncArchiveLocal -ProcessedRows @(
-                'gpt54,swe,0.700,SWE-Bench verified,2024-08-13,gpt-5.4,gpt-5.4,GPT-5.4,2026-10-19,'
+                'gpt56t,swe,0.700,SWE-Bench verified,2024-08-13,gpt-5.6-terra,gpt-5.6-terra,GPT-5.6 Terra,2026-10-19,'
             )
             $output = Join-Path $TestDrive 'precise-source-last-good.md'
             & $script:SyncScript -ArchivePath $archive -OutputPath $output -CatalogPath $script:CatalogPath `
                 -AsOf ([datetime]'2026-10-19') -EpochVersion fixture-v1 | Out-Null
             $before = (Get-FileHash -LiteralPath $output).Hash
             $conflicting = New-SyncArchiveLocal -ProcessedRows @(
-                'gpt54,swe,0.60000000000000000,SWE-Bench verified,2024-08-13,gpt-5.4,gpt-5.4,GPT-5.4,2026-10-19,'
-                'gpt54,swe,0.60000000000000001,SWE-Bench verified,2024-08-13,gpt-5.4,gpt-5.4,GPT-5.4,2026-10-19,'
+                'gpt56t,swe,0.60000000000000000,SWE-Bench verified,2024-08-13,gpt-5.6-terra,gpt-5.6-terra,GPT-5.6 Terra,2026-10-19,'
+                'gpt56t,swe,0.60000000000000001,SWE-Bench verified,2024-08-13,gpt-5.6-terra,gpt-5.6-terra,GPT-5.6 Terra,2026-10-19,'
             )
             { & $script:SyncScript -ArchivePath $conflicting -OutputPath $output -CatalogPath $script:CatalogPath `
                     -AsOf ([datetime]'2026-10-19') -EpochVersion fixture-v1 } |
@@ -1473,7 +1491,7 @@ Describe 'model-benchmarks.md knowledge base and provenance contract (#166, case
 
         It 'preserves prior independent model coverage unless a reviewed reduction is explicit' {
             $broadArchive = New-SyncArchiveLocal -ProcessedRows @(
-                'gpt54,swe,0.700,SWE-Bench verified,2024-08-13,gpt-5.4,gpt-5.4,GPT-5.4,2026-10-19,'
+                'gpt56t,swe,0.700,SWE-Bench verified,2024-08-13,gpt-5.6-terra,gpt-5.6-terra,GPT-5.6 Terra,2026-10-19,'
                 'gpt56,swe,0.800,SWE-Bench verified,2024-08-13,gpt-5.6-sol,gpt-5.6-sol,GPT-5.6 Sol,2026-10-19,'
                 'gpt61,swe,0.900,SWE-Bench verified,2024-08-13,gpt-6.1-sol,gpt-6.1-sol,GPT-6.1 Sol,2026-10-19,'
             )
@@ -1482,7 +1500,7 @@ Describe 'model-benchmarks.md knowledge base and provenance contract (#166, case
             $before = (Get-FileHash -LiteralPath $output).Hash
 
             $narrowArchive = New-SyncArchiveLocal -ProcessedRows @(
-                'gpt54,swe,0.700,SWE-Bench verified,2024-08-13,gpt-5.4,gpt-5.4,GPT-5.4,2026-10-19,'
+                'gpt56t,swe,0.700,SWE-Bench verified,2024-08-13,gpt-5.6-terra,gpt-5.6-terra,GPT-5.6 Terra,2026-10-19,'
                 'gpt56,swe,0.800,SWE-Bench verified,2024-08-13,gpt-5.6-sol,gpt-5.6-sol,GPT-5.6 Sol,2026-10-19,'
             )
             { & $script:SyncScript -ArchivePath $narrowArchive -OutputPath $output -CatalogPath $script:CatalogPath -AsOf ([datetime]'2026-10-19') -EpochVersion 'fixture-v1' } |
@@ -1498,8 +1516,8 @@ Describe 'model-benchmarks.md knowledge base and provenance contract (#166, case
 
         It 'requires the same explicit override when an evaluation disappears but model coverage remains' {
             $broadArchive = New-SyncArchiveLocal -ProcessedRows @(
-                'gpt54,swe,0.700,SWE-Bench verified,2024-08-13,gpt-5.4,gpt-5.4,GPT-5.4,2026-10-19,'
-                'gpt54,os,0.600,OSWorld 2.0,2026-06-26,gpt-5.4,gpt-5.4,GPT-5.4,2026-10-19,https://osworld-v2.xlang.ai/'
+                'gpt56t,swe,0.700,SWE-Bench verified,2024-08-13,gpt-5.6-terra,gpt-5.6-terra,GPT-5.6 Terra,2026-10-19,'
+                'gpt56t,os,0.600,OSWorld 2.0,2026-06-26,gpt-5.6-terra,gpt-5.6-terra,GPT-5.6 Terra,2026-10-19,https://osworld-v2.xlang.ai/'
                 'gpt56,swe,0.800,SWE-Bench verified,2024-08-13,gpt-5.6-sol,gpt-5.6-sol,GPT-5.6 Sol,2026-10-19,'
             )
             $output = Join-Path $TestDrive 'score-coverage-continuity.md'
@@ -1507,24 +1525,24 @@ Describe 'model-benchmarks.md knowledge base and provenance contract (#166, case
             $before = (Get-FileHash -LiteralPath $output).Hash
 
             $narrowArchive = New-SyncArchiveLocal -ProcessedRows @(
-                'gpt54,swe,0.700,SWE-Bench verified,2024-08-13,gpt-5.4,gpt-5.4,GPT-5.4,2026-10-19,'
+                'gpt56t,swe,0.700,SWE-Bench verified,2024-08-13,gpt-5.6-terra,gpt-5.6-terra,GPT-5.6 Terra,2026-10-19,'
                 'gpt56,swe,0.800,SWE-Bench verified,2024-08-13,gpt-5.6-sol,gpt-5.6-sol,GPT-5.6 Sol,2026-10-19,'
             )
             { & $script:SyncScript -ArchivePath $narrowArchive -OutputPath $output -CatalogPath $script:CatalogPath -AsOf ([datetime]'2026-10-19') -EpochVersion 'fixture-v1' } |
-                Should -Throw '*would remove existing independent evidence coverage*gpt-5.4/OSWorld 2.0*AllowCoverageReduction*'
+                Should -Throw '*would remove existing independent evidence coverage*gpt-5.6-terra/OSWorld 2.0*AllowCoverageReduction*'
             (Get-FileHash -LiteralPath $output).Hash | Should -Be $before
         }
 
         It 'shares primary scoring with runtime without allowing secondary scores to reverse it' {
             $archive = New-SyncArchiveLocal -ProcessedRows @(
-                'gpt54,swe,0.900,SWE-Bench verified,2024-08-13,gpt-5.4,gpt-5.4,GPT-5.4,2026-10-19,'
-                'gpt54,os,0.100,OSWorld 2.0,2026-06-26,gpt-5.4,gpt-5.4,GPT-5.4,2026-10-19,https://osworld-v2.xlang.ai/'
+                'gpt56t,swe,0.900,SWE-Bench verified,2024-08-13,gpt-5.6-terra,gpt-5.6-terra,GPT-5.6 Terra,2026-10-19,'
+                'gpt56t,os,0.100,OSWorld 2.0,2026-06-26,gpt-5.6-terra,gpt-5.6-terra,GPT-5.6 Terra,2026-10-19,https://osworld-v2.xlang.ai/'
                 'gpt56,swe,0.600,SWE-Bench verified,2024-08-13,gpt-5.6-sol,gpt-5.6-sol,GPT-5.6 Sol,2026-10-19,'
                 'gpt56,os,0.900,OSWorld 2.0,2026-06-26,gpt-5.6-sol,gpt-5.6-sol,GPT-5.6 Sol,2026-10-19,https://osworld-v2.xlang.ai/'
-                'gpt54,terminal,0.700,Terminal Bench,2025-05-19,gpt-5.4,gpt-5.4,GPT-5.4,2026-10-19,'
+                'gpt56t,terminal,0.700,Terminal Bench,2025-05-19,gpt-5.6-terra,gpt-5.6-terra,GPT-5.6 Terra,2026-10-19,'
                 'gpt56,terminal,0.600,Terminal Bench,2025-05-19,gpt-5.6-sol,gpt-5.6-sol,GPT-5.6 Sol,2026-10-19,'
             )
-            @('Model version,Score,Source', 'gpt-5.4,0.700,', 'gpt-5.6-sol,0.600,') |
+            @('Model version,Score,Source', 'gpt-5.6-terra,0.700,', 'gpt-5.6-sol,0.600,') |
                 Set-Content -LiteralPath (Join-Path $archive 'scicode_external.csv') -Encoding utf8NoBOM
             $output = Join-Path $TestDrive 'aggregation-consistency.md'
             & $script:SyncScript -ArchivePath $archive -OutputPath $output -CatalogPath $script:CatalogPath -AsOf ([datetime]'2026-10-19') -EpochVersion 'fixture-v1' | Out-Null
@@ -1535,21 +1553,21 @@ Describe 'model-benchmarks.md knowledge base and provenance contract (#166, case
             $fit = @($tables | Where-Object { 'Composite' -in $_.Header -and 'implementation' -in $_.Header })[0]
             $fitById = @{}
             foreach ($row in $fit.Rows) { $fitById[$row['Catalog ID']] = [int]$row['implementation'] }
-            $fitById['gpt-5.4'] | Should -Be 2
+            $fitById['gpt-5.6-terra'] | Should -Be 2
             $fitById['gpt-5.6-sol'] | Should -Be 2
 
-            $route = & $script:Resolver -SquadRoot (New-RoutingRootLocal) -AvailableModels @('gpt-5.4', 'gpt-5.6-sol') -Mode ranked -Role @('developer') -AsOf ([datetime]'2026-10-19') -BenchmarksPath $output | ConvertFrom-Json
+            $route = & $script:Resolver -SquadRoot (New-RoutingRootLocal) -AvailableModels @('gpt-5.6-terra', 'gpt-5.6-sol') -Mode ranked -Role @('developer') -AsOf ([datetime]'2026-10-19') -BenchmarksPath $output | ConvertFrom-Json
             foreach ($candidate in $route.roles[0].candidates) {
                 if ($fitById.ContainsKey($candidate.id)) {
                     $candidate.fit | Should -Be $fitById[$candidate.id]
                 }
             }
-            $route.roles[0].suggested | Should -Be 'gpt-5.4'
+            $route.roles[0].suggested | Should -Be 'gpt-5.6-terra'
         }
 
         It 'writes a transient snapshot for dry-run validation but gates publication on the typed boolean' {
             $workflow = Get-Content -LiteralPath $script:WorkflowPath -Raw
-            $workflow | Should -Match "if:\s*steps\.sync\.outputs\.updated == 'true' && !inputs\.dry_run"
+            $workflow | Should -Match "if:\s*\(steps\.catalog\.outputs\.updated == 'true' \|\| steps\.sync\.outputs\.updated == 'true'\) && !inputs\.dry_run"
             $workflow | Should -Not -Match "inputs\.dry_run != 'true'"
             $workflow | Should -Not -Match '\$params\[''DryRun''\]'
             $workflow | Should -Match 'allow_coverage_reduction:'
@@ -1722,9 +1740,12 @@ Describe 'model-benchmarks.md knowledge base and provenance contract (#166, case
 
     It 'uses independent benchmark evidence before model-catalog.md and records source, version, and evaluations in Route rationale' {
         $root = New-BenchmarkRosterRoot
-        $snapshotDate = [regex]::Match($script:BenchmarksRaw, '\*\*Retrieved:\s*(?<date>\d{4}-\d{2}-\d{2})\*\*').Groups['date'].Value
+        $retrievedDate = [regex]::Match($script:BenchmarksRaw, '\*\*Retrieved:\s*(?<date>\d{4}-\d{2}-\d{2})\*\*').Groups['date'].Value
+        $snapshotDate = Get-SnapshotEvaluationDate -Content $script:BenchmarksRaw
         $run = & $script:Resolver -SquadRoot $root -AvailableModels $script:CliEnum -Mode ranked -Role @('researcher', 'lead', 'developer') -AsOf ([datetime]$snapshotDate) | ConvertFrom-Json
-        $run.benchmarksRetrieved | Should -Be $snapshotDate
+        $run.benchmarksRetrieved | Should -Be $retrievedDate
+        $run.benchmarksGenerated | Should -Be $snapshotDate
+        @($run.warnings | Where-Object { $_ -match 'could not be parsed' }) | Should -BeNullOrEmpty
         $run.warnings.Count | Should -BeLessOrEqual 1
         foreach ($roleEntry in $run.roles) {
             if ($roleEntry.evidenceStatus -eq 'sufficient') { $roleEntry.rationale | Should -Match '\(evidence: .+@.+ \[' }
@@ -1783,23 +1804,23 @@ Describe 'model-benchmarks.md knowledge base and provenance contract (#166, case
             ''
             '| Catalog ID | Evaluation | Category | Score | Source ID | Source version | Retrieved | Provenance |'
             '| --- | --- | --- | ---: | --- | --- | --- | --- |'
-            '| `gpt-5.4` | FrontierMath-Tiers-1-3-v2 | `math` | 0.999 | `vendor-model-card` | `2026-10` | `2026-10-18` | `self-reported` |'
+            '| `gpt-5.6-terra` | FrontierMath-Tiers-1-3-v2 | `math` | 0.999 | `vendor-model-card` | `2026-10` | `2026-10-18` | `self-reported` |'
             '| `gpt-5.6-sol` | FrontierMath-Tiers-1-3-v2 | `math` | 0.891 | `epoch-ai` | `2026-10-18` | `2026-10-18` | `independent` |'
             '| `gpt-5.6-sol` | GPQA diamond | `scientific-reasoning` | 0.891 | `epoch-ai` | `2026-10-18` | `2026-10-18` | `independent` |'
-            '| `gpt-5-mini` | FrontierMath-Tiers-1-3-v2 | `math` | 0.100 | `epoch-ai` | `2026-10-18` | `2026-10-18` | `independent` |'
-            '| `gpt-5-mini` | GPQA diamond | `scientific-reasoning` | 0.100 | `epoch-ai` | `2026-10-18` | `2026-10-18` | `independent` |'
+            '| `gpt-5.6-luna` | FrontierMath-Tiers-1-3-v2 | `math` | 0.100 | `epoch-ai` | `2026-10-18` | `2026-10-18` | `independent` |'
+            '| `gpt-5.6-luna` | GPQA diamond | `scientific-reasoning` | 0.100 | `epoch-ai` | `2026-10-18` | `2026-10-18` | `independent` |'
         ) -join "`n"
         Set-Content -LiteralPath $selfReportBench -Value $selfReportContent -Encoding utf8NoBOM
         ConvertTo-VerifiedFixtureSnapshot -Path $selfReportBench
 
-        # gpt-5.4 is cheaper (Blended 1.000 vs 1.920) and has a 0.999 self-reported score,
+        # gpt-5.6-terra is cheaper (Blended 1.000 vs 1.920) and has a 0.999 self-reported score,
         # but only gpt-5.6-sol has independent benchmark evidence, so gpt-5.6-sol wins.
-        $res = & $script:Resolver -SquadRoot $root -AvailableModels @('gpt-5.4', 'gpt-5.6-sol') -Mode ranked -Role @('lead') -AsOf ([datetime]'2026-10-18') -BenchmarksPath $selfReportBench | ConvertFrom-Json
+        $res = & $script:Resolver -SquadRoot $root -AvailableModels @('gpt-5.6-terra', 'gpt-5.6-sol') -Mode ranked -Role @('lead') -AsOf ([datetime]'2026-10-18') -BenchmarksPath $selfReportBench | ConvertFrom-Json
         $res.roles[0].suggested | Should -Be 'gpt-5.6-sol'
         $res.roles[0].rationale | Should -Match 'epoch-ai@2026-10-18@.* \[FrontierMath-Tiers-1-3-v2, GPQA diamond\]'
 
         # When only a self-reported model (mai-code-1.1-flash) is available, it falls back to declared fit and logs a warning.
-        $currentSnapshotDate = [regex]::Match($script:BenchmarksRaw, '\*\*Retrieved:\s*(?<date>\d{4}-\d{2}-\d{2})\*\*').Groups['date'].Value
+        $currentSnapshotDate = Get-SnapshotEvaluationDate -Content $script:BenchmarksRaw
         $onlySelfReported = & $script:Resolver -SquadRoot $root -AvailableModels @('mai-code-1.1-flash') -Mode ranked -Role @('technical-writer') -AsOf ([datetime]$currentSnapshotDate) | ConvertFrom-Json
         $onlySelfReported.roles[0].suggested | Should -Be 'mai-code-1.1-flash'
         $onlySelfReported.roles[0].rationale | Should -Match '\(declared-fit fallback\)'
@@ -1809,12 +1830,12 @@ Describe 'model-benchmarks.md knowledge base and provenance contract (#166, case
 
     It 'falls back when the snapshot is missing but never expires verified rows from the envelope retrieval stamp alone' {
         $root = New-BenchmarkRosterRoot
-        $currentSnapshotDate = [regex]::Match($script:BenchmarksRaw, '\*\*Retrieved:\s*(?<date>\d{4}-\d{2}-\d{2})\*\*').Groups['date'].Value
+        $currentSnapshotDate = Get-SnapshotEvaluationDate -Content $script:BenchmarksRaw
         $missingPath = Join-Path $TestDrive 'does-not-exist-benchmarks.md'
         $missingRun = & $script:Resolver -SquadRoot $root -AvailableModels $script:CliEnum -Mode ranked -Role @('lead') -AsOf ([datetime]$currentSnapshotDate) -BenchmarksPath $missingPath | ConvertFrom-Json
         $missingRun.warnings.Count | Should -Be 1
         $missingRun.warnings[0] | Should -Match 'model-benchmarks\.md was not found; ranking falls back to the declared fit table'
-        $missingRun.roles[0].suggested | Should -Be 'gpt-5.6-sol'
+        $missingRun.roles[0].suggested | Should -Be 'gemini-4-argon'
         $missingRun.roles[0].rationale | Should -Match '\(declared-fit fallback\)'
 
         $staleBench = Join-Path $TestDrive 'stale-benchmarks.md'
@@ -1833,12 +1854,12 @@ Describe 'model-benchmarks.md knowledge base and provenance contract (#166, case
             @{
                 Name = 'stale-row'
                 Mapping = '| `planning` | `GPQA diamond` |  | `epoch-ai` | test |'
-                Score = '| `gpt-5.4` | GPQA diamond | `scientific-reasoning` | 0.990 | `epoch-ai` | `2026-10-18` | `2020-01-01` | `independent` |'
+                Score = '| `gpt-5.6-terra` | GPQA diamond | `scientific-reasoning` | 0.990 | `epoch-ai` | `2026-10-18` | `2020-01-01` | `independent` |'
             }
             @{
                 Name = 'missing-class-map'
                 Mapping = '| `research` | `SciCode` |  | `artificial-analysis` | test |'
-                Score = '| `gpt-5.4` | SciCode | `coding` | 0.990 | `artificial-analysis` | `v4.3.2` | `2026-10-18` | `independent` |'
+                Score = '| `gpt-5.6-terra` | SciCode | `coding` | 0.990 | `artificial-analysis` | `v4.3.2` | `2026-10-18` | `independent` |'
             }
         )
 
@@ -1862,19 +1883,39 @@ Describe 'model-benchmarks.md knowledge base and provenance contract (#166, case
                     $case.Score
                 ) -join "`n") -Encoding utf8NoBOM
 
-            $run = & $script:Resolver -SquadRoot $root -AvailableModels @('gpt-5.4') -Mode ranked -Role @('lead') -AsOf ([datetime]'2026-10-18') -BenchmarksPath $path | ConvertFrom-Json
-            $run.roles[0].suggested | Should -Be 'gpt-5.4'
+            $run = & $script:Resolver -SquadRoot $root -AvailableModels @('gpt-5.6-terra') -Mode ranked -Role @('lead') -AsOf ([datetime]'2026-10-18') -BenchmarksPath $path | ConvertFrom-Json
+            $run.roles[0].suggested | Should -Be 'gpt-5.6-terra'
             $run.roles[0].rationale | Should -Match '\(declared-fit fallback\)'
             $run.warnings.Count | Should -Be 1
             $run.warnings[0] | Should -Match 'No supported planning benchmark comparison.*(unverified|missing-evaluation)'
         }
     }
 
-    It 'canonicalizes the short HydraFusion alias for ranked availability and manual cells' {
+    It 'canonicalizes Copilot Fusion effort levels and distinguishes hydrafusion (High) from hydrafusion-max (Max)' {
+        $currentSnapshotDate = Get-SnapshotEvaluationDate -Content $script:BenchmarksRaw
         $root = New-BenchmarkRosterRoot
-        $ranked = & $script:Resolver -SquadRoot $root -AvailableModels @('hydrafusion') -Mode ranked -Role @('developer') -AsOf ([datetime]'2026-10-18') | ConvertFrom-Json
+        $ranked = & $script:Resolver -SquadRoot $root -AvailableModels @('hydrafusion') -Mode ranked -Role @('developer') -AsOf ([datetime]$currentSnapshotDate) | ConvertFrom-Json
         $ranked.unevaluated | Should -BeNullOrEmpty
         $ranked.roles[0].suggested | Should -Be 'hydrafusion'
+
+        $both = & $script:Resolver -SquadRoot $root -AvailableModels @('hydrafusion', 'hydrafusion-max') -Mode ranked -Role @('developer') -AsOf ([datetime]$currentSnapshotDate) | ConvertFrom-Json
+        @($both.roles[0].candidates | ForEach-Object { $_.id }) | Should -Contain 'hydrafusion'
+        @($both.roles[0].candidates | ForEach-Object { $_.id }) | Should -Contain 'hydrafusion-max'
+
+        $extendedRoot = New-BenchmarkRosterRoot -Content (@(
+                '# Squad Roster', '', 'Model routing: ranked', '', '## Members', ''
+                '| Role | Member Name | Agent Name (Primary) | Model Tier | Deliverable Root |'
+                '|------|-------------|----------------------|------------|------------------|'
+                '| architect | | System Architecture Reviewer | extended | docs/architecture/ |'
+            ) -join "`n")
+        $extended = & $script:Resolver -SquadRoot $extendedRoot -AvailableModels @('fusion-standard', 'hydrafusion', 'hydrafusion-max') -Mode ranked -Role @('architect') -AsOf ([datetime]$currentSnapshotDate) | ConvertFrom-Json
+        $extended.roles[0].suggested | Should -Be 'hydrafusion-max'
+        @($extended.roles[0].candidates | ForEach-Object { $_.id }) | Should -Be @('hydrafusion-max')
+
+        # Verify alias canonicalization on AvailableModels for all three Copilot Fusion tiers:
+        $fusionAliasAvail = & $script:Resolver -SquadRoot $root -AvailableModels @('fusion', 'fusion-high', 'fusion-max') -Mode ranked -Role @('developer') -AsOf ([datetime]$currentSnapshotDate) | ConvertFrom-Json
+        $fusionAliasAvail.unevaluated | Should -BeNullOrEmpty
+        @($fusionAliasAvail.roles[0].candidates | ForEach-Object { $_.id }).Count | Should -Be 3
 
         $manualRoot = New-BenchmarkRosterRoot -Content (@(
                 '# Squad Roster', '', 'Model routing: manual', '', '## Members', ''
@@ -1882,7 +1923,7 @@ Describe 'model-benchmarks.md knowledge base and provenance contract (#166, case
                 '|------|-------------|----------------------|------------|-------|------------------|'
                 '| developer | | Squad Implementor | default | hydrafusion | src/ |'
             ) -join "`n")
-        $manual = & $script:Resolver -SquadRoot $manualRoot -AvailableModels @('hydrafusion') -Mode manual -Role @('developer') -AsOf ([datetime]'2026-10-18') | ConvertFrom-Json
+        $manual = & $script:Resolver -SquadRoot $manualRoot -AvailableModels @('hydrafusion') -Mode manual -Role @('developer') -AsOf ([datetime]$currentSnapshotDate) | ConvertFrom-Json
         $manual.roles[0].cellStatus | Should -Be 'valid'
         $manual.roles[0].resolved | Should -Be 'hydrafusion'
         $manual.warnings | Should -BeNullOrEmpty
@@ -1893,7 +1934,7 @@ Describe 'model-benchmarks.md knowledge base and provenance contract (#166, case
                 '|------|-------------|----------------------|------------|-------|------------------|'
                 '| developer | | Squad Implementor | default | hydrafusion-max | src/ |'
             ) -join "`n")
-        $canonicalOnly = & $script:Resolver -SquadRoot $canonicalOnlyRoot -AvailableModels @('hydrafusion') -Mode manual -Role @('developer') -AsOf ([datetime]'2026-10-18') | ConvertFrom-Json
+        $canonicalOnly = & $script:Resolver -SquadRoot $canonicalOnlyRoot -AvailableModels @('hydrafusion') -Mode manual -Role @('developer') -AsOf ([datetime]$currentSnapshotDate) | ConvertFrom-Json
         $canonicalOnly.roles[0].cellStatus | Should -Be 'refused: not available on this host'
         $canonicalOnly.roles[0].resolved | Should -BeNullOrEmpty
     }
@@ -1921,7 +1962,7 @@ Describe 'Capability-first Ranked and qualified cost-first Economy (SQ-33b..d, S
                 [string]$Cell = '', [string]$Mode = 'ranked',
                 [string]$Agent = 'Fixture Agent',
                 [System.Collections.IDictionary]$Scores,
-                [string[]]$Available = @('gpt-5.4', 'gpt-5.6-sol')
+                [string[]]$Available = @('gpt-5.6-terra', 'gpt-5.6-sol')
             )
             $root = Join-Path $TestDrive ([guid]::NewGuid().ToString('N'))
             New-Item -ItemType Directory -Path $root | Out-Null
@@ -2004,7 +2045,7 @@ Describe 'Capability-first Ranked and qualified cost-first Economy (SQ-33b..d, S
         $fixture = New-PolicyRoster
         $ranked = (Invoke-PolicyRoute $fixture).roles[0]
         $economy = (Invoke-PolicyRoute $fixture -Mode economy).roles[0]
-        $economy.suggested | Should -Be 'gpt-5.4'
+        $economy.suggested | Should -Be 'gpt-5.6-terra'
         $economy.selectionObjective | Should -Be 'cost-first'
         $economy.capability | Should -BeLessThan $ranked.capability
         $economy.estimatedCost | Should -BeLessThan $ranked.estimatedCost
@@ -2015,38 +2056,38 @@ Describe 'Capability-first Ranked and qualified cost-first Economy (SQ-33b..d, S
 
     It 'excludes a cheap model that fails even one primary minimum' {
         $fixture = New-PolicyRoster
-        Set-PolicyRow $fixture -Id gpt-5.4 -Evaluation Terminal-Bench -Score 0.010
+        Set-PolicyRow $fixture -Id gpt-5.6-terra -Evaluation Terminal-Bench -Score 0.010
         $role = (Invoke-PolicyRoute $fixture -Mode economy).roles[0]
         $role.suggested | Should -Be 'gpt-5.6-sol'
-        @($role.candidates | Where-Object id -eq 'gpt-5.4')[0].economyQualified | Should -BeFalse
+        @($role.candidates | Where-Object id -eq 'gpt-5.6-terra')[0].economyQualified | Should -BeFalse
     }
 
     It 'uses known cost when primary capability and confidence genuinely tie' {
         $fixture = New-PolicyRoster
         foreach ($evaluation in 'SciCode', 'Terminal-Bench') {
-            Set-PolicyRow $fixture -Id gpt-5.4 -Evaluation $evaluation -Score 0.700
+            Set-PolicyRow $fixture -Id gpt-5.6-terra -Evaluation $evaluation -Score 0.700
         }
         $role = (Invoke-PolicyRoute $fixture).roles[0]
         $role.candidates[0].capability | Should -Be $role.candidates[1].capability
-        $role.suggested | Should -Be 'gpt-5.4'
+        $role.suggested | Should -Be 'gpt-5.6-terra'
         $role.rationale | Should -Match 'capability tied'
     }
 
     It 'uses confidence only after tied capability, never before Economy price' {
         $fixture = New-PolicyRoster
         foreach ($evaluation in 'SciCode', 'Terminal-Bench') {
-            Set-PolicyRow $fixture -Id gpt-5.4 -Evaluation $evaluation -Score 0.700
+            Set-PolicyRow $fixture -Id gpt-5.6-terra -Evaluation $evaluation -Score 0.700
         }
         Set-PolicyRow $fixture -Id gpt-5.6-sol -Evaluation 'SWE-Bench verified' -Score 0.900
-        Set-PolicyRow $fixture -Id gpt-5-mini -Evaluation 'SWE-Bench verified' -Score 0.100
+        Set-PolicyRow $fixture -Id gpt-5.6-luna -Evaluation 'SWE-Bench verified' -Score 0.100
         (Invoke-PolicyRoute $fixture).roles[0].suggested | Should -Be 'gpt-5.6-sol'
-        (Invoke-PolicyRoute $fixture -Mode economy).roles[0].suggested | Should -Be 'gpt-5.4'
+        (Invoke-PolicyRoute $fixture -Mode economy).roles[0].suggested | Should -Be 'gpt-5.6-terra'
     }
 
     It 'uses higher capability when Economy prices tie' {
         $fixture = New-PolicyRoster -Scores ([ordered]@{
                 'gpt-6.1-sol' = '0.700'; 'claude-sonnet-5.5' = '0.600'
-                'gpt-5-mini' = '0.100'; 'gpt-5.4-nano' = '0.200'
+                'gpt-5.6-luna' = '0.100'; 'gpt-5.4-nano' = '0.200'
             }) -Available @('gpt-6.1-sol', 'claude-sonnet-5.5')
         $role = (Invoke-PolicyRoute $fixture -Mode economy).roles[0]
         $role.candidates[0].blended | Should -Be $role.candidates[1].blended
@@ -2055,13 +2096,13 @@ Describe 'Capability-first Ranked and qualified cost-first Economy (SQ-33b..d, S
 
     It 'uses one common reduced basis rather than mixing complete and incomplete full-panel scores' {
         $fixture = New-PolicyRoster
-        Set-PolicyRow $fixture -Id gpt-5.4 -Evaluation Terminal-Bench -Drop
-        Set-PolicyRow $fixture -Id gpt-5.4 -Evaluation SciCode -Score 0.999
-        Set-PolicyRow $fixture -Id gpt-5.4 -Evaluation 'SWE-Bench verified' -Score 0.999
-        Set-PolicyRow $fixture -Id gpt-5-mini -Evaluation 'SWE-Bench verified' -Score 0.100
+        Set-PolicyRow $fixture -Id gpt-5.6-terra -Evaluation Terminal-Bench -Drop
+        Set-PolicyRow $fixture -Id gpt-5.6-terra -Evaluation SciCode -Score 0.999
+        Set-PolicyRow $fixture -Id gpt-5.6-terra -Evaluation 'SWE-Bench verified' -Score 0.999
+        Set-PolicyRow $fixture -Id gpt-5.6-luna -Evaluation 'SWE-Bench verified' -Score 0.100
         foreach ($mode in 'ranked', 'economy') {
             $role = (Invoke-PolicyRoute $fixture -Mode $mode).roles[0]
-            $role.suggested | Should -Be 'gpt-5.4'
+            $role.suggested | Should -Be 'gpt-5.6-terra'
             $role.evidenceLevel | Should -Be 'reduced'
             $role.comparisonPanel.id | Should -Be 'implementation-scicode'
             @($role.candidates.panel | Sort-Object -Unique) | Should -Be @('implementation-scicode v1')
@@ -2073,7 +2114,7 @@ Describe 'Capability-first Ranked and qualified cost-first Economy (SQ-33b..d, S
 
     It 'uses declared-fit Economy when no primary panel can be supported' {
         $fixture = New-PolicyRoster
-        foreach ($id in 'gpt-5.4', 'gpt-5.6-sol', 'gpt-5-mini', 'gpt-5.4-nano') {
+        foreach ($id in 'gpt-5.6-terra', 'gpt-5.6-sol', 'gpt-5.6-luna', 'gpt-5.4-nano') {
             Set-PolicyRow $fixture -Id $id -Evaluation Terminal-Bench -Drop
             Set-PolicyRow $fixture -Id $id -Evaluation SciCode -Drop
         }
@@ -2091,8 +2132,8 @@ Describe 'Capability-first Ranked and qualified cost-first Economy (SQ-33b..d, S
 
     It 'never pools incomparable source versions into a numerical ranking' {
         $fixture = New-PolicyRoster
-        Set-PolicyRow $fixture -Id gpt-5.4 -Evaluation Terminal-Bench -Version incompatible-harness
-        Set-PolicyRow $fixture -Id gpt-5.4 -Evaluation SciCode -Version incompatible-harness
+        Set-PolicyRow $fixture -Id gpt-5.6-terra -Evaluation Terminal-Bench -Version incompatible-harness
+        Set-PolicyRow $fixture -Id gpt-5.6-terra -Evaluation SciCode -Version incompatible-harness
         $role = (Invoke-PolicyRoute $fixture).roles[0]
         $role.evidenceStatus | Should -Be 'incomparable'
         $role.capability | Should -BeNullOrEmpty
@@ -2102,9 +2143,9 @@ Describe 'Capability-first Ranked and qualified cost-first Economy (SQ-33b..d, S
     It 'keeps intrinsic capability unchanged when host availability changes' {
         $fixture = New-PolicyRoster
         $all = Invoke-PolicyRoute $fixture
-        $before = @($all.roles[0].candidates | Where-Object id -eq 'gpt-5.4')[0]
-        $narrow = (Invoke-PolicyRoute $fixture -Available @('gpt-5.4')).roles[0]
-        $narrow.suggested | Should -Be 'gpt-5.4'
+        $before = @($all.roles[0].candidates | Where-Object id -eq 'gpt-5.6-terra')[0]
+        $narrow = (Invoke-PolicyRoute $fixture -Available @('gpt-5.6-terra')).roles[0]
+        $narrow.suggested | Should -Be 'gpt-5.6-terra'
         $narrow.capability | Should -Be $before.capability
         $narrow.coverage.primary[0].referenceCount | Should -Be 4
     }
@@ -2117,14 +2158,14 @@ Describe 'Capability-first Ranked and qualified cost-first Economy (SQ-33b..d, S
     }
 
     It 'never lowers the <Tier> floor under <Mode>' -ForEach @(
-        @{ Tier = 'default'; Mode = 'ranked'; Available = 'gpt-5-mini' }
-        @{ Tier = 'default'; Mode = 'economy'; Available = 'gpt-5-mini' }
-        @{ Tier = 'extended'; Mode = 'ranked'; Available = 'gpt-5.4' }
-        @{ Tier = 'extended'; Mode = 'economy'; Available = 'gpt-5.4' }
+        @{ Tier = 'default'; Mode = 'ranked'; Available = 'gpt-5.6-luna' }
+        @{ Tier = 'default'; Mode = 'economy'; Available = 'gpt-5.6-luna' }
+        @{ Tier = 'extended'; Mode = 'ranked'; Available = 'gpt-5.6-terra' }
+        @{ Tier = 'extended'; Mode = 'economy'; Available = 'gpt-5.6-terra' }
     ) {
         $fixture = New-PolicyRoster -Tier $Tier
         foreach ($evaluation in 'SciCode', 'Terminal-Bench') {
-            Set-PolicyRow $fixture -Id gpt-5-mini -Evaluation $evaluation -Score 0.990
+            Set-PolicyRow $fixture -Id gpt-5.6-luna -Evaluation $evaluation -Score 0.990
         }
         $role = (Invoke-PolicyRoute $fixture -Mode $Mode -Available @($Available)).roles[0]
         $role.suggested | Should -BeNullOrEmpty
@@ -2155,21 +2196,21 @@ Describe 'Capability-first Ranked and qualified cost-first Economy (SQ-33b..d, S
         $fixture = New-PolicyRoster
         $catalog = Copy-PolicySkill $fixture
         $raw = Get-Content -LiteralPath $catalog -Raw
-        $raw | Should -Match '(?m)^\| `gpt-5\.4` \|.*\| 1\.000 \|\r?$'
-        $raw = $raw -replace '(?m)^(\| `gpt-5\.4` \|.*\|) 1\.000 \|\r?$', '$1 unpriced |'
+        $raw | Should -Match '(?m)^\| `gpt-5\.6-terra` \|.*\| 1\.000 \|\r?$'
+        $raw = $raw -replace '(?m)^(\| `gpt-5\.6-terra` \|.*\|) 1\.000 \|\r?$', '$1 unpriced |'
         Set-Content -LiteralPath $catalog -Value $raw -Encoding utf8NoBOM
         $role = (Invoke-PolicyRoute $fixture -Mode economy).roles[0]
         $role.suggested | Should -Be 'gpt-5.6-sol'
-        $unpriced = @($role.candidates | Where-Object id -eq 'gpt-5.4')[0]
+        $unpriced = @($role.candidates | Where-Object id -eq 'gpt-5.6-terra')[0]
         $unpriced.blended | Should -BeNullOrEmpty
         $unpriced.economyQualified | Should -BeFalse
     }
 
     It 'stops Economy instead of falling back to Ranked when every floor candidate is unpriced' {
-        $fixture = New-PolicyRoster -Available @('gpt-5.4')
+        $fixture = New-PolicyRoster -Available @('gpt-5.6-terra')
         $catalog = Copy-PolicySkill $fixture
         $raw = Get-Content -LiteralPath $catalog -Raw
-        $raw = $raw -replace '(?m)^(\| `gpt-5\.4` \|.*\|) 1\.000 \|\r?$', '$1 unpriced |'
+        $raw = $raw -replace '(?m)^(\| `gpt-5\.6-terra` \|.*\|) 1\.000 \|\r?$', '$1 unpriced |'
         Set-Content -LiteralPath $catalog -Value $raw -Encoding utf8NoBOM
         $role = (Invoke-PolicyRoute $fixture -Mode economy).roles[0]
         $role.suggested | Should -BeNullOrEmpty
@@ -2179,18 +2220,18 @@ Describe 'Capability-first Ranked and qualified cost-first Economy (SQ-33b..d, S
     }
 
     It 'reports that no higher-ranked escalation exists when both objectives select the same model' {
-        $fixture = New-PolicyRoster -Available @('gpt-5.4')
+        $fixture = New-PolicyRoster -Available @('gpt-5.6-terra')
         $role = (Invoke-PolicyRoute $fixture -Mode economy).roles[0]
         $role.escalation | Should -BeNullOrEmpty
         $role.escalationReason | Should -Be 'no higher-ranked escalation target exists'
     }
 
     It 'preserves a valid Manual cell while suggesting the capability-first alternative' {
-        $fixture = New-PolicyRoster -Mode manual -Cell gpt-5.4
+        $fixture = New-PolicyRoster -Mode manual -Cell gpt-5.6-terra
         $role = (Invoke-PolicyRoute $fixture -Mode manual).roles[0]
-        $role.resolved | Should -Be 'gpt-5.4'
+        $role.resolved | Should -Be 'gpt-5.6-terra'
         $role.suggested | Should -Be 'gpt-5.6-sol'
-        $role.requestedDispatchModel | Should -Be 'gpt-5.4'
+        $role.requestedDispatchModel | Should -Be 'gpt-5.6-terra'
         $role.selectionObjective | Should -Be 'explicit-manual-selection'
     }
 
@@ -2207,7 +2248,7 @@ Describe 'Capability-first Ranked and qualified cost-first Economy (SQ-33b..d, S
     It 'reports the Scribe pin rather than an unused automatic or manual suggestion under <Mode>' -ForEach @(
         @{ Mode = 'ranked' }, @{ Mode = 'economy' }, @{ Mode = 'manual' }
     ) {
-        $fixture = New-PolicyRoster -Role scribe -Tier fast -Cell gpt-5.6-sol -Agent 'Squad Scribe' -Mode $Mode -Available @('gpt-5.4', 'gpt-5.6-sol', 'claude-haiku-5.5')
+        $fixture = New-PolicyRoster -Role scribe -Tier fast -Cell gpt-5.6-sol -Agent 'Squad Scribe' -Mode $Mode -Available @('gpt-5.6-terra', 'gpt-5.6-sol', 'claude-haiku-5.5')
         $role = (Invoke-PolicyRoute $fixture -Mode $Mode).roles[0]
         $role.suggested | Should -Be 'claude-haiku-5.5'
         $role.expectedModel | Should -Be 'claude-haiku-5.5'
@@ -2232,7 +2273,7 @@ Describe 'Capability-first Ranked and qualified cost-first Economy (SQ-33b..d, S
         [array]::Reverse($lines)
         $raw = [regex]::Replace($raw, '(?m)^\| `.*(?:\r?\n|$)', '')
         Set-Content -LiteralPath $fixture.Benchmarks -Value ($raw.TrimEnd() + "`n" + ($lines -join "`n")) -Encoding utf8NoBOM
-        $after = (Invoke-PolicyRoute $fixture -Available @('gpt-5.6-sol', 'gpt-5.4')).roles[0]
+        $after = (Invoke-PolicyRoute $fixture -Available @('gpt-5.6-sol', 'gpt-5.6-terra')).roles[0]
         $after.suggested | Should -Be $before.suggested
         $after.rationale | Should -BeExactly $before.rationale
     }
@@ -2259,7 +2300,7 @@ Describe 'Capability-first Ranked and qualified cost-first Economy (SQ-33b..d, S
 
     It 're-evaluates the 90-day verification boundary without treating generation as freshness' {
         $fixture = New-PolicyRoster
-        foreach ($id in 'gpt-5.4', 'gpt-5.6-sol', 'gpt-5-mini', 'gpt-5.4-nano') {
+        foreach ($id in 'gpt-5.6-terra', 'gpt-5.6-sol', 'gpt-5.6-luna', 'gpt-5.4-nano') {
             foreach ($evaluation in 'SciCode', 'Terminal-Bench') {
                 Set-PolicyRow $fixture -Id $id -Evaluation $evaluation -Date '2026-07-21'
             }
@@ -2276,7 +2317,7 @@ Describe 'Capability-first Ranked and qualified cost-first Economy (SQ-33b..d, S
         $fixture = New-PolicyRoster
         $before = (Invoke-PolicyRoute $fixture).roles[0]
         foreach ($evaluation in 'Artificial Analysis Coding Index', 'Epoch Capabilities Index') {
-            Set-PolicyRow $fixture -Id gpt-5.4 -Evaluation $evaluation -Score 0.999
+            Set-PolicyRow $fixture -Id gpt-5.6-terra -Evaluation $evaluation -Score 0.999
             Set-PolicyRow $fixture -Id gpt-5.6-sol -Evaluation $evaluation -Score 0.100
         }
         $after = (Invoke-PolicyRoute $fixture).roles[0]
@@ -2286,21 +2327,21 @@ Describe 'Capability-first Ranked and qualified cost-first Economy (SQ-33b..d, S
     }
 
     It 'does not round away native differences before comparison' {
-        $less = New-FixtureEvidenceRow -Id gpt-5.4 -Evaluation SciCode -Score '0.60000000000000000'
-        $more = New-FixtureEvidenceRow -Id gpt-5.4 -Evaluation SciCode -Score '0.60000000000000001'
+        $less = New-FixtureEvidenceRow -Id gpt-5.6-terra -Evaluation SciCode -Score '0.60000000000000000'
+        $more = New-FixtureEvidenceRow -Id gpt-5.6-terra -Evaluation SciCode -Score '0.60000000000000001'
         (Get-SquadBenchmarkRecordDigest -Row $less) | Should -Not -Be (Get-SquadBenchmarkRecordDigest -Row $more)
         { Get-SquadBenchmarkScore -Rows @($less, $more) -AsOf ([datetime]'2026-10-19') } |
             Should -Throw '*Conflicting duplicate benchmark score rows*'
         $fixture = New-PolicyRoster
         foreach ($evaluation in 'SciCode', 'Terminal-Bench') {
-            Set-PolicyRow $fixture -Id gpt-5.4 -Evaluation $evaluation -Score '0.60000000000000000'
+            Set-PolicyRow $fixture -Id gpt-5.6-terra -Evaluation $evaluation -Score '0.60000000000000000'
             Set-PolicyRow $fixture -Id gpt-5.6-sol -Evaluation $evaluation -Score '0.60000000000000001'
         }
         (Invoke-PolicyRoute $fixture).roles[0].suggested | Should -Be 'gpt-5.6-sol'
     }
 
     It 'discloses an unsupported policy without changing Manual selections or Off behavior' {
-        $fixture = New-PolicyRoster -Mode manual -Cell gpt-5.4
+        $fixture = New-PolicyRoster -Mode manual -Cell gpt-5.6-terra
         $raw = (Get-Content -LiteralPath $fixture.Benchmarks -Raw) -replace 'squad-capability-v3', 'unsupported-v999'
         Set-Content -LiteralPath $fixture.Benchmarks -Value $raw -Encoding utf8NoBOM
         $ranked = Invoke-PolicyRoute $fixture
@@ -2310,7 +2351,7 @@ Describe 'Capability-first Ranked and qualified cost-first Economy (SQ-33b..d, S
         $ranked.roles[0].comparisonOutcome | Should -Be 'declared-fit fallback'
         $manual = Invoke-PolicyRoute $fixture -Mode manual
         $manual.warnings | Should -BeNullOrEmpty
-        $manual.roles[0].resolved | Should -Be 'gpt-5.4'
+        $manual.roles[0].resolved | Should -Be 'gpt-5.6-terra'
         $offFixture = New-PolicyRoster -Mode off
         Copy-Item -LiteralPath $fixture.Benchmarks -Destination $offFixture.Benchmarks -Force
         $off = Invoke-PolicyRoute $offFixture -Mode off
@@ -2322,7 +2363,7 @@ Describe 'Capability-first Ranked and qualified cost-first Economy (SQ-33b..d, S
         $fixture = New-PolicyRoster
         $before = (Invoke-PolicyRoute $fixture).roles[0]
         $raw = Get-Content -LiteralPath $fixture.Benchmarks -Raw
-        $duplicate = [regex]::Match($raw, '(?m)^\| `gpt-5\.4` \| SciCode \|.*$').Value -replace '\| 0\.600 \|', '| 0.6000 |'
+        $duplicate = [regex]::Match($raw, '(?m)^\| `gpt-5\.6-terra` \| SciCode \|.*$').Value -replace '\| 0\.600 \|', '| 0.6000 |'
         $duplicate | Should -Not -BeNullOrEmpty
         $raw += "`n$duplicate"
         Set-Content -LiteralPath $fixture.Benchmarks -Value $raw -Encoding utf8NoBOM
@@ -2379,10 +2420,10 @@ Describe 'Capability-first Ranked and qualified cost-first Economy (SQ-33b..d, S
     It 'refuses attribution to another exact model version despite fresh acquisition and verification (SQ-33g)' {
         $fixture = New-PolicyRoster
         foreach ($evaluation in 'SciCode', 'Terminal-Bench') {
-            Set-PolicyRow $fixture -Id gpt-5.4 -Evaluation $evaluation -Score 0.999 -ModelVersion 'gpt-5.5'
+            Set-PolicyRow $fixture -Id gpt-5.6-terra -Evaluation $evaluation -Score 0.999 -ModelVersion 'gpt-5.6-sol'
         }
         $role = (Invoke-PolicyRoute $fixture).roles[0]
-        $rejected = @($role.evidenceCandidates | Where-Object id -eq 'gpt-5.4')[0]
+        $rejected = @($role.evidenceCandidates | Where-Object id -eq 'gpt-5.6-terra')[0]
         $rejected.evidenceStatus | Should -Be 'incomparable'
         $rejected.capability | Should -BeNullOrEmpty
         $rejected.gaps -join '; ' | Should -Match 'identity mismatch'
@@ -2393,10 +2434,10 @@ Describe 'Capability-first Ranked and qualified cost-first Economy (SQ-33b..d, S
     It 'does not let recent retrieval legitimize an unknown evaluation configuration' {
         $fixture = New-PolicyRoster
         foreach ($evaluation in 'SciCode', 'Terminal-Bench') {
-            Set-PolicyRow $fixture -Id gpt-5.4 -Evaluation $evaluation -Score 0.999 -Configuration unknown
+            Set-PolicyRow $fixture -Id gpt-5.6-terra -Evaluation $evaluation -Score 0.999 -Configuration unknown
         }
         $role = (Invoke-PolicyRoute $fixture).roles[0]
-        $bad = @($role.evidenceCandidates | Where-Object id -eq 'gpt-5.4')[0]
+        $bad = @($role.evidenceCandidates | Where-Object id -eq 'gpt-5.6-terra')[0]
         $bad.evidenceStatus | Should -Be 'unverified'
         $bad.capability | Should -BeNullOrEmpty
         $bad.gaps -join '; ' | Should -Match 'known configuration'
@@ -2407,10 +2448,10 @@ Describe 'Capability-first Ranked and qualified cost-first Economy (SQ-33b..d, S
     ) {
         $fixture = New-PolicyRoster
         foreach ($evaluation in 'SciCode', 'Terminal-Bench') {
-            Set-PolicyRow $fixture -Id gpt-5.4 -Evaluation $evaluation -Score 0.999 -Verification $State
+            Set-PolicyRow $fixture -Id gpt-5.6-terra -Evaluation $evaluation -Score 0.999 -Verification $State
         }
         $role = (Invoke-PolicyRoute $fixture -Mode economy).roles[0]
-        $bad = @($role.evidenceCandidates | Where-Object id -eq 'gpt-5.4')[0]
+        $bad = @($role.evidenceCandidates | Where-Object id -eq 'gpt-5.6-terra')[0]
         @($bad.evaluations.status | Sort-Object -Unique) | Should -Be @($State)
         $bad.capability | Should -BeNullOrEmpty
         $bad.economyQualified | Should -BeFalse
@@ -2421,27 +2462,27 @@ Describe 'Capability-first Ranked and qualified cost-first Economy (SQ-33b..d, S
         $full = (Invoke-PolicyRoute $fixture).roles[0]
         $full.comparisonPanel.id | Should -Be 'implementation-full'
         $full.comparisonPanel.weight | Should -Be 0.5
-        Set-PolicyRow $fixture -Id gpt-5-mini -Evaluation Terminal-Bench -Drop
+        Set-PolicyRow $fixture -Id gpt-5.6-luna -Evaluation Terminal-Bench -Drop
         $reduced = (Invoke-PolicyRoute $fixture).roles[0]
         $reduced.comparisonPanel.id | Should -Be 'implementation-scicode'
         $reduced.comparisonPanel.weight | Should -Be 1
         @($reduced.comparisonPanel.options | Where-Object id -eq 'implementation-full')[0].populationCount | Should -Be 3
         $reduced.comparisonPanel.populationCount | Should -Be 4
-        $narrow = (Invoke-PolicyRoute $fixture -Available @('gpt-5.4')).roles[0]
+        $narrow = (Invoke-PolicyRoute $fixture -Available @('gpt-5.6-terra')).roles[0]
         $narrow.comparisonPanel | ConvertTo-Json -Depth 6 |
             Should -BeExactly ($reduced.comparisonPanel | ConvertTo-Json -Depth 6)
-        $narrow.capability | Should -Be @($reduced.candidates | Where-Object id -eq 'gpt-5.4')[0].capability
+        $narrow.capability | Should -Be @($reduced.candidates | Where-Object id -eq 'gpt-5.6-terra')[0].capability
     }
 
     It 'versions the reduced minimum rather than silently reusing both midpoint requirements (SQ-35b)' {
         $fixture = New-PolicyRoster
-        foreach ($id in 'gpt-5.4', 'gpt-5.6-sol', 'gpt-5-mini', 'gpt-5.4-nano') {
+        foreach ($id in 'gpt-5.6-terra', 'gpt-5.6-sol', 'gpt-5.6-luna', 'gpt-5.4-nano') {
             Set-PolicyRow $fixture -Id $id -Evaluation Terminal-Bench -Drop
         }
         $role = (Invoke-PolicyRoute $fixture -Mode economy).roles[0]
         $role.qualificationRule | Should -Be 'implementation-scicode-upper-quartile-v1'
         $role.comparisonPanel.minimumPercentile | Should -Be 0.75
-        $cheap = @($role.candidates | Where-Object id -eq 'gpt-5.4')[0]
+        $cheap = @($role.candidates | Where-Object id -eq 'gpt-5.6-terra')[0]
         $cheap.capability | Should -BeGreaterThan 0.50
         $cheap.capability | Should -BeLessThan 0.75
         $cheap.economyQualified | Should -BeFalse
@@ -2449,12 +2490,12 @@ Describe 'Capability-first Ranked and qualified cost-first Economy (SQ-33b..d, S
     }
 
     It 'uses the cheapest priced floor candidate instead of Ranked when no model meets Economy qualification' {
-        $fixture = New-PolicyRoster -Available @('gpt-5.4')
+        $fixture = New-PolicyRoster -Available @('gpt-5.6-terra')
         foreach ($evaluation in 'SciCode', 'Terminal-Bench') {
-            Set-PolicyRow $fixture -Id gpt-5.4 -Evaluation $evaluation -Score 0.010
+            Set-PolicyRow $fixture -Id gpt-5.6-terra -Evaluation $evaluation -Score 0.010
         }
         $economy = (Invoke-PolicyRoute $fixture -Mode economy).roles[0]
-        $economy.suggested | Should -Be 'gpt-5.4'
+        $economy.suggested | Should -Be 'gpt-5.6-terra'
         $economy.economyQualification | Should -Be 'floor-only'
         $economy.qualificationRule | Should -Be 'floor-only-known-price-v1'
         $economy.comparisonOutcome | Should -Be 'economy floor-only'
@@ -2463,22 +2504,22 @@ Describe 'Capability-first Ranked and qualified cost-first Economy (SQ-33b..d, S
 
     It 'keeps Ranked capability-first and Economy price-first on a qualified common reduced panel (SQ-35b)' {
         $scores = [ordered]@{
-            'gpt-5.4' = '0.600'; 'gpt-5.6-sol' = '0.990'
-            'gpt-5-mini' = '0.100'; 'gpt-5.4-nano' = '0.200'; 'gpt-5.4-mini' = '0.300'
+            'gpt-5.6-terra' = '0.600'; 'gpt-5.6-sol' = '0.990'
+            'gpt-5.6-luna' = '0.100'; 'gpt-5.4-nano' = '0.200'; 'gpt-6-luna' = '0.300'
         }
         $fixture = New-PolicyRoster -Scores $scores
         foreach ($id in $scores.Keys) { Set-PolicyRow $fixture -Id $id -Evaluation Terminal-Bench -Drop }
         $ranked = (Invoke-PolicyRoute $fixture).roles[0]
         $economy = (Invoke-PolicyRoute $fixture -Mode economy).roles[0]
         $ranked.suggested | Should -Be 'gpt-5.6-sol'
-        $economy.suggested | Should -Be 'gpt-5.4'
+        $economy.suggested | Should -Be 'gpt-5.6-terra'
         $economy.capability | Should -Be 0.75
         $ranked.comparisonPanel.id | Should -Be $economy.comparisonPanel.id
         $economy.escalation | Should -Be $ranked.suggested
     }
 
     It 'requires at least two same-panel models, not unrelated single-model primary populations' {
-        $fixture = New-PolicyRoster -Scores ([ordered]@{ 'gpt-5.4' = '0.600'; 'gpt-5.6-sol' = '0.700' })
+        $fixture = New-PolicyRoster -Scores ([ordered]@{ 'gpt-5.6-terra' = '0.600'; 'gpt-5.6-sol' = '0.700' })
         Set-PolicyRow $fixture -Id gpt-5.6-sol -Evaluation SciCode -Drop
         Set-PolicyRow $fixture -Id gpt-5.6-sol -Evaluation Terminal-Bench -Drop
         $role = (Invoke-PolicyRoute $fixture).roles[0]
@@ -2514,22 +2555,22 @@ Describe 'Capability-first Ranked and qualified cost-first Economy (SQ-33b..d, S
         $fixture = New-PolicyRoster
         $raw = Get-Content -LiteralPath $fixture.Benchmarks -Raw
         $rows = @(Get-SquadBenchmarkRowsFromMarkdown -Content $raw)
-        foreach ($row in @($rows | Where-Object CatalogId -eq 'gpt-5.4')) { $row.Retrieved = 'unknown' }
+        foreach ($row in @($rows | Where-Object CatalogId -eq 'gpt-5.6-terra')) { $row.Retrieved = 'unknown' }
         $missing = "## Benchmark Scores`n`n" + (@(Get-SquadBenchmarkScoreLine -Rows $rows) -join "`n")
-        (Get-SquadBenchmarkScore -Rows $rows -AsOf ([datetime]'2026-10-19')).Models['gpt-5.4'].implementation.status | Should -Be 'unverified'
-        foreach ($row in @($rows | Where-Object CatalogId -eq 'gpt-5.4')) { $row.Retrieved = '2026-10-19' }
+        (Get-SquadBenchmarkScore -Rows $rows -AsOf ([datetime]'2026-10-19')).Models['gpt-5.6-terra'].implementation.status | Should -Be 'unverified'
+        foreach ($row in @($rows | Where-Object CatalogId -eq 'gpt-5.6-terra')) { $row.Retrieved = '2026-10-19' }
         $known = "## Benchmark Scores`n`n" + (@(Get-SquadBenchmarkScoreLine -Rows $rows) -join "`n")
-        (Get-SquadBenchmarkScore -Rows $rows -AsOf ([datetime]'2026-10-19')).Models['gpt-5.4'].implementation.status | Should -Be 'sufficient'
+        (Get-SquadBenchmarkScore -Rows $rows -AsOf ([datetime]'2026-10-19')).Models['gpt-5.6-terra'].implementation.status | Should -Be 'sufficient'
         (Get-SquadBenchmarkDigest -Content $known) | Should -Not -Be (Get-SquadBenchmarkDigest -Content $missing)
     }
 
     It 'allows a later acquisition without renewing an expired genuine verification' {
         $fixture = New-PolicyRoster
         foreach ($evaluation in 'SciCode', 'Terminal-Bench') {
-            Set-PolicyRow $fixture -Id gpt-5.4 -Evaluation $evaluation -Date '2026-07-20' -RetrievedDate '2026-10-19'
+            Set-PolicyRow $fixture -Id gpt-5.6-terra -Evaluation $evaluation -Date '2026-07-20' -RetrievedDate '2026-10-19'
         }
         $report = Invoke-PolicyRoute $fixture
-        $bad = @($report.roles[0].evidenceCandidates | Where-Object id -eq 'gpt-5.4')[0]
+        $bad = @($report.roles[0].evidenceCandidates | Where-Object id -eq 'gpt-5.6-terra')[0]
         $report.warnings | Should -BeNullOrEmpty -Because 'valid expired evidence must not invalidate other candidates'
         $bad.evidenceStatus | Should -Be 'verification-expired'
         $bad.evaluations[0].retrieved | Should -Be '2026-10-19'
@@ -2540,7 +2581,7 @@ Describe 'Capability-first Ranked and qualified cost-first Economy (SQ-33b..d, S
     It 'refuses a verification manifest bound to different scores without replacing the output' {
         $fixture = New-PolicyRoster
         $checks = New-FixtureVerificationFile -Snapshot $fixture.Benchmarks
-        Set-PolicyRow $fixture -Id gpt-5.4 -Evaluation SciCode -Score 0.601
+        Set-PolicyRow $fixture -Id gpt-5.6-terra -Evaluation SciCode -Score 0.601
         $output = Join-Path $fixture.Root 'last-good.md'
         Set-Content -LiteralPath $output -Value 'last good' -Encoding utf8NoBOM
         $before = (Get-FileHash -LiteralPath $output).Hash
@@ -2551,11 +2592,11 @@ Describe 'Capability-first Ranked and qualified cost-first Economy (SQ-33b..d, S
 
     It 'does not count case-variant evaluation labels as two independent models' {
         $rows = @(
-            New-FixtureEvidenceRow -Id gpt-5.4 -Evaluation SciCode -Score 0.600
-            New-FixtureEvidenceRow -Id gpt-5.4 -Evaluation scicode -Score 0.900
+            New-FixtureEvidenceRow -Id gpt-5.6-terra -Evaluation SciCode -Score 0.600
+            New-FixtureEvidenceRow -Id gpt-5.6-terra -Evaluation scicode -Score 0.900
         )
         $score = Get-SquadBenchmarkScore -Rows $rows -AsOf ([datetime]'2026-10-19')
-        $result = $score.Models['gpt-5.4'].implementation
+        $result = $score.Models['gpt-5.6-terra'].implementation
         $result.capability | Should -BeNullOrEmpty
         @($result.evaluations | Where-Object evaluation -CEQ SciCode)[0].referenceCount | Should -Be 1
         $result.status | Should -Be 'insufficient-coverage'
@@ -2564,7 +2605,7 @@ Describe 'Capability-first Ranked and qualified cost-first Economy (SQ-33b..d, S
     It 'never pools different harness configurations even when their source versions match' {
         $fixture = New-PolicyRoster
         foreach ($evaluation in 'SciCode', 'Terminal-Bench') {
-            Set-PolicyRow $fixture -Id gpt-5.4 -Evaluation $evaluation -Configuration 'different-agent-harness-v2'
+            Set-PolicyRow $fixture -Id gpt-5.6-terra -Evaluation $evaluation -Configuration 'different-agent-harness-v2'
         }
         $role = (Invoke-PolicyRoute $fixture).roles[0]
         $role.capability | Should -BeNullOrEmpty
@@ -2587,9 +2628,9 @@ Describe 'Sync original-source verification is a real check, not a new timestamp
         $script:SupportedMethod = '<table><tr><td>SciCode</td><td>288 subproblems (test set)</td><td>3</td></tr></table><h4 id="scicode">SciCode</h4><p>scientist-annotated background information; sub-problem level scoring; Pass@1; 300-second execution timeout (dataset v1.0.1)</p><h3 id="next">Next</h3>'
 
         function Get-SyntheticPublisherHtml {
-            param([decimal]$FirstScore = 0.600, [string]$FirstName = 'GPT-5.4 (High)')
+            param([decimal]$FirstScore = 0.600, [string]$FirstName = 'GPT-5.6 Terra (High)')
             $data = @{ models = @(
-                    @{ slug = 'gpt-5-4'; name = $FirstName; scicode = $FirstScore }
+                    @{ slug = 'gpt-5-6-terra'; name = $FirstName; scicode = $FirstScore }
                     @{ slug = 'gpt-5-6-sol'; name = 'GPT-5.6 Sol (High)'; scicode = [decimal]0.700 }
                 ) } | ConvertTo-Json -Depth 6 -Compress
             $payload = ConvertTo-Json -InputObject @(1, "a:$data`n") -Compress
@@ -2601,14 +2642,14 @@ Describe 'Sync original-source verification is a real check, not a new timestamp
         $script:MethodFixture = $script:SupportedMethod
         $script:PublisherFixture = Get-SyntheticPublisherHtml
         $script:VerificationRows = @(
-            New-FixtureEvidenceRow -Id gpt-5.4 -Evaluation SciCode -Score 0.600 -SourceId artificial-analysis -ModelVersion gpt-5.4_high -Verification unverified
+            New-FixtureEvidenceRow -Id gpt-5.6-terra -Evaluation SciCode -Score 0.600 -SourceId artificial-analysis -ModelVersion gpt-5.6-terra_high -Verification unverified
             New-FixtureEvidenceRow -Id gpt-5.6-sol -Evaluation SciCode -Score 0.700 -SourceId artificial-analysis -ModelVersion gpt-5.6-sol_high -Verification unverified
         )
         foreach ($row in $script:VerificationRows) {
             $row.Retrieved = 'unknown'; $row.Verified = 'unknown'; $row.Configuration = 'unknown'; $row.VerificationBasis = 'unknown'
         }
         $script:RawSciCodeRows = @(
-            [pscustomobject]@{ 'Model version' = 'gpt-5.4_high'; Score = '0.600'; 'AA model slug' = 'gpt-5-4' }
+            [pscustomobject]@{ 'Model version' = 'gpt-5.6-terra_high'; Score = '0.600'; 'AA model slug' = 'gpt-5-6-terra' }
             [pscustomobject]@{ 'Model version' = 'gpt-5.6-sol_high'; Score = '0.700'; 'AA model slug' = 'gpt-5-6-sol' }
         )
         Mock Invoke-WebRequest {
@@ -2659,11 +2700,196 @@ Describe 'Sync original-source verification is a real check, not a new timestamp
     }
 
     It 'refuses a publisher fallback configuration rather than attributing another model to this one' {
-        $script:PublisherFixture = Get-SyntheticPublisherHtml -FirstName 'GPT-5.4 (High, GPT-5.5 Fallback)'
+        $script:PublisherFixture = Get-SyntheticPublisherHtml -FirstName 'GPT-5.6 Terra (High, GPT-6 Sol Fallback)'
         $rows = @(Get-OnlineSciCodeVerificationLocal -Rows $script:VerificationRows -SciCodeRows $script:RawSciCodeRows)
         $rows[0].Verification | Should -Be 'incomparable'
         $rows[0].Verified | Should -Be 'unknown'
         $rows[0].VerificationReason | Should -Match 'single-model/configuration attribution unproven'
         $rows[1].Verification | Should -Be 'verified'
+    }
+
+    It 'accepts the Artificial Analysis v5.0 Legacy Evaluations h3 #scicode methodology block' {
+        $script:MethodFixture = '<h3 id="scicode">SciCode</h3><p>Status: Removed from the Artificial Analysis Intelligence Index in v5.0, having been a constituent up to and including v4.3.2. We test with scientist-annotated background information; sub-problem level scoring; Pass@1; 300-second execution timeout (dataset v1.0.1)</p><h3 id="aa-lcr">AA-LCR</h3>'
+        $rows = @(Get-OnlineSciCodeVerificationLocal -Rows $script:VerificationRows -SciCodeRows $script:RawSciCodeRows)
+        @($rows | Where-Object Verification -eq 'verified').Count | Should -Be 2
+        $rows[0].Configuration | Should -Be 'aa-scicode-v1.0.1-background-subproblem-pass1-r3-t300-v1'
+    }
+}
+
+Describe 'Sync-ModelCatalog.ps1 and standalone benchmark dataset fallbacks' {
+    BeforeAll {
+        $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '../..')).Path
+        $script:CatalogSyncScript = Join-Path $repoRoot 'scripts/Sync-ModelCatalog.ps1'
+        $script:BenchmarkSyncScript = Join-Path $repoRoot 'scripts/Sync-ModelBenchmarks.ps1'
+        $script:Resolver = Join-Path $repoRoot 'squad-src/.github/skills/squad/scripts/Resolve-SquadModelRoute.ps1'
+    }
+
+    It 'adds newly launched Copilot models, prunes retired ones, maintains 3-tier Copilot Fusion, and syncs Observed-on dates' {
+        $fixtureDir = Join-Path $TestDrive 'catalog-sync'
+        New-Item -ItemType Directory -Path $fixtureDir -Force | Out-Null
+
+        $supportedHtml = @'
+<main>
+<h2>Supported AI models in Copilot</h2>
+<table>
+<tr><th>Model name</th><th>Provider</th><th>Release status</th></tr>
+<tr><td>GPT-5.6 Sol</td><td>OpenAI</td><td>GA</td></tr>
+<tr><td>GPT-6.1 Terra</td><td>OpenAI</td><td>GA</td></tr>
+<tr><td>Claude Haiku 4.5</td><td>Anthropic</td><td>GA</td></tr>
+<tr><td>Claude Haiku 5.5</td><td>Anthropic</td><td>GA</td></tr>
+<tr><td>Claude Sonnet 4.6</td><td>Anthropic</td><td>GA</td></tr>
+<tr><td>Claude Sonnet 5.5</td><td>Anthropic</td><td>GA</td></tr>
+<tr><td>Claude Opus 5</td><td>Anthropic</td><td>GA</td></tr>
+<tr><td>Claude Fable 5.2</td><td>Anthropic</td><td>GA</td></tr>
+<tr><td>Gemini 4 Argon</td><td>Google</td><td>GA</td></tr>
+<tr><td>Gemini 4 Carbon</td><td>Google</td><td>GA</td></tr>
+<tr><td>Frontier Next 9.0</td><td>OpenAI</td><td>GA</td></tr>
+</table>
+<h2>Models with extended capabilities</h2>
+<table>
+<tr><th>Model</th><th>1 million token context window</th><th>Configurable reasoning</th></tr>
+<tr><td>Frontier Next 9.0</td><td><svg aria-label="Supported"></svg></td><td><svg aria-label="Supported"></svg></td></tr>
+</table>
+<h2>Supported AI models per client</h2>
+<table>
+<tr><th>Model</th><th>GitHub.com</th><th>Copilot CLI</th></tr>
+<tr><td>Frontier Next 9.0</td><td><svg aria-label="Included"></svg></td><td><svg aria-label="Included"></svg></td></tr>
+<tr><td>Claude Haiku 5.5</td><td><svg aria-label="Included"></svg></td><td><svg aria-label="Included"></svg></td></tr>
+</table>
+<h2>Model retirement history</h2>
+<table>
+<tr><th>Model name</th><th>Retirement date</th><th>Suggested alternative</th></tr>
+<tr><td>GPT-5.4</td><td>2026-10-19</td><td>Latest GPT Sol model</td></tr>
+</table>
+</main>
+'@
+        $pricingHtml = @'
+<main>
+<h2>Pricing tables</h2>
+<h3>OpenAI</h3>
+<table>
+<tr><th>Model</th><th>Release status</th><th>Category</th><th>Tier</th><th>Threshold (input tokens)</th><th>Input</th><th>Cached input</th><th>Cache write</th><th>Output</th></tr>
+<tr><td>GPT-5.6 Sol</td><td>GA</td><td>Powerful</td><td>Default</td><td>≤ 272K</td><td>$4.00</td><td>$0.40</td><td>$5.00</td><td>$20.00</td></tr>
+<tr><td>GPT-6.1 Terra</td><td>GA</td><td>Versatile</td><td>Default</td><td>≤ 272K</td><td>$1.00</td><td>$0.05</td><td>$1.25</td><td>$5.00</td></tr>
+<tr><td>Frontier Next 9.0</td><td>GA</td><td>Powerful</td><td>Default</td><td>≤ 272K</td><td>$3.00</td><td>$0.15</td><td>$3.75</td><td>$15.00</td></tr>
+</table>
+<h3>Anthropic</h3>
+<table>
+<tr><th>Model</th><th>Release status</th><th>Category</th><th>Tier</th><th>Threshold (input tokens)</th><th>Input</th><th>Cached input</th><th>Cache write</th><th>Output</th></tr>
+<tr><td>Claude Haiku 4.5</td><td>GA</td><td>Versatile</td><td>Default</td><td>Not applicable</td><td>$1.00</td><td>$0.10</td><td>$1.25</td><td>$5.00</td></tr>
+<tr><td>Claude Haiku 5.5</td><td>GA</td><td>Lightweight</td><td>Default</td><td>≤ 100K</td><td>$0.10</td><td>$0.01</td><td>$0.125</td><td>$0.50</td></tr>
+<tr><td>Claude Haiku 5.5</td><td>GA</td><td>Lightweight</td><td>Long context</td><td>&gt; 100K</td><td>$0.50</td><td>$0.05</td><td>$0.625</td><td>$2.50</td></tr>
+<tr><td>Claude Sonnet 4.6</td><td>GA</td><td>Versatile</td><td>Default</td><td>Not applicable</td><td>$3.00</td><td>$0.30</td><td>$3.75</td><td>$15.00</td></tr>
+<tr><td>Claude Sonnet 5.5</td><td>GA</td><td>Versatile</td><td>Default</td><td>Not applicable</td><td>$2.00</td><td>$0.10</td><td>$2.50</td><td>$10.00</td></tr>
+<tr><td>Claude Opus 5</td><td>GA</td><td>Powerful</td><td>Default</td><td>Not applicable</td><td>$5.00</td><td>$0.50</td><td>$6.25</td><td>$25.00</td></tr>
+<tr><td>Claude Fable 5.2</td><td>GA</td><td>Powerful</td><td>Default</td><td>Not applicable</td><td>$8.00</td><td>$0.20</td><td>$10.00</td><td>$40.00</td></tr>
+</table>
+<h3>Google</h3>
+<table>
+<tr><th>Model</th><th>Release status</th><th>Category</th><th>Tier</th><th>Threshold (input tokens)</th><th>Input</th><th>Cached input</th><th>Output</th></tr>
+<tr><td>Gemini 4 Argon</td><td>GA</td><td>Powerful</td><td>Default</td><td>Not applicable</td><td>$2.00</td><td>$0.10</td><td>$10.00</td></tr>
+<tr><td>Gemini 4 Carbon</td><td>GA</td><td>Powerful</td><td>Default</td><td>Not applicable</td><td>$2.00</td><td>$0.10</td><td>$10.00</td></tr>
+</table>
+</main>
+'@
+        $compHtml = @'
+<main>
+<h2>Comparison of AI models for GitHub Copilot</h2>
+<h3>Recommended models by task</h3>
+<table>
+<tr><th>Model</th><th>Task area</th><th>Excels at (primary use case)</th></tr>
+<tr><td>Frontier Next 9.0</td><td>Complex coding and security review</td><td>Deep security review and autonomous coding</td></tr>
+</table>
+</main>
+'@
+        $fusionHtml = @'
+<main>
+<h2>Copilot Fusion effort levels</h2>
+<table>
+<tr><th>Effort level</th><th>Priority</th><th>Typical use</th></tr>
+<tr><td>Fusion Standard</td><td>Balanced</td><td>Everyday work.</td></tr>
+<tr><td>Fusion High</td><td>High</td><td>Substantial coding tasks.</td></tr>
+<tr><td>Fusion Max</td><td>Max</td><td>Deepest reasoning.</td></tr>
+<tr><td>Fusion Fast</td><td>Fast</td><td>Not selectable by users. Only available in Visual Studio Code inline chat.</td></tr>
+</table>
+</main>
+'@
+        $supFile = Join-Path $fixtureDir 'sup.html'; Set-Content -LiteralPath $supFile -Value $supportedHtml -Encoding utf8NoBOM
+        $prcFile = Join-Path $fixtureDir 'prc.html'; Set-Content -LiteralPath $prcFile -Value $pricingHtml -Encoding utf8NoBOM
+        $cmpFile = Join-Path $fixtureDir 'cmp.html'; Set-Content -LiteralPath $cmpFile -Value $compHtml -Encoding utf8NoBOM
+        $fusFile = Join-Path $fixtureDir 'fus.html'; Set-Content -LiteralPath $fusFile -Value $fusionHtml -Encoding utf8NoBOM
+
+        $outCat = Join-Path $fixtureDir 'model-catalog.md'
+        $outRates = Join-Path $fixtureDir 'consumption-rates-template.md'
+        Copy-Item -LiteralPath (Join-Path $repoRoot 'squad-src/.github/skills/squad/references/model-catalog.md') -Destination $outCat
+
+        $res = @(& $script:CatalogSyncScript `
+                -CatalogOutputPath $outCat -RatesOutputPath $outRates `
+                -SupportedModelsHtmlPath $supFile -PricingHtmlPath $prcFile -ComparisonHtmlPath $cmpFile -FusionHtmlPath $fusFile `
+                -AsOf ([datetime]'2026-11-11'))[-1]
+
+        $res.Updated | Should -BeTrue
+        $res.AddedModels | Should -Contain 'frontier-next-9.0'
+        $res.RetiredModels | Should -Contain 'gpt-5.3-codex'
+
+        $catContent = Get-Content -LiteralPath $outCat -Raw
+        $ratesContent = Get-Content -LiteralPath $outRates -Raw
+        $catContent | Should -Match '\*\*Retrieved: 2026-11-11\*\*'
+        $ratesContent | Should -Match 'Observed-on: 2026-11-11\.'
+        $catContent | Should -Match '\| `frontier-next-9\.0` \| advertised \| Frontier Next 9\.0 \| GA \| frontier-reasoning \| 1M \| configurable \|'
+        $catContent | Should -Match '\| `fusion-standard` \|'
+        $catContent | Should -Match '\| `hydrafusion` \|'
+        $catContent | Should -Match '\| `hydrafusion-max` \|'
+        $catContent | Should -Not -Match '\| `gpt-5\.3-codex` \|'
+        $ratesContent | Should -Match '\| Frontier Next 9\.0 \| `frontier-next-9\.0` \|'
+
+        $noop = @(& $script:CatalogSyncScript `
+                -CatalogOutputPath $outCat -RatesOutputPath $outRates `
+                -SupportedModelsHtmlPath $supFile -PricingHtmlPath $prcFile -ComparisonHtmlPath $cmpFile -FusionHtmlPath $fusFile `
+                -AsOf ([datetime]'2026-11-12') -DryRun)[-1]
+        $noop.Updated | Should -BeFalse
+    }
+
+    It 'falls back to standalone Epoch CSVs and ignores retired catalog models in coverage-continuity checks' {
+        $dir = Join-Path $TestDrive 'standalone-epoch'
+        $eciDir = Join-Path $dir 'epoch_capabilities_index'
+        New-Item -ItemType Directory -Path $eciDir -Force | Out-Null
+        @(
+            'model_id,benchmark_id,performance,benchmark,benchmark_release_date,model_lower,model_version,model_display,date,source'
+            'gpt56,gpqa,0.900,GPQA diamond,2023-11-20,gpt-5.6-sol,gpt-5.6-sol,GPT-5.6 Sol,2026-10-19,'
+        ) | Set-Content -LiteralPath (Join-Path $eciDir 'processed_data_for_eci.csv') -Encoding utf8NoBOM
+        @('Model version,Pass@1,Release date,Source', 'claude-fable-5-2_max,0.720,2026-10-25,https://deepswe.datacurve.ai/') |
+            Set-Content -LiteralPath (Join-Path $dir 'deepswe_external.csv') -Encoding utf8NoBOM
+        @('Model version,Accuracy,Release date', 'gemini-4-argon_high,0.520,2026-10-28') |
+            Set-Content -LiteralPath (Join-Path $dir 'hle_external.csv') -Encoding utf8NoBOM
+        @('Model version,mean_score,Release date', 'gemini-4-carbon_high,0.790,2026-10-28') |
+            Set-Content -LiteralPath (Join-Path $dir 'swe_bench_verified.csv') -Encoding utf8NoBOM
+        @('Model version,Accuracy mean,Release date,Source', 'gpt-5.3-codex,0.784,2026-02-05,https://www.tbench.ai/leaderboard/terminal-bench/2.0') |
+            Set-Content -LiteralPath (Join-Path $dir 'terminalbench_external.csv') -Encoding utf8NoBOM
+
+        $outBench = Join-Path $dir 'benchmarks.md'
+        # Seed a prior snapshot with a retired model (`gpt-5.4`) to verify retiring it in model-catalog.md does not trip coverage reduction
+        $priorRows = @(
+            New-FixtureEvidenceRow -Id 'gpt-5.4' -Evaluation 'DeepSWE' -Score '0.500' -Verification 'unverified'
+            New-FixtureEvidenceRow -Id 'gpt-5.6-sol' -Evaluation 'GPQA diamond' -Score '0.900' -Verification 'unverified'
+        )
+        @(
+            '# Prior Snapshot'
+            '* **Retrieved: 2026-10-19**'
+            '* **Generated: 2026-10-19**'
+            '* **Scoring Policy: squad-capability-v3**'
+            '', '## Benchmark Scores', ''
+            Get-SquadBenchmarkScoreLine -Rows $priorRows
+        ) | Set-Content -LiteralPath $outBench -Encoding utf8NoBOM
+
+        $catPath = Join-Path $repoRoot 'squad-src/.github/skills/squad/references/model-catalog.md'
+        $res = @(& $script:BenchmarkSyncScript -ArchivePath $dir -OutputPath $outBench -CatalogPath $catPath -AsOf ([datetime]'2026-11-11') -EpochVersion 'fixture-v2')[-1]
+        $res.Updated | Should -BeTrue
+        $raw = Get-Content -LiteralPath $outBench -Raw
+        $raw | Should -Match '\| `claude-fable-5\.2` \| DeepSWE \|'
+        $raw | Should -Match '\| `gemini-4-argon` \| HLE \|'
+        $raw | Should -Match '\| `gemini-4-carbon` \| SWE-Bench verified \|'
+        $raw | Should -Match '\| `gpt-5\.3-codex` \| Terminal-Bench \|'
+        $raw | Should -Not -Match '\| `gpt-5\.4` \|'
     }
 }
