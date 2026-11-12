@@ -110,6 +110,18 @@ Describe 'PKG-14 Plugin host discovery and hook commands' -Tag 'Unit' {
         $script:BuildExitCode | Should -Be 0 -Because ($script:BuildOutput -join "`n")
     }
 
+    It 'ships the shared Responsible Use contract and its link from every first-party agent (RAI-01)' {
+        $skill = [IO.File]::ReadAllText((Join-Path $script:OutputRoot 'skills/squad/SKILL.md'))
+        $skill | Should -Match '## Responsible Use'
+        $skill | Should -Match '\[Responsible Use\]\(references/responsible-use\.md\)'
+        [IO.File]::ReadAllText((Join-Path $script:OutputRoot 'skills/squad/references/responsible-use.md')) |
+            Should -Match 'No independent usage reporting'
+        foreach ($agent in Get-ChildItem (Join-Path $script:OutputRoot 'agents/squad') -Filter '*.agent.md') {
+            [IO.File]::ReadAllText($agent.FullName) |
+                Should -Match 'Read Responsible Use in the installed `squad` skill before work\.'
+        }
+    }
+
     It 'ships the canonical root license and keeps upstream legal material separate and unchanged' {
         foreach ($legalFile in @('LICENSE.TXT', 'NOTICE')) {
             $expected = Get-Content -LiteralPath (Join-Path $script:SourceRootResolved $legalFile) -Raw

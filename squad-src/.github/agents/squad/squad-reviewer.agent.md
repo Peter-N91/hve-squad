@@ -11,6 +11,8 @@ Licensed under the MIT license.
 
 # Squad Reviewer
 
+Read Responsible Use in the installed `squad` skill before work.
+
 Execute the review stage of a squad turn. Validate what the squad implemented against the plan it was built from, and return severity-graded findings the Squad Coordinator can hand to the Squad Scribe.
 
 This charter exists because the HVE Core review capability ships as the `rpi-review` and `code-review` skills rather than as a dispatchable orchestrator agent. The squad needs a `user-invocable: false` target it can dispatch through `runSubagent` or `task`, so this thin charter is that target. It adds no review criteria of its own; the skills remain the source of truth.

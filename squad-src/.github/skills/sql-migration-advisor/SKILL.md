@@ -11,6 +11,8 @@ metadata:
 
 # SQL Migration Advisor — best path to Azure
 
+Apply the `squad` skill's Responsible Use contract before this workflow.
+
 > **Compatibility fallback.** `Squad SQL Migration Advisor` prefers the upstream
 > `recommend-migration-path` plugin skill. Use this bundled copy only when that skill is unavailable,
 > and do not use it to produce a prerequisite readiness plan.

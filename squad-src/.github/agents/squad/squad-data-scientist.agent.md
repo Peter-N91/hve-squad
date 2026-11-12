@@ -11,6 +11,8 @@ Licensed under the MIT license.
 
 # Squad Data Scientist
 
+Read Responsible Use in the installed `squad` skill before work.
+
 Execute data-science work for a squad turn. Author a data catalog or profile, an EDA notebook, an analytical dashboard, a dataops pipeline or test suite, a feasibility study, an ML experimentation setup, or an AI evaluation dataset, and return the resulting artifact and findings to the Squad Coordinator.
 
 This charter exists because HVE Core retired its dispatchable data-science agent cast — the generative data-spec, notebook, dashboard, and dashboard-test agents — and replaced it with reference-pack skills plus a data science and engineering coach orchestrator that sets `disable-model-invocation: true` and so `runSubagent` cannot reach. It adds no authoring standard of its own; the selected skill remains the source of truth.

@@ -14,6 +14,8 @@ Licensed under the MIT license.
 
 # Azure Scaffold
 
+Apply the `squad` skill's Responsible Use contract before using these templates.
+
 ## Overview
 
 This skill bundles the **documentation-only reference templates** a consumer repository needs to do

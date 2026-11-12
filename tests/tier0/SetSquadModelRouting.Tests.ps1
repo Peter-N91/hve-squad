@@ -159,4 +159,62 @@ Describe 'Set-SquadModelRouting deterministic transaction' {
         $decisions | Should -Match '\* Previous mode: off'
         $decisions | Should -Match '\* Trade accepted: Cost-first qualified implementation routing\.'
     }
+
+    It 'refuses an unconsented <Mode>-to-economy switch without changing either file' -ForEach @(
+        @{ Mode = 'off' }
+        @{ Mode = 'ranked' }
+    ) {
+        $fixture = New-RoutingFixture -Mode $Mode
+        $teamPath = Join-Path $fixture.Root 'team.md'
+        $decisionsPath = Join-Path $fixture.Root 'decisions.md'
+        $hash = (Get-FileHash -LiteralPath $teamPath -Algorithm SHA256).Hash
+        $plan = New-RoutingPlan $fixture $hash $true $Mode economy
+        $before = @($teamPath, $decisionsPath | ForEach-Object {
+                [Convert]::ToBase64String([IO.File]::ReadAllBytes($_))
+            })
+
+        $result = Invoke-RoutingRefresh $fixture.Repo $plan
+
+        $result.ExitCode | Should -Be 1
+        $result.Output | Should -Match 'Switching into economy requires economyConsent'
+        @($teamPath, $decisionsPath | ForEach-Object {
+                [Convert]::ToBase64String([IO.File]::ReadAllBytes($_))
+            }) | Should -Be $before
+    }
+
+    It 'refuses repeated all-role economy consent without changing either file' {
+        $fixture = New-RoutingFixture -Mode economy
+        $teamPath = Join-Path $fixture.Root 'team.md'
+        $decisionsPath = Join-Path $fixture.Root 'decisions.md'
+        [IO.File]::AppendAllText($decisionsPath, @"
+
+## Economy Mode Accepted 2026-10-24T16:00:00Z
+
+* User: fixture-user
+* Previous mode: ranked
+* Trade accepted: Cost-first routing.
+* Never weakened: Floors and gates.
+* Scope: all-roles
+
+"@, $script:Utf8)
+        $hash = (Get-FileHash -LiteralPath $teamPath -Algorithm SHA256).Hash
+        $consent = @{
+            user = 'fixture-user'
+            tradeAccepted = 'Cost-first routing.'
+            neverWeakened = 'Floors and gates.'
+            timestamp = '2026-10-24T17:00:00Z'
+        }
+        $plan = New-RoutingPlan $fixture $hash $true economy economy $consent
+        $before = @($teamPath, $decisionsPath | ForEach-Object {
+                [Convert]::ToBase64String([IO.File]::ReadAllBytes($_))
+            })
+
+        $result = Invoke-RoutingRefresh $fixture.Repo $plan
+
+        $result.ExitCode | Should -Be 1
+        $result.Output | Should -Match 'Economy is already accepted for all roles'
+        @($teamPath, $decisionsPath | ForEach-Object {
+                [Convert]::ToBase64String([IO.File]::ReadAllBytes($_))
+            }) | Should -Be $before
+    }
 }

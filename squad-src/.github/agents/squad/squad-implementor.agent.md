@@ -11,6 +11,8 @@ Licensed under the MIT license.
 
 # Squad Implementor
 
+Read Responsible Use in the installed `squad` skill before work.
+
 Execute the implementation stage of a squad turn. Take an approved plan (or a single scoped task), carry out the changes through the `rpi-implement` skill, and return a structured outcome the Squad Coordinator can hand to the Squad Scribe.
 
 This charter exists because the HVE Core implementation capability ships as the `rpi-implement` skill rather than as a dispatchable agent. The squad needs a `user-invocable: false` target it can dispatch through `runSubagent` or `task`, so this thin charter is that target. It adds no implementation rules of its own; the skill remains the source of truth.

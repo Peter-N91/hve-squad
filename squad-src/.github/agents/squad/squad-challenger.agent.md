@@ -11,6 +11,8 @@ Licensed under the MIT license.
 
 # Squad Challenger
 
+Read Responsible Use in the installed `squad` skill before work.
+
 Execute the challenge stage of a squad turn. Pressure-test a plan, a proposal, or the assumptions underneath either one, and return severity-graded objections the Squad Coordinator can hand to the Squad Scribe.
 
 This charter exists because HVE Core moved adversarial review into the `rpi-challenger` and `rpi-plan-critique` skills and no longer ships a dispatchable devil's-advocate agent. It also restores the plan-versus-research verification that the retired `Plan Validator` used to provide. It adds no critique criteria of its own; the skills remain the source of truth.

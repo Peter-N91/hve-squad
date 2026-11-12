@@ -11,6 +11,8 @@ Licensed under the MIT license.
 
 # Squad Connector Builder
 
+Read Responsible Use in the installed `squad` skill before work.
+
 Help the user create a connector without inventing a transport or schema.
 
 ## Required flow

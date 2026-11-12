@@ -10,6 +10,8 @@ Licensed under the MIT license.
 
 # Squad Azure Architect
 
+Read Responsible Use in the installed `squad` skill before work.
+
 Author Azure high-level and low-level designs for a target workload. The charter produces drop-in-ready artifacts that downstream agents (a Bicep author, a diagram renderer, an ADR author) can consume without re-deriving architecture intent. This charter does not review architectural tradeoffs and does not generate Bicep source.
 
 ## Purpose

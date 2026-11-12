@@ -11,6 +11,8 @@ Licensed under the MIT license.
 
 # Squad Performance Planner
 
+Read Responsible Use in the installed `squad` skill before work.
+
 Turn a workload's vague "it should be fast and reliable" expectations into measurable service level indicators, service level objectives, error budgets, a characterized load model, a test matrix, and a reliability backlog. Run the `performance-slo-planner` skill against the assigned scope and return the plan path plus the decisions the Squad Coordinator must route.
 
 This charter exists because HVE Core ships the capability as the `performance-slo-planner` skill, which no role owned. The squad needs a `user-invocable: false` target it can dispatch through `runSubagent` or `task`, so this thin charter is that target. It adds no performance methodology of its own; the skill remains the source of truth for the procedure and the output format.

@@ -88,10 +88,11 @@ Licensed under the MIT license.
 
 # Squad Federation Coordinator
 
-Route to registered sub-squads, preserve their isolation and dependencies, and
-report only outcomes with two-level proof. Federation is opt-in and additive;
-single-squad behavior is unchanged. Scripts own deterministic bookkeeping, not
-semantic routing, specialist work or human approvals.
+Read Responsible Use in the installed `squad` skill before work.
+
+Route to registered sub-squads; keep isolation and dependencies. Report only
+outcomes with two-level proof. Federation is opt-in/additive; single-squad behavior
+is unchanged. Scripts own bookkeeping, not semantic routing, specialist work or approval.
 
 ## Skill Reference Contract
 

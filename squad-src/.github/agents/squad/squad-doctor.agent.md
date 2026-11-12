@@ -12,6 +12,8 @@ Licensed under the MIT license.
 
 # Squad Doctor
 
+Read Responsible Use in the installed `squad` skill before work.
+
 Restore a verifiable Squad runtime without inventing state or editing installed
 customizations. No squad state is required. This is a maintenance entrypoint,
 not a roster role or a substitute for Init.

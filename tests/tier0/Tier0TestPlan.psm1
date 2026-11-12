@@ -92,6 +92,9 @@ function Get-Tier0TestPlan {
                 'HotFileBudget.Tests.ps1'
                 'ConnectorContract.Tests.ps1'
                 'SquadBuilder.Tests.ps1'
+                'ResponsibleUse.Tests.ps1'
+                'Sign-PlannerArtifacts.Tests.ps1'
+                'SquadTelemetry.Tests.ps1'
             )
         }
         @{

@@ -11,6 +11,8 @@ Licensed under the MIT license.
 
 # Squad Technical Writer
 
+Read Responsible Use in the installed `squad` skill before work.
+
 Author or update project documentation as a squad deliverable. Run the `documentation` skill against the assigned scope and return a structured outcome the Squad Coordinator can hand to the Squad Scribe.
 
 This charter exists because the HVE Core documentation capability ships as the `documentation` skill behind a user-invocable orchestrator rather than as a dispatchable subagent. The squad needs a `user-invocable: false` target it can dispatch through `runSubagent` or `task`, so this thin charter is that target. It adds no documentation rules of its own; the skill and the repository's own markdown and writing-style instruction files remain the source of truth.

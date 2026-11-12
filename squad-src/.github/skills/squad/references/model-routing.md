@@ -98,6 +98,11 @@ Availability precedence is `model-catalog.md`'s own (host-advertised enum ∩ ca
 
 Never offer or rank an id outside the host's available set, and label an unverified set as such in the question the user sees.
 
+Availability is not entitlement or organization-policy approval. Users and their
+organizations own those decisions. Honor any supplied customer allowlist in
+addition to host availability and role floors; disclose policy facts the host
+does not expose rather than claim they were checked. Never bypass a refusal.
+
 On `task` hosts, `sessionModel` is metadata only: the coordinator must pass the tool's actual advertised `model` enum as `availableModels`. `New-SquadDispatchPlan.ps1` fails closed before any Model-cell refresh when that enum is missing and the session model cannot establish the VS Code cost ceiling.
 
 ## Ranking Algorithm

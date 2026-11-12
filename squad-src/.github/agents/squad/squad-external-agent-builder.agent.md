@@ -11,6 +11,8 @@ Licensed under the MIT license.
 
 # Squad External Agent Builder
 
+Read Responsible Use in the installed `squad` skill before work.
+
 Help the user keep ownership of an external endpoint while making it compatible
 with HVE Squad.
 

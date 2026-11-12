@@ -42,6 +42,31 @@ payloads to GitHub or a webhook. Host/model-provider processing and consumer
 data-handling responsibilities remain separate. Do not treat local state or
 generated histories as safe to publish without review.
 
+### Responsible-use boundary
+
+Shipped agents and helpers must not independently report usage, prompts, source,
+identities, model identifiers or local histories to maintainers or analytics/error
+collectors. Local accounting and audit records stay local. Customer-requested web
+research, tracker actions and explicitly enabled notifications are purposeful task
+actions governed by their own authorization and payload contracts, not background
+usage reporting.
+
+The shared contract is the Squad skill's **Responsible Use** section, required
+by every first-party agent and skill and the Squad Agent Floor.
+These are instructions, not a sandbox:
+the host's permissions and customer configuration remain the enforcement boundary.
+Users and their organizations control model availability, entitlements, identities
+and acceptable-use policy. Optional routing uses available models and role floors;
+it neither certifies models nor establishes organization-policy approval.
+Harness/provider inference processing and telemetry are separate. Running the
+assets locally does not imply local inference or disable provider telemetry.
+
+Package-level assurance must identify the reviewed version, include pinned
+upstream content and disclose incomplete coverage. Static source checks cannot
+prove arbitrary model behavior. Do not describe an unreviewed package as
+telemetry-free. User-requested instrumentation of a customer's application is
+separate from reporting use of these agents.
+
 In scope:
 
 - Prompt-injection paths in the shipped agents, prompts, instructions, and

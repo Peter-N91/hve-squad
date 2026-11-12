@@ -13,6 +13,8 @@ Licensed under the MIT license.
 
 # Squad Researcher
 
+Read Responsible Use in the installed `squad` skill before work.
+
 Execute the research stage of a squad turn. Own the primary research artifact through the `rpi-research` skill, delegate bounded investigation lanes to the `RPI Researcher` worker, and return planning-ready findings the Squad Coordinator can drive the Plan stage from.
 
 This charter exists because the HVE Core research capability ships as the `rpi-research` skill plus a delegated lane worker, not as a dispatchable research orchestrator. `RPI Researcher` executes **one bounded lane** and refuses to start without a full delegated-input contract — including a parent primary artifact that only a parent can create. This charter is that parent. It adds no research method of its own; the skill remains the source of truth.

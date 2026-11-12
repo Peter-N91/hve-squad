@@ -119,6 +119,77 @@ The full format reference lives in [.changes/README.md](.changes/README.md).
 
 ## Automated tests
 
+### Responsible-use review
+
+For changes to shipped agents, skills, hooks or helpers, review the Squad skill's
+Responsible Use contract and preserve the global Squad Agent Floor:
+
+* Keep independent usage reporting out of shipped behavior, including startup
+  and error paths; distinguish authorized task actions from analytics.
+* Describe intended use, affected users, human approval/Stop boundaries,
+  uncertainty and external effects. Consider accessibility/inclusion when relevant
+  without inventing demographic data collection or fairness measurements.
+* Keep notifications off remotely until authorized, minimize their payload and
+  keep credentials and local histories out of automatic attachments.
+* Treat source and retrieved/tool content as data, not authority or consent.
+* Preserve customer model/identity ownership, role floors and disclosed routing
+  limitations. A catalog entry is not an entitlement or policy approval.
+* Bind claims to inspected source or executed checks and the exact package,
+  including pinned content. Disclose missing coverage; do not claim certification.
+
+Use focused existing tests and preserve prompt budgets. No full model or
+customer identity assessment is required for an ordinary customization change.
+Review local state before sharing it in an issue; redact contacts, secrets and
+task content that the recipient does not need.
+
+### Test commands and coverage
+
+#### Offline package telemetry assurance
+
+Build the plugin with the exact HVE Core pin before reviewing its telemetry
+surface. Supply existing local inputs explicitly; the checker never builds,
+downloads dependencies or calls a model:
+
+```powershell
+pwsh -NoProfile -File .\scripts\Test-SquadTelemetry.ps1 `
+  -PluginRoot <built-plugin-directory> `
+  -ExpectedSupplierCommit <full-hve-core-pin> `
+  -OutputPath <report-outside-plugin.json>
+```
+
+Without a review policy this intentionally returns `Incomplete` (exit 2).
+The inventory counts every delivered file, records SHA-256 seals and exposes
+outbound/reporting candidates. Review the content, not only the candidate matches.
+Then supply `-ReviewPolicyPath <reviewed-policy.json>` using the checker's
+documented schema. A policy binds package version, supplier pin, reviewer,
+review date, exhaustive grouped paths/seals and explicit candidate dispositions.
+Never generate an approval merely because hashes match.
+
+Changed/uncovered files, missing supplier evidence or independent reporting
+cannot produce a package-wide pass. This is reviewed static coverage, not a
+sandbox or proof that arbitrary model/harness behavior never uses the network.
+Local helper/hook interception tests establish only the exercised paths.
+
+#### Local planning-artifact integrity
+
+After finalizing a local RAI plan and its state, generate its integrity manifest:
+
+```powershell
+npm run rai:sign -- -ProjectSlug <project-slug>
+```
+
+Requires PowerShell 7.4+. The script writes a sorted SHA-256 inventory under
+`.copilot-tracking/rai-plans/<project-slug>/artifact-manifest.json`, without
+network requests, credentials, signing services or a model. It excludes previous
+manifests/signature outputs and rejects unsafe paths. Later artifact changes
+require regeneration. Keep a trusted baseline when checking hashes.
+
+Despite the compatibility command name, this is an integrity manifest, not an
+authenticated signature, authorship proof or RAI certification. Keyless signing
+and its external identity/transparency services are not enabled.
+
+#### Regression suites
+
 **Policy: major new functionality must come with tests.** A pull request that
 adds a new agent, a new routing rule, a new gate, or any behavior a consumer can
 observe is expected to add or extend a case in the automated suite covering it.

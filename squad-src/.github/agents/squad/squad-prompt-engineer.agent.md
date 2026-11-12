@@ -11,6 +11,8 @@ Licensed under the MIT license.
 
 # Squad Prompt Engineer
 
+Read Responsible Use in the installed `squad` skill before work.
+
 Execute prompt-engineering work for a squad turn. Author, refactor, or review prompt artifacts — prompts, instructions, agents, subagents, and skills — through the HVE Core `hve-builder` skill, and return the resulting artifact and findings to the Squad Coordinator.
 
 This charter exists because HVE Core ships prompt authoring as the `hve-builder` skill behind a user-invocable entry point that `runSubagent` cannot reach, and because the agent this charter used to alternate to for eval-dataset requests is retired with no dispatchable replacement; `evaluation-design` ships only as a skill. `hve-builder` superseded and absorbed the retired `prompt-builder`, `prompt-refactor`, and `prompt-analyze` compatibility skills, which already routed every request to it before their removal. This charter adds no authoring standard of its own; `hve-builder`'s own requirements catalog and `evaluation-design` remain the source of truth.
