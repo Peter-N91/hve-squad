@@ -68,7 +68,7 @@
           propose un profil recommandé avant toute création.
         </li>
         <li>
-          <code>pack=power-platform</code>, <code>pack=m365-copilot</code>, <code>pack=aws</code>, <code data-release-change="20261008-foundry-agentic-pack">pack=foundry</code> ou <code>pack=fabric</code>
+          <code>pack=power-platform</code>, <code>pack=m365-copilot</code>, <code>pack=aws</code>, <code data-release-change="20261008-foundry-agentic-pack">pack=foundry</code>, <code>pack=fabric</code> ou <code>pack=dotnet</code>
           &mdash; ajoute au profil
           les rôles spécialisés, les consignes ciblées ou les deux pour un domaine technologique. Un pack ne remplace jamais le profil, et vous
           pouvez en appliquer plusieurs, séparés par des virgules. Voir <em>Packs</em> ci-dessous.
@@ -1432,8 +1432,8 @@ flowchart TD
       </p>
       <p data-release-change="20261104-official-source-packs">
         Un pack enregistré dont les rôles sont déjà dans l'équipe met à jour <code>Packs:</code> et
-        ajoute une décision. Il n'invente pas de membre. <code>full +foundry</code> et
-        <code>full +fabric</code> sont ce cas. Un pack déjà listé dans <code>Packs:</code> est rejeté. Retirer un pack arrête la sélection de la squad et la
+        ajoute une décision. Il n'invente pas de membre. <code>full +foundry</code>,
+        <code>full +fabric</code> et <code>full +dotnet</code> sont ce cas. Un pack déjà listé dans <code>Packs:</code> est rejeté. Retirer un pack arrête la sélection de la squad et la
         transmission des consignes. Cela ne désinstalle pas une compétence que l'hôte peut encore voir,
         et ne la cache pas.
       </p>
@@ -1481,7 +1481,25 @@ apm install microsoft/skills-for-fabric/skills/eventstream-cli --target copilot
 apm install microsoft/skills-for-fabric/skills/spark-cli --target copilot
 apm install microsoft/skills-for-fabric/skills/dataflows-cli --target copilot
 apm install microsoft/skills-for-fabric/skills/databricks-migration --target copilot
-apm install microsoft/skills-for-fabric/skills/pipeline-migration --target copilot</code></pre>
+apm install microsoft/skills-for-fabric/skills/pipeline-migration --target copilot
+apm install dotnet/skills/plugins/dotnet-upgrade/skills/migrate-dotnet8-to-dotnet9#2877c712edc20643b72f64e2983b168e6661d607 --target copilot
+apm install dotnet/skills/plugins/dotnet-upgrade/skills/migrate-dotnet9-to-dotnet10#2877c712edc20643b72f64e2983b168e6661d607 --target copilot
+apm install dotnet/skills/plugins/dotnet-upgrade/skills/migrate-nullable-references#2877c712edc20643b72f64e2983b168e6661d607 --target copilot
+apm install dotnet/skills/plugins/dotnet-upgrade/skills/dotnet-aot-compat#2877c712edc20643b72f64e2983b168e6661d607 --target copilot
+apm install dotnet/skills/plugins/dotnet-msbuild/skills/msbuild-modernization#2877c712edc20643b72f64e2983b168e6661d607 --target copilot
+apm install dotnet/skills/plugins/dotnet-nuget/skills/convert-to-cpm#2877c712edc20643b72f64e2983b168e6661d607 --target copilot
+apm install dotnet/skills/plugins/dotnet-test-migration/skills/migrate-vstest-to-mtp#2877c712edc20643b72f64e2983b168e6661d607 --target copilot
+apm install dotnet/skills/plugins/dotnet-test/skills/test-value-evidence#2877c712edc20643b72f64e2983b168e6661d607 --target copilot
+apm install dotnet/skills/plugins/dotnet-test/skills/coverage-analysis#2877c712edc20643b72f64e2983b168e6661d607 --target copilot
+apm install dotnet/skills/plugins/dotnet/skills/dotnet-breaking-changes#2877c712edc20643b72f64e2983b168e6661d607 --target copilot
+apm install dotnet/skills/plugins/dotnet-diag/skills/analyzing-dotnet-performance#2877c712edc20643b72f64e2983b168e6661d607 --target copilot
+apm install dotnet/skills/plugins/dotnet-diag/skills/microbenchmarking#2877c712edc20643b72f64e2983b168e6661d607 --target copilot
+apm install dotnet/skills/plugins/dotnet-diag/skills/dotnet-trace-collect#2877c712edc20643b72f64e2983b168e6661d607 --target copilot
+apm install dotnet/skills/plugins/dotnet-aspnetcore/skills/dotnet-webapi#2877c712edc20643b72f64e2983b168e6661d607 --target copilot
+apm install dotnet/skills/plugins/dotnet-blazor/skills/author-component#2877c712edc20643b72f64e2983b168e6661d607 --target copilot
+apm install dotnet/skills/plugins/dotnet-data/skills/optimizing-ef-core-queries#2877c712edc20643b72f64e2983b168e6661d607 --target copilot
+apm install dotnet/skills/plugins/dotnet/skills/csharp-refactoring#2877c712edc20643b72f64e2983b168e6661d607 --target copilot
+apm install dotnet/skills/plugins/dotnet/skills/msbuild#2877c712edc20643b72f64e2983b168e6661d607 --target copilot</code></pre>
       <table>
         <thead>
           <tr><th>Pack</th><th>Ajoute</th><th>À utiliser lorsque</th></tr>
@@ -1492,6 +1510,7 @@ apm install microsoft/skills-for-fabric/skills/pipeline-migration --target copil
           <tr><td><code>aws</code></td><td>aws-architect, aws-diagnose</td><td>Le projet repose sur AWS &mdash; Lambda et serverless, ECS ou EKS, CDK, SAM, CloudFormation, Organizations et zones d'atterrissage, ou une charge de travail AWS en service à diagnostiquer</td></tr>
           <tr><td data-release-change="20261008-foundry-agentic-pack"><code>foundry</code></td><td>architect, azure-architect, deployer, prompt-engineer, security, rai, observability, cost-manager, data-scientist</td><td>Planification, revue indépendante et déploiement contrôlé d'un projet Microsoft Foundry avec un blueprint en sept blocs, des preuves de source et une vérification SDK/API ; réutilise les rôles existants, dont data-scientist pour Foundry IQ</td></tr>
           <tr><td><code>fabric</code></td><td>data-scientist</td><td>Entrepôt Fabric, Eventhouse, Spark ou Dataflow au-delà de l'introduction Lakehouse. Activation explicite ; réutilise <code>data-scientist</code> et n'ajoute aucun rôle. Les commandes d'installation restent dans le catalogue. Rien n'est installé automatiquement.</td></tr>
+          <tr><td><code>dotnet</code></td><td>modernizer, tester, performance, developer</td><td>Le projet repose sur .NET &mdash; mises à niveau de SDK et de framework cible, gestion centralisée des paquets NuGet, migration du runner VSTest vers MTP, revue des tests .NET et des changements cassants, planification des performances sur les chemins critiques et BenchmarkDotNet, ou implémentation EF Core, ASP.NET Core Web API, Blazor, C# et MSBuild. Activation explicite ; réutilise <code>modernizer</code>, <code>tester</code>, <code>performance</code> et <code>developer</code> sans ajouter de rôle.</td></tr>
         </tbody>
       </table>
       <p>
@@ -1782,6 +1801,120 @@ apm install github/awesome-copilot/agents/mcp-m365-agent-expert.agent.md#9db369d
           </tbody>
         </table>
       </section>
+      <section data-release-change="20261112-dotnet-pack">
+        <h3 id="dotnet-setup">Configurer .NET avec l'aide de Squad</h3>
+        <p>
+          Vous n'avez pas à retenir les chemins des plugins ni les identifiants de commit. Ouvrez
+          votre projet dans l'hôte où Squad est installé, puis envoyez cette demande. Appliquer le
+          pack ajoute les consignes .NET et les rôles spécialistes manquants de la distribution
+          existante ; cela n'installe ni SDK .NET, ni charge de travail, ni outil global, ni serveur
+          MCP sur votre poste.
+        </p>
+        <pre><code>/squad request="Set up the .NET pack. Explain what will be installed, ask before installing, and leave the .NET 11 and experimental mock-analysis preview skills out unless I approve them." pack=dotnet</code></pre>
+        <ol>
+          <li>
+            <strong>Choisissez le nécessaire.</strong> Squad liste les ressources .NET absentes et
+            explique les travaux que chacune permet. L'ensemble officiel principal compte dix-huit
+            compétences couvrant les mises à niveau .NET 8 vers 9 et 9 vers 10, les types référence
+            nullables, la compatibilité Native AOT, la modernisation MSBuild héritée, la gestion
+            centralisée des paquets NuGet, la migration VSTest vers MTP, la revue des tests modifiés
+            et des rapports de couverture fournis, la compatibilité d'API publique, les performances
+            sur les chemins critiques, la planification BenchmarkDotNet et de traces, ASP.NET Core
+            Web API, Blazor, EF Core, le refactoring C# et la rédaction MSBuild. Vous pouvez
+            installer les dix-huit, choisir un sous-ensemble ou continuer sans elles. Les deux
+            compétences en préversion sont un choix distinct, pas une condition d'utilisation du pack.
+          </li>
+          <li>
+            <strong>Approuvez l'installation des compétences, pas de la chaîne d'outils.</strong>
+            Squad exécute <code>Install-SquadPackResources.ps1</code> pour vos sélections approuvées
+            et affiche les commandes exactes ainsi que le reçu. Un reçu <code>PASS</code> confirme
+            l'installation des compétences ; <code>PLANNED</code> signifie que rien n'a été écrit. Si
+            une commande échoue ou si vous annulez, Squad garde la ressource absente et explique
+            comment réessayer. Il n'installe jamais de SDK .NET, de charge de travail, d'outil global
+            ni de serveur MCP.
+          </li>
+          <li>
+            <strong>Vérifiez les fichiers de support inclus.</strong> Chaque installation de dossier
+            .NET épinglée embarque ses propres dossiers <code>references/</code> et
+            <code>scripts/</code> sans hooks, configuration LSP ni serveurs MCP. Squad vérifie ces
+            fichiers inclus avant de déclarer un travail prêt, et demande séparément votre accord si
+            vous souhaitez une copie de référence hors ligne.
+          </li>
+          <li>
+            <strong>Rechargez et vérifiez.</strong> Rechargez ou redémarrez l'hôte après
+            installation, puis demandez à Squad de relancer le contrôle préalable .NET. Squad vérifie
+            l'inventaire réel des compétences de l'hôte plutôt que de se fier au seul reçu, et
+            enregistre chaque ressource comme <code>available</code> ou <code>declined</code>. Une
+            compétence visible ne prouve pas que le SDK .NET cible ou l'outil de diagnostic est
+            installé.
+          </li>
+          <li>
+            <strong>Gardez la planification et la revue en lecture seule.</strong> Dans Squad,
+            <code>modernizer</code>, <code>tester</code> et <code>performance</code> restent en
+            lecture seule sur votre code source et vos tests, tandis que <code>developer</code>
+            n'applique des modifications qu'à partir d'un plan approuvé et n'exécute jamais
+            automatiquement <code>git commit</code> ni de migrations de base de données.
+          </li>
+        </ol>
+        <h4>Solution manuelle : compétences .NET principales et copie de référence facultative</h4>
+        <p>
+          Si Squad ne peut pas exécuter l'installateur, ouvrez un terminal à la racine de votre
+          projet et vérifiez que Git, APM et le SDK .NET cible de votre projet sont disponibles. Si
+          un prérequis manque, arrêtez-vous et suivez le
+          <a href="getting-started.html">guide de démarrage</a> et les
+          <a href="https://dotnet.microsoft.com/download">instructions de téléchargement du SDK .NET</a>,
+          ou demandez à Squad les étapes pour votre système d'exploitation. Exécutez uniquement les
+          dix-huit commandes .NET épinglées du bloc ci-dessus qui correspondent à votre besoin. Elles
+          ciblent des dossiers de compétences : ajouter <code>/SKILL.md</code> fait échouer la
+          validation APM.
+        </p>
+        <p>
+          Chaque dossier de compétence installé contient déjà ses références et scripts requis. Si
+          vous souhaitez aussi une copie hors ligne en lecture seule du dépôt amont (par exemple sous
+          <code>plugins/dotnet/</code>) sans activer de plugins, de configurations LSP ni de serveurs
+          MCP, exécutez les commandes ci-dessous uniquement lorsque le dossier de destination n'existe
+          pas et vérifiez que l'identifiant du commit affiché correspond.
+        </p>
+        <pre><code>git clone --config core.longpaths=true --filter=blob:none --no-checkout https://github.com/dotnet/skills.git apm_modules/.squad-pack-support/dotnet-skills-2877c71
+git -C apm_modules/.squad-pack-support/dotnet-skills-2877c71 checkout --detach 2877c712edc20643b72f64e2983b168e6661d607
+git -C apm_modules/.squad-pack-support/dotnet-skills-2877c71 rev-parse HEAD</code></pre>
+        <h4>Compétences facultatives en préversion pour .NET 11 et l'audit expérimental de mocks</h4>
+        <p>
+          Deux compétences en préversion issues du
+          <a href="https://github.com/dotnet/skills">dépôt officiel dotnet/skills</a>
+          peuvent être approuvées séparément : <code>migrate-dotnet10-to-dotnet11</code> pour
+          planifier les migrations de .NET 10 vers .NET 11 en préversion, et
+          <code>exp-mock-usage-analysis</code> pour auditer en lecture seule le flux de contrôle des
+          mocks Moq, NSubstitute et FakeItEasy.
+        </p>
+        <p>
+          Squad n'installe que ces deux dossiers autonomes épinglés, jamais un plugin entier. Squad
+          n'exécute jamais <code>dotnet-install</code>, <code>setup-local-sdk</code> ni le serveur en
+          préversion <code>Microsoft.AITools.BinlogMcp</code> ; installer un SDK .NET en préversion
+          reste un choix manuel séparé hors de Squad.
+        </p>
+        <pre><code>apm install dotnet/skills/plugins/dotnet-upgrade/skills/migrate-dotnet10-to-dotnet11#2877c712edc20643b72f64e2983b168e6661d607 --target copilot
+apm install dotnet/skills/plugins/dotnet-experimental/skills/exp-mock-usage-analysis#2877c712edc20643b72f64e2983b168e6661d607 --target copilot</code></pre>
+        <p>
+          Après rechargement, Squad vérifie <code>.agents/skills/migrate-dotnet10-to-dotnet11/</code>
+          pour <code>references/core-libraries-dotnet10to11.md</code> et contrôle
+          <code>.agents/skills/exp-mock-usage-analysis/SKILL.md</code>. L'approbation autorise la
+          planification et la revue en lecture seule (ainsi que les modifications d'un plan approuvé),
+          jamais l'installation d'un SDK ni des commits automatiques.
+        </p>
+        <h4>Si la configuration s'arrête</h4>
+        <table>
+          <thead><tr><th>Ce que vous voyez</th><th>Que faire</th></tr></thead>
+          <tbody>
+            <tr><td>Installateur ou version du SDK .NET introuvable</td><td>Gardez la ressource ou l'étape de validation bloquée. Installez vous-même le SDK .NET requis si vous souhaitez valider la compilation ; n'approuvez pas de scripts automatiques d'installation de SDK depuis un worker.</td></tr>
+            <tr><td>Installé sur disque, mais absent de la liste de l'hôte</td><td>Rechargez l'hôte, rouvrez le même projet et relancez le contrôle préalable .NET. Ne marquez pas la ressource disponible à partir du seul reçu.</td></tr>
+            <tr><td>Référence ou script inclus absent, ou mauvaise révision source</td><td>Vérifiez le dossier de compétence installé ou l'identifiant de commit détaché ci-dessus avant de réessayer ; ne devinez aucun changement cassant de mémoire.</td></tr>
+            <tr><td>Windows signale un chemin trop long</td><td>Utilisez l'option locale au dépôt dans les commandes de copie ci-dessus, ou choisissez un chemin de support plus court sans modifier la configuration Git globale.</td></tr>
+            <tr><td>Une étape de couverture ou de diagnostic demande de lancer des tests, benchmarks ou profileurs en direct</td><td>Gardez Reviewer et Performance Planner en lecture seule sur les artefacts fournis ; lancez vous-même la collecte de couverture, BenchmarkDotNet ou la capture de traces, ou déléguez une tâche developer/QA approuvée.</td></tr>
+            <tr><td>Installation annulée ou en échec</td><td>Conservez les fichiers déjà écrits, signalez la ressource en échec et réessayez ou refusez cette entrée. Le reste du pack .NET demeure utilisable.</td></tr>
+          </tbody>
+        </table>
+      </section>
       <p>
         <code>aws-architect</code> conçoit les charges de travail AWS &mdash; services à retenir, organisation des comptes et
         de la zone d'atterrissage, et code CDK, SAM ou CloudFormation pour les construire &mdash; en s'appuyant
@@ -1949,6 +2082,7 @@ apm install microsoft/skills-for-fabric/skills/sqldw-cli --target copilot</code>
           <tr><td>Un environnement couvrant Azure et AWS</td><td><code>profile=azure pack=aws</code></td></tr>
           <tr><td>Planification d'un assistant de support Microsoft Foundry</td><td><code>profile=azure pack=foundry</code></td></tr>
           <tr><td>Entrepôt Fabric ou Eventhouse au-delà de l'introduction Lakehouse</td><td><code>profile=azure pack=fabric</code></td></tr>
+          <tr><td>Mettre à niveau et optimiser un service ASP.NET Core et EF Core</td><td><code>profile=modernization pack=dotnet</code></td></tr>
           <tr><td>Astreinte pour une charge de travail AWS en service</td><td><code>profile=operations pack=aws</code></td></tr>
           <tr><td>Agent M365 Copilot traitant des données personnelles</td><td><code>profile=security pack=m365-copilot</code></td></tr>
           <tr><td>Solution Power Platform dont l'interface est un agent M365 Copilot</td><td><code>profile=default pack=power-platform,m365-copilot</code></td></tr>

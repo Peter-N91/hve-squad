@@ -191,6 +191,19 @@ BeforeAll {
                         $decisions[$resource] = 'declined'
                     }
                 }
+                elseif ($pack -eq 'dotnet') {
+                    foreach ($resource in @(
+                            'migrate-dotnet8-to-dotnet9', 'migrate-dotnet9-to-dotnet10',
+                            'migrate-dotnet10-to-dotnet11', 'migrate-nullable-references',
+                            'dotnet-aot-compat', 'msbuild-modernization', 'convert-to-cpm',
+                            'migrate-vstest-to-mtp', 'test-value-evidence', 'coverage-analysis',
+                            'dotnet-breaking-changes', 'exp-mock-usage-analysis',
+                            'analyzing-dotnet-performance', 'microbenchmarking',
+                            'dotnet-trace-collect', 'dotnet-webapi', 'author-component',
+                            'optimizing-ef-core-queries', 'csharp-refactoring', 'msbuild')) {
+                        $decisions[$resource] = 'declined'
+                    }
+                }
             }
             if ($decisions.Count) { $Choices.resourceDecisions = $decisions }
         }
@@ -1070,5 +1083,60 @@ Describe 'All-present registered pack expansion' {
         $after | Should -Match '(?m)^Packs: m365-copilot$'
         $after | Should -Match 'Squad M365 Agent Architect'
         $after | Should -Match 'Declarative Agents Architect'
+    }
+
+    It 'applies, cold-removes, and reapplies dotnet while reusing existing roles and adding zero roles on full (SRC-15)' {
+        $repo = New-RepoFixture
+        $root = Initialize-PlainSquad $repo
+        $before = [IO.File]::ReadAllText((Join-Path $root 'team.md'))
+        $before | Should -Not -Match '(?m)^\| modernizer \|'
+        $before | Should -Not -Match '(?m)^\| performance \|'
+        $plan = New-ExpansionPlanReady -Repo $repo -Choices @{
+            confirmed = $true
+            runId = 'dotnet-apply'
+            packs = @('dotnet')
+        }
+        $plan.Result.ExitCode | Should -Be 0 -Because $plan.Result.Output
+        (@($plan.Receipt.addedRoles | Sort-Object) -join ',') | Should -BeExactly 'modernizer,performance'
+        $plan.Receipt.packResources.Count | Should -Be 20
+        $plan.Receipt.packResources['migrate-dotnet10-to-dotnet11'] | Should -BeExactly 'declined'
+        $plan.Receipt.packResources['exp-mock-usage-analysis'] | Should -BeExactly 'declined'
+        (Invoke-Expansion -Repo $repo -Plan $plan).ExitCode | Should -Be 0
+        $teamPath = Join-Path $root 'team.md'
+        $applied = [IO.File]::ReadAllText($teamPath)
+        $applied | Should -Match '(?m)^Packs: dotnet$'
+        $applied | Should -Match 'Squad Modernization Planner'
+        $applied | Should -Match 'Squad Performance Planner'
+
+        $removed = $applied -replace '(?m)^Packs: dotnet\r?\n', ''
+        $removed = [regex]::Replace($removed, '(?m)^\| (modernizer|performance) \|.*\r?\n', '')
+        [IO.File]::WriteAllText($teamPath, $removed, [Text.UTF8Encoding]::new($false))
+        [IO.File]::ReadAllText($teamPath) | Should -Match '(?m)^\| developer \|'
+        [IO.File]::ReadAllText($teamPath) | Should -Match '(?m)^\| tester \|'
+        [IO.File]::ReadAllText($teamPath) | Should -Not -Match '(?m)^\| modernizer \|'
+
+        $reapplied = New-ExpansionPlanReady -Repo $repo -Choices @{
+            confirmed = $true
+            runId = 'dotnet-reapply'
+            packs = @('dotnet')
+        }
+        $reapplied.Result.ExitCode | Should -Be 0 -Because $reapplied.Result.Output
+        (@($reapplied.Receipt.addedRoles | Sort-Object) -join ',') | Should -BeExactly 'modernizer,performance'
+        (Invoke-Expansion -Repo $repo -Plan $reapplied).ExitCode | Should -Be 0
+        $after = [IO.File]::ReadAllText($teamPath)
+        $after | Should -Match '(?m)^Packs: dotnet$'
+        $after | Should -Match 'Squad Modernization Planner'
+
+        $fullRepo = New-RepoFixture
+        $fullRoot = Initialize-ProfileSquad -Repo $fullRepo -Profile 'full'
+        $fullPlan = New-ExpansionPlan -Repo $fullRepo -Root $fullRoot -Choices @{
+            confirmed = $true
+            runId = 'dotnet-full-apply'
+            packs = @('dotnet')
+        }
+        $fullPlan.Result.ExitCode | Should -Be 0 -Because $fullPlan.Result.Output
+        @($fullPlan.Receipt.addedRoles) | Should -BeNullOrEmpty
+        (Invoke-Expansion -Repo $fullRepo -Plan $fullPlan).ExitCode | Should -Be 0
+        [IO.File]::ReadAllText((Join-Path $fullRoot 'team.md')) | Should -Match '(?m)^Packs: dotnet$'
     }
 }

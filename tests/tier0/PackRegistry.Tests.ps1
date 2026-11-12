@@ -704,3 +704,117 @@ Describe 'Fabric supplement pack' -Tag 'Unit' {
         $script:FrenchDocs | Should -Match '<td(?:\s+[^>]*)?><code>fabric</code></td>'
     }
 }
+
+Describe '.NET official pack' -Tag 'Unit' {
+    It 'reuses existing roles, offers all twenty pinned directory skills through shared preflight, and blocklists upstream agents (SRC-14)' {
+        function Get-RoleSet {
+            param([string]$Body, [string]$Header, [string]$Name)
+            $rows = @(Get-MarkdownTableRows -Body $Body -HeaderCell $Header)
+            $row = @($rows | Where-Object { $_[1].Trim().Trim('`') -eq $Name })
+            $row | Should -HaveCount 1
+            @($row[0][2] -split ',' | ForEach-Object { $_.Trim().Trim('`') } | Where-Object { $_ } | Sort-Object -Unique)
+        }
+
+        $rosterAdds = Get-RoleSet -Body $script:RosterBody -Header 'Pack' -Name 'dotnet'
+        $mirrorAdds = Get-RoleSet -Body $script:ProfilesBody -Header 'Pack' -Name 'dotnet'
+        ($mirrorAdds -join ',') | Should -BeExactly ($rosterAdds -join ',')
+        ($rosterAdds -join ',') | Should -BeExactly 'developer,modernizer,performance,tester'
+
+        $full = Get-RoleSet -Body $script:RosterBody -Header 'Profile' -Name 'full'
+        $default = Get-RoleSet -Body $script:RosterBody -Header 'Profile' -Name 'default'
+        $azure = Get-RoleSet -Body $script:RosterBody -Header 'Profile' -Name 'azure'
+        $operations = Get-RoleSet -Body $script:RosterBody -Header 'Profile' -Name 'operations'
+        @($rosterAdds | Where-Object { $_ -notin $full }) | Should -BeNullOrEmpty
+        (@($rosterAdds | Where-Object { $_ -notin $default } | Sort-Object) -join ',') | Should -BeExactly 'modernizer,performance'
+        @($rosterAdds | Where-Object { $_ -notin $azure }) | Should -BeExactly @('performance')
+        @($rosterAdds | Where-Object { $_ -notin $operations }) | Should -BeExactly @('modernizer')
+
+        $rows = @(Get-MarkdownTableRows `
+                -Body (Get-MarkdownSectionBody -Body $script:RosterCatalogBody -Heading 'Registered External Cast') `
+                -HeaderCell 'Role')
+        $dotnetSkills = @($rows | Where-Object { $_[5].Trim() -match '^`dotnet/skills`' })
+        $mapped = @(
+            Get-MarkdownTableRows `
+                -Body (Get-MarkdownSectionBody -Body $script:RosterCatalogBody -Heading 'Registered Pack Skills') `
+                -HeaderCell 'Pack' |
+                Where-Object { $_[1].Trim() -eq 'dotnet' } |
+                ForEach-Object { $_[2].Trim().Trim('`') } |
+                Sort-Object
+        )
+        $mapped | Should -HaveCount 20
+        ($mapped -join ',') | Should -BeExactly (@($dotnetSkills | ForEach-Object { $_[3].Trim().Trim('`') } | Sort-Object) -join ',')
+        $profileRow = @(Get-MarkdownTableRows -Body $script:ProfilesBody -HeaderCell 'Resource pack' |
+                Where-Object { $_[1].Trim().Trim('`') -eq 'dotnet' })[0]
+        (@($profileRow[2] -split ',' | ForEach-Object { $_.Trim() } | Sort-Object) -join ',') |
+            Should -BeExactly ($mapped -join ',')
+
+        foreach ($row in $dotnetSkills) {
+            $row[2].Trim() | Should -BeExactly 'opt-in'
+            $row[4].Trim() | Should -BeExactly 'skill'
+            $row[5].Trim() | Should -Match '^`dotnet/skills` \(`vendor-official`\), `plugins/[^`]+/skills/[^`]+/SKILL\.md`$'
+            $row[6].Trim() | Should -Match '^`apm install dotnet/skills/plugins/[^#]+#2877c712edc20643b72f64e2983b168e6661d607 --target copilot`$'
+            $row[6].Trim() | Should -Not -Match '/SKILL\.md'
+            $row[7].Trim() | Should -BeExactly 'MIT'
+            $row[8].Trim() | Should -Match 'Reach only while `dotnet` is active'
+            $row[8].Trim() | Should -Match 'Do not auto-install'
+            $row[10].Trim() | Should -BeExactly '2026-11-12'
+        }
+        foreach ($preview in @('migrate-dotnet10-to-dotnet11', 'exp-mock-usage-analysis')) {
+            $row = @($dotnetSkills | Where-Object { $_[3].Trim().Trim('`') -eq $preview })
+            $row | Should -HaveCount 1
+            $row[0][8] | Should -Match 'Preview'
+            $row[0][8] | Should -Match 'explicit preview approval'
+        }
+        @($rows | Where-Object { $_[3].Trim().Trim('`') -in @(
+                    'setup-local-sdk', 'system-text-json-net11', 'csharp-expert',
+                    'binlog-failure-analysis', 'troubleshoot-binlog-mcp', 'code-testing',
+                    'run-tests', 'test-analysis-extensions', 'code-testing-extensions'
+                ) }) | Should -BeNullOrEmpty
+
+        $blocklist = Get-MarkdownSectionBody -Body $script:RosterCatalogBody -Heading 'External Cast Blocklist'
+        $blocklistResources = @(Get-MarkdownTableRows -Body $blocklist -HeaderCell 'Resource' | ForEach-Object { $_[1] }) -join ' '
+        foreach ($agent in @('code-testing-implementer', 'test-quality-auditor', 'test-engineer', 'test-migration', 'optimizing-dotnet-performance')) {
+            $blocklistResources | Should -Match ([regex]::Escape($agent))
+        }
+        foreach ($preserved in @('microsoft-agent-framework', 'semantic-kernel', 'recommend-migration-path', 'qa-subagent')) {
+            @($rows | Where-Object { $_[3].Trim().Trim('`') -eq $preserved }) | Should -Not -BeNullOrEmpty
+            $blocklistResources | Should -Not -Match ('`' + [regex]::Escape($preserved) + '`')
+        }
+    }
+
+    It 'guards .NET preview selection, packaged support files, and read-only charter boundaries in charters and docs (SRC-15)' {
+        $guidance = Get-Content -LiteralPath (Join-Path $script:ReferenceRoot 'dotnet-platform-options.md') -Raw
+        $guidance | Should -Match 'Host visibility is not selection'
+        $guidance | Should -Match 'declined resource stays unavailable'
+        $guidance | Should -Match 'Preview is not the default'
+        $guidance | Should -Match 'dotnet-install'
+        $guidance | Should -Match 'setup-local-sdk'
+        $guidance | Should -Match 'Microsoft\.AITools\.BinlogMcp'
+        $guidance | Should -Match 'not registered squad capabilities'
+        $guidance | Should -Match 'https://peter-n91\.github\.io/hve-squad/usage\.html#dotnet-setup'
+        $script:ProfilesBody | Should -Match '(?s)For `dotnet`, read \[dotnet-platform-options\.md\].*?before asking to install resources'
+        $script:RoutingBody | Should -Match 'only while `dotnet` is active'
+
+        foreach ($name in @(
+                'squad-modernization-planner', 'squad-reviewer',
+                'squad-performance-planner', 'squad-implementor')) {
+            $charter = Get-Content -LiteralPath (Join-Path $SourceRoot "squad-src/.github/agents/squad/$name.agent.md") -Raw
+            $charter | Should -Match 'dotnet-platform-options\.md'
+            $charter | Should -Match 'only while this pack is active'
+            $charter | Should -Match 'decision is not `declined`'
+            $charter | Should -Match 'missing support files is not ready'
+            $charter | Should -Match 'Do not write squad state'
+        }
+        foreach ($name in @('squad-modernization-planner', 'squad-reviewer', 'squad-implementor')) {
+            $charter = Get-Content -LiteralPath (Join-Path $SourceRoot "squad-src/.github/agents/squad/$name.agent.md") -Raw
+            $charter | Should -Match 'user explicitly approved the preview'
+        }
+        foreach ($docs in @($script:EnglishDocs, $script:FrenchDocs)) {
+            $docs | Should -Match 'id="dotnet-setup"'
+            $docs | Should -Match 'migrate-dotnet9-to-dotnet10#2877c712edc20643b72f64e2983b168e6661d607 --target copilot'
+            $docs | Should -Match 'migrate-dotnet10-to-dotnet11#2877c712edc20643b72f64e2983b168e6661d607 --target copilot'
+            $docs | Should -Match 'exp-mock-usage-analysis#2877c712edc20643b72f64e2983b168e6661d607 --target copilot'
+            $docs | Should -Match 'dotnet-skills-2877c71'
+        }
+    }
+}
