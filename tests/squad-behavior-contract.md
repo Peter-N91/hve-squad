@@ -249,8 +249,9 @@ Power Platform and M365 official jobs resolve to local charter Primaries
 (`Squad Power Platform Architect`, `Squad Power Platform Integrator`,
 `Squad M365 Agent Architect`, `Squad M365 Agent Integrator`). Those charters
 are `user-invocable: false`, `disable-model-invocation: false`, have no prompt
-binding, and name the nine original gated skills plus the two separately approved
-PP preview jobs. Broad legacy cues outside those specific preview jobs select
+binding, and name the twelve core gated official skills plus the two separately
+approved PP preview jobs and two separately approved M365 preview jobs. Broad
+legacy cues outside those specific official and preview jobs select
 `Power Platform Expert`, `Power Platform MCP Integration Expert`,
 `Declarative Agents Architect`, and `MCP M365 Agent Expert`. Those community
 agents stay registered Alternates and are not blocklisted. No cue match keeps
@@ -288,6 +289,9 @@ registered and unchanged. No Fabric candidate is blocklisted.
 | SRC-08 | Every registered PP skill is in shared resource preflight only when `power-platform` is proposed. All six existing official installs use verified pinned directories, not `SKILL.md` paths. The two preview resources install one complete pinned bundle, not incomplete skill files | `power-platform-official-resources.md`; `roster-catalog.md`, Registered Pack Skills; `PackRegistry.Tests.ps1`; `CoordinatorRuntime.Tests.ps1` |
 | SRC-09 | Copilot Studio knowledge YAML and skill import use the existing PP owners only for explicitly approved preview work in an existing agentic-loop workspace. Declining a resource, pack absence/removal, missing support files, or missing approval stops its use. Standard schemas, extra bundle agents, evaluation and PAC cloud workflows are not silently admitted | PP charters and `power-platform-official-resources.md`; `PackRegistry.Tests.ps1`; `ExpandSquadRoster.Tests.ps1` |
 | SRC-10 | PP uses the same approval, selected-subset, receipt, reload and host-availability lifecycle as other resource packs. Every resource needs an explicit disposition; preview may be declined without preventing PP activation. No-pack proposals contain no PP resources. Installation does not grant prerequisite, startup-hook, authentication or tenant authority | `profiles-and-packs.md`, Pack Resource Preflight; `power-platform-official-resources.md`, Installation and readiness; `CoordinatorRuntime.Tests.ps1` |
+| SRC-11 | Every registered M365 skill is in shared resource preflight only when `m365-copilot` is proposed. All eight official M365 installs and six community supplements use verified pinned directories, not `SKILL.md` paths. No M365 community agent or skill is superseded or blocklisted | `m365-copilot-platform-options.md`; `roster-catalog.md`, Registered Pack Skills; `PackRegistry.Tests.ps1`; `CoordinatorRuntime.Tests.ps1` |
+| SRC-12 | M365 evaluation suite and Copilot Chat MCP widget server jobs use the existing M365 owners only for explicitly approved local file-authoring preview work. Declining a resource, pack absence/removal, missing packaged support files, or missing approval stops its use. `declarative-agent-developer`, `wiqd`, `install-atk`, `setup-sso-ui-widget`, `teams-app-developer`, `teams-dev`, and whole-plugin installs are not silently admitted | M365 charters and `m365-copilot-platform-options.md`; `PackRegistry.Tests.ps1`; `ExpandSquadRoster.Tests.ps1` |
+| SRC-13 | M365 uses the same approval, selected-subset, receipt, reload and host-availability lifecycle as other resource packs. Every resource needs an explicit disposition; preview skills may be declined without preventing M365 activation. No-pack proposals contain no M365 resources. Installation does not grant prerequisite, EULA, tunnel, authentication or tenant authority | `profiles-and-packs.md`, Pack Resource Preflight; `m365-copilot-platform-options.md`, Installation and readiness; `CoordinatorRuntime.Tests.ps1`; `WatchMode.Tests.ps1` |
 
 Tier 1 has one opt-in `pack-lifecycle` scenario. It is excluded from the default live matrix and
 requires `-Pack <registered-pack>`, so adding packs does not multiply paid requests. Provision it

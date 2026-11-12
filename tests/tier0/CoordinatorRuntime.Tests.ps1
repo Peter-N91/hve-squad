@@ -340,6 +340,105 @@ Describe 'Compact confirmed initialization (COORD-01..03)' {
         Get-FixtureHash $repo | Should -BeExactly $before
     }
 
+    It 'lists M365 resources only for its active proposal and distinguishes disk from host visibility (SRC-11)' {
+        $repo = New-FixtureRepo
+        Write-FixtureText (Join-Path $repo '.agents/skills/m365-agent-evaluator/SKILL.md') "---`nname: m365-agent-evaluator`ndescription: Fixture.`n---`n"
+        $without = Invoke-Local 'Get-SquadInitContext.ps1' $repo @('-RepoRoot', $repo)
+        $without.ExitCode | Should -Be 0 -Because $without.Output
+        @(($without.Output | ConvertFrom-Json).packResources) | Should -BeNullOrEmpty
+
+        $withPack = Invoke-Local 'Get-SquadInitContext.ps1' $repo @('-RepoRoot', $repo, '-Pack', 'm365-copilot')
+        $withPack.ExitCode | Should -Be 0 -Because $withPack.Output
+        $context = $withPack.Output | ConvertFrom-Json
+        @($context.packResources) | Should -HaveCount 14
+        @($context.members | ForEach-Object role | Sort-Object) | Should -Be @('m365-agent-architect', 'm365-agent-integrator')
+        $evaluator = @($context.packResources | Where-Object resource -eq 'm365-agent-evaluator')[0]
+        $evaluator.installedOnDisk | Should -BeTrue
+        $evaluator.hostVisible | Should -BeFalse
+        $evaluator.installed | Should -BeFalse
+        $evaluator.installOrEntry | Should -Match 'apm install microsoft/work-iq/plugins/microsoft-365-agents-toolkit/skills/m365-agent-evaluator#72c889460aa7ac6d7ed3bb02179332abafc963d4 --target copilot'
+        @($context.packResources | Where-Object resource -eq 'ui-widget-developer')[0].roles | Should -Be @('m365-agent-integrator')
+
+        $visible = Invoke-Local 'Get-SquadInitContext.ps1' $repo @(
+            '-RepoRoot', $repo, '-Pack', 'm365-copilot', '-AvailableSkill', 'm365-agent-evaluator'
+        )
+        $visible.ExitCode | Should -Be 0 -Because $visible.Output
+        $available = @(($visible.Output | ConvertFrom-Json).packResources | Where-Object resource -eq 'm365-agent-evaluator')[0]
+        $available.installed | Should -BeTrue
+        Test-Path -LiteralPath (Join-Path $repo '.copilot-tracking') | Should -BeFalse
+    }
+
+    It 'requires every M365 disposition while allowing preview skills to be declined (SRC-13)' {
+        $repo = New-FixtureRepo
+        $data = Get-SquadInitData -RepoRoot $repo
+        $index = 0
+        foreach ($cast in $data.cast) {
+            $primary = $cast['Primary Agent (`name:`)']
+            if ($primary -notmatch '^[A-Za-z]' -or $primary -match '[/\\:]') { continue }
+            Write-FixtureText (Join-Path $repo '.github/agents' "fixture-$index.agent.md") "---`nname: $primary`n---`n"
+            $index++
+        }
+        $choices = New-Choices
+        $choices.packs = @('m365-copilot')
+        { New-SquadInitPayload -Choices $choices -RepoRoot $repo } | Should -Throw '*resourceDecisions*'
+        $choices.resourceDecisions = Get-PackResourceDecisions -Repo $repo -Packs @('m365-copilot')
+        $choices.resourceDecisions.Remove('ui-widget-developer')
+        { New-SquadInitPayload -Choices $choices -RepoRoot $repo } | Should -Throw '*Missing pack resource decision: ui-widget-developer*'
+        $choices.resourceDecisions['ui-widget-developer'] = 'declined'
+        $choices.resourceDecisions['m365-agent-evaluator'] = 'available'
+        { New-SquadInitPayload -Choices $choices -RepoRoot $repo } | Should -Throw '*not visible*'
+        $choices.resourceDecisions['m365-agent-evaluator'] = 'declined'
+
+        $payload = New-SquadInitPayload -Choices $choices -RepoRoot $repo
+        $payload.packResources.Count | Should -Be 14
+        $payload.packResources['m365-agent-evaluator'] | Should -BeExactly 'declined'
+        $payload.packResources['ui-widget-developer'] | Should -BeExactly 'declined'
+        @($payload.roster | Where-Object { $_.Role -like 'm365-*' } | ForEach-Object Role | Sort-Object) |
+            Should -Be @('m365-agent-architect', 'm365-agent-integrator')
+
+        $choices.availableSkills = @('m365-agent-evaluator', 'ui-widget-developer')
+        $choices.resourceDecisions['m365-agent-evaluator'] = 'available'
+        $accepted = New-SquadInitPayload -Choices $choices -RepoRoot $repo
+        $accepted.packResources['m365-agent-evaluator'] | Should -BeExactly 'available'
+        $accepted.packResources['ui-widget-developer'] | Should -BeExactly 'declined'
+        $choices.resourceDecisions['declarative-agent-developer'] = 'available'
+        { New-SquadInitPayload -Choices $choices -RepoRoot $repo } | Should -Throw '*Unknown pack resource decision: declarative-agent-developer*'
+    }
+
+    It 'previews M365 pinned directory installs and honors a selected subset without writes (SRC-13)' {
+        $repo = New-FixtureRepo
+        $before = Get-FixtureHash $repo
+        $unconfirmed = Invoke-Local 'Install-SquadPackResources.ps1' $repo @(
+            '-RepoRoot', $repo, '-Pack', 'm365-copilot', '-WhatIf'
+        )
+        $unconfirmed.ExitCode | Should -Be 1
+        $unconfirmed.Output | Should -Match 'requires explicit confirmation'
+
+        $all = Invoke-Local 'Install-SquadPackResources.ps1' $repo @(
+            '-RepoRoot', $repo, '-Pack', 'm365-copilot', '-Confirmed', '-WhatIf'
+        )
+        $all.ExitCode | Should -Be 0 -Because $all.Output
+        $allLine = @($all.Output -split '\r?\n' | Where-Object { $_ -match '^\{"schemaVersion"' })[-1]
+        $allReceipt = $allLine | ConvertFrom-Json
+        $allReceipt.status | Should -BeExactly 'PLANNED'
+        @($allReceipt.resources) | Should -HaveCount 14
+        (@($allReceipt.resources | ForEach-Object commands) -join "`n") | Should -Not -Match '/SKILL\.md'
+        (@($allReceipt.resources | ForEach-Object commands) -join "`n") | Should -Match 'agents-sdk-to-prod#a5caf57ff062369c410aa5542039b50ce1a9c7e8 --target copilot'
+        (@($allReceipt.resources | ForEach-Object commands) -join "`n") | Should -Match 'teams-app-manifest#a5caf57ff062369c410aa5542039b50ce1a9c7e8 --target copilot'
+
+        $subset = Invoke-Local 'Install-SquadPackResources.ps1' $repo @(
+            '-RepoRoot', $repo, '-Pack', 'm365-copilot', '-Resource', 'ui-widget-developer',
+            '-Confirmed', '-WhatIf'
+        )
+        $subset.ExitCode | Should -Be 0 -Because $subset.Output
+        $subsetLine = @($subset.Output -split '\r?\n' | Where-Object { $_ -match '^\{"schemaVersion"' })[-1]
+        $subsetReceipt = $subsetLine | ConvertFrom-Json
+        @($subsetReceipt.resources) | Should -HaveCount 1
+        $subsetReceipt.resources[0].commands | Should -Be @('apm install microsoft/work-iq/plugins/microsoft-365-agents-toolkit/skills/ui-widget-developer#72c889460aa7ac6d7ed3bb02179332abafc963d4 --target copilot')
+        $subsetReceipt.prerequisitesInstalled | Should -BeFalse
+        Get-FixtureHash $repo | Should -BeExactly $before
+    }
+
     It 'requires pack resource dispositions and persists the accepted Foundry activation' {
         $repo = New-FixtureRepo
         $data = Get-SquadInitData -RepoRoot $repo
@@ -1404,8 +1503,10 @@ Describe 'Pack Alternate resolution uses the dispatch plan' {
             @{ Request = 'generate a codeful MCP tool for the widget'; Role = 'pp-connector'; Agent = 'Squad Power Platform Integrator'; Route = $false }
             @{ Request = 'Certify this custom connector before publication'; Role = 'pp-connector'; Agent = 'Power Platform MCP Integration Expert'; Route = $true }
             @{ Request = '.NET Agents SDK production readiness review'; Role = 'm365-agent-architect'; Agent = 'Squad M365 Agent Architect'; Route = $false }
+            @{ Request = 'Audit this Agents SDK Teams manifest and Teams app manifest capabilities'; Role = 'm365-agent-architect'; Agent = 'Squad M365 Agent Architect'; Route = $true }
             @{ Request = 'Author a Microsoft 365 Copilot agent manifest in Agents Toolkit'; Role = 'm365-agent-architect'; Agent = 'Declarative Agents Architect'; Route = $true }
-            @{ Request = 'Agents SDK OpenTelemetry for the bot'; Role = 'm365-agent-integrator'; Agent = 'Squad M365 Agent Integrator'; Route = $false }
+            @{ Request = 'Agents SDK OpenTelemetry for the bot'; Role = 'm365-agent-integrator'; Agent = 'Squad M365 Agent Integrator'; Route = $true }
+            @{ Request = 'Build a Copilot MCP widget server in Fluent UI'; Role = 'm365-agent-integrator'; Agent = 'Squad M365 Agent Integrator'; Route = $true }
             @{ Request = 'Call Microsoft Graph with the Graph SDK'; Role = 'm365-agent-integrator'; Agent = 'MCP M365 Agent Expert'; Route = $true }
         )
 
@@ -1414,7 +1515,7 @@ Describe 'Pack Alternate resolution uses the dispatch plan' {
         $payloadPath = Join-Path $repo 'both-pack-init.json'
         $choices = New-Choices
         $choices.packs = @('power-platform', 'm365-copilot')
-        $choices.resourceDecisions = Get-PackResourceDecisions -Repo $repo -Packs @('power-platform')
+        $choices.resourceDecisions = Get-PackResourceDecisions -Repo $repo -Packs @('power-platform', 'm365-copilot')
         $choices.runId = 'both-packs'
         Write-FixtureJson $choicesPath $choices
         $prepared = Invoke-Local 'Get-SquadInitContext.ps1' $repo @('-RepoRoot', $repo, '-ChoicesPath', $choicesPath, '-PayloadPath', $payloadPath)

@@ -1439,8 +1439,9 @@ flowchart TD
       </p>
       <p data-release-change="20261104-official-source-packs">
         Les travaux pris en charge sur Power Pages, les applications pilotées par modèle, Dataverse et
-        le SDK Agents .NET sélectionnent la charte locale. La préversion, approuvée séparément, ajoute
-        le YAML de connaissances et l'import de compétences Copilot Studio en local.
+        la préparation, le manifeste Teams, OpenTelemetry et la planification de provisionnement du SDK Agents sélectionnent la charte locale. Des préversions approuvées séparément ajoutent
+        le YAML de connaissances et l'import de compétences Copilot Studio sur Power Platform, ainsi que
+        les suites d'évaluation M365 et les serveurs MCP de widgets Copilot Chat en local sur M365.
         L'architecture Power Platform plus large, les autres travaux Copilot Studio, les connecteurs, les agents déclaratifs, TypeSpec et l'intégration MCP
         sélectionnent encore l'alternative communautaire lorsque cet agent est installé. Power Automate,
         cloud flow, canvas app, DLP policy et solution ALM sélectionnent <code>Power Platform Expert</code>.
@@ -1463,9 +1464,12 @@ apm install microsoft/power-platform-skills/plugins/mcp-apps/skills/generate-cod
 apm install microsoft/power-platform-skills/plugins/mcp-apps/skills/generate-mcp-app-ui#8021d27d517d81963da22e728125a26c9ecfbbe1 --target copilot
 apm install microsoft/Dataverse-skills/.github/plugins/dataverse/skills/dv-overview#27e6f6a3fef23075ede87d8e5f028cde29e0130e --target copilot
 apm install microsoft/Dataverse-skills/.github/plugins/dataverse/skills/dv-connect#27e6f6a3fef23075ede87d8e5f028cde29e0130e --target copilot
-apm install microsoft/Agents/agent-plugins/agents-for-net/skills/agents-sdk-to-prod/SKILL.md --target copilot
-apm install microsoft/Agents/agent-plugins/agents-for-net/skills/agents-sdk-dotnet-otel/SKILL.md --target copilot
-apm install microsoft/Agents/agent-plugins/agents-sdk-common/skills/agents-sdk-provision/SKILL.md --target copilot
+apm install microsoft/Agents/agent-plugins/agents-for-net/skills/agents-sdk-to-prod#a5caf57ff062369c410aa5542039b50ce1a9c7e8 --target copilot
+apm install microsoft/Agents/agent-plugins/agents-sdk-common/skills/teams-app-manifest#a5caf57ff062369c410aa5542039b50ce1a9c7e8 --target copilot
+apm install microsoft/Agents/agent-plugins/agents-for-net/skills/agents-sdk-dotnet-otel#a5caf57ff062369c410aa5542039b50ce1a9c7e8 --target copilot
+apm install microsoft/Agents/agent-plugins/agents-for-js/skills/agents-sdk-typescript-otel#a5caf57ff062369c410aa5542039b50ce1a9c7e8 --target copilot
+apm install microsoft/Agents/agent-plugins/agents-for-python/skills/agents-sdk-python-otel#a5caf57ff062369c410aa5542039b50ce1a9c7e8 --target copilot
+apm install microsoft/Agents/agent-plugins/agents-sdk-common/skills/agents-sdk-provision#a5caf57ff062369c410aa5542039b50ce1a9c7e8 --target copilot
 apm install microsoft/skills/.github/plugins/foundry-iq-skills/skills/foundry-iq/SKILL.md --target copilot
 apm install microsoft/azure-skills/skills/appinsights-instrumentation/SKILL.md --target copilot
 copilot plugin marketplace add Azure/aigateway
@@ -1647,6 +1651,137 @@ apm install github/awesome-copilot/agents/power-platform-mcp-integration-expert.
         Graph &mdash; et planifie le déploiement dans le tenant. Comme pour Power Platform, tous deux s'arrêtent à la transmission :
         aucun ne provisionne d'agent ni ne le publie dans votre tenant.
       </p>
+      <section data-release-change="20261112-m365-pack-parity">
+        <h3 id="m365-copilot-setup">Configurer Microsoft 365 Copilot avec l'aide de Squad</h3>
+        <p>
+          Vous n'avez pas à retenir les chemins des dépôts ni les options des paquets. Ouvrez votre
+          projet dans l'hôte où Squad est installé, puis envoyez cette demande. Appliquer le pack
+          ajoute les rôles spécialistes et les consignes M365 ; ce n'est ni une licence Microsoft 365
+          Copilot, ni un consentement administrateur du tenant, ni une autorisation de provisionner
+          ou de publier un agent.
+        </p>
+        <pre><code>/squad request="Set up the Microsoft 365 Copilot pack. Explain what will be installed, ask before installing, and leave the Work IQ preview skills out unless I approve them." pack=m365-copilot</code></pre>
+        <ol>
+          <li>
+            <strong>Choisissez le nécessaire.</strong> Squad liste les ressources M365 absentes et
+            explique les travaux que chacune active. L'ensemble officiel principal comprend six
+            compétences Microsoft 365 Agents SDK pour la préparation à la production .NET, les
+            manifestes d'application Teams, OpenTelemetry en .NET/TypeScript/Python et les plans de
+            provisionnement Azure Bot/Entra. Vous pouvez installer les six, choisir un sous-ensemble,
+            ajouter les six compléments communautaires pour les agents déclaratifs, TypeSpec, Graph
+            et MCP, ou continuer sans eux. Les deux compétences Work IQ Agents Toolkit en préversion
+            constituent un choix séparé, pas une condition d'utilisation du pack.
+          </li>
+          <li>
+            <strong>Approuvez l'installation, pas les actions sur le tenant.</strong> Squad utilise
+            <code>Install-SquadPackResources.ps1</code> pour vos choix approuvés et affiche les
+            commandes exactes ainsi que le reçu. Un reçu <code>PASS</code> confirme l'installation
+            des compétences ; <code>PLANNED</code> signifie qu'aucun fichier n'a été écrit. En cas
+            d'échec ou d'annulation, Squad garde la ressource absente et indique comment réessayer.
+            Il n'installe jamais de CLI ni d'extension VS Code, n'accepte aucun CLUF, ne vous
+            connecte pas et n'accorde aucun consentement de tenant.
+          </li>
+          <li>
+            <strong>Vérifiez les fichiers de support inclus.</strong> Chaque dossier M365 épinglé
+            embarque ses propres fichiers <code>references/</code> et <code>assets/</code> sans hook
+            ni serveur MCP. Squad vérifie la présence de ces fichiers avant d'annoncer qu'un travail
+            est prêt, et demande un accord séparé si vous souhaitez une copie hors ligne de
+            l'exemple de référence.
+          </li>
+          <li>
+            <strong>Rechargez et vérifiez.</strong> Rechargez ou redémarrez l'hôte après
+            l'installation, puis demandez à Squad de relancer le contrôle préalable M365. Squad
+            inspecte la liste réelle des compétences de l'hôte plutôt que le seul reçu
+            d'installation, et consigne chaque ressource comme <code>available</code> ou
+            <code>declined</code>. Une compétence visible ne prouve pas l'accès au tenant.
+          </li>
+          <li>
+            <strong>Restez en local et en mode planification.</strong> Les chartes M365 rédigent en
+            local les manifestes, revues de préparation, jeux d'évaluation, composants de widgets et
+            plans de provisionnement. Aucune charte n'exécute <code>az</code>, n'ouvre de
+            <code>devtunnel</code>, ne provisionne de ressources Entra ou Bot Service, ne lance
+            d'évaluation en direct sur un tenant et ne publie au catalogue.
+          </li>
+        </ol>
+        <h4>Solution manuelle : compétences Agents SDK principales et copie de référence facultative</h4>
+        <p>
+          Si Squad ne peut pas lancer l'installateur, ouvrez un terminal à la racine du projet et
+          vérifiez la présence de Git et d'APM ; les flux TypeScript et les CLI en préversion
+          nécessitent aussi Node.js lorsque vous les exécutez vous-même. Si un prérequis manque,
+          arrêtez-vous et suivez le <a href="getting-started.html">guide de démarrage</a> ainsi que
+          les <a href="https://nodejs.org/en/download">instructions d'installation de Node.js</a>, ou
+          demandez à Squad les étapes adaptées à votre système. Exécutez uniquement celles des six
+          commandes Agents SDK épinglées plus haut qui correspondent à votre stack. Elles ciblent
+          des dossiers de compétences : ajouter <code>/SKILL.md</code> fait échouer la validation APM.
+        </p>
+        <p>
+          Chaque dossier installé contient déjà ses schémas et modèles requis. Si vous souhaitez en
+          plus une copie hors ligne du dépôt Microsoft Agents pour consulter
+          <code>samples/dotnet/production-reference/</code>, exécutez les commandes ci-dessous
+          uniquement lorsque le dossier cible n'existe pas encore. Ne commitez pas ce dossier et
+          vérifiez que l'identifiant de commit affiché correspond.
+        </p>
+        <pre><code>git clone --config core.longpaths=true --filter=blob:none --no-checkout https://github.com/microsoft/Agents.git apm_modules/.squad-pack-support/agents-a5caf57
+git -C apm_modules/.squad-pack-support/agents-a5caf57 checkout --detach a5caf57ff062369c410aa5542039b50ce1a9c7e8
+git -C apm_modules/.squad-pack-support/agents-a5caf57 rev-parse HEAD</code></pre>
+        <h4>Compétences Work IQ Agents Toolkit facultatives en préversion</h4>
+        <p>
+          Deux compétences en préversion issues du
+          <a href="https://github.com/microsoft/work-iq">dépôt Work IQ de Microsoft</a>
+          peuvent être approuvées séparément : <code>m365-agent-evaluator</code> pour rédiger des
+          jeux d'évaluation d'agents déclaratifs au schéma 1.2.0 et analyser des résultats locaux,
+          et <code>ui-widget-developer</code> pour rédiger en local des serveurs MCP Copilot Chat,
+          des widgets React + Fluent UI et les manifestes de plugin MCP associés.
+        </p>
+        <p>
+          Squad installe uniquement ces deux dossiers autonomes épinglés, jamais le plugin complet.
+          L'exécution de la CLI en préversion publique <code>@microsoft/m365-copilot-eval</code>
+          (avec acceptation humaine du CLUF, consentement administrateur WorkIQ, agent déployé et
+          juge Azure OpenAI) reste une action manuelle distincte hors de Squad. En amont,
+          <code>declarative-agent-developer</code>, <code>wiqd</code> et
+          <code>setup-sso-ui-widget</code> restent exclus afin qu'une CLI expérimentale ou un script
+          Entra en direct ne bloque jamais la rédaction locale d'agents déclaratifs.
+        </p>
+        <pre><code>apm install microsoft/work-iq/plugins/microsoft-365-agents-toolkit/skills/m365-agent-evaluator#72c889460aa7ac6d7ed3bb02179332abafc963d4 --target copilot
+apm install microsoft/work-iq/plugins/microsoft-365-agents-toolkit/skills/ui-widget-developer#72c889460aa7ac6d7ed3bb02179332abafc963d4 --target copilot</code></pre>
+        <p>
+          Après rechargement, Squad vérifie dans <code>.agents/skills/m365-agent-evaluator/</code>
+          et <code>.agents/skills/ui-widget-developer/</code> la présence de
+          <code>references/prompts-schema.json</code> et
+          <code>references/copilot-widget-protocol.md</code>. L'approbation autorise uniquement la
+          rédaction locale de fichiers, jamais le lancement de serveurs en arrière-plan, de tunnels,
+          d'installations de paquets ou de provisionnements.
+        </p>
+        <h4>Compléments communautaires et alternatives pour les travaux plus larges</h4>
+        <p>
+          Les six compétences communautaires pour les agents déclaratifs, TypeSpec, Microsoft Graph
+          et MCP sont proposées dans le contrôle préalable M365 car aucune compétence officielle ne
+          les remplace. Les deux agents communautaires restent des alternatives facultatives pour
+          l'architecture d'agents déclaratifs, TypeSpec, les plugins API, Graph SDK et l'intégration
+          MCP plus large ; Squad fournit leurs commandes épinglées exactes au besoin et ne substitue
+          jamais silencieusement une charte locale.
+        </p>
+        <pre><code>apm install github/awesome-copilot/skills/declarative-agents#9db369d00f121542e1c99fd9b6cd6f707bade765 --target copilot
+apm install github/awesome-copilot/skills/typespec-create-agent#9db369d00f121542e1c99fd9b6cd6f707bade765 --target copilot
+apm install github/awesome-copilot/skills/typespec-create-api-plugin#9db369d00f121542e1c99fd9b6cd6f707bade765 --target copilot
+apm install github/awesome-copilot/skills/msgraph-sdk#9db369d00f121542e1c99fd9b6cd6f707bade765 --target copilot
+apm install github/awesome-copilot/skills/mcp-create-declarative-agent#9db369d00f121542e1c99fd9b6cd6f707bade765 --target copilot
+apm install github/awesome-copilot/skills/mcp-deploy-manage-agents#9db369d00f121542e1c99fd9b6cd6f707bade765 --target copilot
+apm install github/awesome-copilot/agents/declarative-agents-architect.agent.md#9db369d00f121542e1c99fd9b6cd6f707bade765 --target copilot
+apm install github/awesome-copilot/agents/mcp-m365-agent-expert.agent.md#9db369d00f121542e1c99fd9b6cd6f707bade765 --target copilot</code></pre>
+        <h4>Si la configuration s'arrête</h4>
+        <table>
+          <thead><tr><th>Ce que vous voyez</th><th>Que faire</th></tr></thead>
+          <tbody>
+            <tr><td>Installateur ou prérequis introuvable</td><td>Gardez la ressource absente. Demandez à Squad les étapes pour l'outil nommé ; n'approuvez pas d'installations globales sans rapport.</td></tr>
+            <tr><td>Installé sur disque, mais absent de la liste de l'hôte</td><td>Rechargez l'hôte, rouvrez le même projet et relancez le contrôle préalable M365. Ne marquez pas la ressource disponible à partir du seul reçu.</td></tr>
+            <tr><td>Schéma/référence absent ou mauvaise révision de source</td><td>Vérifiez le dossier installé ou l'identifiant de commit détaché ci-dessus avant de réessayer ; ne devinez aucun schéma de mémoire.</td></tr>
+            <tr><td>Windows signale un chemin trop long</td><td>Utilisez l'option locale au dépôt dans les commandes de copie ci-dessus, ou choisissez un chemin de support plus court sans modifier la configuration Git globale.</td></tr>
+            <tr><td>Une CLI en préversion demande un CLUF, un tunnel ou une connexion au tenant</td><td>Arrêtez l'étape du worker. Gardez Squad sur les fichiers locaux et n'exécutez vous-même l'évaluation en direct, le tunnel ou le provisionnement que si vous le décidez.</td></tr>
+            <tr><td>Installation annulée ou en échec</td><td>Conservez les fichiers déjà écrits, signalez la ressource en échec et réessayez ou refusez cette entrée. Le reste du pack M365 demeure utilisable.</td></tr>
+          </tbody>
+        </table>
+      </section>
       <p>
         <code>aws-architect</code> conçoit les charges de travail AWS &mdash; services à retenir, organisation des comptes et
         de la zone d'atterrissage, et code CDK, SAM ou CloudFormation pour les construire &mdash; en s'appuyant

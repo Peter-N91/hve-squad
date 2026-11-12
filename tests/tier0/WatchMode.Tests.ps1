@@ -2202,6 +2202,7 @@ $(Format-WatchSelectionMarkdown)
         $catalogText = Get-Content -LiteralPath (Join-Path $script:SourceRootResolved 'squad-src/.github/skills/squad/references/profiles-and-packs.md') -Raw
         $catalog = Get-SquadWatchProfileCatalog -Markdown $catalogText
         $catalog.Profiles['security'] | Should -Contain 'privacy'
+        $catalog.PackSkills['m365-copilot'] | Should -HaveCount 14
         $catalog.PackSkills['foundry'] | Should -HaveCount 6
         $catalog.PackSkills['fabric'] | Should -HaveCount 8
         $cases = @(
@@ -2210,6 +2211,9 @@ $(Format-WatchSelectionMarkdown)
             @{ Name = 'default'; Packs = @('power-platform'); Installed = @('power-platform'); Skills = @(); Roles = @($catalog.Profiles['default'] + $catalog.Packs['power-platform']); Ok = $false }
             @{ Name = 'default'; Packs = @('power-platform'); Installed = @('power-platform'); Skills = @($catalog.PackSkills['power-platform'] | Where-Object { $_ -ne 'add-skill' }); Roles = @($catalog.Profiles['default'] + $catalog.Packs['power-platform']); Ok = $false }
             @{ Name = 'default'; Packs = @('power-platform'); Installed = @('power-platform'); Skills = @($catalog.PackSkills['power-platform']); Roles = @($catalog.Profiles['default'] + $catalog.Packs['power-platform']); Ok = $true }
+            @{ Name = 'default'; Packs = @('m365-copilot'); Installed = @('m365-copilot'); Skills = @(); Roles = @($catalog.Profiles['default'] + $catalog.Packs['m365-copilot']); Ok = $false }
+            @{ Name = 'default'; Packs = @('m365-copilot'); Installed = @('m365-copilot'); Skills = @($catalog.PackSkills['m365-copilot'] | Where-Object { $_ -ne 'ui-widget-developer' }); Roles = @($catalog.Profiles['default'] + $catalog.Packs['m365-copilot']); Ok = $false }
+            @{ Name = 'default'; Packs = @('m365-copilot'); Installed = @('m365-copilot'); Skills = @($catalog.PackSkills['m365-copilot']); Roles = @($catalog.Profiles['default'] + $catalog.Packs['m365-copilot']); Ok = $true }
             @{ Name = 'default'; Packs = @('foundry'); Installed = @('foundry'); Skills = @(); Roles = @($catalog.Profiles['default'] + $catalog.Packs['foundry']); Ok = $false }
             @{ Name = 'default'; Packs = @('foundry'); Installed = @('foundry'); Skills = @($catalog.PackSkills['foundry']); Roles = @($catalog.Profiles['default'] + $catalog.Packs['foundry']); Ok = $true }
             @{ Name = 'security'; Packs = @(); Installed = @(); Roles = @($catalog.Profiles['security'] | Where-Object { $_ -ne 'privacy' }); Ok = $false }
@@ -2227,6 +2231,10 @@ $(Format-WatchSelectionMarkdown)
             elseif (-not $case.Ok -and $case.Packs -contains 'power-platform') {
                 $resolved.Ok | Should -BeFalse
                 $resolved.Reason | Should -Match '^pack-skill-not-visible:power-platform:'
+            }
+            elseif (-not $case.Ok -and $case.Packs -contains 'm365-copilot') {
+                $resolved.Ok | Should -BeFalse
+                $resolved.Reason | Should -Match '^pack-skill-not-visible:m365-copilot:'
             }
             elseif (-not $case.Ok -and $case.Packs -contains 'foundry') {
                 $resolved.Ok | Should -BeFalse
