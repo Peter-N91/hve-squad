@@ -50,6 +50,20 @@ BeforeAll {
         $roles | Sort-Object -Unique
     }
 
+    function Get-SnapshotEvaluationDate {
+        <#
+        .SYNOPSIS
+            Returns the evaluation date (Generated, falling back to Retrieved) of a benchmark snapshot.
+        #>
+        param([Parameter(Mandatory)][string]$Content)
+
+        $genMatch = [regex]::Match($Content, '\*\*Generated:\s*(?<date>\d{4}-\d{2}-\d{2})\*\*')
+        if ($genMatch.Success) {
+            return $genMatch.Groups['date'].Value
+        }
+        [regex]::Match($Content, '\*\*Retrieved:\s*(?<date>\d{4}-\d{2}-\d{2})\*\*').Groups['date'].Value
+    }
+
     function New-FixtureEvidenceRow {
         param(
             [string]$Id, [string]$Evaluation, [string]$Score = '0.600',
@@ -578,7 +592,7 @@ Describe 'Resolve-SquadModelRoute.ps1 ranks by fit, not by name (case l)' {
         function Invoke-Resolver {
             param([Parameter(Mandatory)][string]$Root, [hashtable]$Extra = @{})
             $benchmarkRaw = Get-Content -LiteralPath (Join-Path $script:ReferencesRoot 'model-benchmarks.md') -Raw
-            $benchmarkDate = [regex]::Match($benchmarkRaw, '\*\*Retrieved:\s*(?<date>\d{4}-\d{2}-\d{2})\*\*').Groups['date'].Value
+            $benchmarkDate = Get-SnapshotEvaluationDate -Content $benchmarkRaw
             $parameters = @{ SquadRoot = $Root; AsOf = [datetime]$benchmarkDate }
             foreach ($key in $Extra.Keys) { $parameters[$key] = $Extra[$key] }
             & $script:Resolver @parameters | ConvertFrom-Json
@@ -728,7 +742,7 @@ Describe 'Resolve-SquadModelRoute.ps1 economy mode (case n)' {
         $script:EconomyBenchmarks = New-PolicyBenchmarkFile -Path (Join-Path $TestDrive 'economy-policy.md') -Date '2026-10-15'
         $script:EconomyQualifiedIds = @('gpt-5.6-terra', 'gpt-5.6-sol')
         $liveBenchmarkRaw = Get-Content -LiteralPath (Join-Path $script:ReferencesRoot 'model-benchmarks.md') -Raw
-        $script:LiveBenchmarkDate = [datetime]([regex]::Match($liveBenchmarkRaw, '\*\*Retrieved:\s*(?<date>\d{4}-\d{2}-\d{2})\*\*').Groups['date'].Value)
+        $script:LiveBenchmarkDate = [datetime](Get-SnapshotEvaluationDate -Content $liveBenchmarkRaw)
 
         function New-EconomyRoot {
             param([Parameter(Mandatory)][string]$Content, [string]$Under = $TestDrive)
@@ -1726,9 +1740,12 @@ Describe 'model-benchmarks.md knowledge base and provenance contract (#166, case
 
     It 'uses independent benchmark evidence before model-catalog.md and records source, version, and evaluations in Route rationale' {
         $root = New-BenchmarkRosterRoot
-        $snapshotDate = [regex]::Match($script:BenchmarksRaw, '\*\*Retrieved:\s*(?<date>\d{4}-\d{2}-\d{2})\*\*').Groups['date'].Value
+        $retrievedDate = [regex]::Match($script:BenchmarksRaw, '\*\*Retrieved:\s*(?<date>\d{4}-\d{2}-\d{2})\*\*').Groups['date'].Value
+        $snapshotDate = Get-SnapshotEvaluationDate -Content $script:BenchmarksRaw
         $run = & $script:Resolver -SquadRoot $root -AvailableModels $script:CliEnum -Mode ranked -Role @('researcher', 'lead', 'developer') -AsOf ([datetime]$snapshotDate) | ConvertFrom-Json
-        $run.benchmarksRetrieved | Should -Be $snapshotDate
+        $run.benchmarksRetrieved | Should -Be $retrievedDate
+        $run.benchmarksGenerated | Should -Be $snapshotDate
+        @($run.warnings | Where-Object { $_ -match 'could not be parsed' }) | Should -BeNullOrEmpty
         $run.warnings.Count | Should -BeLessOrEqual 1
         foreach ($roleEntry in $run.roles) {
             if ($roleEntry.evidenceStatus -eq 'sufficient') { $roleEntry.rationale | Should -Match '\(evidence: .+@.+ \[' }
@@ -1803,7 +1820,7 @@ Describe 'model-benchmarks.md knowledge base and provenance contract (#166, case
         $res.roles[0].rationale | Should -Match 'epoch-ai@2026-10-18@.* \[FrontierMath-Tiers-1-3-v2, GPQA diamond\]'
 
         # When only a self-reported model (mai-code-1.1-flash) is available, it falls back to declared fit and logs a warning.
-        $currentSnapshotDate = [regex]::Match($script:BenchmarksRaw, '\*\*Retrieved:\s*(?<date>\d{4}-\d{2}-\d{2})\*\*').Groups['date'].Value
+        $currentSnapshotDate = Get-SnapshotEvaluationDate -Content $script:BenchmarksRaw
         $onlySelfReported = & $script:Resolver -SquadRoot $root -AvailableModels @('mai-code-1.1-flash') -Mode ranked -Role @('technical-writer') -AsOf ([datetime]$currentSnapshotDate) | ConvertFrom-Json
         $onlySelfReported.roles[0].suggested | Should -Be 'mai-code-1.1-flash'
         $onlySelfReported.roles[0].rationale | Should -Match '\(declared-fit fallback\)'
@@ -1813,7 +1830,7 @@ Describe 'model-benchmarks.md knowledge base and provenance contract (#166, case
 
     It 'falls back when the snapshot is missing but never expires verified rows from the envelope retrieval stamp alone' {
         $root = New-BenchmarkRosterRoot
-        $currentSnapshotDate = [regex]::Match($script:BenchmarksRaw, '\*\*Retrieved:\s*(?<date>\d{4}-\d{2}-\d{2})\*\*').Groups['date'].Value
+        $currentSnapshotDate = Get-SnapshotEvaluationDate -Content $script:BenchmarksRaw
         $missingPath = Join-Path $TestDrive 'does-not-exist-benchmarks.md'
         $missingRun = & $script:Resolver -SquadRoot $root -AvailableModels $script:CliEnum -Mode ranked -Role @('lead') -AsOf ([datetime]$currentSnapshotDate) -BenchmarksPath $missingPath | ConvertFrom-Json
         $missingRun.warnings.Count | Should -Be 1
@@ -1875,7 +1892,7 @@ Describe 'model-benchmarks.md knowledge base and provenance contract (#166, case
     }
 
     It 'canonicalizes Copilot Fusion effort levels and distinguishes hydrafusion (High) from hydrafusion-max (Max)' {
-        $currentSnapshotDate = [regex]::Match($script:BenchmarksRaw, '\*\*Retrieved:\s*(?<date>\d{4}-\d{2}-\d{2})\*\*').Groups['date'].Value
+        $currentSnapshotDate = Get-SnapshotEvaluationDate -Content $script:BenchmarksRaw
         $root = New-BenchmarkRosterRoot
         $ranked = & $script:Resolver -SquadRoot $root -AvailableModels @('hydrafusion') -Mode ranked -Role @('developer') -AsOf ([datetime]$currentSnapshotDate) | ConvertFrom-Json
         $ranked.unevaluated | Should -BeNullOrEmpty
@@ -2807,9 +2824,9 @@ Describe 'Sync-ModelCatalog.ps1 and standalone benchmark dataset fallbacks' {
         Copy-Item -LiteralPath (Join-Path $repoRoot 'squad-src/.github/skills/squad/references/model-catalog.md') -Destination $outCat
 
         $res = @(& $script:CatalogSyncScript `
-            -CatalogOutputPath $outCat -RatesOutputPath $outRates `
-            -SupportedModelsHtmlPath $supFile -PricingHtmlPath $prcFile -ComparisonHtmlPath $cmpFile -FusionHtmlPath $fusFile `
-            -AsOf ([datetime]'2026-11-11'))[-1]
+                -CatalogOutputPath $outCat -RatesOutputPath $outRates `
+                -SupportedModelsHtmlPath $supFile -PricingHtmlPath $prcFile -ComparisonHtmlPath $cmpFile -FusionHtmlPath $fusFile `
+                -AsOf ([datetime]'2026-11-11'))[-1]
 
         $res.Updated | Should -BeTrue
         $res.AddedModels | Should -Contain 'frontier-next-9.0'
@@ -2827,9 +2844,9 @@ Describe 'Sync-ModelCatalog.ps1 and standalone benchmark dataset fallbacks' {
         $ratesContent | Should -Match '\| Frontier Next 9\.0 \| `frontier-next-9\.0` \|'
 
         $noop = @(& $script:CatalogSyncScript `
-            -CatalogOutputPath $outCat -RatesOutputPath $outRates `
-            -SupportedModelsHtmlPath $supFile -PricingHtmlPath $prcFile -ComparisonHtmlPath $cmpFile -FusionHtmlPath $fusFile `
-            -AsOf ([datetime]'2026-11-12') -DryRun)[-1]
+                -CatalogOutputPath $outCat -RatesOutputPath $outRates `
+                -SupportedModelsHtmlPath $supFile -PricingHtmlPath $prcFile -ComparisonHtmlPath $cmpFile -FusionHtmlPath $fusFile `
+                -AsOf ([datetime]'2026-11-12') -DryRun)[-1]
         $noop.Updated | Should -BeFalse
     }
 

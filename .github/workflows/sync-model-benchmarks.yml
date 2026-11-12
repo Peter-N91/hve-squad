@@ -139,6 +139,9 @@ jobs:
         if: steps.catalog.outputs.updated == 'true' || steps.sync.outputs.updated == 'true'
         shell: pwsh
         run: |
+          $ErrorActionPreference = 'Stop'
+          Set-StrictMode -Version Latest
+          $env:TIER0_BASE_SHA = (git rev-parse HEAD).Trim()
           $repoRoot = (Resolve-Path -LiteralPath '.').Path
           $tier0Config = New-PesterConfiguration
           $tier0Config.Run.Container = @(
