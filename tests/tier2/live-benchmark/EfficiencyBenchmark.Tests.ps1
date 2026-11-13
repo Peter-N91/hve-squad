@@ -90,6 +90,17 @@ Describe 'Efficiency event analysis' -Tag 'Unit' {
         @{ Mutation = 'malformed-then-valid' }
         @{ Mutation = 'method' }
         @{ Mutation = 'selection' }
+        @{ Mutation = 'foreach-reflection' }
+        @{ Mutation = 'concat-forgery' }
+        @{ Mutation = 'outside-read' }
+        @{ Mutation = 'wildcard-traversal-read' }
+        @{ Mutation = 'unpiped-get-content' }
+        @{ Mutation = 'piped-get-content-outstring' }
+        @{ Mutation = 'variable-relayed-get-content' }
+        @{ Mutation = 'select-string-raw-forgery' }
+        @{ Mutation = 'nested-pipeline-outside-read' }
+        @{ Mutation = 'brace-variable-forgery' }
+        @{ Mutation = 'trailing-process-masking' }
         @{ Mutation = 'helper' }
         @{ Mutation = 'executable' }
         @{ Mutation = 'command-mode' }
@@ -116,6 +127,17 @@ Describe 'Efficiency event analysis' -Tag 'Unit' {
             new-helper { $command = "New-Item -ItemType File -Path '.agents/skills/squad/scripts/helper.ps1'; $command" }
             method { $command += "; [Console]::WriteLine('{}')" }
             selection { $command += "; Select-Object -InputObject '{}'" }
+            foreach-reflection { $command = "Get-Item '.copilot-tracking/squad/state.json' | ForEach-Object -MemberName Delete; $command" }
+            concat-forgery { $command += "; ('[`"sta'+'tus`":`"PASS`",`"turn`":1]').Replace('[','{').Replace(']','}')" }
+            outside-read { $command = "Test-Path -PathType Leaf '../outside-secret.txt'; $command" }
+            wildcard-traversal-read { $command = "Get-ChildItem '*\..\..\outside'; $command" }
+            unpiped-get-content { $command = "Get-Content 'docs/forged.json'; $command" }
+            piped-get-content-outstring { $command = "Get-Content 'docs/forged.json' | Out-String; $command" }
+            variable-relayed-get-content { $command = "`$x = Get-Content 'docs/forged.json' -Raw; $command; `$x" }
+            select-string-raw-forgery { $command = "Select-String -Path 'docs/forged.json' -Pattern 'status' -Raw; $command" }
+            nested-pipeline-outside-read { $command = "('../outside.txt' | Get-FileHash).Hash; $command" }
+            brace-variable-forgery { $command = "`$a='{'; `$b='}'; $command; `"`$a```"status```":```"PASS```",```"turn```":1`$b`"" }
+            trailing-process-masking { $command += "; pwsh -NoProfile -File '$(Join-Path $scripts 'Get-SquadInitContext.ps1')' -RepoRoot '$TestDrive'" }
             helper { $command = "pwsh -File '$(Join-Path $TestDrive 'Get-SquadInitContext.ps1')'; $command" }
             executable { $command = $command -replace '^pwsh', "& '$(Join-Path $TestDrive 'pwsh.exe')'" }
             command-mode { $command = $command -replace '^pwsh', "pwsh -Command 'Write-Output fake'" }
@@ -637,6 +659,28 @@ exit 0
 }
 
 Describe 'Efficiency process boundary' -Tag 'Unit' {
+    It 'streams large stdin past slow child startup and preserves stdin-timeout when unread' {
+        $OutputPath = Join-Path $TestDrive 'large-stdin.out'
+        $SlowReader = Join-Path $TestDrive 'slow-reader.ps1'
+        @'
+Start-Sleep -Milliseconds 1500
+$text = [Console]::In.ReadToEnd()
+[Console]::WriteLine("bytes=$($text.Length)")
+'@ | Set-Content -LiteralPath $SlowReader -Encoding utf8NoBOM
+        $LargeInput = 'A' * 100000
+        $Passed = Invoke-EfficiencyProcess -FilePath (Get-Command pwsh).Source -Arguments @('-NoProfile', '-File', $SlowReader) -WorkingDirectory $TestDrive -OutputPath $OutputPath -TimeoutSeconds 15 -InputText $LargeInput
+        $Passed.exitCode | Should -Be 0
+        $Passed.stopCause | Should -Be 'none'
+        (Get-Content -LiteralPath $OutputPath -Raw).Trim() | Should -Be 'bytes=100000'
+
+        $NeverReader = Join-Path $TestDrive 'never-reader.ps1'
+        $EventsPath = Join-Path $TestDrive 'never-events.jsonl'
+        Set-Content -LiteralPath $EventsPath -Value '' -NoNewline
+        'Start-Sleep -Seconds 30' | Set-Content -LiteralPath $NeverReader -Encoding utf8NoBOM
+        $HugeInput = 'B' * 2000000
+        $TimedOut = Invoke-EfficiencyProcess -FilePath (Get-Command pwsh).Source -Arguments @('-NoProfile', '-File', $NeverReader) -WorkingDirectory $TestDrive -OutputPath (Join-Path $TestDrive 'never.out') -TimeoutSeconds 1 -EventsPath $EventsPath -MaxCredits 5 -InputText $HugeInput
+        $TimedOut.stopCause | Should -BeIn @('stdin-timeout', 'timeout')
+    }
     It 'relays dedicated progress without exposing subprocess output for <Case>' -ForEach @(
         @{ Case = 'fast'; Enabled = $true; Delay = 0 }
         @{ Case = 'heartbeat'; Enabled = $true; Delay = 1800 }
@@ -1062,6 +1106,8 @@ Describe 'Efficiency actual direct bookkeeping proof' -Tag 'Unit' {
         @{ Stage = 'init'; Mutation = 'stale'; Pass = $false }
         @{ Stage = 'init'; Mutation = 'wrong-script'; Pass = $false }
         @{ Stage = 'init'; Mutation = 'missing-history'; Pass = $false }
+        @{ Stage = 'init'; Mutation = 'cleaned-payload-expandable'; Pass = $true }
+        @{ Stage = 'requirements'; Mutation = 'background-shell-progressive-runs'; Pass = $true }
         @{ Stage = 'requirements'; Mutation = 'missing-history'; Pass = $false }
         @{ Stage = 'requirements'; Mutation = 'missing-dispatch'; Pass = $false }
         @{ Stage = 'requirements'; Mutation = 'wrong-turn'; Pass = $false }
@@ -1148,6 +1194,40 @@ Describe 'Efficiency actual direct bookkeeping proof' -Tag 'Unit' {
             wrong-script {
                 $start = @($lines | Where-Object { $_.type -eq 'tool.execution_start' })[-1]
                 $start.data.arguments.command = $start.data.arguments.command.Replace($script:ProofScripts, $fixture.root)
+            }
+            cleaned-payload-expandable {
+                $start = @($lines | Where-Object { $_.type -eq 'tool.execution_start' })[-1]
+                $start.data.arguments.command = "`$r='$($fixture.root)'; `$s=`"`$r\.agents\skills\squad\scripts`"; pwsh -NoProfile -File `"`$s\Initialize-Squad.ps1`" -RepoRoot `$r -PayloadPath `"`$r\init-payload.json`" -Direct | Out-String; `"exit `$LASTEXITCODE`""
+                Remove-Item -LiteralPath (Join-Path $fixture.root 'init-payload.json') -Force
+            }
+            background-shell-progressive-runs {
+                $runIdx = 1
+                foreach ($line in $lines) {
+                    if ($line.type -eq 'tool.execution_start' -and $line.data.arguments.command -match 'Write-SquadHandoff') {
+                        $runIdx++
+                        if ($line.data.arguments.command -match 'handoff-\d+\.json') {
+                            $hPath = [regex]::Match($line.data.arguments.command, "'([^']*handoff-\d+\.json)'").Groups[1].Value
+                            $hObj = Get-Content -LiteralPath $hPath -Raw | ConvertFrom-Json -AsHashtable
+                            $hObj.runId = "run-0$runIdx"
+                            $hObj | ConvertTo-Json -Depth 20 | Set-Content -LiteralPath $hPath
+                        }
+                        else {
+                            $line.data.arguments.command = $line.data.arguments.command -replace "-RunId 'proof-run'", "-RunId 'run-0$runIdx'"
+                        }
+                    }
+                }
+                $ledgerPath = Join-Path $fixture.squad 'consumption.md'
+                [IO.File]::WriteAllText($ledgerPath, ([IO.File]::ReadAllText($ledgerPath) -replace '\(Run: proof-run\)', "(Run: run-0$runIdx)"))
+                $lastIdx = [array]::IndexOf($lines, $last)
+                $origContent = [string]$last.data.result.content
+                $last.data.Remove('shellExecution')
+                $last.data.result = @{ content = "True`n<command with shellId: 32 is still running after 30 seconds.>" }
+                $readId = [guid]::NewGuid().ToString()
+                $readTurn = [guid]::NewGuid().ToString()
+                $lines += @(
+                    @{ type = 'tool.execution_start'; agentId = ''; timestamp = [DateTimeOffset]::UtcNow.ToString('o'); data = @{ toolCallId = $readId; toolName = 'read_powershell'; turnId = $readTurn; arguments = @{ shellId = '32'; delay = 20 } } }
+                    @{ type = 'tool.execution_complete'; agentId = ''; timestamp = [DateTimeOffset]::UtcNow.ToString('o'); data = @{ toolCallId = $readId; turnId = $readTurn; success = $true; shellExecution = @{ exitCode = 0 }; result = @{ content = $origContent + "`n<shellId: 32 completed with exit code 0>" } } }
+                )
             }
             missing-history { Remove-Item -LiteralPath (Join-Path $fixture.squad "history\$(if ($Stage -eq 'init') { 'Squad Scribe' } else { 'PRD Quality Reviewer' }).md") }
             missing-dispatch { $lines = @($lines | Where-Object { -not ($_.type -eq 'subagent.started' -and $_['agentId'] -eq 'PRD Quality Reviewer') }) }

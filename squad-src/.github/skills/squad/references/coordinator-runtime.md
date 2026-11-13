@@ -57,7 +57,7 @@ Read applicable `gates-and-modes.md` sections with
 | Trigger | Names or additional reference |
 |---------|-------------------------------|
 | Substantive output, except an eligible quick bounded task | `implementation` |
-| Requirement/input artifacts advancing toward a plan or deliverable | `intake`; read `requirements-quality.md` before dispatch for BRD/PRD briefs and capture barriers |
+| Requirement/input artifacts advancing toward a plan or deliverable | `intake`; BRD/PRD also `requirements-quality.md` (read `requirements-quality.md` before dispatch) |
 | `product`/`full`, goal rather than settled task, no input artifact, attended | `discovery` |
 | Explicit council/cross-check or implementation+risk across two council domains, or RAI concern | `council` |
 | Supplied or same-run inherited ceiling | `cost-preflight`, then `consumption.md` |

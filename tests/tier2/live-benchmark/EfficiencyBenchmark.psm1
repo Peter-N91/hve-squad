@@ -670,7 +670,7 @@ function Invoke-EfficiencyProcess {
     $Info.RedirectStandardInput = $PSBoundParameters.ContainsKey('InputText')
     if ($Info.RedirectStandardInput) { $Info.StandardInputEncoding = [Text.UTF8Encoding]::new($false) }
     foreach ($Argument in $Arguments) { $Info.ArgumentList.Add($Argument) }
-    foreach ($Name in @('COPILOT_AGENT', 'COPILOT_DEBUG_NONCE', 'COPILOT_ENTRA_AUTH_AUD')) { $Info.Environment.Remove($Name) | Out-Null }
+    foreach ($Name in @('COPILOT_AGENT', 'COPILOT_AGENT_SESSION_ID', 'COPILOT_DEBUG_NONCE', 'COPILOT_ENTRA_AUTH_AUD')) { $Info.Environment.Remove($Name) | Out-Null }
     foreach ($Name in $EnvironmentVariables.Keys) { $Info.Environment[$Name] = [string]$EnvironmentVariables[$Name] }
     $Info.Environment['GIT_TERMINAL_PROMPT'] = '0'
     $Process = [Diagnostics.Process]::new(); $Process.StartInfo = $Info
@@ -690,23 +690,43 @@ function Invoke-EfficiencyProcess {
         $Started = $true
         $OutputCopy = $Process.StandardOutput.BaseStream.CopyToAsync($OutputStream)
         $ErrorCopy = $Process.StandardError.BaseStream.CopyToAsync($ErrorStream)
+        $InputCopy = $null; $InputClosed = $false
         if ($Info.RedirectStandardInput) {
             $InputCopy = $Process.StandardInput.WriteAsync($InputText)
-            if (-not $InputCopy.Wait(10000)) { $StopCause = 'stdin-timeout'; $Process.Kill($true); $Process.WaitForExit() }
-            else { $null = $InputCopy.GetAwaiter().GetResult(); $Process.StandardInput.Close() }
+            $CompletedQuickly = $false
+            try { $CompletedQuickly = $InputCopy.Wait(50) } catch { $CompletedQuickly = $true }
+            if ($CompletedQuickly) {
+                try { $null = $InputCopy.GetAwaiter().GetResult() } catch { }
+                try { $Process.StandardInput.Close() } catch { }
+                $InputClosed = $true
+            }
         }
         while (-not $Process.WaitForExit(250)) {
+            if ($null -ne $InputCopy -and -not $InputClosed -and $InputCopy.IsCompleted) {
+                try { $null = $InputCopy.GetAwaiter().GetResult() } catch { }
+                try { $Process.StandardInput.Close() } catch { }
+                $InputClosed = $true
+            }
             if ($ProgressPath) { Update-EfficiencyProgress -Context $Progress -Path $ProgressPath -ElapsedSeconds $Watch.Elapsed.TotalSeconds -IntervalSeconds $ProgressIntervalSeconds }
-            if ($Watch.Elapsed.TotalSeconds -gt $TimeoutSeconds) { $StopCause = 'timeout' }
+            if ($Watch.Elapsed.TotalSeconds -gt $TimeoutSeconds) {
+                $StopCause = if ($null -ne $InputCopy -and -not $InputCopy.IsCompleted) { 'stdin-timeout' } else { 'timeout' }
+            }
             Update-EfficiencyProcessMonitor -Context $Monitor -EventsPath $EventsPath -StartLine $StartLine -MaxRequests $MaxRequests
             if ($Monitor.reason -ne 'none') { $StopCause = $Monitor.reason }
             if ($StopCause -ne 'none') { $Process.Kill($true); $Process.WaitForExit(); break }
+        }
+        if ($null -ne $InputCopy -and -not $InputClosed) {
+            try {
+                if ($InputCopy.Wait(2000)) { $null = $InputCopy.GetAwaiter().GetResult() }
+            }
+            catch { }
+            try { $Process.StandardInput.Close() } catch { }
         }
         $null = $OutputCopy.GetAwaiter().GetResult(); $null = $ErrorCopy.GetAwaiter().GetResult()
         if ($ProgressPath) { Update-EfficiencyProgress -Context $Progress -Path $ProgressPath -ElapsedSeconds $Watch.Elapsed.TotalSeconds -IntervalSeconds $ProgressIntervalSeconds -Final }
         Update-EfficiencyProcessMonitor -Context $Monitor -EventsPath $EventsPath -StartLine $StartLine -MaxRequests $MaxRequests
         if ($Monitor.reason -ne 'none') { $StopCause = $Monitor.reason }
-        if ($MaxCredits -gt 0 -and ($Monitor.credits.usageIds.Count -le $PriorCreditRecords -or $Monitor.pending.Trim())) { $StopCause = 'incomplete-credit-metering' }
+        if ($StopCause -eq 'none' -and $MaxCredits -gt 0 -and ($Monitor.credits.usageIds.Count -le $PriorCreditRecords -or $Monitor.pending.Trim())) { $StopCause = 'incomplete-credit-metering' }
         [pscustomobject]@{ exitCode = $Process.ExitCode; stopCause = $StopCause; seconds = [Math]::Round($Watch.Elapsed.TotalSeconds, 3); observedRequests = $Monitor.requestIds.Count; creditsUsed = if ($MaxCredits -gt 0) { $Monitor.credits.nanoAiu / 1e9 } else { $null }; creditCeiling = if ($MaxCredits -gt 0) { $MaxCredits } else { $null } }
     }
     finally {
@@ -910,6 +930,7 @@ function Get-EfficiencyBookkeepingEvidence {
     $Root = [IO.Path]::GetFullPath($Workspace)
     $IntegrityContext = @{}
     $Starts = @{}; $Seen = [Collections.Generic.HashSet[string]]::new()
+    $BackgroundShells = @{}
     $Executions = [Collections.Generic.List[object]]::new()
     $ScribeStarts = @{}; $ScribeRuns = [Collections.Generic.List[object]]::new()
     $SessionId = $null; $Sessions = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
@@ -932,159 +953,471 @@ function Get-EfficiencyBookkeepingEvidence {
                 $ScribeRuns.Add(@{ actorId = [string]$Event['agentId']; startedAt = $ScribeStart['timestamp']; completedAt = $Event['timestamp']; toolCallId = [string]$Data.toolCallId })
             }
         }
-        if ($Event['type'] -eq 'tool.execution_start' -and $Data['toolName'] -in @('powershell', 'functions.powershell') -and $Data['toolCallId']) {
+        if ($Event['type'] -eq 'tool.execution_start' -and $Data['toolName'] -in @('powershell', 'functions.powershell', 'read_powershell', 'functions.read_powershell') -and $Data['toolCallId']) {
             $Starts[[string]$Data.toolCallId] = $Event
         }
         if ($Event['type'] -ne 'tool.execution_complete' -or -not $Data['toolCallId'] -or
             -not $Starts.ContainsKey([string]$Data.toolCallId) -or -not $Seen.Add([string]$Data.toolCallId)) { continue }
         $Start = $Starts[[string]$Data.toolCallId]
         try {
-        if ($Data['success'] -ne $true -or $Data['shellExecution'] -isnot [Collections.IDictionary] -or
-            -not $Data.shellExecution.Contains('exitCode') -or $Data.shellExecution.exitCode -ne 0) { continue }
-        if ([string]::IsNullOrWhiteSpace([string]$Start.data['turnId']) -or
+        if ($Data['success'] -ne $true -or [string]::IsNullOrWhiteSpace([string]$Start.data['turnId']) -or
             [string]$Start.data['turnId'] -cne [string]$Data['turnId'] -or [string]$Start['agentId'] -cne [string]$Event['agentId']) { continue }
         if (-not $Start['timestamp'] -or -not $Event['timestamp'] -or
             [DateTimeOffset]$Start.timestamp -gt [DateTimeOffset]$Event.timestamp) { continue }
         if ($Start.data['arguments'] -isnot [Collections.IDictionary] -or $Data['result'] -isnot [Collections.IDictionary]) { continue }
+        $ToolName = [string]$Start.data['toolName']
+        $ResultText = [string]$Data.result['content']
+        if ($ToolName -in @('powershell', 'functions.powershell') -and ($Data['shellExecution'] -isnot [Collections.IDictionary] -or -not $Data.shellExecution.Contains('exitCode'))) {
+            $RunningMatch = [regex]::Match($ResultText, '<command with shellId:\s*(?<sid>[^\s>]+)\s+is still running')
+            if ($RunningMatch.Success) {
+                $ShellKey = ([string]$Start['agentId']) + ':' + $RunningMatch.Groups['sid'].Value
+                $BackgroundShells[$ShellKey] = @{ start = $Start; output = $ResultText }
+            }
+            continue
+        }
+        if ($ToolName -in @('read_powershell', 'functions.read_powershell')) {
+            $ReadSid = [string]$Start.data.arguments['shellId']
+            $ShellKey = ([string]$Start['agentId']) + ':' + $ReadSid
+            if (-not $ReadSid -or -not $BackgroundShells.ContainsKey($ShellKey)) { continue }
+            if ($Data['shellExecution'] -isnot [Collections.IDictionary] -or -not $Data.shellExecution.Contains('exitCode')) {
+                $BackgroundShells[$ShellKey].output += "`n" + $ResultText
+                continue
+            }
+            $PendingShell = $BackgroundShells[$ShellKey]
+            $null = $BackgroundShells.Remove($ShellKey)
+            $Start = $PendingShell.start
+            $ResultText = $PendingShell.output + "`n" + $ResultText
+        }
+        if ($Data['shellExecution'] -isnot [Collections.IDictionary] -or -not $Data.shellExecution.Contains('exitCode')) { continue }
+        $ShellExitCode = [int]$Data.shellExecution.exitCode
         $Command = [string]$Start.data.arguments['command']
         $Tokens = $null; $Errors = $null
         $Ast = [Management.Automation.Language.Parser]::ParseInput($Command, [ref]$Tokens, [ref]$Errors)
         if ($Errors.Count -or $Ast.ParamBlock -or $Ast.BeginBlock -or $Ast.ProcessBlock -or
             $Ast.CleanBlock -or $Ast.ScriptRequirements -or $Ast.UsingStatements.Count) { continue }
-        $Variables = @{}; $SafeStatements = $true
-        foreach ($Statement in $Ast.EndBlock.Statements) {
-            if ($Statement -is [Management.Automation.Language.PipelineAst]) {
-                if (@($Statement.PipelineElements | Where-Object { $_ -isnot [Management.Automation.Language.CommandAst] }).Count) { $SafeStatements = $false }
-            }
-            elseif ($Statement -isnot [Management.Automation.Language.AssignmentStatementAst]) { $SafeStatements = $false }
-        }
-        foreach ($Assignment in $Ast.FindAll({ param($Node) $Node -is [Management.Automation.Language.AssignmentStatementAst] }, $true)) {
-            if ($Assignment.Left -isnot [Management.Automation.Language.VariableExpressionAst] -or
-                $Variables.ContainsKey($Assignment.Left.VariablePath.UserPath)) { $SafeStatements = $false; break }
-            $Key = $Assignment.Left.VariablePath.UserPath
-            $Right = $Assignment.Right.Extent.Text.Trim()
-            if ($Right -match '^\(Get-Location\)\.(?:Path|ProviderPath)$') { $Value = $Root }
-            elseif ($Right -match "^'(?<value>[^']*)'$") { $Value = $Matches.value }
-            else { $SafeStatements = $false; break }
-            $Variables[$Key] = @{ value = $Value; offset = $Assignment.Extent.EndOffset }
-        }
-        if (-not $SafeStatements) { continue }
+        $Variables = @{}
+        $HashVars = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+        $TextVars = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+        $FileReadCommands = @('Test-Path', 'Get-Item', 'Get-ChildItem', 'Get-Content', 'Get-FileHash', 'Select-String')
+        $PipelineFilterCommands = @('Measure-Object', 'measure', 'Select', 'Select-Object', 'Out-Null', 'Out-String', 'ConvertFrom-Json', 'ForEach-Object', '%', 'Where-Object', '?')
+        $ReadOnlyCommands = @('Get-Location') + $FileReadCommands + $PipelineFilterCommands
+        $TempRoot = [IO.Path]::GetFullPath([IO.Path]::GetTempPath()).TrimEnd([IO.Path]::DirectorySeparatorChar)
+        $TrustedPwsh = @((Get-Command pwsh).Source, (Get-Process -Id $PID).Path, (Join-Path $PSHOME 'pwsh.exe'), (Join-Path $PSHOME 'pwsh')) | Where-Object { $_ }
         $ValueOf = {
             param($Node)
+            if ($Node -is [Management.Automation.Language.ParenExpressionAst]) {
+                if ($Node.Extent.Text.Trim() -match '^\(Get-Location\)$') { return $Root }
+            }
+            if ($Node -is [Management.Automation.Language.MemberExpressionAst] -and
+                $Node.Extent.Text.Trim() -match '^\(Get-Location\)\.(?:Path|ProviderPath)$') { return $Root }
             if ($Node -is [Management.Automation.Language.StringConstantExpressionAst]) { return $Node.Value }
             if ($Node -is [Management.Automation.Language.ConstantExpressionAst] -and $Node.Value -is [ValueType]) {
                 return [Convert]::ToString($Node.Value, [Globalization.CultureInfo]::InvariantCulture)
             }
             if ($Node -is [Management.Automation.Language.VariableExpressionAst]) {
-                if ($Variables.ContainsKey($Node.VariablePath.UserPath) -and $Variables[$Node.VariablePath.UserPath].offset -lt $Node.Extent.StartOffset) { return $Variables[$Node.VariablePath.UserPath].value }
+                if (-not $Node.VariablePath.IsDriveQualified -and $Variables.ContainsKey($Node.VariablePath.UserPath)) {
+                    return $Variables[$Node.VariablePath.UserPath]
+                }
                 throw 'Unbound shell variable.'
             }
             if ($Node -is [Management.Automation.Language.ExpandableStringExpressionAst]) {
                 $Value = $Node.Value
                 foreach ($Nested in $Node.NestedExpressions) {
-                    if ($Nested -isnot [Management.Automation.Language.VariableExpressionAst] -or -not $Variables.ContainsKey($Nested.VariablePath.UserPath) -or
-                        $Variables[$Nested.VariablePath.UserPath].offset -ge $Nested.Extent.StartOffset) { throw 'Unsupported shell expression.' }
-                    $Value = $Value.Replace($Nested.Extent.Text, $Variables[$Nested.VariablePath.UserPath].value)
+                    if ($Nested -isnot [Management.Automation.Language.VariableExpressionAst] -or
+                        $Nested.VariablePath.IsDriveQualified -or
+                        -not $Variables.ContainsKey($Nested.VariablePath.UserPath)) { throw 'Unsupported shell expression.' }
+                    $Value = $Value.Replace($Nested.Extent.Text, $Variables[$Nested.VariablePath.UserPath])
                 }
                 return $Value
             }
             throw 'Nonliteral shell argument.'
         }
-        try {
-            $Calls = @($Ast.FindAll({ param($Node) $Node -is [Management.Automation.Language.CommandAst] }, $true))
-            $WriterCalls = [Collections.Generic.List[object]]::new()
-            foreach ($Call in $Calls) {
-                $Elements = @($Call.CommandElements)
-                $Name = & $ValueOf $Elements[0]
-                if ($Name -in @('Get-Location', 'Test-Path', 'Select', 'Select-Object', 'Out-Null', 'New-Item', 'Copy-Item')) {
-                    if ($Name -in @('Select', 'Select-Object') -and
-                        @($Elements | Where-Object { $_ -is [Management.Automation.Language.CommandParameterAst] -and $_.ParameterName -notin @('First', 'Last', 'Skip') }).Count) { throw 'Output-producing selection refused.' }
-                    foreach ($Element in @($Elements | Select-Object -Skip 1)) {
-                        if ($Element -is [Management.Automation.Language.CommandParameterAst]) {
-                            if ($Element.Argument) { $null = & $ValueOf $Element.Argument }
-                        }
-                        else { $null = & $ValueOf $Element }
+        $AssertSafeReadPath = {
+            param([string]$TargetPath)
+            if ([string]::IsNullOrWhiteSpace($TargetPath)) { throw 'Empty read path refused.' }
+            if ($TargetPath -match '(?:^|[\\/])\.\.(?:[\\/]|$)' -and $TargetPath -match '[*?\[\]]') {
+                throw 'Wildcard path with parent traversal refused.'
+            }
+            $CandidateBase = $TargetPath -replace '[*?\[\]].*$', ''
+            $Resolved = Resolve-EfficiencyPlainPath -Path ($(if ($CandidateBase) { $CandidateBase } else { '.' })) -Base $Root
+            if (Test-EfficiencyPathWithin $Resolved $Root) { return }
+            $ParentDir = Split-Path -Parent $Resolved
+            $LeafName = [IO.Path]::GetFileName($Resolved)
+            if ($ParentDir -ieq $TempRoot -and $LeafName -match '^\d+-copilot-tool-output-[A-Za-z0-9-]+\.txt$') { return }
+            throw 'Read operation leaves the workspace.'
+        }
+        $AssertSafeDestination = {
+            param([string]$TargetPath, [bool]$AllowTrialParentScratch = $false)
+            if ([string]::IsNullOrWhiteSpace($TargetPath) -or $TargetPath -match '[*?\[\]]') { throw 'Wildcard or empty write destination refused.' }
+            $Resolved = Resolve-EfficiencyPlainPath -Path $TargetPath -Base $Root
+            $InWorkspace = Test-EfficiencyPathWithin $Resolved $Root
+            if (-not $InWorkspace) {
+                $TrialParent = Split-Path -Parent $Root
+                $Leaf = [IO.Path]::GetFileName($Resolved)
+                if (-not $AllowTrialParentScratch -or -not $TrialParent -or (Split-Path -Parent $Resolved) -ine $TrialParent -or $Leaf -notmatch '\.json$') {
+                    throw 'File operation leaves the workspace.'
+                }
+            }
+            foreach ($Protected in @('.copilot-tracking\squad', '.agents', '.github', 'skills')) {
+                $ProtectedPath = Join-Path $Root $Protected
+                if ((Test-EfficiencyPathWithin $Resolved $ProtectedPath) -or (Test-EfficiencyPathWithin $ProtectedPath $Resolved)) {
+                    throw 'File operation changes protected state or helpers.'
+                }
+            }
+        }
+        $AssertReadOnlyAst = {
+            param($Subtree, [switch]$ForStdoutExpression)
+            foreach ($StrConst in $Subtree.FindAll({ param($N) $N -is [Management.Automation.Language.StringConstantExpressionAst] -or $N -is [Management.Automation.Language.ExpandableStringExpressionAst] }, $true)) {
+                if ($StrConst.Extent.Text -match '[{}]' -and $StrConst -isnot [Management.Automation.Language.ExpandableStringExpressionAst]) {
+                    throw 'Brace-containing string literal alongside receipt refused.'
+                }
+                if ($StrConst -is [Management.Automation.Language.ExpandableStringExpressionAst]) {
+                    $Stripped = [regex]::Replace($StrConst.Extent.Text, '\$\([^)]*\)|\$\{[^{}]*\}|\$[A-Za-z0-9_:]+', '')
+                    if ($Stripped -match '[{}]') { throw 'JSON-shaped expandable string alongside receipt refused.' }
+                }
+            }
+            if ($ForStdoutExpression) {
+                foreach ($BinExpr in $Subtree.FindAll({ param($N) $N -is [Management.Automation.Language.BinaryExpressionAst] }, $true)) {
+                    if ($BinExpr.Operator -eq [Management.Automation.Language.TokenKind]::Plus) {
+                        throw 'String concatenation in stdout expression alongside receipt refused.'
                     }
-                    if ($Name -in @('Copy-Item', 'New-Item')) {
-                            $Options = @{}; $Positionals = [Collections.Generic.List[string]]::new()
-                            for ($Index = 1; $Index -lt $Elements.Count; $Index++) {
-                                $Element = $Elements[$Index]
-                                if ($Element -is [Management.Automation.Language.CommandParameterAst]) {
-                                    $Key = $Element.ParameterName
-                                    if ($Key -in @('Force', 'Recurse')) { continue }
-                                    if ($Key -notin @('Path', 'LiteralPath', 'Destination', 'ItemType', 'Value') -or $Options.ContainsKey($Key)) { throw 'Unsupported file operation.' }
-                                    if ($Element.Argument) { $Options[$Key] = & $ValueOf $Element.Argument }
-                                    else { $Index++; $Options[$Key] = & $ValueOf $Elements[$Index] }
-                                }
-                                else { $Positionals.Add((& $ValueOf $Element)) }
+                }
+                foreach ($VarExpr in $Subtree.FindAll({ param($N) $N -is [Management.Automation.Language.VariableExpressionAst] }, $true)) {
+                    $VarName = $VarExpr.VariablePath.UserPath
+                    if ($VarExpr.VariablePath.IsDriveQualified) { throw 'Drive-qualified variable in stdout expression refused.' }
+                    if ($VarName -in @('_', 'PSItem', 'LASTEXITCODE', 'true', 'false', 'null') -or
+                        $Variables.ContainsKey($VarName) -or $HashVars.Contains($VarName)) { continue }
+                    if ($TextVars.Contains($VarName)) {
+                        $ParentNode = $VarExpr.Parent
+                        $SplitCountParent = $ParentNode
+                        while ($SplitCountParent -is [Management.Automation.Language.BinaryExpressionAst] -or
+                            $SplitCountParent -is [Management.Automation.Language.CommandExpressionAst] -or
+                            $SplitCountParent -is [Management.Automation.Language.PipelineAst] -or
+                            $SplitCountParent -is [Management.Automation.Language.ParenExpressionAst]) {
+                            $SplitCountParent = $SplitCountParent.Parent
+                        }
+                        $SafeScalarUse = ($ParentNode -is [Management.Automation.Language.InvokeMemberExpressionAst] -and $ParentNode.Expression -eq $VarExpr -and $ParentNode.Member.Extent.Text -in @('Contains', 'StartsWith', 'EndsWith')) -or
+                            ($ParentNode -is [Management.Automation.Language.BinaryExpressionAst] -and $ParentNode.Operator -in @([Management.Automation.Language.TokenKind]::Isplit, [Management.Automation.Language.TokenKind]::Csplit) -and $SplitCountParent -is [Management.Automation.Language.MemberExpressionAst] -and $SplitCountParent.Member.Extent.Text -eq 'Count') -or
+                            ($ParentNode -is [Management.Automation.Language.InvokeMemberExpressionAst] -and $ParentNode.Member.Extent.Text -in @('Matches', 'IsMatch') -and ($ParentNode.Member.Extent.Text -eq 'IsMatch' -or ($ParentNode.Parent -is [Management.Automation.Language.MemberExpressionAst] -and $ParentNode.Parent.Member.Extent.Text -eq 'Count')))
+                        if ($SafeScalarUse) { continue }
+                    }
+                    throw "Unbound or text variable '`$$VarName' in stdout expression alongside receipt refused."
+                }
+            }
+            foreach ($NestedPipe in $Subtree.FindAll({ param($N) $N -is [Management.Automation.Language.PipelineAst] }, $true)) {
+                if ($NestedPipe.PipelineElements.Count -gt 1 -and $NestedPipe.PipelineElements[0] -is [Management.Automation.Language.CommandExpressionAst]) {
+                    throw 'Piped expression statement refused.'
+                }
+                for ($NPIdx = 0; $NPIdx -lt $NestedPipe.PipelineElements.Count; $NPIdx++) {
+                    $NPCall = $NestedPipe.PipelineElements[$NPIdx]
+                    if ($NPCall -isnot [Management.Automation.Language.CommandAst]) { continue }
+                    $NPName = if ($NPCall.CommandElements[0] -is [Management.Automation.Language.StringConstantExpressionAst]) { $NPCall.CommandElements[0].Value } else { '' }
+                    if ($NPName -eq 'Select-String' -or ($ForStdoutExpression -and $NPName -eq 'Get-Content')) {
+                        if ($NPIdx -ge ($NestedPipe.PipelineElements.Count - 1)) { throw "Terminal $NPName alongside receipt refused." }
+                        $NPNext = $NestedPipe.PipelineElements[$NPIdx + 1]
+                        $NPNextName = if ($NPNext -is [Management.Automation.Language.CommandAst] -and $NPNext.CommandElements[0] -is [Management.Automation.Language.StringConstantExpressionAst]) { $NPNext.CommandElements[0].Value } else { '' }
+                        if ($NPNextName -notin @('Measure-Object', 'measure', 'Out-Null')) {
+                            throw "$NPName piped to stdout-preserving command alongside receipt refused."
+                        }
+                    }
+                }
+            }
+            foreach ($TypeExpr in $Subtree.FindAll({ param($N) $N -is [Management.Automation.Language.TypeExpressionAst] }, $true)) {
+                if ($TypeExpr.TypeName.FullName -notin @('Math', 'System.Math', 'regex', 'System.Text.RegularExpressions.Regex')) {
+                    throw 'Disallowed .NET type expression alongside receipt.'
+                }
+            }
+            foreach ($MemberExpr in $Subtree.FindAll({ param($N) $N -is [Management.Automation.Language.MemberExpressionAst] -and $N -isnot [Management.Automation.Language.InvokeMemberExpressionAst] }, $true)) {
+                $PropName = $MemberExpr.Member.Extent.Text
+                if ($PropName -notin @('Path', 'ProviderPath', 'Hash', 'Length', 'Count', 'Name', 'FullName')) {
+                    throw "Disallowed property access '$PropName' alongside receipt."
+                }
+            }
+            foreach ($InvokeExpr in $Subtree.FindAll({ param($N) $N -is [Management.Automation.Language.InvokeMemberExpressionAst] }, $true)) {
+                $MemberName = $InvokeExpr.Member.Extent.Text
+                $AllowedMethods = if ($ForStdoutExpression) { @('Contains', 'StartsWith', 'EndsWith', 'Matches', 'IsMatch') } else { @('Contains', 'Substring', 'StartsWith', 'EndsWith', 'Min', 'Max', 'Matches', 'IsMatch') }
+                if ($MemberName -notin $AllowedMethods) {
+                    throw "Disallowed method call '$MemberName' alongside receipt."
+                }
+            }
+            foreach ($InnerCmd in $Subtree.FindAll({ param($N) $N -is [Management.Automation.Language.CommandAst] }, $true)) {
+                if ($InnerCmd.InvocationOperator -ne [Management.Automation.Language.TokenKind]::Unknown) { throw 'Dynamic invocation operator refused.' }
+                $InnerElements = @($InnerCmd.CommandElements)
+                $CmdFirst = $InnerElements[0]
+                if ($CmdFirst -isnot [Management.Automation.Language.StringConstantExpressionAst] -or $CmdFirst.Value -notin $ReadOnlyCommands) {
+                    throw 'Unsupported nested command alongside receipt.'
+                }
+                $InnerName = $CmdFirst.Value
+                if ($ForStdoutExpression -and $InnerName -in @('Get-Content', 'Select-String')) {
+                    throw "Stdout-producing $InnerName alongside receipt refused."
+                }
+                if ($InnerName -in @('Select', 'Select-Object')) {
+                    foreach ($ParamElem in @($InnerElements | Where-Object { $_ -is [Management.Automation.Language.CommandParameterAst] })) {
+                        if ($ParamElem.ParameterName -notin @('First', 'Last', 'Skip')) { throw 'Output-producing selection refused.' }
+                    }
+                }
+                if ($InnerName -in @('ForEach-Object', '%', 'Where-Object', '?')) {
+                    if (@($InnerElements | Where-Object { $_ -is [Management.Automation.Language.CommandParameterAst] }).Count) {
+                        throw "Reflection or parameter binding refused on '$InnerName'."
+                    }
+                    foreach ($PosElem in @($InnerElements | Select-Object -Skip 1)) {
+                        if ($PosElem -is [Management.Automation.Language.ScriptBlockExpressionAst]) { continue }
+                        if ($InnerName -in @('ForEach-Object', '%') -and $PosElem -is [Management.Automation.Language.StringConstantExpressionAst] -and
+                            $PosElem.Value -in @('Count', 'Length', 'Name', 'FullName', 'Hash')) { continue }
+                        throw "Unsupported positional member binding on '$InnerName'."
+                    }
+                }
+                if ($InnerName -in $FileReadCommands) {
+                    $AllowedReadSwitches = if ($InnerName -eq 'Select-String') {
+                        @('Quiet', 'SimpleMatch', 'CaseSensitive', 'NoEmphasis')
+                    }
+                    else {
+                        @('Force', 'Recurse', 'File', 'Directory', 'Raw', 'Quiet', 'SimpleMatch', 'CaseSensitive', 'NoEmphasis')
+                    }
+                    $AllowedReadValueParams = @('Filter', 'Pattern', 'Encoding', 'ErrorAction', 'Depth', 'PathType', 'Algorithm')
+                    $HasExplicitPath = $false
+                    for ($PIdx = 1; $PIdx -lt $InnerElements.Count; $PIdx++) {
+                        $PElem = $InnerElements[$PIdx]
+                        if ($PElem -is [Management.Automation.Language.CommandParameterAst]) {
+                            if ($PElem.ParameterName -in @('Path', 'LiteralPath')) {
+                                $HasExplicitPath = $true
+                                $PNode = if ($PElem.Argument) { $PElem.Argument } else { $PIdx++; $InnerElements[$PIdx] }
+                                $PList = if ($PNode -is [Management.Automation.Language.ArrayLiteralAst]) { @($PNode.Elements | ForEach-Object { & $ValueOf $_ }) } else { @(& $ValueOf $PNode) }
+                                foreach ($SinglePath in $PList) { & $AssertSafeReadPath $SinglePath }
                             }
-                            if ($Name -eq 'Copy-Item') {
-                                $Destination = if ($Options.ContainsKey('Destination')) { $Options.Destination } elseif ($Positionals.Count -eq 2) { $Positionals[1] } else { throw 'An exact copy destination is required.' }
+                            elseif ($PElem.ParameterName -in $AllowedReadSwitches) {
+                                if ($PElem.Argument) { throw "Unexpected argument on switch '$($PElem.ParameterName)'." }
+                            }
+                            elseif ($PElem.ParameterName -in $AllowedReadValueParams) {
+                                if (-not $PElem.Argument) { $PIdx++ }
                             }
                             else {
-                                if ($Options.ContainsKey('ItemType') -and $Options.ItemType -notin @('Directory', 'File')) { throw 'Linked file creation refused.' }
-                                $Destination = if ($Options.ContainsKey('Path')) { $Options.Path } elseif ($Positionals.Count -eq 1) { $Positionals[0] } else { throw 'An exact creation path is required.' }
+                                throw "Unsupported parameter '$($PElem.ParameterName)' on '$InnerName'."
                             }
-                            if ($Destination -match '[*?\[\]]') { throw 'Wildcard write destination refused.' }
-                            $Destination = Resolve-EfficiencyPlainPath -Path $Destination -Base $Root
-                            if (-not (Test-EfficiencyPathWithin $Destination $Root)) { throw 'File operation leaves the workspace.' }
-                            foreach ($Protected in @('.copilot-tracking\squad', '.agents', '.github', 'skills')) {
-                                $ProtectedPath = Join-Path $Root $Protected
-                                if ((Test-EfficiencyPathWithin $Destination $ProtectedPath) -or (Test-EfficiencyPathWithin $ProtectedPath $Destination)) { throw 'File operation changes protected state or helpers.' }
-                            }
+                        }
+                        elseif (-not $HasExplicitPath -and $InnerName -ne 'Select-String') {
+                            $PList = if ($PElem -is [Management.Automation.Language.ArrayLiteralAst]) { @($PElem.Elements | ForEach-Object { & $ValueOf $_ }) } else { @(& $ValueOf $PElem) }
+                            foreach ($SinglePath in $PList) { & $AssertSafeReadPath $SinglePath }
+                            $HasExplicitPath = $true
+                        }
+                    }
+                    $IsPipedReadStage = $InnerCmd.Parent -is [Management.Automation.Language.PipelineAst] -and $InnerCmd.Parent.PipelineElements[0] -ne $InnerCmd
+                    if (-not $HasExplicitPath -and ($InnerName -ne 'Get-ChildItem' -or $IsPipedReadStage)) {
+                        throw "$InnerName requires an explicit -Path or -LiteralPath."
+                    }
+                }
+            }
+        }
+        try {
+            $WriterCalls = [Collections.Generic.List[object]]::new()
+            $WriterStatementIndex = -1
+            $PostWriterCompletionIndex = -1
+            $ImmediateExitMarkerAfterWriter = $false
+            for ($StatementIndex = 0; $StatementIndex -lt $Ast.EndBlock.Statements.Count; $StatementIndex++) {
+                $Statement = $Ast.EndBlock.Statements[$StatementIndex]
+                if ($Statement -is [Management.Automation.Language.AssignmentStatementAst]) {
+                    if ($Statement.Left -isnot [Management.Automation.Language.VariableExpressionAst] -or
+                        $Statement.Left.VariablePath.IsDriveQualified -or
+                        $Statement.Operator -ne [Management.Automation.Language.TokenKind]::Equals) { throw 'Unsupported variable assignment.' }
+                    $VarKey = $Statement.Left.VariablePath.UserPath
+                    & $AssertReadOnlyAst $Statement.Right
+                    $BoundLiteral = $false
+                    if ($Statement.Right -is [Management.Automation.Language.CommandExpressionAst]) {
+                        try {
+                            $EvaluatedVar = & $ValueOf $Statement.Right.Expression
+                            if ($EvaluatedVar -match '[{}]') { throw 'Brace-containing variable value alongside receipt refused.' }
+                            $Variables[$VarKey] = $EvaluatedVar
+                            $null = $HashVars.Remove($VarKey); $null = $TextVars.Remove($VarKey)
+                            $BoundLiteral = $true
+                        }
+                        catch {
+                            if ($_.Exception.Message -match 'Brace-containing') { throw }
+                            $BoundLiteral = $false
+                        }
+                    }
+                    if (-not $BoundLiteral) {
+                        $null = $Variables.Remove($VarKey); $null = $HashVars.Remove($VarKey); $null = $TextVars.Remove($VarKey)
+                        $RightCmds = @($Statement.Right.FindAll({ param($N) $N -is [Management.Automation.Language.CommandAst] }, $true))
+                        if ($RightCmds.Count -eq 1 -and $RightCmds[0].CommandElements[0].Value -eq 'Get-FileHash' -and
+                            $Statement.Right -is [Management.Automation.Language.CommandExpressionAst] -and
+                            $Statement.Right.Expression -is [Management.Automation.Language.MemberExpressionAst] -and
+                            $Statement.Right.Expression.Member.Extent.Text -eq 'Hash') {
+                            $null = $HashVars.Add($VarKey)
+                        }
+                        elseif ($RightCmds.Count -eq 1 -and $RightCmds[0].CommandElements[0].Value -eq 'Get-Content') {
+                            $null = $TextVars.Add($VarKey)
+                        }
                     }
                     continue
                 }
-                $Offset = 0
-                if ([IO.Path]::GetFileNameWithoutExtension($Name) -eq 'pwsh') {
-                    if ($Name -match '[/\\]' -and [IO.Path]::GetFullPath($Name, $Root) -ine (Get-Command pwsh).Source) { throw 'Untrusted PowerShell executable.' }
-                    $Offset = -1
-                    for ($Index = 1; $Index -lt $Elements.Count; $Index++) {
-                        if ($Elements[$Index] -is [Management.Automation.Language.CommandParameterAst] -and $Elements[$Index].ParameterName -eq 'File') { $Offset = $Index + 1; break }
+                if ($Statement -isnot [Management.Automation.Language.PipelineAst]) { throw 'Unsupported shell statement.' }
+                for ($PipeIndex = 0; $PipeIndex -lt $Statement.PipelineElements.Count; $PipeIndex++) {
+                    $Call = $Statement.PipelineElements[$PipeIndex]
+                    if ($Call -is [Management.Automation.Language.CommandExpressionAst]) {
+                        if ($Statement.PipelineElements.Count -ne 1) { throw 'Piped expression statement refused.' }
+                        & $AssertReadOnlyAst $Call -ForStdoutExpression
+                        if ($WriterStatementIndex -ge 0 -and $StatementIndex -eq ($WriterStatementIndex + 1) -and
+                            $Call.Expression -is [Management.Automation.Language.ExpandableStringExpressionAst] -and
+                            $Call.Expression.Extent.Text -match '^"exit[\s=]+\$LASTEXITCODE"$') {
+                            $ImmediateExitMarkerAfterWriter = $true
+                        }
+                        continue
                     }
-                    if ($Offset -lt 0 -or $Offset -ge $Elements.Count) { throw 'Not a script execution.' }
-                    for ($Index = 1; $Index -lt ($Offset - 1); $Index++) {
-                        if ($Elements[$Index] -isnot [Management.Automation.Language.CommandParameterAst] -or
-                            $Elements[$Index].ParameterName -notin @('NoProfile', 'NonInteractive', 'NoLogo') -or
-                            $Elements[$Index].Argument) { throw 'Ambiguous PowerShell invocation.' }
+                    if ($Call -isnot [Management.Automation.Language.CommandAst] -or
+                        $Call.InvocationOperator -ne [Management.Automation.Language.TokenKind]::Unknown) { throw 'Unsupported pipeline element.' }
+                    $Elements = @($Call.CommandElements)
+                    $Name = & $ValueOf $Elements[0]
+                    if ($Name -in $ReadOnlyCommands) {
+                        if ($PipeIndex -eq 0 -and $Name -in $PipelineFilterCommands) {
+                            throw 'Pipeline filter command cannot start a standalone statement alongside a writer.'
+                        }
+                        if ($Name -eq 'Get-Content') {
+                            if ($PipeIndex -ge ($Statement.PipelineElements.Count - 1)) {
+                                throw 'Terminal Get-Content alongside receipt refused.'
+                            }
+                            $NextStage = $Statement.PipelineElements[$PipeIndex + 1]
+                            $NextStageName = if ($NextStage -is [Management.Automation.Language.CommandAst]) { & $ValueOf $NextStage.CommandElements[0] } else { '' }
+                            if ($NextStageName -in @('Measure-Object', 'measure', 'Out-Null')) { }
+                            elseif ($NextStageName -eq 'ConvertFrom-Json') {
+                                $AfterJson = if (($PipeIndex + 2) -lt $Statement.PipelineElements.Count -and $Statement.PipelineElements[$PipeIndex + 2] -is [Management.Automation.Language.CommandAst]) {
+                                    & $ValueOf $Statement.PipelineElements[$PipeIndex + 2].CommandElements[0]
+                                }
+                                else { '' }
+                                if ($AfterJson -ne 'Out-Null') { throw 'Get-Content ConvertFrom-Json must pipe to Out-Null alongside receipt.' }
+                            }
+                            else {
+                                throw 'Get-Content piped to stdout-preserving command alongside receipt refused.'
+                            }
+                        }
+                        & $AssertReadOnlyAst $Call -ForStdoutExpression:($Name -in @('ForEach-Object', '%'))
+                        continue
                     }
-                    $Name = & $ValueOf $Elements[$Offset]
-                }
-                $Script = [IO.Path]::GetFileName($Name)
-                if ($Script -eq 'Get-SquadInitContext.ps1') {
+                    if ($Name -in @('Copy-Item', 'New-Item', 'Set-Content', 'Remove-Item')) {
+                        $Options = @{}; $Positionals = [Collections.Generic.List[string]]::new(); $MultiTargets = [Collections.Generic.List[string]]::new()
+                        for ($Index = 1; $Index -lt $Elements.Count; $Index++) {
+                            $Element = $Elements[$Index]
+                            if ($Element -is [Management.Automation.Language.CommandParameterAst]) {
+                                $Key = $Element.ParameterName
+                                if ($Key -in @('Force', 'NoNewline') -or ($Name -ne 'Remove-Item' -and $Key -eq 'Recurse')) { continue }
+                                if ($Key -in @('ErrorAction', 'Encoding')) {
+                                    if (-not $Element.Argument) { $Index++ }
+                                    continue
+                                }
+                                if ($Key -notin @('Path', 'LiteralPath', 'Destination', 'ItemType', 'Value') -or $Options.ContainsKey($Key)) { throw 'Unsupported file operation.' }
+                                $ArgNode = if ($Element.Argument) { $Element.Argument } else { $Index++; $Elements[$Index] }
+                                if ($Name -eq 'Set-Content' -and $Key -eq 'Value') {
+                                    & $AssertReadOnlyAst $ArgNode
+                                    $Options[$Key] = $ArgNode.Extent.Text
+                                }
+                                elseif ($ArgNode -is [Management.Automation.Language.ArrayLiteralAst] -and $Key -in @('Path', 'LiteralPath') -and $Name -in @('New-Item', 'Remove-Item')) {
+                                    foreach ($ArrElem in $ArgNode.Elements) { $MultiTargets.Add((& $ValueOf $ArrElem)) }
+                                    $Options[$Key] = $MultiTargets[0]
+                                }
+                                else { $Options[$Key] = & $ValueOf $ArgNode }
+                            }
+                            elseif ($Element -is [Management.Automation.Language.ArrayLiteralAst] -and $Name -in @('New-Item', 'Remove-Item')) {
+                                foreach ($ArrElem in $Element.Elements) { $MultiTargets.Add((& $ValueOf $ArrElem)) }
+                            }
+                            elseif ($Name -eq 'Set-Content' -and ($Positionals.Count -ge 1 -or $Options.ContainsKey('Path') -or $Options.ContainsKey('LiteralPath'))) {
+                                & $AssertReadOnlyAst $Element
+                                $Positionals.Add($Element.Extent.Text)
+                            }
+                            else { $Positionals.Add((& $ValueOf $Element)) }
+                        }
+                        if ($Name -eq 'Copy-Item') {
+                            $SourceFile = if ($Options.ContainsKey('LiteralPath')) { $Options.LiteralPath } elseif ($Options.ContainsKey('Path')) { $Options.Path } elseif ($Positionals.Count -ge 1) { $Positionals[0] } else { throw 'An exact copy source is required.' }
+                            & $AssertSafeReadPath $SourceFile
+                            $Destination = if ($Options.ContainsKey('Destination')) { $Options.Destination } elseif ($Positionals.Count -eq 2) { $Positionals[1] } else { throw 'An exact copy destination is required.' }
+                            & $AssertSafeDestination $Destination $false
+                        }
+                        elseif ($Name -eq 'New-Item') {
+                            if ($Options.ContainsKey('ItemType') -and $Options.ItemType -notin @('Directory', 'File')) { throw 'Linked file creation refused.' }
+                            $Targets = if ($MultiTargets.Count) { @($MultiTargets) } elseif ($Options.ContainsKey('Path')) { @($Options.Path) } elseif ($Options.ContainsKey('LiteralPath')) { @($Options.LiteralPath) } elseif ($Positionals.Count -eq 1) { @($Positionals[0]) } else { throw 'An exact creation path is required.' }
+                            foreach ($Target in $Targets) { & $AssertSafeDestination $Target $false }
+                        }
+                        elseif ($Name -eq 'Set-Content') {
+                            $Destination = if ($Options.ContainsKey('LiteralPath')) { $Options.LiteralPath } elseif ($Options.ContainsKey('Path')) { $Options.Path } elseif ($Positionals.Count -ge 1) { $Positionals[0] } else { throw 'An exact write path is required.' }
+                            & $AssertSafeDestination $Destination $false
+                        }
+                        else {
+                            $Targets = if ($MultiTargets.Count) { @($MultiTargets) } elseif ($Options.ContainsKey('LiteralPath')) { @($Options.LiteralPath) } elseif ($Options.ContainsKey('Path')) { @($Options.Path) } elseif ($Positionals.Count -ge 1) { @($Positionals) } else { throw 'An exact removal path is required.' }
+                            foreach ($Target in $Targets) { & $AssertSafeDestination $Target $true }
+                        }
+                        continue
+                    }
+                    $Offset = 0
+                    if ([IO.Path]::GetFileNameWithoutExtension($Name) -eq 'pwsh') {
+                        if ($Name -match '[/\\]') {
+                            $ResolvedPwsh = [IO.Path]::GetFullPath($Name, $Root)
+                            if (@($TrustedPwsh | Where-Object { $_ -ieq $ResolvedPwsh }).Count -eq 0) { throw 'Untrusted PowerShell executable.' }
+                        }
+                        $Offset = -1
+                        for ($Index = 1; $Index -lt $Elements.Count; $Index++) {
+                            if ($Elements[$Index] -is [Management.Automation.Language.CommandParameterAst] -and $Elements[$Index].ParameterName -eq 'File') { $Offset = $Index + 1; break }
+                        }
+                        if ($Offset -lt 0 -or $Offset -ge $Elements.Count) { throw 'Not a script execution.' }
+                        for ($Index = 1; $Index -lt ($Offset - 1); $Index++) {
+                            if ($Elements[$Index] -isnot [Management.Automation.Language.CommandParameterAst] -or
+                                $Elements[$Index].ParameterName -notin @('NoProfile', 'NonInteractive', 'NoLogo') -or
+                                $Elements[$Index].Argument) { throw 'Ambiguous PowerShell invocation.' }
+                        }
+                        $Name = & $ValueOf $Elements[$Offset]
+                    }
+                    $Script = [IO.Path]::GetFileName($Name)
+                    if ($Script -in @('Get-SquadInitContext.ps1', 'Test-SquadTurnCompletion.ps1', 'Get-SquadDispatchBrief.ps1')) {
+                        if ($WriterStatementIndex -ge 0) {
+                            if ($Script -ne 'Test-SquadTurnCompletion.ps1' -or -not $ImmediateExitMarkerAfterWriter -or $PostWriterCompletionIndex -ge 0) {
+                                throw 'Trailing process execution after writer masks writer exit status.'
+                            }
+                            $PostWriterCompletionIndex = $StatementIndex
+                        }
+                        $null = Resolve-EfficiencySquadScriptCore -Name $Script -SourceRoot $SourceRoot -InstallRoot $InstallRoot -Workspace $Root -ExecutionPath ([IO.Path]::GetFullPath($Name, $Root)) -IntegrityContext $IntegrityContext
+                        foreach ($Element in @($Elements | Select-Object -Skip ($Offset + 1))) {
+                            if ($Element -isnot [Management.Automation.Language.CommandParameterAst]) { $null = & $ValueOf $Element }
+                            elseif ($Element.Argument) { $null = & $ValueOf $Element.Argument }
+                        }
+                        continue
+                    }
+                    if ($Script -notin @('Initialize-Squad.ps1', 'Write-SquadHandoff.ps1')) { throw 'Unsupported command alongside receipt.' }
                     $null = Resolve-EfficiencySquadScriptCore -Name $Script -SourceRoot $SourceRoot -InstallRoot $InstallRoot -Workspace $Root -ExecutionPath ([IO.Path]::GetFullPath($Name, $Root)) -IntegrityContext $IntegrityContext
-                    foreach ($Element in @($Elements | Select-Object -Skip ($Offset + 1))) {
-                        if ($Element -isnot [Management.Automation.Language.CommandParameterAst]) { $null = & $ValueOf $Element }
-                        elseif ($Element.Argument) { $null = & $ValueOf $Element.Argument }
+                    $Bound = @{}
+                    for ($Index = $Offset + 1; $Index -lt $Elements.Count; $Index++) {
+                        $Parameter = $Elements[$Index]
+                        if ($Parameter -isnot [Management.Automation.Language.CommandParameterAst] -or $Parameter.Argument -or $Bound.ContainsKey($Parameter.ParameterName)) { throw 'Ambiguous writer argument.' }
+                        $Key = $Parameter.ParameterName
+                        $Allowed = if ($Script -eq 'Initialize-Squad.ps1') { @('RepoRoot', 'AgentRepoRoot', 'PayloadPath', 'Direct') }
+                        else { @('SquadRoot', 'PayloadPath', 'RunId', 'Agent', 'Request', 'Deliverable', 'Outcome', 'SelectionCue', 'Mode', 'Turn', 'Since', 'SessionLog', 'Quiet') }
+                        if ($Key -notin $Allowed) { throw 'Unsupported writer parameter.' }
+                        if ($Key -in @('Direct', 'Quiet')) { $Bound[$Key] = $true }
+                        else { $Index++; $Bound[$Key] = & $ValueOf $Elements[$Index] }
                     }
-                    continue
+                    $WriterCalls.Add(@{ script = $Script; parameters = $Bound })
+                    $WriterStatementIndex = $StatementIndex
                 }
-                if ($Script -notin @('Initialize-Squad.ps1', 'Write-SquadHandoff.ps1')) { throw 'Unsupported command alongside receipt.' }
-                $null = Resolve-EfficiencySquadScriptCore -Name $Script -SourceRoot $SourceRoot -InstallRoot $InstallRoot -Workspace $Root -ExecutionPath ([IO.Path]::GetFullPath($Name, $Root)) -IntegrityContext $IntegrityContext
-                $Bound = @{}
-                for ($Index = $Offset + 1; $Index -lt $Elements.Count; $Index++) {
-                    $Parameter = $Elements[$Index]
-                    if ($Parameter -isnot [Management.Automation.Language.CommandParameterAst] -or $Parameter.Argument -or $Bound.ContainsKey($Parameter.ParameterName)) { throw 'Ambiguous writer argument.' }
-                    $Key = $Parameter.ParameterName
-                    $Allowed = if ($Script -eq 'Initialize-Squad.ps1') { @('RepoRoot', 'AgentRepoRoot', 'PayloadPath', 'Direct') }
-                    else { @('SquadRoot', 'PayloadPath', 'RunId', 'Agent', 'Request', 'Deliverable', 'Outcome', 'SelectionCue', 'Mode', 'Turn', 'Since', 'SessionLog', 'Quiet') }
-                    if ($Key -notin $Allowed) { throw 'Unsupported writer parameter.' }
-                    if ($Key -in @('Direct', 'Quiet')) { $Bound[$Key] = $true }
-                    else { $Index++; $Bound[$Key] = & $ValueOf $Elements[$Index] }
-                }
-                $WriterCalls.Add(@{ script = $Script; parameters = $Bound })
             }
             if ($WriterCalls.Count -ne 1) { continue }
-            $Receipts = @(
-                foreach ($OutputLine in ([string]$Data.result['content'] -split '\r?\n')) {
-                    try {
-                        $Receipt = $OutputLine | ConvertFrom-Json -AsHashtable -ErrorAction Stop
-                        if ($Receipt -is [Collections.IDictionary] -and $Receipt.Contains('status') -and $Receipt.Contains('turn')) { $Receipt }
+            $OutputLines = @($ResultText -split '\r?\n')
+            $Receipts = [Collections.Generic.List[object]]::new()
+            $ReceiptLineIndices = [Collections.Generic.List[int]]::new()
+            for ($LineIdx = 0; $LineIdx -lt $OutputLines.Count; $LineIdx++) {
+                try {
+                    $Receipt = $OutputLines[$LineIdx] | ConvertFrom-Json -AsHashtable -ErrorAction Stop
+                    if ($Receipt -is [Collections.IDictionary] -and $Receipt.Contains('status') -and $Receipt.Contains('turn')) {
+                        $Receipts.Add($Receipt)
+                        $ReceiptLineIndices.Add($LineIdx)
                     }
-                    catch { }
                 }
-            )
+                catch { }
+            }
             if ($Receipts.Count -ne 1) { continue }
+            if ($PostWriterCompletionIndex -ge 0 -or $ShellExitCode -ne 0) {
+                $NextLineIdx = $ReceiptLineIndices[0] + 1
+                $VerifiedImmediateZero = $PostWriterCompletionIndex -eq ($Ast.EndBlock.Statements.Count - 1) -and
+                    $ImmediateExitMarkerAfterWriter -and
+                    $NextLineIdx -lt $OutputLines.Count -and
+                    $OutputLines[$NextLineIdx] -match '^exit[\s=]+0$'
+                if (-not $VerifiedImmediateZero) { continue }
+            }
             $Executions.Add([pscustomobject]@{
                 script = $WriterCalls[0].script; parameters = $WriterCalls[0].parameters; receipt = $Receipts[0]
                 toolCallId = [string]$Data.toolCallId; hostTurnId = [string]$Data['turnId']; actorId = [string]$Start['agentId']
@@ -1116,7 +1449,7 @@ function Test-EfficiencyBookkeeping {
         $Run = [regex]::Match($Ledger, '(?m)^# Squad Consumption Ledger \(Run: (?<id>[^)\r\n]+)\)')
         if (-not $Run.Success) { return $false }
         $Records = [Collections.Generic.List[object]]::new()
-        $Latest = $null; $LatestActive = @()
+        $Latest = $null; $LatestActive = @(); $LatestRunId = ''
         foreach ($Execution in $Evidence.executions) {
             $RecordCountBefore = $Records.Count
             try {
@@ -1135,14 +1468,21 @@ function Test-EfficiencyBookkeeping {
                 $Receipt.turn -lt 1 -or $Receipt.turn -gt $State.turn) { continue }
             $Payload = $null
             if ($Bound.ContainsKey('PayloadPath')) {
-                $Payload = Get-Content -LiteralPath ([IO.Path]::GetFullPath($Bound.PayloadPath, $Root)) -Raw | ConvertFrom-Json -AsHashtable
+                $PayloadCandidate = [IO.Path]::GetFullPath($Bound.PayloadPath, $Root)
+                if (Test-Path -LiteralPath $PayloadCandidate -PathType Leaf) {
+                    $Payload = Get-Content -LiteralPath $PayloadCandidate -Raw | ConvertFrom-Json -AsHashtable
+                }
+                elseif ($Execution.script -ne 'Initialize-Squad.ps1') { continue }
             }
             if ($Execution.script -eq 'Initialize-Squad.ps1') {
-                if ($Stage -ne 'init' -or $null -eq $Payload -or $Receipt['status'] -ne 'PASS' -or
+                if ($Stage -ne 'init' -or $Receipt['status'] -ne 'PASS' -or
                     $Receipt['verified'] -ne $true -or $Receipt['rosterCheck'] -ne 'PASS' -or $Receipt.turn -ne 1 -or
                     [IO.Path]::GetFullPath([string]$Receipt['squadRoot'], $Root) -ine $Squad -or
-                    [IO.Path]::GetFullPath([string]$Payload.squadRoot, $Root) -ine $Squad -or
-                    ($Bound.ContainsKey('RepoRoot') -and [IO.Path]::GetFullPath([string]$Bound['RepoRoot'], $Root) -ine $Root) -or $Payload.runId -cne $Run.Groups['id'].Value) { continue }
+                    ($Bound.ContainsKey('RepoRoot') -and [IO.Path]::GetFullPath([string]$Bound['RepoRoot'], $Root) -ine $Root)) { continue }
+                if ($null -ne $Payload) {
+                    if ([IO.Path]::GetFullPath([string]$Payload.squadRoot, $Root) -ine $Squad -or
+                        $Payload.runId -cne $Run.Groups['id'].Value) { continue }
+                }
                 $Actors = @(if ($Bound.ContainsKey('Direct')) { 'coordinator' } else { 'coordinator'; 'scribe' })
                 if (($Receipt['actors'] -join ',') -cne ($Actors -join ',') -or $Receipt['historyEntries'] -ne $Actors.Count) { continue }
                 if (('scribe' -in $Actors) -ne $ScribeActor) { continue }
@@ -1150,10 +1490,15 @@ function Test-EfficiencyBookkeeping {
                 foreach ($Actor in $Actors) {
                     if ($History -notmatch ('(?ms)^### [^\r\n]+ Initialization ' + $Actor + '\r?\n(?:(?!^### ).)*^\* Turn: 1\r?$')) { throw 'Missing actual Init actor history.' }
                 }
-                foreach ($Row in $Payload.roster) {
-                    if ((Get-Content -LiteralPath (Join-Path $Squad 'team.md') -Raw) -notmatch ('(?m)^\|[^\r\n]*\b' + [regex]::Escape($Row['Agent Name (Primary)']) + '\s*\|')) { throw 'Init roster no longer matches.' }
+                $TeamContent = Get-Content -LiteralPath (Join-Path $Squad 'team.md') -Raw
+                if ($null -ne $Payload) {
+                    foreach ($Row in $Payload.roster) {
+                        if ($TeamContent -notmatch ('(?m)^\|[^\r\n]*\b' + [regex]::Escape($Row['Agent Name (Primary)']) + '\s*\|')) { throw 'Init roster no longer matches.' }
+                    }
                 }
+                elseif ($TeamContent -notmatch '(?m)^\|\s*scribe\s*\|') { throw 'Init team.md lacks canonical scribe row.' }
                 $LatestActive = @()
+                $LatestRunId = $Run.Groups['id'].Value
             }
             else {
                 if ($Stage -eq 'init' -or $Receipt['status'] -ne 'written' -or $Receipt['dispatchEntries'] -lt 1) { continue }
@@ -1166,7 +1511,7 @@ function Test-EfficiencyBookkeeping {
                         stateAdvance = @{ activeRoles = @($Bound['Agent']) }
                     }
                 }
-                if ($Payload.runId -cne $Run.Groups['id'].Value -or $Payload.historyRecords.Count -ne $Receipt.dispatchEntries -or
+                if ([string]::IsNullOrWhiteSpace([string]$Payload.runId) -or $Payload.historyRecords.Count -ne $Receipt.dispatchEntries -or
                     ($Payload.Contains('turn') -and $Payload.turn -ne $Receipt.turn)) { continue }
                 foreach ($Record in $Payload.historyRecords) {
                     if ($null -eq $Metrics -or -not $Metrics.dispatches.Contains($Record.agent) -or $Record.agent -eq 'Squad Scribe') { throw 'Missing real worker dispatch.' }
@@ -1180,6 +1525,7 @@ function Test-EfficiencyBookkeeping {
                     $Records.Add($Copy)
                 }
                 $LatestActive = @($Payload.stateAdvance.activeRoles)
+                $LatestRunId = [string]$Payload.runId
             }
             $Latest = $Execution
             }
@@ -1188,7 +1534,7 @@ function Test-EfficiencyBookkeeping {
                 continue
             }
         }
-        if ($null -eq $Latest -or $Latest.receipt.turn -ne $State.turn) { return $false }
+        if ($null -eq $Latest -or $Latest.receipt.turn -ne $State.turn -or $LatestRunId -cne $Run.Groups['id'].Value) { return $false }
         $Updated = [DateTimeOffset]$State.updated
         if ($Updated -lt ([DateTimeOffset]$Latest.startedAt).AddMinutes(-5) -or
             $Updated -gt ([DateTimeOffset]$Latest.completedAt).AddMinutes(5)) { return $false }
@@ -1305,7 +1651,7 @@ function Test-EfficiencyWorkflow {
         $Arguments = @('-NoProfile', '-File', $Checker, '-SquadRoot', $Squad, '-SourceRoot', $SourceRoot)
         if ($InstallRoot) { $Arguments += @('-InstallRoot', $InstallRoot) }
         if ($ExpectedSessionId) { $Arguments += @('-ExpectedSessionId', $ExpectedSessionId) }
-        $Result = Invoke-EfficiencyProcess -FilePath (Get-Command pwsh).Source -Arguments $Arguments -WorkingDirectory $Root -OutputPath $Temp -TimeoutSeconds 60
+        $Result = Invoke-EfficiencyProcess -FilePath (Get-Command pwsh).Source -Arguments $Arguments -WorkingDirectory $Root -OutputPath $Temp -TimeoutSeconds 120
         $Checks['stateVerifier'] = ($Result.exitCode -eq 0 -and $Result.stopCause -eq 'none')
     }
     catch { $Checks['stateVerifier'] = $false }
