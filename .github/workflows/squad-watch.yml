@@ -1026,6 +1026,7 @@ jobs:
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: '22'
+          package-manager-cache: false
 
       - name: Install pinned GitHub Copilot CLI
         if: steps.prep.outputs.authorized == 'true' && steps.prep.outputs.suppressInterpret != 'true'
@@ -1035,6 +1036,7 @@ jobs:
           # Haiku 5.5 subagent dispatch was smoke-tested with 1.0.106; 1.0.78
           # predates its CLI support and produced a thinking-mode API error.
           COPILOT_CLI_VERSION: '1.0.106'
+        # zizmor: ignore[adhoc-packages] - the CLI ships only via npm and has no lockfile to install from; the exact pin above is the mitigation.
         run: npm install -g "@github/copilot@${COPILOT_CLI_VERSION}"
 
       - name: Create working branch

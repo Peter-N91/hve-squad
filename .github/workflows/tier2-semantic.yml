@@ -146,7 +146,7 @@ jobs:
       - name: Install pinned GitHub Copilot CLI
         if: ${{ inputs.judge-answer }}
         env:
-          COPILOT_CLI_VERSION: '1.0.78'
+          COPILOT_CLI_VERSION: '1.0.106'
         # zizmor: ignore[adhoc-packages] - the CLI ships only via npm and has no lockfile to install from; the exact pin above is the mitigation.
         run: npm install -g "@github/copilot@${COPILOT_CLI_VERSION}"
 

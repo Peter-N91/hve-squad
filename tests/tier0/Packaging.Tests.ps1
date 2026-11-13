@@ -832,3 +832,302 @@ print(json.dumps(items))
         $script:Tier0Runner | Should -Match 'WatchMode\.Tests\.ps1'
     }
 }
+
+Describe 'CI-06 Workflow supply-chain pinning and template SDL hygiene' {
+    BeforeAll {
+        $script:SourceRootCi06 = (Resolve-Path -LiteralPath $SourceRoot).Path
+        $script:LiveWorkflowPaths = @(
+            Get-ChildItem -LiteralPath (Join-Path $script:SourceRootCi06 '.github/workflows') -File -Filter '*.yml' |
+                Sort-Object FullName |
+                ForEach-Object { $_.FullName }
+        )
+        $script:TemplateWorkflowPaths = @(
+            Get-ChildItem -LiteralPath (Join-Path $script:SourceRootCi06 'squad-src') -Recurse -File -Filter '*.workflow.yml' |
+                Sort-Object FullName |
+                ForEach-Object { $_.FullName }
+        )
+        $script:AllWorkflowPaths = @($script:LiveWorkflowPaths + $script:TemplateWorkflowPaths)
+    }
+
+    It 'CI-06 pins every external uses reference to a 40-char SHA with a version tag comment and sets persist-credentials false on every checkout' {
+        $python = Get-Command python -ErrorAction Stop
+        $inspector = @'
+import json, re, sys, yaml
+from pathlib import Path
+
+uses_rows = []
+checkout_rows = []
+uses_line_re = re.compile(r"^\s*(?:-\s*)?uses:\s*(.+?)\s*$")
+pinned_line_re = re.compile(r"^[^@\s]+@[0-9a-f]{40}\s+#\s*v\d+\.\d+\.\d+\b")
+
+for raw_path in sys.argv[1:]:
+    p = Path(raw_path)
+    text = p.read_text(encoding="utf-8")
+    for lineno, line in enumerate(text.splitlines(), 1):
+        m = uses_line_re.match(line)
+        if not m:
+            continue
+        target = m.group(1)
+        if target.startswith("./"):
+            continue
+        uses_rows.append({
+            "file": p.as_posix(),
+            "line": lineno,
+            "raw": target,
+            "pinnedWithTagComment": bool(pinned_line_re.match(target)),
+        })
+    doc = yaml.safe_load(text) or {}
+    for job_name, job in (doc.get("jobs") or {}).items():
+        if not isinstance(job, dict):
+            continue
+        for idx, step in enumerate(job.get("steps") or []):
+            if not isinstance(step, dict):
+                continue
+            u = str(step.get("uses") or "")
+            if u.startswith("actions/checkout"):
+                w = step.get("with") or {}
+                checkout_rows.append({
+                    "file": p.as_posix(),
+                    "job": str(job_name),
+                    "step": str(step.get("name") or f"step-{idx}"),
+                    "persist": w.get("persist-credentials"),
+                })
+
+print(json.dumps({"uses": uses_rows, "checkouts": checkout_rows}))
+'@
+        $json = & $python.Source -c $inspector @script:AllWorkflowPaths
+        $LASTEXITCODE | Should -Be 0 -Because ($json -join "`n")
+        $report = $json | ConvertFrom-Json
+        @($report.uses).Count | Should -BeGreaterThan 20
+        @($report.checkouts).Count | Should -BeGreaterThan 15
+        foreach ($row in @($report.uses)) {
+            $row.pinnedWithTagComment | Should -BeTrue -Because "$($row.file):$($row.line) '$($row.raw)' must pin a 40-char SHA with a '# vX.Y.Z' comment"
+        }
+        foreach ($checkout in @($report.checkouts)) {
+            $checkout.persist | Should -BeFalse -Because "$($checkout.file) job '$($checkout.job)' checkout '$($checkout.step)' must set persist-credentials: false"
+        }
+    }
+
+    It 'CI-06 aligns COPILOT_CLI_VERSION, adhoc-packages rationale, and setup-node cache hardening across workflows' {
+        $cliWorkflows = @(
+            '.github/workflows/squad-watch.yml'
+            'squad-src/.github/skills/squad/squad-watch.workflow.yml'
+            '.github/workflows/tier1-behavior.yml'
+            '.github/workflows/tier2-semantic.yml'
+        )
+        $versions = [System.Collections.Generic.List[string]]::new()
+        foreach ($rel in $cliWorkflows) {
+            $content = Get-Content -LiteralPath (Join-Path $script:SourceRootCi06 $rel) -Raw
+            $match = [regex]::Match($content, "(?m)^\s*COPILOT_CLI_VERSION:\s*'(\d+\.\d+\.\d+)'\s*$")
+            $match.Success | Should -BeTrue -Because "$rel must pin COPILOT_CLI_VERSION"
+            [version]$match.Groups[1].Value | Should -BeGreaterOrEqual ([version]'1.0.106') -Because "$rel COPILOT_CLI_VERSION must be >= 1.0.106"
+            $versions.Add($match.Groups[1].Value)
+            $content | Should -Match '#\s*zizmor:\s*ignore\[adhoc-packages\]' -Because "$rel must document the pinned npm CLI exception for Zizmor"
+        }
+        @($versions | Select-Object -Unique).Count | Should -Be 1 -Because 'all Copilot CLI workflows must pin the same CLI version'
+
+        foreach ($watchRel in @('.github/workflows/squad-watch.yml', 'squad-src/.github/skills/squad/squad-watch.workflow.yml')) {
+            $watchContent = Get-Content -LiteralPath (Join-Path $script:SourceRootCi06 $watchRel) -Raw
+            $watchContent | Should -Match 'package-manager-cache:\s*false' -Because "$watchRel must disable setup-node package-manager caching"
+        }
+    }
+
+    It 'CI-06 enforces non-write top-level permissions, explicit job permissions, and env-bound run blocks across all shipped workflow templates' {
+        $python = Get-Command python -ErrorAction Stop
+        $inspector = @'
+import json, re, sys, yaml
+from pathlib import Path
+
+expr_re = re.compile(r"\$\{\{.*?\}\}", re.DOTALL)
+rows = []
+for raw_path in sys.argv[1:]:
+    p = Path(raw_path)
+    doc = yaml.safe_load(p.read_text(encoding="utf-8")) or {}
+    top_perm = doc.get("permissions")
+    top_write = False
+    if isinstance(top_perm, dict):
+        top_write = any(str(v) == "write" for v in top_perm.values())
+    elif isinstance(top_perm, str):
+        top_write = "write" in top_perm
+    missing_job_perm = []
+    run_interpolations = []
+    for job_name, job in (doc.get("jobs") or {}).items():
+        if not isinstance(job, dict):
+            continue
+        if not isinstance(job.get("permissions"), dict) or len(job.get("permissions")) == 0:
+            missing_job_perm.append(str(job_name))
+        for idx, step in enumerate(job.get("steps") or []):
+            if not isinstance(step, dict):
+                continue
+            run_body = step.get("run")
+            if isinstance(run_body, str) and expr_re.search(run_body):
+                run_interpolations.append(f"{job_name}:{step.get('name') or idx}")
+    rows.append({
+        "file": p.name,
+        "hasTopPermissions": top_perm is not None,
+        "topWrite": top_write,
+        "missingJobPerm": missing_job_perm,
+        "runInterpolations": run_interpolations,
+    })
+
+print(json.dumps(rows))
+'@
+        $json = & $python.Source -c $inspector @script:TemplateWorkflowPaths
+        $LASTEXITCODE | Should -Be 0 -Because ($json -join "`n")
+        $rows = @($json | ConvertFrom-Json)
+        $rows.Count | Should -Be 5
+        foreach ($row in $rows) {
+            $row.hasTopPermissions | Should -BeTrue -Because "$($row.file) must declare workflow-level permissions"
+            $row.topWrite | Should -BeFalse -Because "$($row.file) must not grant write permissions at workflow scope"
+            @($row.missingJobPerm) | Should -BeNullOrEmpty -Because "$($row.file) must declare explicit permissions on every job"
+            @($row.runInterpolations) | Should -BeNullOrEmpty -Because "$($row.file) must pass GitHub expressions via env: rather than interpolating inside run:"
+        }
+    }
+
+    It 'CI-06 hardens github-approval-watcher.workflow.yml permissions, authorization markers, and /changes note sanitization' {
+        $python = Get-Command python -ErrorAction Stop
+        $node = Get-Command node -ErrorAction Stop
+        $watcherPath = Join-Path $script:SourceRootCi06 'squad-src/.github/skills/squad/github-approval-watcher.workflow.yml'
+        $extractor = @'
+import json, sys, yaml
+from pathlib import Path
+doc = yaml.safe_load(Path(sys.argv[1]).read_text(encoding="utf-8"))
+job = doc["jobs"]["relay-approval"]
+steps = job["steps"]
+decide = next(s for s in steps if s.get("id") == "decide")
+summary = next(s for s in steps if s.get("name") == "Decision summary")
+print(json.dumps({
+    "topPermKeys": list((doc.get("permissions") or {}).keys()),
+    "jobIf": str(job.get("if") or ""),
+    "jobPerm": job.get("permissions") or {},
+    "script": decide["with"]["script"],
+    "summaryIf": str(summary.get("if") or ""),
+    "summaryEnvKeys": sorted(list((summary.get("env") or {}).keys())),
+}))
+'@
+        $json = & $python.Source -c $extractor $watcherPath
+        $LASTEXITCODE | Should -Be 0 -Because ($json -join "`n")
+        $meta = $json | ConvertFrom-Json
+        @($meta.topPermKeys).Count | Should -Be 0 -Because 'workflow-level permissions must be empty ({})'
+        $meta.jobIf | Should -Match '!github\.event\.issue\.pull_request'
+        $meta.jobPerm.issues | Should -Be 'write'
+        @($meta.jobPerm.PSObject.Properties.Name) | Should -HaveCount 1 -Because 'relay-approval needs only issues: write'
+        $meta.summaryIf | Should -Match 'ignored-unauthorized'
+        @($meta.summaryEnvKeys) | Should -Be @('ACTOR', 'DECISION', 'ISSUE')
+
+        $dir = Join-Path $TestDrive ('approval-watcher-' + [guid]::NewGuid().ToString('n'))
+        New-Item -ItemType Directory -Path $dir | Out-Null
+        $scriptPath = Join-Path $dir 'decide.js'
+        $driverPath = Join-Path $dir 'driver.js'
+        Set-Content -LiteralPath $scriptPath -Value $meta.script -Encoding utf8
+        $driver = @'
+const fs = require('fs');
+const code = fs.readFileSync(process.argv[2], 'utf8');
+const fn = new Function('context', 'github', 'core', `return (async () => {\n${code}\n})();`);
+
+async function runCase(c) {
+  const outputs = {};
+  const comments = [];
+  const core = {
+    info: () => {},
+    setOutput: (k, v) => { outputs[k] = v; },
+  };
+  const github = {
+    rest: {
+      repos: {
+        getCollaboratorPermissionLevel: async () => ({ data: { permission: c.perm || 'read' } }),
+      },
+      issues: {
+        createComment: async (req) => { comments.push(req.body); },
+      },
+    },
+  };
+  await fn(c.context, github, core);
+  return { name: c.name, outputs, comments };
+}
+
+(async () => {
+  const cases = [
+    {
+      name: 'rejects pull request comments',
+      perm: 'write',
+      context: {
+        eventName: 'issue_comment',
+        actor: 'maintainer',
+        repo: { owner: 'org', repo: 'app' },
+        payload: {
+          issue: { number: 12, body: 'Approver: @maintainer', pull_request: { url: 'https://api.github.com/pulls/12' } },
+          comment: { body: '/approve' },
+        },
+      },
+    },
+    {
+      name: 'ignores self-relayed marker comment',
+      perm: 'write',
+      context: {
+        eventName: 'issue_comment',
+        actor: 'maintainer',
+        repo: { owner: 'org', repo: 'app' },
+        payload: {
+          issue: { number: 12, body: 'Approver: @maintainer' },
+          comment: { body: '<!-- squad-approval-relay -->\n/approve' },
+        },
+      },
+    },
+    {
+      name: 'rejects mid-sentence Approver spoof from read-only user',
+      perm: 'read',
+      context: {
+        eventName: 'issue_comment',
+        actor: 'mallory',
+        repo: { owner: 'org', repo: 'app' },
+        payload: {
+          issue: { number: 12, body: 'Context paragraph mentioning Approver: @mallory inline only.\nApprover: @alice' },
+          comment: { body: '/approve' },
+        },
+      },
+    },
+    {
+      name: 'sanitizes /changes note newlines backticks angle brackets mentions and issue refs',
+      perm: 'read',
+      context: {
+        eventName: 'issue_comment',
+        actor: 'Alice',
+        repo: { owner: 'org', repo: 'app' },
+        payload: {
+          issue: { number: 42, body: '- Approver: @alice\nTopic: deploy' },
+          comment: { body: '/changes: Fix `auth`\n<script>alert(1)</script> ping @sec-team Closes #99' },
+        },
+      },
+    },
+  ];
+  const results = [];
+  for (const c of cases) {
+    results.push(await runCase(c));
+  }
+  console.log(JSON.stringify(results));
+})();
+'@
+        Set-Content -LiteralPath $driverPath -Value $driver -Encoding utf8
+        $out = & $node.Source $driverPath $scriptPath
+        $LASTEXITCODE | Should -Be 0 -Because ($out -join "`n")
+        $results = @($out | ConvertFrom-Json)
+
+        $results[0].outputs.decision | Should -Be 'none'
+        @($results[0].comments).Count | Should -Be 0
+
+        $results[1].outputs.decision | Should -Be 'none'
+        @($results[1].comments).Count | Should -Be 0
+
+        $results[2].outputs.decision | Should -Be 'ignored-unauthorized'
+        @($results[2].comments).Count | Should -Be 0
+
+        $results[3].outputs.decision | Should -Be 'changes-requested'
+        $results[3].outputs.issue | Should -Be '42'
+        $results[3].outputs.actor | Should -Be 'Alice'
+        $results[3].outputs.note | Should -Be "Fix 'auth' scriptalert(1)/script ping @sec-team Closes #99"
+        $results[3].outputs.note | Should -Not -Match '[\r\n`<>]'
+        @($results[3].comments).Count | Should -Be 1
+        $results[3].comments[0] | Should -Match ([regex]::Escape("Note: ``Fix 'auth' scriptalert(1)/script ping @sec-team Closes #99``"))
+    }
+}
