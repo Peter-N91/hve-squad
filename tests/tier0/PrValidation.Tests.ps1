@@ -308,3 +308,52 @@ print(json.dumps({
         }
     }
 }
+
+Describe 'CI-09 First-party source files carry Microsoft MIT copyright headers' {
+    BeforeAll {
+        $script:HeaderAuditScript = Join-Path $SourceRoot 'scripts/Test-SourceHeaders.ps1'
+        $script:PrValidationCi09 = Get-Content -LiteralPath (Join-Path $SourceRoot '.github/workflows/pr-validation.yml') -Raw
+    }
+
+    It 'runs Test-SourceHeaders.ps1 in pr-validation.yml on every pull request' {
+        $step = Get-WorkflowStepBlock -Body $script:PrValidationCi09 -Name 'Verify Microsoft copyright headers'
+        $step | Should -Match 'shell:\s*pwsh'
+        $step | Should -Match '\./scripts/Test-SourceHeaders\.ps1'
+        $step | Should -Not -Match '(?m)^\s*if:'
+    }
+
+    It 'passes Test-SourceHeaders.ps1 across every eligible repository file' {
+        $output = & $script:HeaderAuditScript -RepoRoot $SourceRoot 2>&1 | Out-String
+        $output | Should -Match 'Eligible=(?<n>\d+) Headed=\k<n>' -Because $output
+    }
+
+    It 'rejects unheaded first-party files and accepts them once the Microsoft MIT notice is added' {
+        $repo = Join-Path $TestDrive ([guid]::NewGuid().ToString('N'))
+        New-Item -ItemType Directory -Path (Join-Path $repo 'squad-src/.github/agents/squad') -Force | Out-Null
+        New-Item -ItemType Directory -Path (Join-Path $repo '.github') -Force | Out-Null
+        Push-Location $repo
+        try {
+            Invoke-FixtureGit init --quiet --initial-branch=main
+            Invoke-FixtureGit config user.email fixture@example.invalid
+            Invoke-FixtureGit config user.name Fixture
+            $agentPath = Join-Path $repo 'squad-src/.github/agents/squad/sample.agent.md'
+            $workflowPath = Join-Path $repo '.github/github-app.yml'
+            [IO.File]::WriteAllText($agentPath, "---`nname: Sample`n---`n`n# Sample`n", [Text.UTF8Encoding]::new($false))
+            [IO.File]::WriteAllText($workflowPath, "feature: true`n", [Text.UTF8Encoding]::new($false))
+            Invoke-FixtureGit add .
+
+            { & $script:HeaderAuditScript -RepoRoot $repo } | Should -Throw '*squad-src/.github/agents/squad/sample.agent.md*'
+
+            $mdNotice = "<!--`nCopyright (c) Microsoft Corporation.`nLicensed under the MIT license.`n-->`n"
+            [IO.File]::WriteAllText($agentPath, "---`nname: Sample`n---`n$mdNotice`n# Sample`n", [Text.UTF8Encoding]::new($false))
+            [IO.File]::WriteAllText($workflowPath, "# Copyright (c) Microsoft Corporation.`n# Licensed under the MIT license.`nfeature: true`n", [Text.UTF8Encoding]::new($false))
+
+            $out = & $script:HeaderAuditScript -RepoRoot $repo 2>&1 | Out-String
+            $out | Should -Match 'Eligible=2 Headed=2' -Because $out
+        }
+        finally {
+            Pop-Location
+        }
+    }
+}
+

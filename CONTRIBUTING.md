@@ -187,11 +187,13 @@ retains its Pester XML report for seven days, so failures and slow cases can be
 inspected without another run.
 
 Local commands still run the complete selection by default. To reproduce one
-CI shard or run repository checks without downloading a package:
+CI shard, run repository checks without downloading a package, or audit
+first-party Microsoft MIT copyright headers directly:
 
 ```powershell
 ./tests/tier0/Invoke-Tier0Tests.ps1 -SourceRoot . -Shard Contracts
 ./tests/tier0/Invoke-Tier0Tests.ps1 -SourceRoot . -Scope Repository
+./scripts/Test-SourceHeaders.ps1
 ```
 
 The other shards are `Handoff`, `Lifecycle`, and `Coordinator`. Sharding changes

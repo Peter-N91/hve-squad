@@ -165,6 +165,10 @@ jobs:
             exit 1
           fi
 
+      - name: Verify Microsoft copyright headers
+        shell: pwsh
+        run: ./scripts/Test-SourceHeaders.ps1
+
       - name: Validate pending fragments
         shell: pwsh
         run: |
