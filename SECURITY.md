@@ -77,8 +77,16 @@ The repository provides pull request validation and these automated workflows:
 
 Third-party GitHub Actions are pinned to full commit SHAs, workflows declare
 token permissions explicitly with job-level scopes, and checkouts use
-`persist-credentials: false`. These controls do not replace the destination
-organization's required reviews, branch protection, SDL, or release approval.
+`persist-credentials: false`. Automated repository mutations (`sync-hve-core.yml`,
+`release-prep.yml`, `sync-model-benchmarks.yml`) run in the `automation-governance`
+GitHub Environment using short-lived `actions/create-github-app-token`
+installation tokens (with transitional PAT fallback prior to organization
+transfer) and propose pull requests rather than pushing directly to `main`.
+Headless Copilot workflows (`squad-watch.yml`, `tier1-behavior.yml`,
+`tier2-semantic.yml`) run in the `copilot-headless` GitHub Environment, with
+event-driven Watch gated on `vars.SQUAD_WATCH_ENABLED == 'true'`. These controls
+do not replace the destination organization's required reviews, branch
+protection, SDL, or release approval.
 
 ### Watch Mode credential boundary
 

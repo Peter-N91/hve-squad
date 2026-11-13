@@ -63,6 +63,9 @@ jobs:
   sync-benchmarks:
     name: Refresh model catalog, rates, and benchmarks
     runs-on: ubuntu-latest
+    environment:
+      name: automation-governance
+      deployment: false
     permissions:
       contents: write
       pull-requests: write
@@ -176,11 +179,21 @@ jobs:
             throw 'Shared scoring views or policy identity differ from the generated snapshot; refusing publication.'
           }
 
+      - name: Generate GitHub App token
+        id: app_token
+        if: (steps.catalog.outputs.updated == 'true' || steps.sync.outputs.updated == 'true') && !inputs.dry_run && vars.AUTOMATION_APP_CLIENT_ID != ''
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          client-id: ${{ vars.AUTOMATION_APP_CLIENT_ID }}
+          private-key: ${{ secrets.AUTOMATION_APP_PRIVATE_KEY }}
+          permission-contents: write
+          permission-pull-requests: write
+
       - name: Propose reviewed pull request
         if: (steps.catalog.outputs.updated == 'true' || steps.sync.outputs.updated == 'true') && !inputs.dry_run
         shell: pwsh
         env:
-          GH_TOKEN: ${{ secrets.SYNC_DEPS_TOKEN || secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ steps.app_token.outputs.token || secrets.SYNC_DEPS_TOKEN || secrets.GITHUB_TOKEN }}
           CAT_RETRIEVED: ${{ steps.catalog.outputs.retrieved }}
           CAT_MODELS: ${{ steps.catalog.outputs.models_count }}
           CAT_ADDED: ${{ steps.catalog.outputs.added_models }}

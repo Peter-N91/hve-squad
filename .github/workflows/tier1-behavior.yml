@@ -61,8 +61,8 @@ on:
         default: true
     secrets:
       copilot-token:
-        description: 'PAT carrying the Copilot Requests permission.'
-        required: true
+        description: 'PAT carrying the Copilot Requests permission (falls back to copilot-headless environment secret COPILOT_GITHUB_TOKEN).'
+        required: false
   workflow_dispatch:
     # checkov:skip=CKV_GHA_7:Manual trigger; inputs are passed via env and only reach harness arguments.
     inputs:
@@ -152,6 +152,9 @@ jobs:
     name: ${{ matrix.scenario }}
     needs: discover
     runs-on: ubuntu-latest
+    environment:
+      name: copilot-headless
+      deployment: false
     timeout-minutes: 60
     strategy:
       fail-fast: false

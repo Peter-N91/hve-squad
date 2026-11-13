@@ -96,14 +96,14 @@ Describe 'CI-01 Release-state checks compare the tested merge parent' {
 }
 
 Describe 'CI-02 hve-core sync validates before publication' {
-    It 'runs candidate Tier 0 after regeneration and before fragment creation or push' {
+    It 'runs candidate Tier 0 after regeneration and before fragment creation or PR proposal' {
         $names = @(
             'Regenerate apm.yml dependencies'
             'Install the APM CLI for candidate conformance'
             'Install Pester for candidate conformance'
             'Validate candidate package before push'
             'Record the pin move'
-            'Commit and push'
+            'Propose sync pull request'
         )
         $positions = @($names | ForEach-Object { $script:SyncWorkflow.IndexOf("- name: $_") })
         $positions | ForEach-Object { $_ | Should -BeGreaterOrEqual 0 }
@@ -115,6 +115,7 @@ Describe 'CI-02 hve-core sync validates before publication' {
         $validation | Should -Match 'Invoke-Tier0Tests\.ps1 -SourceRoot \. -Output Detailed'
         $validation | Should -Match "steps\.castguard\.outputs\.is_breaking == 'false'"
         $validation | Should -Match "inputs\.dry_run != 'true'"
+        $script:SyncWorkflow | Should -Not -Match 'git push origin main'
     }
 
     It 'keeps dependency pushes on rolling preview and releases only by explicit dispatch' {
@@ -190,6 +191,120 @@ Describe 'CI-02 hve-core sync validates before publication' {
 
         It 'uploads SARIF only when the analyzer actually produced it' {
             @([regex]::Matches($script:LintWorkflow, "hashFiles\('results\.sarif'\) != ''")).Count | Should -Be 2
+        }
+    }
+
+    Describe 'CI-08 Organization token, environment, and PR governance' {
+        BeforeAll {
+            $script:SourceRootCi08 = (Resolve-Path -LiteralPath $SourceRoot).Path
+            $script:PrValidationRaw = Get-Content -LiteralPath (Join-Path $script:SourceRootCi08 '.github/workflows/pr-validation.yml') -Raw
+        }
+
+        It 'scopes GitHub App key and Copilot headless tokens to dedicated non-deployment environments without PR key exposure' {
+            $python = Get-Command python -ErrorAction Stop
+            $inspector = @'
+import json, sys, yaml
+from pathlib import Path
+
+root = Path(sys.argv[1]) / ".github" / "workflows"
+app_jobs = []
+app_pr_triggers = []
+copilot_jobs = []
+for p in sorted(root.glob("*.yml")):
+    raw = p.read_text(encoding="utf-8")
+    doc = yaml.safe_load(raw)
+    on_block = doc.get("on") or doc.get(True) or {}
+    on_keys = list(on_block.keys()) if isinstance(on_block, dict) else []
+    if "secrets.AUTOMATION_APP_PRIVATE_KEY" in raw:
+        if "pull_request" in on_keys or "pull_request_target" in on_keys or "github.event.pull_request" in raw:
+            app_pr_triggers.append(p.name)
+    for job_name, job in (doc.get("jobs") or {}).items():
+        if not isinstance(job, dict) or "uses" in job:
+            continue
+        job_json = json.dumps(job)
+        env_cfg = job.get("environment") or {}
+        if "secrets.AUTOMATION_APP_PRIVATE_KEY" in job_json:
+            token_steps = [
+                s for s in (job.get("steps") or [])
+                if isinstance(s, dict) and str(s.get("uses") or "").startswith("actions/create-github-app-token@")
+            ]
+            perms = []
+            uses_vals = []
+            for ts in token_steps:
+                uses_vals.append(str(ts.get("uses") or ""))
+                w = ts.get("with") or {}
+                perms.append(sorted([k for k in w.keys() if str(k).startswith("permission-")]))
+            app_jobs.append({
+                "workflow": p.name,
+                "job": job_name,
+                "envName": env_cfg.get("name") if isinstance(env_cfg, dict) else env_cfg,
+                "deployment": env_cfg.get("deployment") if isinstance(env_cfg, dict) else None,
+                "uses": uses_vals,
+                "permKeys": perms,
+            })
+        if "COPILOT_GITHUB_TOKEN" in job_json or "secrets.copilot-token" in job_json:
+            copilot_jobs.append({
+                "workflow": p.name,
+                "job": job_name,
+                "envName": env_cfg.get("name") if isinstance(env_cfg, dict) else env_cfg,
+                "deployment": env_cfg.get("deployment") if isinstance(env_cfg, dict) else None,
+                "ifExpr": str(job.get("if") or ""),
+            })
+
+print(json.dumps({
+    "appJobs": app_jobs,
+    "appPrTriggers": app_pr_triggers,
+    "copilotJobs": copilot_jobs,
+}))
+'@
+            $json = & $python.Source -c $inspector $script:SourceRootCi08
+            $LASTEXITCODE | Should -Be 0 -Because ($json -join "`n")
+            $data = $json | ConvertFrom-Json
+
+            @($data.appPrTriggers) | Should -BeNullOrEmpty -Because 'no workflow reading AUTOMATION_APP_PRIVATE_KEY may trigger on pull_request or pull_request_target'
+            @($data.appJobs).Count | Should -Be 6 -Because 'sync-hve-core, sync-model-benchmarks, release-prep (prepare + dispatch-release), and release (tag + release) must mint scoped GitHub App tokens'
+            foreach ($job in @($data.appJobs)) {
+                $job.envName | Should -BeExactly 'automation-governance' -Because "$($job.workflow)/$($job.job) must bind to automation-governance"
+                $job.deployment | Should -BeFalse -Because "$($job.workflow)/$($job.job) must set deployment: false"
+                foreach ($u in @($job.uses)) {
+                    $u | Should -BeExactly 'actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510'
+                }
+                foreach ($pk in @($job.permKeys)) {
+                    @($pk).Count | Should -BeGreaterOrEqual 1 -Because "$($job.workflow)/$($job.job) must request explicit permission-* inputs"
+                }
+            }
+
+            $copilotTargets = @($data.copilotJobs | ForEach-Object { "$($_.workflow):$($_.job)" } | Sort-Object)
+            $copilotTargets | Should -Be @('squad-watch.yml:interpret', 'tier1-behavior.yml:live', 'tier2-semantic.yml:compare')
+            foreach ($cjob in @($data.copilotJobs)) {
+                $cjob.envName | Should -BeExactly 'copilot-headless' -Because "$($cjob.workflow)/$($cjob.job) must bind to copilot-headless"
+                $cjob.deployment | Should -BeFalse -Because "$($cjob.workflow)/$($cjob.job) must set deployment: false"
+            }
+            $watchJob = @($data.copilotJobs | Where-Object { $_.workflow -eq 'squad-watch.yml' })[0]
+            $watchJob.ifExpr | Should -Match "vars\.SQUAD_WATCH_ENABLED == 'true'"
+            $watchJob.ifExpr | Should -Match "github\.event\.pull_request\.head\.repo\.full_name == github\.repository"
+        }
+
+        It 'eliminates direct-to-main automation pushes and enforces same-repo PR scope guards in pr-validation.yml' {
+            $script:SyncWorkflow | Should -Match 'chore/sync-hve-core'
+            $script:SyncWorkflow | Should -Match 'gh pr create'
+            $script:SyncWorkflow | Should -Not -Match 'git push origin main'
+
+            $script:ReleasePrepWorkflow | Should -Match 'chore/release-prep'
+            $script:ReleasePrepWorkflow | Should -Match 'gh pr create'
+            $script:ReleasePrepWorkflow | Should -Not -Match 'git push origin "HEAD:\$\{REF\}"'
+            $script:ReleaseWorkflow | Should -Match 'Run Release Prep first so the version bump lands on main through a reviewed pull request'
+
+            $script:PrValidationRaw | Should -Match '- name: Validate Release Prep pull request scope'
+            $script:PrValidationRaw | Should -Match '- name: Validate Sync and Adapt pull request scope'
+            $pinStep = Get-WorkflowStepBlock -Body $script:PrValidationRaw -Name 'Reject an unreviewed hve-core pin move'
+            $pinStep | Should -Match 'github\.event\.pull_request\.head\.repo\.full_name == github\.repository'
+            $pinStep | Should -Match "github\.head_ref == 'chore/sync-hve-core'"
+        }
+
+        It 'apm.yml sets Microsoft package authorship' {
+            $apm = Get-Content -LiteralPath (Join-Path $script:SourceRootCi08 'apm.yml') -Raw
+            $apm | Should -Match '(?m)^author:\s*Microsoft\s*$'
         }
     }
 }

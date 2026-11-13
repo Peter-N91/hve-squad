@@ -69,26 +69,24 @@
 #   them combine repository write with `--allow-all-tools` over untrusted text.
 #
 # Required configuration
-#   Secret COPILOT_GITHUB_TOKEN — a DEDICATED fine-grained PAT with only the
-#     "Copilot Requests" permission. The built-in GITHUB_TOKEN does not carry
-#     Copilot access. Do not reuse a broader PAT (such as one scoped for
-#     repository sync/release automation) for this secret: the Copilot CLI
-#     authenticates with whatever is supplied here, so a broader credential
-#     handed to an `--allow-all-tools` run over untrusted content defeats the
-#     job-level permission scoping above.
+#   Environment `copilot-headless` (`deployment: false`) — holds (or admits) secret
+#     `COPILOT_GITHUB_TOKEN`, a DEDICATED fine-grained PAT with only the "Copilot
+#     Requests" permission (zero repository write permissions). The built-in
+#     GITHUB_TOKEN does not carry Copilot access. Do not reuse a broader PAT (such
+#     as one scoped for repository sync/release automation) for this secret: the
+#     Copilot CLI authenticates with whatever is supplied here.
+#   Repository variable `SQUAD_WATCH_ENABLED` — set to `true` to enable automatic
+#     issue, PR, and `/squad` comment triggers. Leaving it unset during an
+#     organization transfer keeps event-driven Watch dormant on day 1 until the
+#     destination `copilot-headless` environment and token are provisioned (manual
+#     `workflow_dispatch` remains available for smoke testing unless set to `false`).
 #   Settings -> Actions -> General -> Workflow permissions ->
 #     "Allow GitHub Actions to create and approve pull requests" must be ON, or
 #     `gh pr create` returns 403 and the run ends with a branch but no PR.
-#   A branch ruleset on the default branch requiring a pull request, with the
-#     repository-admin role as the only bypass actor. This is the third enforcement
-#     layer under the Impactful-Action Gate, and it is the one easiest to leave
-#     unconfigured: a rule that merely forbids force pushes and deletions does NOT
-#     stop a direct push to `main`, it only limits the damage of one. The admin
-#     bypass is what keeps the two automations separated — `sync-hve-core.yml`
-#     pushes with a maintainer PAT and passes straight through, while this workflow
-#     pushes as `github-actions[bot]`, which holds no repository role and therefore
-#     cannot reach `main` at all. Required approvals are set to zero deliberately,
-#     so a solo maintainer is not locked out of merging their own pull request.
+#   A branch ruleset on `main` requiring a pull request with no personal-PAT
+#     bypass required for automation (`sync-hve-core.yml`, `release-prep.yml`,
+#     `sync-model-benchmarks.yml`, and Watch Mode all land changes through pull
+#     requests rather than pushing directly to `main`).
 #   Labels `squad/auto` and `squad/review` must exist.
 
 name: Squad Watch
@@ -195,12 +193,22 @@ jobs:
   # above. It hands off its output as an artifact for `apply`/`post-review` to act on.
   interpret:
     # Coarse filter so a runner only starts for a relevant, opted-in event.
+    # Automatic triggers also require vars.SQUAD_WATCH_ENABLED == 'true' so an org
+    # transfer stays dormant until destination secrets/environments are provisioned.
     if: >-
-      github.event_name == 'workflow_dispatch' ||
-      (github.event_name == 'issues' && github.event.label.name == 'squad/auto') ||
-      (github.event_name == 'issue_comment' && startsWith(github.event.comment.body, '/squad')) ||
-      (github.event_name == 'pull_request' && contains(join(github.event.pull_request.labels.*.name, ','), 'squad/review'))
+      (github.event_name == 'workflow_dispatch' && vars.SQUAD_WATCH_ENABLED != 'false') ||
+      (
+        vars.SQUAD_WATCH_ENABLED == 'true' &&
+        (
+          (github.event_name == 'issues' && github.event.label.name == 'squad/auto') ||
+          (github.event_name == 'issue_comment' && startsWith(github.event.comment.body, '/squad')) ||
+          (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && contains(join(github.event.pull_request.labels.*.name, ','), 'squad/review'))
+        )
+      )
     runs-on: ubuntu-latest
+    environment:
+      name: copilot-headless
+      deployment: false
     permissions:
       contents: read
       issues: read

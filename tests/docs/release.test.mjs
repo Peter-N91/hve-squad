@@ -373,7 +373,7 @@ test("release lifecycle refreshes Pages from the default branch, including GITHU
     assert.match(publisher, /run: gh workflow run docs\.yml --repo "\$GITHUB_REPOSITORY" --ref main/);
   }
   const prep = readFileSync(new URL("../../.github/workflows/release-prep.yml", import.meta.url), "utf8");
-  assert.match(prep, /if: always\(\).*has_changes == 'true'.*inputs\.dry_run != true.*inputs\.ref == 'main'/);
+  assert.match(prep, /if: always\(\) && steps\.detect\.outputs\.should_release == 'true' && github\.ref == 'refs\/heads\/main'/);
   const scripts = JSON.parse(readFileSync(new URL("../../package.json", import.meta.url), "utf8")).scripts;
   assert(scripts["docs:build"].startsWith("node scripts/docs-release.mjs --refresh && "));
 });
