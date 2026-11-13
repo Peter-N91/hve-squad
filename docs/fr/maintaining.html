@@ -299,6 +299,13 @@ flowchart TD
         revendique pas le rattachement actif d’une issue vers une pull request. Lorsque ce rattachement
         ne s’applique pas, le workflow actif échoue de façon fermée vers <code>pr-&lt;N&gt;</code>.
       </p>
+      <p>
+        Dans le <code>squad-watch.yml</code> actif de ce dépôt, <code>interpret</code> exécute en outre
+        Copilot dans <code>github/gh-aw-firewall</code> (<code>awf</code>) afin que
+        <code>COPILOT_GITHUB_TOKEN</code> reste dans le sidecar <code>api-proxy</code> isolé hors du
+        conteneur de l’agent et que Squid applique une liste blanche de domaines sortants, tandis que les deux workflows nettoient et
+        filtrent les liens symboliques des diagnostics d’échec avant le téléversement d’artefacts.
+      </p>
 
       <p>Exécutez vous-même le contrôle des différences à tout moment :</p>
       <pre><code>./scripts/Get-HveCoreCastDelta.ps1

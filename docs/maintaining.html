@@ -316,6 +316,13 @@ flowchart TD
         live issue-to-PR mapping. When that mapping does not apply, the live workflow fails closed to
         <code>pr-&lt;N&gt;</code>.
       </p>
+      <p>
+        In this repository's live <code>squad-watch.yml</code>, <code>interpret</code> additionally runs
+        Copilot inside <code>github/gh-aw-firewall</code> (<code>awf</code>) so
+        <code>COPILOT_GITHUB_TOKEN</code> stays in the isolated <code>api-proxy</code> sidecar outside the
+        agent container and Squid enforces outbound domain allowlisting, while both workflows scrub and
+        symlink-filter failure diagnostics before artifact upload.
+      </p>
 
       <p>Run the delta check yourself at any time:</p>
       <pre><code>./scripts/Get-HveCoreCastDelta.ps1

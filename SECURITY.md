@@ -68,14 +68,39 @@ Out of scope:
 The repository provides pull request validation and these automated workflows:
 
 - **CodeQL** static analysis on the Python surface.
-- **Checkov** infrastructure-as-code scanning.
-- **Zizmor** GitHub Actions security analysis, reported to the Security tab.
+- **Checkov** infrastructure-as-code and GitHub Actions scanning across `.github/workflows/` and shipped `.workflow.yml` templates.
+- **Zizmor** blocking GitHub Actions security analysis across `.github/workflows/`, `.github/dependabot.yml`, and shipped `.workflow.yml` templates, reported to the Security tab.
 - **OpenSSF Scorecard** supply-chain posture analysis, published publicly.
 - **Tier 0 conformance testing** over the shipped agent assets. Tier 1
   behavioural and Tier 2 semantic testing are available as manual runs.
-- **Dependabot** weekly updates for GitHub Actions.
+- **Dependabot** weekly updates for GitHub Actions with a 7-day release cooldown.
 
 Third-party GitHub Actions are pinned to full commit SHAs, workflows declare
 token permissions explicitly with job-level scopes, and checkouts use
 `persist-credentials: false`. These controls do not replace the destination
 organization's required reviews, branch protection, SDL, or release approval.
+
+### Watch Mode credential boundary
+
+Both `.github/workflows/squad-watch.yml` and the shipped consumer template
+`squad-src/.github/skills/squad/squad-watch.workflow.yml` separate read-only
+interpretation (`interpret`, `persist-credentials: false`, runtime zero-write
+verification of `COPILOT_GITHUB_TOKEN`) from minimal-scope publication jobs
+(`apply`, `post-review`, `escalate-*`), and sanitize failure diagnostic
+artifacts (redacting token patterns and skipping symlinks with 1-day retention)
+before upload.
+
+- **Repository workflow (`.github/workflows/squad-watch.yml`):** `copilot --allow-all-tools`
+  executes inside SHA- and digest-pinned `github/gh-aw-firewall` (`awf`).
+  `COPILOT_GITHUB_TOKEN` is held exclusively by the isolated `api-proxy`
+  sidecar container outside the `agent` container's environment and `/proc`,
+  `GH_TOKEN`/`GITHUB_TOKEN` are excluded, `.squad-trusted` is mounted
+  read-only, and Squid restricts agent HTTP/HTTPS egress to an explicit domain
+  allowlist.
+- **Consumer reference template (`squad-watch.workflow.yml`):** Ships without
+  requiring container runtime privileges by default, so `--allow-all-tools`
+  shares the runner OS process environment with `COPILOT_GITHUB_TOKEN`. Prompt
+  injection cannot mutate the repository, but untrusted tool execution could
+  access `COPILOT_GITHUB_TOKEN` (Copilot-Requests quota scope only) unless
+  consumers configure short token expiry and collaborator-only triggers or wrap
+  execution in `github/gh-aw-firewall` (`awf`).

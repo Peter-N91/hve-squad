@@ -597,6 +597,19 @@ print(json.dumps({
         $script:ReferenceSquadWatch | Should -Match ([regex]::Escape('New-SquadWatchHandoff'))
         $script:ReferenceSquadWatch | Should -Match ([regex]::Escape('Verify COPILOT_GITHUB_TOKEN least privilege'))
         $script:RepoSquadWatch | Should -Match ([regex]::Escape('Verify COPILOT_GITHUB_TOKEN least privilege'))
+        $script:RepoSquadWatch | Should -Match 'uses: github/gh-aw-firewall@[0-9a-f]{40} # v0\.29\.13'
+        $script:RepoSquadWatch | Should -Match ([regex]::Escape('--exclude-env COPILOT_GITHUB_TOKEN'))
+        $script:RepoSquadWatch | Should -Match ([regex]::Escape('--exclude-env GH_TOKEN'))
+        $script:RepoSquadWatch | Should -Match ([regex]::Escape('--exclude-env GITHUB_TOKEN'))
+        $script:RepoSquadWatch | Should -Match ([regex]::Escape('.squad-trusted:${WORKSPACE_DIR}/.squad-trusted:ro'))
+        foreach ($watchText in @($script:RepoSquadWatch, $script:ReferenceSquadWatch)) {
+            $watchText | Should -Match ([regex]::Escape('- name: Sanitize publication diagnostics'))
+            $watchText | Should -Match ([regex]::Escape('path: ${{ runner.temp }}/squad-watch-diagnostics-staged/**'))
+            $watchText | Should -Not -Match ([regex]::Escape('${{ github.workspace }}/.copilot-tracking/squad/members/${{ steps.prep.outputs.subSquad }}/**'))
+        }
+        $securityPolicy = Get-Content -LiteralPath (Join-Path $script:SourceRootResolved 'SECURITY.md') -Raw
+        $securityPolicy | Should -Match '### Watch Mode credential boundary'
+        $securityPolicy | Should -Match 'github/gh-aw-firewall'
         $script:ReferenceSquadWatch | Should -Match ([regex]::Escape('sourceSha: ${{ steps.source.outputs.sha }}'))
         $script:ReferenceSquadWatch | Should -Match ([regex]::Escape('ref: ${{ needs.interpret.outputs.sourceSha }}'))
     }

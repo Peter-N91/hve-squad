@@ -144,10 +144,13 @@
 #
 # Hardening
 #   `--allow-all-tools` lets the agent work unattended inside read-only `interpret`
-#   while `COPILOT_GITHUB_TOKEN` remains in the runner process environment. Use a
-#   short-lived fine-grained PAT with only "Copilot Requests" (zero repo write), or
-#   pair the runner with a credential-isolating proxy/firewall container, and rely
-#   on branch protection so a draft PR still requires human review before merge.
+#   while `COPILOT_GITHUB_TOKEN` remains in the runner process environment by default
+#   so consumers do not need Docker/rootless container privileges out of the box.
+#   Use a short-lived fine-grained PAT with only "Copilot Requests" (zero repo write),
+#   or wrap the `copilot` step in `github/gh-aw-firewall` (`awf`) as `.github/workflows/squad-watch.yml`
+#   does in `hve-squad` so `COPILOT_GITHUB_TOKEN` stays in an isolated `api-proxy`
+#   sidecar outside the agent container. Diagnostic failure artifacts are scrubbed
+#   before upload, and branch protection ensures a draft PR requires human review.
 
 name: Squad Watch
 
@@ -1399,16 +1402,90 @@ jobs:
           & $assertPath -TrustedRoot $trusted -ExpectedSha $sha -SkillRoot $skillRoot
           & (Join-Path $trusted ($skillRoot -replace '/', [System.IO.Path]::DirectorySeparatorChar) 'scripts/Invoke-SquadWatchMarkedBody.ps1')
 
-      - name: Upload publication diagnostics
+      - name: Sanitize publication diagnostics
+        id: sanitize_diagnostics
         if: failure() && (steps.run_squad.outcome == 'failure' || steps.stage.outcome == 'failure')
+        shell: pwsh
+        env:
+          SUB_SQUAD: ${{ steps.prep.outputs.subSquad }}
+          DIAGNOSTICS_OUT: ${{ runner.temp }}/squad-watch-diagnostics-staged
+        run: |
+          $ErrorActionPreference = 'Stop'
+          Set-StrictMode -Version Latest
+          $outRoot = [System.IO.Path]::GetFullPath($env:DIAGNOSTICS_OUT)
+          if (Test-Path -LiteralPath $outRoot) {
+            Remove-Item -LiteralPath $outRoot -Recurse -Force
+          }
+          New-Item -ItemType Directory -Path $outRoot -Force | Out-Null
+
+          function Copy-SanitizedDiagnosticFile {
+            param(
+              [Parameter(Mandatory)][string]$SourcePath,
+              [Parameter(Mandatory)][string]$AllowedRoot,
+              [Parameter(Mandatory)][string]$RelativeDestination
+            )
+            if (-not (Test-Path -LiteralPath $SourcePath -PathType Leaf)) { return }
+            $item = Get-Item -LiteralPath $SourcePath -Force
+            if (($item.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0) { return }
+            if ($item.Length -gt 1048576) { return }
+            $resolvedRoot = [System.IO.Path]::GetFullPath($AllowedRoot).TrimEnd([System.IO.Path]::DirectorySeparatorChar, [System.IO.Path]::AltDirectorySeparatorChar) + [System.IO.Path]::DirectorySeparatorChar
+            $current = $item.Directory
+            while ($null -ne $current) {
+              if (($current.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0) { return }
+              $currentFull = [System.IO.Path]::GetFullPath($current.FullName).TrimEnd([System.IO.Path]::DirectorySeparatorChar, [System.IO.Path]::AltDirectorySeparatorChar) + [System.IO.Path]::DirectorySeparatorChar
+              if ($currentFull -eq $resolvedRoot) { break }
+              if (-not $currentFull.StartsWith($resolvedRoot, [System.StringComparison]::Ordinal)) { return }
+              $current = $current.Parent
+            }
+            $resolvedFile = [System.IO.Path]::GetFullPath($item.FullName)
+            if (-not $resolvedFile.StartsWith($resolvedRoot, [System.StringComparison]::Ordinal)) { return }
+            $bytes = [System.IO.File]::ReadAllBytes($resolvedFile)
+            if ([Array]::IndexOf($bytes, [byte]0) -ge 0) { return }
+            $text = [System.Text.Encoding]::UTF8.GetString($bytes)
+            $text = [regex]::Replace($text, 'github_pat_[A-Za-z0-9_]{16,}', '[REDACTED]')
+            $text = [regex]::Replace($text, '\bgh[pousr]_[A-Za-z0-9_]{16,}\b', '[REDACTED]')
+            $text = [regex]::Replace($text, '\bv1\.[0-9a-f]{40,}\b', '[REDACTED]')
+            $text = [regex]::Replace($text, '\beyJ[A-Za-z0-9_-]{8,}\.eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\b', '[REDACTED]')
+            $text = [regex]::Replace($text, '(?i)(Authorization\s*[:=]\s*(?:Bearer|token|Basic)\s+)[^\s"''`,;]+', '${1}[REDACTED]')
+            $text = [regex]::Replace($text, '(?i)(https?://[^/\s:@]+:)[^@\s"'']+(@)', '${1}[REDACTED]${2}')
+            $text = [regex]::Replace($text, '(?i)\b((?:COPILOT_GITHUB_TOKEN|GH_TOKEN|GITHUB_TOKEN|GITHUB_PAT|SYNC_DEPS_TOKEN)\s*[:=]\s*["'']?)[^\s"'']{8,}', '${1}[REDACTED]')
+            $text = [regex]::Replace($text, '\bsk-(?!placeholder-for-api-proxy\b|ant-placeholder-key-for-credential-isolation\b)[A-Za-z0-9_-]{20,}\b', '[REDACTED]')
+            $destPath = Join-Path $outRoot $RelativeDestination
+            New-Item -ItemType Directory -Path (Split-Path -Parent $destPath) -Force | Out-Null
+            [System.IO.File]::WriteAllText($destPath, $text, [System.Text.UTF8Encoding]::new($false))
+          }
+
+          foreach ($tempName in @('squad-watch-publication.json', 'squad-watch-baseline.json', 'squad-watch-preflight.log')) {
+            Copy-SanitizedDiagnosticFile `
+              -SourcePath (Join-Path $env:RUNNER_TEMP $tempName) `
+              -AllowedRoot $env:RUNNER_TEMP `
+              -RelativeDestination (Join-Path 'runner-temp' $tempName)
+          }
+
+          $subSquad = ([string]$env:SUB_SQUAD).Trim()
+          if ($subSquad -match '^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$') {
+            $memberRoot = Join-Path $env:GITHUB_WORKSPACE ".copilot-tracking/squad/members/$subSquad"
+            if (Test-Path -LiteralPath $memberRoot -PathType Container) {
+              $memberDir = Get-Item -LiteralPath $memberRoot -Force
+              if (($memberDir.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -eq 0) {
+                $resolvedMemberRoot = [System.IO.Path]::GetFullPath($memberDir.FullName)
+                foreach ($file in @(Get-ChildItem -LiteralPath $resolvedMemberRoot -Recurse -File -Force -ErrorAction SilentlyContinue)) {
+                  $rel = [System.IO.Path]::GetRelativePath($resolvedMemberRoot, $file.FullName)
+                  Copy-SanitizedDiagnosticFile `
+                    -SourcePath $file.FullName `
+                    -AllowedRoot $resolvedMemberRoot `
+                    -RelativeDestination (Join-Path "members/$subSquad" $rel)
+                }
+              }
+            }
+          }
+
+      - name: Upload publication diagnostics
+        if: failure() && (steps.run_squad.outcome == 'failure' || steps.stage.outcome == 'failure') && steps.sanitize_diagnostics.outcome == 'success'
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: squad-watch-diagnostics-${{ github.run_id }}
-          path: |
-            ${{ runner.temp }}/squad-watch-publication.json
-            ${{ runner.temp }}/squad-watch-baseline.json
-            ${{ runner.temp }}/squad-watch-preflight.log
-            ${{ github.workspace }}/.copilot-tracking/squad/members/${{ steps.prep.outputs.subSquad }}/**
+          path: ${{ runner.temp }}/squad-watch-diagnostics-staged/**
           if-no-files-found: ignore
           retention-days: 1
 

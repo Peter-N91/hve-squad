@@ -1000,12 +1000,15 @@ Describe 'GATE-48 Watch workflow handoff preflight and record repair' {
 import json, sys, yaml
 from pathlib import Path
 workflow = yaml.safe_load(Path(sys.argv[1]).read_text(encoding="utf-8"))
-names = {"Prepare handoff validator", "Run the squad", "Stage changes for handoff"}
+names = {"Prepare handoff validator", "Run the squad", "Stage changes for handoff", "Sanitize publication diagnostics"}
 print(json.dumps({step["name"]: step["run"] for step in workflow["jobs"]["interpret"]["steps"] if step.get("name") in names}))
 '@
         $json = & python -c $extractor (Join-Path $script:SourceRootResolved '.github/workflows/squad-watch.yml')
         if ($LASTEXITCODE -ne 0) { throw 'Could not extract Watch handoff steps.' }
         $script:HandoffSteps = $json | ConvertFrom-Json -AsHashtable
+        $templateJson = & python -c $extractor (Join-Path $script:SourceRootResolved 'squad-src/.github/skills/squad/squad-watch.workflow.yml')
+        if ($LASTEXITCODE -ne 0) { throw 'Could not extract template Watch handoff steps.' }
+        $script:TemplateHandoffSteps = $templateJson | ConvertFrom-Json -AsHashtable
         $script:HandoffEnvironmentNames = @(
             'RUNNER_TEMP', 'GITHUB_WORKSPACE', 'GITHUB_OUTPUT', 'GITHUB_STEP_SUMMARY',
             'SUB_SQUAD', 'SOURCE_THREAD', 'SOURCE_THREAD_NUMBER', 'STABLE_REF',
@@ -1013,7 +1016,8 @@ print(json.dumps({step["name"]: step["run"] for step in workflow["jobs"]["interp
             'TRIGGER_ACTOR', 'TRIGGER_RECEIVED_AT', 'SQUAD_WATCH_TRUSTED_SHA',
             'WATCH_MODULE_HASH', 'BASELINE_HASH', 'VALIDATOR_HASH', 'EXISTING_PR',
             'PUBLICATION_BRANCH_EXISTS', 'COPILOT_GITHUB_TOKEN', 'SQUAD_PROMPT_FILE',
-            'MODEL_OVERRIDE', 'SQUAD_MODEL', 'RUN_KIND', 'WATCH_TEST_SCENARIO'
+            'MODEL_OVERRIDE', 'SQUAD_MODEL', 'RUN_KIND', 'WATCH_TEST_SCENARIO',
+            'AWF_IMAGE_TAG', 'AWF_ALLOW_DOMAINS', 'DIAGNOSTICS_OUT', 'GH_TOKEN', 'GITHUB_TOKEN'
         )
     }
 
@@ -1138,15 +1142,19 @@ print(json.dumps({step["name"]: step["run"] for step in workflow["jobs"]["interp
     }
 
     It 'runs the actual headless control flow without a model: <Name>' -ForEach @(
-        @{ Name = 'valid records'; Scenario = 'valid'; Kind = 'dispatch'; ExitCode = 0; Calls = 1; Checks = 1 }
-        @{ Name = 'one successful record repair'; Scenario = 'repair'; Kind = 'dispatch'; ExitCode = 0; Calls = 2; Checks = 2 }
-        @{ Name = 'unresolved failure'; Scenario = 'blocked'; Kind = 'dispatch'; ExitCode = 1; Calls = 2; Checks = 2 }
-        @{ Name = 'CLI execution failure'; Scenario = 'cli-failure'; Kind = 'dispatch'; ExitCode = 42; Calls = 1; Checks = 0 }
-        @{ Name = 'changed validator'; Scenario = 'tampered'; Kind = 'dispatch'; ExitCode = 1; Calls = 1; Checks = 0 }
-        @{ Name = 'review-only run'; Scenario = 'valid'; Kind = 'pull_request'; ExitCode = 0; Calls = 1; Checks = 0 }
+        @{ Name = 'valid records'; Scenario = 'valid'; Kind = 'dispatch'; ExitCode = 0; Calls = 1; Checks = 1; ImageTag = '0.29.13,squid=sha256:6e0cbf7f980beb78b5461563a8164f6439ca959bc93733d5a6b52972e523ed50,agent=sha256:b14bd399376180b5649a9324be3b50fbfc82bfe8f0c80045840416b5a4e65b96,api-proxy=sha256:baff00b856a4bdc93bce134928c70af3d3492f2e518757115042040674d56b0b' }
+        @{ Name = 'one successful record repair'; Scenario = 'repair'; Kind = 'dispatch'; ExitCode = 0; Calls = 2; Checks = 2; ImageTag = '0.29.13,squid=sha256:6e0cbf7f980beb78b5461563a8164f6439ca959bc93733d5a6b52972e523ed50,agent=sha256:b14bd399376180b5649a9324be3b50fbfc82bfe8f0c80045840416b5a4e65b96,api-proxy=sha256:baff00b856a4bdc93bce134928c70af3d3492f2e518757115042040674d56b0b' }
+        @{ Name = 'unresolved failure'; Scenario = 'blocked'; Kind = 'dispatch'; ExitCode = 1; Calls = 2; Checks = 2; ImageTag = '0.29.13,squid=sha256:6e0cbf7f980beb78b5461563a8164f6439ca959bc93733d5a6b52972e523ed50,agent=sha256:b14bd399376180b5649a9324be3b50fbfc82bfe8f0c80045840416b5a4e65b96,api-proxy=sha256:baff00b856a4bdc93bce134928c70af3d3492f2e518757115042040674d56b0b' }
+        @{ Name = 'CLI execution failure'; Scenario = 'cli-failure'; Kind = 'dispatch'; ExitCode = 42; Calls = 1; Checks = 0; ImageTag = '0.29.13,squid=sha256:6e0cbf7f980beb78b5461563a8164f6439ca959bc93733d5a6b52972e523ed50,agent=sha256:b14bd399376180b5649a9324be3b50fbfc82bfe8f0c80045840416b5a4e65b96,api-proxy=sha256:baff00b856a4bdc93bce134928c70af3d3492f2e518757115042040674d56b0b' }
+        @{ Name = 'changed validator'; Scenario = 'tampered'; Kind = 'dispatch'; ExitCode = 1; Calls = 1; Checks = 0; ImageTag = '0.29.13,squid=sha256:6e0cbf7f980beb78b5461563a8164f6439ca959bc93733d5a6b52972e523ed50,agent=sha256:b14bd399376180b5649a9324be3b50fbfc82bfe8f0c80045840416b5a4e65b96,api-proxy=sha256:baff00b856a4bdc93bce134928c70af3d3492f2e518757115042040674d56b0b' }
+        @{ Name = 'review-only run'; Scenario = 'valid'; Kind = 'pull_request'; ExitCode = 0; Calls = 1; Checks = 0; ImageTag = '0.29.13,squid=sha256:6e0cbf7f980beb78b5461563a8164f6439ca959bc93733d5a6b52972e523ed50,agent=sha256:b14bd399376180b5649a9324be3b50fbfc82bfe8f0c80045840416b5a4e65b96,api-proxy=sha256:baff00b856a4bdc93bce134928c70af3d3492f2e518757115042040674d56b0b' }
+        @{ Name = 'unpinned awf image tag'; Scenario = 'valid'; Kind = 'dispatch'; ExitCode = 1; Calls = 0; Checks = 0; ImageTag = '0.29.13' }
     ) {
         $root = Join-Path $TestDrive "runner $Name"
         New-Item -ItemType Directory -Path $root -Force | Out-Null
+        $workspaceDir = Join-Path $root 'workspace'
+        New-Item -ItemType Directory -Path (Join-Path $workspaceDir '.squad-trusted') -Force | Out-Null
+        $env:GITHUB_WORKSPACE = $workspaceDir.Replace('\', '/')
         $env:RUNNER_TEMP = $root.Replace('\', '/')
         $env:SQUAD_PROMPT_FILE = (Join-Path $root 'prompt.txt').Replace('\', '/')
         Set-WatchModeTestFile -Path $env:SQUAD_PROMPT_FILE -Content 'Fixture task.'
@@ -1154,12 +1162,45 @@ print(json.dumps({step["name"]: step["run"] for step in workflow["jobs"]["interp
         Set-WatchModeTestFile -Path $validator -Content 'fixture validator'
         $env:VALIDATOR_HASH = (Get-FileHash -LiteralPath $validator).Hash.ToLowerInvariant()
         $env:COPILOT_GITHUB_TOKEN = 'fixture-not-a-token'
+        $env:GH_TOKEN = 'fixture-gh-token'
+        $env:GITHUB_TOKEN = 'fixture-github-token'
+        $env:AWF_IMAGE_TAG = $ImageTag
+        $env:AWF_ALLOW_DOMAINS = 'api.github.com,github.com'
         $env:SQUAD_MODEL = 'fixture-model'
         $env:MODEL_OVERRIDE = ''
         $env:RUN_KIND = $Kind
         $env:WATCH_TEST_SCENARIO = $Scenario
         $stubs = @'
+awf() {
+  local has_img=0 has_dom=0 has_wd=0 has_ss=0 has_env_all=0 has_ro_trusted=0 excl_copilot=0 excl_gh=0 excl_github=0
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --) shift; break ;;
+      --image-tag) has_img=1; shift 2 ;;
+      --allow-domains) has_dom=1; shift 2 ;;
+      --container-workdir) has_wd=1; shift 2 ;;
+      --session-state-dir) has_ss=1; shift 2 ;;
+      --env-all) has_env_all=1; shift ;;
+      --mount)
+        [[ "$2" != *"/.squad-trusted:"*":ro" ]] || has_ro_trusted=1
+        shift 2
+        ;;
+      --exclude-env)
+        case "$2" in
+          COPILOT_GITHUB_TOKEN) excl_copilot=1 ;;
+          GH_TOKEN) excl_gh=1 ;;
+          GITHUB_TOKEN) excl_github=1 ;;
+        esac
+        shift 2
+        ;;
+      *) shift ;;
+    esac
+  done
+  [[ "$has_img" == 1 && "$has_dom" == 1 && "$has_wd" == 1 && "$has_ss" == 1 && "$has_env_all" == 1 && "$has_ro_trusted" == 1 && "$excl_copilot" == 1 && "$excl_gh" == 1 && "$excl_github" == 1 ]] || return 95
+  COPILOT_GITHUB_TOKEN="" GH_TOKEN="" GITHUB_TOKEN="" "$@"
+}
 copilot() {
+  [[ -z "${COPILOT_GITHUB_TOKEN:-}" && -z "${GH_TOKEN:-}" && -z "${GITHUB_TOKEN:-}" ]] || return 94
   local count=0 id="" resume=""
   [[ ! -f "$RUNNER_TEMP/calls" ]] || count="$(cat "$RUNNER_TEMP/calls")"
   count=$((count + 1))
@@ -1197,14 +1238,96 @@ pwsh() {
 '@
         $output = @(& bash -c ($stubs + "`n" + $script:HandoffSteps['Run the squad']) 2>&1)
         $LASTEXITCODE | Should -Be $ExitCode -Because ($output -join "`n")
-        [int](Get-Content -LiteralPath (Join-Path $root 'calls') -Raw) | Should -Be $Calls
+        $callCount = if (Test-Path -LiteralPath (Join-Path $root 'calls')) {
+            [int](Get-Content -LiteralPath (Join-Path $root 'calls') -Raw)
+        } else { 0 }
+        $callCount | Should -Be $Calls
         $checkCount = if (Test-Path -LiteralPath (Join-Path $root 'checks')) {
             [int](Get-Content -LiteralPath (Join-Path $root 'checks') -Raw)
         } else { 0 }
         $checkCount | Should -Be $Checks
-        if ($Kind -ne 'pull_request') {
+        if ($Calls -gt 0 -and $Kind -ne 'pull_request') {
             (Get-Content -LiteralPath $env:SQUAD_PROMPT_FILE -Raw) | Should -Match 'FINAL HANDOFF PREFLIGHT'
         }
+    }
+
+    It 'scrubs token patterns and skips reparse points before diagnostic artifact upload in <Variant>' -ForEach @(
+        @{ Variant = 'live'; StepKey = 'live' }
+        @{ Variant = 'template'; StepKey = 'template' }
+    ) {
+        $stepBody = if ($StepKey -eq 'live') {
+            $script:HandoffSteps['Sanitize publication diagnostics']
+        } else {
+            $script:TemplateHandoffSteps['Sanitize publication diagnostics']
+        }
+        $root = Join-Path $TestDrive "diag-$Variant"
+        $runnerTemp = Join-Path $root 'temp'
+        $workspace = Join-Path $root 'workspace'
+        $outside = Join-Path $root 'outside'
+        $memberDir = Join-Path $workspace '.copilot-tracking/squad/members/issue-7/history'
+        New-Item -ItemType Directory -Path $runnerTemp, $memberDir, $outside -Force | Out-Null
+        Set-WatchModeTestFile -Path (Join-Path $outside 'secret.txt') -Content 'outside-secret-payload'
+
+        $fakeFinePat = 'github_pat_' + ('A1b2C3d4_' * 4)
+        $fakeClassicPat = 'ghp_' + ('x9Y8z7W6v5U4t3S2r1Q0' * 2)
+        $fakeServerToken = 'ghs_' + ('m1N2o3P4q5R6s7T8u9V0' * 2)
+        $fakeJwt = 'eyJhbGciOiJSUzI1NiJ9.eyJzdWIiOiJ3YXRjaCJ9.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c'
+        $fakeOpenAi = 'sk-proj-' + ('K1l2M3n4O5p6Q7r8S9t0U1v2')
+        $safeSha = '62b7e8ff1884aa476185369fa6be85585029f4c9'
+
+        Set-WatchModeTestFile -Path (Join-Path $runnerTemp 'squad-watch-preflight.log') -Content @"
+Preflight error at commit $safeSha
+Authorization: Bearer $fakeFinePat
+Remote https://x-access-token:$fakeServerToken@github.com/org/repo.git
+COPILOT_GITHUB_TOKEN=$fakeClassicPat
+Placeholder sk-placeholder-for-api-proxy kept intact
+"@
+        Set-WatchModeTestFile -Path (Join-Path $memberDir 'run.md') -Content @"
+# Run Diagnostics
+JWT: $fakeJwt
+Key: $fakeOpenAi
+"@
+
+        $reparseCreated = $false
+        $linkDir = Join-Path $workspace '.copilot-tracking/squad/members/issue-7/linked-outside'
+        try {
+            New-Item -ItemType SymbolicLink -Path $linkDir -Target $outside -ErrorAction Stop | Out-Null
+            $reparseCreated = $true
+        }
+        catch {
+            if ($IsWindows) {
+                New-Item -ItemType Junction -Path $linkDir -Target $outside -ErrorAction Stop | Out-Null
+                $reparseCreated = $true
+            }
+        }
+        $reparseCreated | Should -BeTrue
+
+        $stagedOut = Join-Path $runnerTemp 'squad-watch-diagnostics-staged'
+        $env:RUNNER_TEMP = $runnerTemp
+        $env:GITHUB_WORKSPACE = $workspace
+        $env:SUB_SQUAD = 'issue-7'
+        $env:DIAGNOSTICS_OUT = $stagedOut
+
+        & ([scriptblock]::Create($stepBody))
+
+        $stagedLog = Get-Content -LiteralPath (Join-Path $stagedOut 'runner-temp/squad-watch-preflight.log') -Raw
+        $stagedRun = Get-Content -LiteralPath (Join-Path $stagedOut 'members/issue-7/history/run.md') -Raw
+
+        $stagedLog | Should -Match ([regex]::Escape($safeSha))
+        $stagedLog | Should -Match 'sk-placeholder-for-api-proxy'
+        $stagedLog | Should -Not -Match 'github_pat_'
+        $stagedLog | Should -Not -Match 'ghp_'
+        $stagedLog | Should -Not -Match 'ghs_'
+        $stagedLog | Should -Match 'Authorization: Bearer \[REDACTED\]'
+        $stagedLog | Should -Match 'https://x-access-token:\[REDACTED\]@github\.com'
+        $stagedLog | Should -Match 'COPILOT_GITHUB_TOKEN=\[REDACTED\]'
+
+        $stagedRun | Should -Not -Match ([regex]::Escape($fakeJwt))
+        $stagedRun | Should -Not -Match ([regex]::Escape($fakeOpenAi))
+        $stagedRun | Should -Match 'JWT: \[REDACTED\]'
+        $stagedRun | Should -Match 'Key: \[REDACTED\]'
+
+        Test-Path -LiteralPath (Join-Path $stagedOut 'members/issue-7/linked-outside/secret.txt') | Should -BeFalse
     }
 }
 

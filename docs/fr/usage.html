@@ -1061,6 +1061,15 @@ dispatch-9911223344         # a free-form manual dispatch (workflow run id)</cod
         Le modèle ne revendique pas le rattachement actif d'une issue vers une pull request. Lorsque ce
         rattachement ne s'applique pas, le workflow actif échoue de façon fermée vers <code>pr-&lt;N&gt;</code>.
       </p>
+      <p>
+        Comme le modèle consommateur évite par défaut d'exiger des privilèges de conteneur,
+        <code>--allow-all-tools</code> partage l'environnement de processus du runner avec
+        <code>COPILOT_GITHUB_TOKEN</code> (portée limitée au quota Copilot, aucun droit d'écriture sur le dépôt) : définissez une expiration courte
+        du jeton, nettoyez les journaux de diagnostic téléversés (intégré), ou encapsulez l'étape dans
+        <code>github/gh-aw-firewall</code> (<code>awf</code>) comme le
+        <code>squad-watch.yml</code> actif de ce dépôt afin qu'un sidecar <code>api-proxy</code> isolé détienne le jeton hors
+        du conteneur de l'agent.
+      </p>
 
       <h2>Retrouver les détails d'un point de contrôle</h2>
       <p>

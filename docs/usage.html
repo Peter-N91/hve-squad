@@ -1068,6 +1068,15 @@ dispatch-9911223344         # a free-form manual dispatch (workflow run id)</cod
         The template does not claim the live issue-to-PR mapping. When that mapping does not
         apply, the live workflow fails closed to <code>pr-&lt;N&gt;</code>.
       </p>
+      <p>
+        Because the consumer template avoids requiring container privileges by default,
+        <code>--allow-all-tools</code> shares the runner process environment with
+        <code>COPILOT_GITHUB_TOKEN</code> (Copilot-quota scope only, zero repository write): set a short
+        token expiry, scrub diagnostic uploads (built in), or wrap the step in
+        <code>github/gh-aw-firewall</code> (<code>awf</code>) like this repository's live
+        <code>squad-watch.yml</code> so an isolated <code>api-proxy</code> sidecar holds the token outside
+        the agent container.
+      </p>
 
       <h2>Finding the details behind a gate</h2>
       <p>
