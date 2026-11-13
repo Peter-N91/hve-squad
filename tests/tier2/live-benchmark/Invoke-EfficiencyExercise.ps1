@@ -294,6 +294,8 @@ if ($MyInvocation.InvocationName -ne '.') {
             $Prompts.requirements = "$Common Using the initialized squad and mapped requirements roles, produce a BRD and PRD for EXERCISE.txt and collect independent domain and closing reviews. Preserve unresolved findings as measured quality results; do not repeatedly rewrite merely to reach a quality threshold. Keep roster-root deliverables and copy available drafts byte-for-byte to docs/requirements/brd.md and docs/requirements/prd.md for independent measurement, clearly identifying them as unapproved baseline artifacts. Missing or failed review is a recorded outcome, not permission to claim approval."
             $Prompts.build = "$Common Implement the frozen EXERCISE.txt CLI contract using available requirements, mapped roles and a Research, Plan, Implement, Review cycle. Produce src/task.ps1, tests and a short README. Run your own tests and closing review; record actual failures, unresolved findings and missing evidence rather than inventing success. This stage must still attempt feasible work if the preceding stage had quality or bookkeeping failures."
         }
+        $Prompts.requirements += ' Read the installed squad requirements-quality reference before dispatch. Carry requirements-author activation, actual phase/template/taxonomy and verified source/draft/state paths in each author/reviewer brief. Preserve explicit source-to-requirement-to-acceptance mappings and exercise bounds; do not invent business baselines, performance targets or approvals. Drain each complete reviewer capture and verified handoff before the next capture, apply the existing single source-supported author correction/disposition batch, and preserve unresolved findings.'
+        $Prompts.build += ' Verify the complete source contract, including that values produced and persisted remain readable and usable by every consuming command. Use consistent numeric domains; reject unrepresentable new values before modifying stored bytes. Preserve titles and explicit platform/encoding requirements. The closing review checks these invariants against actual tests; unavailable evidence stays unverified.'
         if ($Depth -eq 'quick') {
             foreach ($StageName in @($Prompts.Keys)) { $Prompts[$StageName] += ' depth=quick' }
         }
@@ -330,7 +332,9 @@ if ($MyInvocation.InvocationName -ne '.') {
             $Saved = Save-EfficiencyAttemptEvidence -EventsPath $SessionEvents -Out $Out -Prefix $Stage
             $Metrics = $Saved.metrics; $StartLine = $Saved.lineCount
             $StagePassed = ($Result.exitCode -eq 0 -and $Result.stopCause -eq 'none' -and $null -ne $Metrics -and $Metrics.complete -and $null -ne $Metrics.modelRequests -and $Metrics.modelRequests -le $WorkflowRequestCeiling -and $Metrics.counts.questions -eq 0)
-            $Readiness = if ($StagePassed) { Test-EfficiencyWorkflow -Workspace $Workspace -Metrics $Metrics -Stage $Stage } else { [pscustomobject]@{ passed = $false; checks = @{ processEvidence = $false }; reviewPath = $null } }
+            $Readiness = if ($StagePassed) {
+                Test-EfficiencyWorkflow -Workspace $Workspace -Metrics $Metrics -Stage $Stage -EventsPath (Join-Path $Out "$Stage-events.jsonl") -SourceRoot $SourceRoot -InstallRoot $InstallRoot -ExpectedSessionId $Session -EvidenceRoot $Out
+            } else { [pscustomobject]@{ passed = $false; checks = @{ processEvidence = $false }; reviewPath = $null } }
             $StagePassed = $StagePassed -and $Readiness.passed -and $Watch.Elapsed.TotalSeconds -le $WorkflowSeconds
             $Attempts.Add(@{ kind = 'stage'; process = $Result; readiness = $Readiness; passed = $StagePassed; sessionCreditCeiling = $SessionCreditCeiling; evidence = @(@("out/$Stage-stdout.jsonl", "out/$Stage-events.jsonl", "out/$Stage-metrics.json") | Where-Object { Test-Path -LiteralPath (Join-Path $TrialRoot $_) -PathType Leaf }) })
             if (-not $StagePassed -and -not $ObservationOnly) {
@@ -358,7 +362,9 @@ if ($MyInvocation.InvocationName -ne '.') {
                         $Saved = Save-EfficiencyAttemptEvidence -EventsPath $SessionEvents -Out $Out -Prefix "$Stage-continuation"
                         $Metrics = $Saved.metrics; $StartLine = $Saved.lineCount
                         $StagePassed = ($Result.exitCode -eq 0 -and $Result.stopCause -eq 'none' -and $Metrics -and $Metrics.complete -and $null -ne $Metrics.modelRequests -and $Metrics.modelRequests -le $WorkflowRequestCeiling -and $Metrics.counts.questions -eq 0 -and $Watch.Elapsed.TotalSeconds -le $WorkflowSeconds)
-                        $Readiness = if ($StagePassed) { Test-EfficiencyWorkflow -Workspace $Workspace -Metrics $Metrics -Stage $Stage } else { [pscustomobject]@{ passed = $false; checks = @{ processEvidence = $false }; reviewPath = $null } }
+                        $Readiness = if ($StagePassed) {
+                            Test-EfficiencyWorkflow -Workspace $Workspace -Metrics $Metrics -Stage $Stage -EventsPath (Join-Path $Out "$Stage-continuation-events.jsonl") -SourceRoot $SourceRoot -InstallRoot $InstallRoot -ExpectedSessionId $Session -EvidenceRoot $Out
+                        } else { [pscustomobject]@{ passed = $false; checks = @{ processEvidence = $false }; reviewPath = $null } }
                         $StagePassed = $StagePassed -and $Readiness.passed -and $Watch.Elapsed.TotalSeconds -le $WorkflowSeconds
                         $Attempts.Add(@{ kind = 'continuation'; process = $Result; readiness = $Readiness; passed = $StagePassed; sessionCreditCeiling = $SessionCreditCeiling; evidence = @(@("out/$Stage-continuation-stdout.jsonl", "out/$Stage-continuation-events.jsonl", "out/$Stage-continuation-metrics.json") | Where-Object { Test-Path -LiteralPath (Join-Path $TrialRoot $_) -PathType Leaf }) })
                         $Recovery.status = if ($StagePassed) { 'recovered' } else { 'failed' }
@@ -389,7 +395,7 @@ if ($MyInvocation.InvocationName -ne '.') {
         $ProgressStep = 5; $ProgressLabel = 'Checking acceptance and workflow'
         Write-EfficiencyProgress -Step $ProgressStep -Label $ProgressLabel -Path $ProgressPath
         $Acceptance = & (Join-Path $PSScriptRoot 'Test-EfficiencyTask.ps1') -Workspace $Workspace | ConvertFrom-Json -AsHashtable
-        $Workflow = if ($Stages[-1].name -eq 'build') { $Stages[-1].readiness } else { Test-EfficiencyWorkflow -Workspace $Workspace -Metrics $Metrics }
+        $Workflow = if ($Stages[-1].name -eq 'build') { $Stages[-1].readiness } else { Test-EfficiencyWorkflow -Workspace $Workspace -Metrics $Metrics -SourceRoot $SourceRoot -InstallRoot $InstallRoot -ExpectedSessionId $Session -EvidenceRoot $Out }
         Write-EfficiencyProgress -Step $ProgressStep -Label $ProgressLabel -Status finished -Path $ProgressPath
         $ProgressStep = 6; $ProgressLabel = 'Judging documents'
         $Judge = $null

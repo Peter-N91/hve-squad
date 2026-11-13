@@ -88,7 +88,11 @@ are unchanged; observational collection records their failures separately.
 
 In strict mode, each stage must pass both process/telemetry checks and stage-readiness checks
 before the next stage launches. Initialization requires nonempty shared state,
-Scribe dispatch/history evidence and the existing state verifier. Requirements
+canonical history, verified script-backed execution or a real cold-Scribe dispatch,
+and the state verifier. Script receipts must match the run, turn and persisted
+artifacts; narrative receipts and zero Scribe dispatches alone prove nothing.
+Exact-native ledgers are checked against native coverage, not repriced history
+estimates; fallback estimates retain their independent rate checks. Requirements
 also require the published BRD/PRD and dispatch-backed history pointing to nonempty
 artifacts for both builders and both quality reviewers. Artifact presence does
 not replace workflow approval or final independent quality judging. Build retains
@@ -96,6 +100,13 @@ the closing-review and role-evidence checks; functional acceptance and judging
 remain mandatory. A zero-exit blocked stage is not treated as successful merely
 because the CLI returned normally. Eligible context-budget failures may use the
 bounded same-stage recovery below; other failures stop dependent work.
+
+Score summaries keep the existing judge-only finding count separate from per-stage
+review outcomes. Structured severity counts are optional; unknown counts are not zero
+and review findings are never summed across potentially overlapping records. Reports
+also distinguish scored-only timing/credit means from all-requested observations and
+their actual coverage. Compatibility fingerprints identify differing executing inputs;
+historical scores are descriptive evidence, not reusable controls after evaluator changes.
 
 ### Bounded context recovery
 

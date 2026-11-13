@@ -123,6 +123,14 @@ material omissions; 0–13 means major gaps. The score is the median over the ru
 Critical or high-severity findings (missing mandatory requirements, unresolved
 production-safety claims) are counted separately.
 
+That count is **judge-only**: the judge sees the BRD, PRD and final implementation
+closing review, not every requirements/domain review. New results separately retain
+Requirements and Build review outcomes and artifact paths under each trial's
+`sourceReviews`. A failed stage review remains visible even when the judge reports
+zero findings. Missing or unparseable severity coverage is **unavailable**, never zero.
+Optional structured `readiness.findingCounts` (`critical` and `high`) supplies counts;
+the runner does not infer them from arbitrary Markdown or sum overlapping reviews.
+
 ### Functional: does the product work?
 
 After each run the benchmark executes the delivered CLI and tries specific behaviours:
@@ -140,6 +148,18 @@ and decision files, cost logs, proof that the expected roles (researcher, develo
 tester, lead, BRD/PRD builders) were dispatched, a recorded review outcome, and a state
 verifier confirming the recorded state matches reality. A run passes only if every check
 passes.
+
+Supported script-backed Init and handoffs are bookkeeping, not fictional Scribe
+dispatches: their actual execution receipts must match persisted state and history.
+Cold Scribe work still requires its real dispatch evidence. Exact native usage and
+fallback token estimates are checked on their own bases, never priced as if they were
+the same observations.
+
+Validation helpers come from the reviewed source or prepared installation, not the
+agent-writable trial workspace. Evaluated helper copies must match reviewed code;
+path names or printed receipts alone are not proof. Cold work needs its actual actor
+and equivalent completion evidence. Missing identity or native coverage stays failed
+or unavailable, not an assurance of arbitrary model behavior.
 
 ## Reading a score
 
@@ -174,13 +194,24 @@ speed improvement. Older saved scores remain readable and are not backfilled.
 
 ### Score interpretation
 
+* New scores retain fingerprints of allowlisted executing identities: scenarioHash,
+  rubric, parser, exercise, preparation, grader, verifier, converter, installation,
+  role-model policy and evaluation/recovery configuration. Comparisons explicitly
+  report compatible, incompatible or unknown coverage; older scores remain readable
+  with unknown identity. Matching model labels alone do not establish comparability.
+  Fingerprints record equality, not approval or a causal performance experiment.
 * The badge shows the quality median, the functional and workflow pass counts and the
   **average benchmark time per run**. It is green only when every run was scored and
   passed both checks, amber otherwise and grey when no run was scored. It is not a claim
   that every check passed: `report.md` lists the ones that did not.
-* The time is the mean of each run's workflow stages plus the judge. Stage clocks include
+* The existing time and credit means cover **scored runs only**. Time sums each scored
+  run's workflow stages plus the judge. Stage clocks include
   some harness checks; setup and report generation are excluded. It is neither pure
   agent latency nor total command duration. Credits count the workflow and the judge.
+  New `summary.allRequested` observations also include measured unscored trials and
+  display each metric's covered/requested count. A partial-coverage mean describes
+  only those measured slots, not the missing runs. Do not compare scored-only and
+  all-requested means as though they had the same denominator.
 * The quality score grades the BRD and PRD, not the delivered software. The judge is an
   AI model, so treat a difference of a few points as noise and prefer three runs.
 * Scores measured with a different model or Copilot CLI version are not directly

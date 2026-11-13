@@ -19,11 +19,13 @@
       is at or above the expectation),
     * every consumption JSON block found carries the ten contractual fields, in the
       contractual order, with no parse error and no non-numeric value,
-    * consumption.md's Usage & Cost Total row's raw columns (turns, in/cached/cache
+    * estimated consumption.md Usage & Cost Total row's raw columns (turns, in/cached/cache
       write/output tokens) equal the sum of the consumption blocks behind them within
       -LedgerTolerance, and its cost column equals those blocks priced at the squad
       root's own consumption-rates.md within the same tolerance (the ledger is
-      rewritten from the full history, so only display rounding may differ),
+      rewritten from the full history, so only display rounding may differ).
+      Native-basis ledgers instead use the trusted read-only canonical checker and
+      require complete native identity/history coverage; ledger-only is not PASS,
     * state.json parses, schemaVersion is unchanged, and turn/updated/activeRoles
       advanced at least as far as expected,
     * every deliverable path a dispatch entry names exists on disk (resolved against
@@ -54,6 +56,14 @@
     root's consumption-rates.md (cost column). Defaults to 0.01 (1%).
 .PARAMETER OutputPath
     Optional path to also write the structured result object as JSON.
+.PARAMETER SourceRoot
+    Reviewed repository containing squad-src. Defaults to this verifier's repository.
+.PARAMETER InstallRoot
+    Prepared base location. Unused base scripts need not match a per-arm source
+    overlay: validation executes only reviewed SourceRoot, never prepared/workspace code.
+.PARAMETER ExpectedSessionId
+    Optional benchmark session that must occur in accepted native coverage. Omit for
+    generic multi-session verification.
 .EXAMPLE
     ./scripts/Test-SquadScribeOutput.ps1 -SquadRoot .copilot-tracking/squad -ExpectationPath tests/fixtures/scribe-benchmark/expected.json
 .NOTES
@@ -101,7 +111,13 @@ param(
     [ValidateRange(0.0, 1.0)]
     [double]$LedgerTolerance = 0.01,
 
-    [string]$OutputPath
+    [string]$OutputPath,
+
+    [string]$SourceRoot = (Split-Path -Parent $PSScriptRoot),
+
+    [string]$InstallRoot,
+
+    [string]$ExpectedSessionId
 )
 
 $ErrorActionPreference = 'Stop'
@@ -269,7 +285,44 @@ function ConvertTo-RateModelKey {
     ($Text -replace '[\s_]+', '-' -replace '-{2,}', '-').Trim('-')
 }
 
-if (-not $model.Ledger) {
+$declaredNativeBasis = [bool]($model.Ledger -and $model.Ledger -match '\|\s*\*{0,2}exact-native\*{0,2}\s*\|')
+# Estimated fallback is supported until native accounting has been persisted. A
+# journal cannot be retained while its ledger is relabelled to evade native checks.
+$nativeJournal = Test-Path -LiteralPath (Join-Path $SquadRoot 'consumption-sessions.json') -PathType Leaf
+$nativeBasis = $declaredNativeBasis -or $nativeJournal
+$ledgerStatus = 'estimated'
+if ($nativeBasis) {
+    $ledgerStatus = 'unavailable'
+    try {
+        Add-Check -Name 'persisted native accounting is not downgraded to estimated' -Passed $declaredNativeBasis -Detail $(if ($declaredNativeBasis) { 'native basis retained' } else { 'a native journal requires native reconciliation; explicit estimated fallback requires no persisted native journal' })
+        Import-Module (Join-Path $PSScriptRoot '..\tests\tier2\live-benchmark\EfficiencyBenchmark.psm1') -Force
+        $repositoryMatch = [regex]::Match($SquadRoot, '^(?<repo>.+?)[\\/]\.copilot-tracking[\\/]squad(?:[\\/]|$)')
+        $workspace = if ($repositoryMatch.Success) { $repositoryMatch.Groups['repo'].Value } else { $SquadRoot }
+        $helper = Resolve-EfficiencySquadScript -Name 'SquadCoordinator.psm1' -SourceRoot $SourceRoot -InstallRoot $InstallRoot -Workspace $workspace
+        Import-Module $helper -Force
+        $canonical = Invoke-SquadLocalScript -Name 'Measure-SquadLedger.ps1' -Arguments @('-SquadRoot', $SquadRoot, '-Check')
+        $text = ($canonical.stdout + $canonical.stderr) -replace '\x1b\[[0-9;]*[A-Za-z]', ''
+        $ledgerStatus = if ($canonical.exitCode -eq 0 -and $text -match '(?m)^Measure-SquadLedger -Check: PASS\s*$') { 'PASS' }
+        elseif ($text -match 'failure class: ledger-only') { 'ledger-only' }
+        else { 'FAIL' }
+        Add-Check -Name 'native ledger passes canonical read-only reconciliation' -Passed ($ledgerStatus -eq 'PASS') -Detail $text.Trim()
+        $snapshot = Invoke-SquadLocalScript -Name 'Measure-SquadLedger.ps1' -Arguments @('-SquadRoot', $SquadRoot, '-SessionLog', 'auto', '-Format', 'json')
+        if ($snapshot.exitCode -ne 0) { throw "Native coverage unavailable: $($snapshot.stderr.Trim())" }
+        $derived = $snapshot.stdout | ConvertFrom-Json -AsHashtable
+        $complete = $derived.Contains('exact') -and $null -ne $derived.exact -and
+            $derived.exact.Contains('partial') -and $derived.exact.partial -eq $false -and
+            $derived.exact.records -gt 0 -and $derived.exact.identityDigest -match '^[a-fA-F0-9]{64}$'
+        Add-Check -Name 'native accounting coverage is complete' -Passed $complete -Detail $(if ($complete) { 'accepted native identities and history coverage reconcile' } else { 'native usage is unavailable or partial; not a zero-cost pass' })
+        if ($ExpectedSessionId) {
+            $matchingSession = $complete -and $derived.exact.Contains('sessionIds') -and $ExpectedSessionId -cin @($derived.exact.sessionIds)
+            Add-Check -Name 'native accounting includes the expected session' -Passed $matchingSession -Detail $(if ($matchingSession) { 'expected session accepted' } else { 'expected session is absent from accepted native coverage' })
+        }
+    }
+    catch {
+        Add-Check -Name 'native accounting evidence is available' -Passed $false -Detail $_.Exception.Message
+    }
+}
+elseif (-not $model.Ledger) {
     Add-Check -Name 'consumption.md ledger total reconciles with blocks' -Passed $false -Detail 'consumption.md is empty or missing'
 }
 else {
@@ -469,6 +522,8 @@ $passed = $failures.Count -eq 0
 $result = [ordered]@{
     squadRoot = $SquadRoot -replace '\\', '/'
     passed    = $passed
+    ledgerBasis = $(if ($nativeBasis) { 'exact-native' } else { 'estimated' })
+    ledgerCheck = $ledgerStatus
     checks    = $checks
     failures  = $failures
 }

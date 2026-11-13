@@ -17,6 +17,12 @@ Set-StrictMode -Version Latest
 $script:Schema = 'benchmark-score-v1'
 $script:Culture = [Globalization.CultureInfo]::InvariantCulture
 $script:Stages = @('init', 'requirements', 'build')
+$script:CompatibilityFields = @(
+    'schema', 'rubric', 'hostProfile', 'scenarioHash', 'parserHash', 'exerciseHash',
+    'preparationHash', 'graderHash', 'verifierHash', 'converterHash', 'installHash',
+    'model', 'cli', 'powershell', 'roleModelPolicy', 'disabledMcpServers',
+    'maxCredits', 'continuations', 'recoveryPolicy', 'evaluationPolicy'
+)
 $script:Dimensions = [ordered]@{
     businessClarity = 'Business clarity'
     scopeFidelity = 'Scope fidelity'
@@ -48,7 +54,7 @@ function Get-ScoreField {
         if ($Object -isnot [Collections.IDictionary] -or -not $Object.Contains($name)) { return $null }
         $Object = $Object[$name]
     }
-    $Object
+    ,$Object
 }
 
 function Get-ScoreList {
@@ -93,11 +99,88 @@ function ConvertTo-ScoreTime {
     $parsed.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", $script:Culture)
 }
 
+function Read-ScoreCompatibility {
+    param($Compatibility)
+    $result = [ordered]@{}
+    foreach ($key in $script:CompatibilityFields) {
+        $value = Get-ScoreField $Compatibility $key
+        $result[$key] = if ($value -is [string] -and $value -cmatch '^[a-f0-9]{64}$') { $value } else { $null }
+    }
+    $result
+}
+
+function ConvertTo-ScoreReviewPath {
+    param($Path)
+    if ($Path -isnot [string] -or $Path.Length -gt 240) { return $null }
+    $pathText = $Path.Replace('\', '/')
+    if ($pathText -cnotmatch '^[A-Za-z0-9_. -]+(?:/[A-Za-z0-9_. -]+)*$' -or
+        @($pathText.Split('/') | Where-Object { $_ -in '.', '..' -or $_ -cne $_.Trim() -or $_.EndsWith('.') }).Count) { return $null }
+    $pathText
+}
+
+function Read-ScoreReview {
+    param($Reviews)
+    $result = [ordered]@{}
+    foreach ($stage in 'requirements', 'build') {
+        $review = Get-ScoreField $Reviews $stage
+        $outcome = Get-ScoreField $review 'outcome'
+        $path = ConvertTo-ScoreReviewPath (Get-ScoreField $review 'reviewPath')
+        $result[$stage] = [ordered]@{
+            outcome = if ($outcome -cin @('passed', 'failed')) { $outcome } else { 'unavailable' }
+            reviewPath = $path
+            criticalHighFindings = ConvertTo-ScoreDouble (Get-ScoreField $review 'criticalHighFindings') 0 1000000
+        }
+        $count = $result[$stage]['criticalHighFindings']
+        if ($null -ne $count -and $count -ne [Math]::Floor($count)) { throw 'Invalid review finding count.' }
+        if ($null -eq $path) { $result[$stage]['criticalHighFindings'] = $null }
+    }
+    $result
+}
+
+function Get-ScoreReviewMarkdown {
+    param([Collections.IDictionary]$Score, [string]$Label)
+    $lines = [Collections.Generic.List[string]]::new()
+    $lines.AddRange([string[]]@("#### $Label stage reviews", '', '| Run | Review source | Outcome check | Review path (workspace-relative) | Critical/high (source only) |', '| --- | --- | --- | --- | --- |'))
+    $trials = @(Get-ScoreList $Score 'trials')
+    if (-not $trials.Count) { $lines.Add('| unavailable | requirements/build | unavailable | unavailable | unavailable |') }
+    foreach ($trial in $trials) {
+        $reviews = Read-ScoreReview (Get-ScoreField $trial 'sourceReviews')
+        foreach ($stage in $reviews.Keys) {
+            $review = $reviews[$stage]
+            $count = if ($null -ne $review['criticalHighFindings']) { $review['criticalHighFindings'] } else { 'unavailable' }
+            $path = if ($review['reviewPath']) { "``$($review['reviewPath'])``" } else { 'unavailable' }
+            $lines.Add("| $($trial['run']) | $stage | $($review['outcome']) | $path | $count |")
+        }
+    }
+    $lines -join "`n"
+}
+
+function Get-ScoreComparability {
+    param($Base, $Head)
+    $unknown = [Collections.Generic.List[string]]::new()
+    $changed = [Collections.Generic.List[string]]::new()
+    foreach ($key in @('scenario') + $script:CompatibilityFields) {
+        $before = if ($key -eq 'scenario') { Get-ScoreField $Base 'scenario' } else { Get-ScoreField $Base 'compatibility', $key }
+        $after = if ($key -eq 'scenario') { Get-ScoreField $Head 'scenario' } else { Get-ScoreField $Head 'compatibility', $key }
+        if ($null -eq $before -or $null -eq $after) { $unknown.Add($key) }
+        elseif ($before -cne $after) { $changed.Add($key) }
+    }
+    [pscustomobject]@{
+        Status = if ($changed.Count) { 'incompatible' } elseif ($unknown.Count) { 'unknown' } else { 'compatible' }
+        Unknown = @($unknown); Changed = @($changed)
+    }
+}
+
 # --- Build a score from run results -------------------------------------------
 
 function ConvertTo-BenchmarkRunSummary {
     <# .SYNOPSIS
     Reduces one run's result file (or the lack of one) to the figures the score uses.
+    .DESCRIPTION
+    sourceReviews preserves requirements/build readiness.checks.reviewOutcome and a safe
+    workspace-relative readiness.reviewPath. Optional readiness.findingCounts must contain
+    both critical and high as nonnegative integers (at most 500000 each); otherwise source
+    severity is unavailable. Review files are not opened and overlapping sources are not summed.
     #>
     [CmdletBinding()]
     param(
@@ -111,11 +194,27 @@ function ConvertTo-BenchmarkRunSummary {
         seconds = $null; credits = $null; failedChecks = @()
         note = if ($Note) { Format-SafeText $Note 120 } else { '' }
         activity = $null
+        sourceReviews = Read-ScoreReview $null
     }
     if ($null -eq $Result) { return $trial }
     $trial['activity'] = Read-ScoreActivity (Get-ScoreField $Result 'metrics', 'activity')
 
     $stages = @(Get-ScoreList $Result 'stages')
+    foreach ($name in 'requirements', 'build') {
+        $stage = $stages | Where-Object { $_['name'] -eq $name } | Select-Object -First 1
+        $outcome = Get-ScoreField $stage 'readiness', 'checks', 'reviewOutcome'
+        $review = $trial['sourceReviews'][$name]
+        $review['outcome'] = if ($outcome -is [bool]) { if ($outcome) { 'passed' } else { 'failed' } } else { 'unavailable' }
+        $review['reviewPath'] = ConvertTo-ScoreReviewPath (Get-ScoreField $stage 'readiness', 'reviewPath')
+        # Only typed, complete severity pairs count; never infer severity from a verdict or prose.
+        $counts = Get-ScoreField $stage 'readiness', 'findingCounts'
+        try {
+            $critical = ConvertTo-ScoreInteger (Get-ScoreField $counts 'critical') 0 500000
+            $high = ConvertTo-ScoreInteger (Get-ScoreField $counts 'high') 0 500000
+            if ($review['reviewPath']) { $review['criticalHighFindings'] = $critical + $high }
+        }
+        catch { $review['criticalHighFindings'] = $null }
+    }
     $stagesPassed = $true
     foreach ($name in $script:Stages) {
         $stage = $stages | Where-Object { $_['name'] -eq $name } | Select-Object -First 1
@@ -170,14 +269,29 @@ function Get-ScoreCredit {
 function Get-BenchmarkRunIdentity {
     <# .SYNOPSIS
     Reads the model, CLI and source identity a run recorded about itself.
+    .DESCRIPTION
+    compatibility contains SHA256 fingerprints of exact allowlisted metadata.compatibility
+    values, not raw policy text or truncated display values. Missing, unsupported or oversized
+    inputs (over 16384 characters) remain null. Fingerprints are comparison evidence, not attestation.
     #>
     [CmdletBinding()]
     param([AllowNull()][Collections.IDictionary]$Result)
+    $compatibility = [ordered]@{}
+    foreach ($key in $script:CompatibilityFields) {
+        $value = Get-ScoreField $Result 'metadata', 'compatibility', $key
+        # Fingerprint exact bounded inputs, not truncated display strings or arbitrary metadata.
+        $text = if ($value -is [string]) { $value } elseif (Test-Number $value) { $value.ToString($script:Culture) } else { $null }
+        $compatibility[$key] = if ($null -ne $text -and $text.Length -le 16384 -and
+            ($text.Length -gt 0 -or $key -in 'roleModelPolicy', 'disabledMcpServers')) {
+            [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData([Text.Encoding]::UTF8.GetBytes($text))).ToLowerInvariant()
+        } else { $null }
+    }
     [ordered]@{
         model = Get-ScoreField $Result 'metadata', 'compatibility', 'model'
         cli = Get-ScoreField $Result 'metadata', 'compatibility', 'cli'
         powershell = Get-ScoreField $Result 'metadata', 'compatibility', 'powershell'
         squadSourceHash = Get-ScoreField $Result 'metadata', 'sourceHash'
+        compatibility = $compatibility
     }
 }
 
@@ -203,6 +317,13 @@ function ConvertTo-BenchmarkScore {
         workflow = @($Trial | Where-Object { $_['workflow'] }).Count
         criticalHighFindings = $null; averageSeconds = $null; averageCredits = $null
         activity = $null
+        allRequested = [ordered]@{}
+    }
+    foreach ($pair in @(@('Seconds', 'seconds'), @('Credits', 'credits'))) {
+        $values = @($Trial | ForEach-Object { Get-ScoreField $_ $pair[1] } | Where-Object { $null -ne $_ })
+        $summary['allRequested']["$($pair[1])Covered"] = $values.Count
+        $summary['allRequested']["total$($pair[0])"] = if ($values.Count) { [double]($values | Measure-Object -Sum).Sum } else { $null }
+        $summary['allRequested']["average$($pair[0])"] = if ($values.Count) { [double]($values | Measure-Object -Average).Average } else { $null }
     }
     if ($scored.Count) {
         $summary['activity'] = [ordered]@{}
@@ -227,6 +348,7 @@ function ConvertTo-BenchmarkScore {
         measuredAt = $MeasuredAt.ToUniversalTime().ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", $script:Culture)
         source = [ordered]@{ commit = $Commit; squadSourceHash = $Identity['squadSourceHash']; uncommittedChanges = $UncommittedChanges }
         environment = [ordered]@{ model = $Identity['model']; cli = $Identity['cli']; powershell = $Identity['powershell'] }
+        compatibility = Read-ScoreCompatibility (Get-ScoreField $Identity 'compatibility')
         runs = [ordered]@{ requested = $Requested; scored = $scored.Count; failed = $Requested - $scored.Count }
         summary = $summary
         trials = @($Trial)
@@ -242,7 +364,7 @@ function Get-BenchmarkBadgeText {
     if ($runs['scored'] -lt 1) { return 'benchmark unavailable' }
     $requested = $runs['requested']
     $time = if ($null -ne $summary['averageSeconds']) { Format-ScoreDuration $summary['averageSeconds'] } else { 'unavailable' }
-    "doc quality $(Format-ScoreNumber $summary['quality'])/100 | functional $($summary['functional'])/$requested | workflow $($summary['workflow'])/$requested | avg benchmark time $time"
+    "doc quality $(Format-ScoreNumber $summary['quality'])/100 | functional $($summary['functional'])/$requested | workflow $($summary['workflow'])/$requested | avg scored-run time $time ($($runs['scored'])/$requested scored)"
 }
 
 function Get-BenchmarkBadgeSvg {
@@ -265,7 +387,9 @@ function Get-ScoreProvenance {
     $model = Format-SafeText (Get-ScoreField $Score 'environment', 'model')
     $cli = Format-SafeText (Get-ScoreField $Score 'environment', 'cli')
     $count = $Score['runs']['requested']
-    "$when, commit ``$commit``, model ``$model``, Copilot CLI ``$cli``, $count run$(if ($count -ne 1) { 's' })"
+    $hash = Get-ScoreField $Score 'source', 'squadSourceHash'
+    $hash = if ($hash -is [string] -and $hash -cmatch '^[0-9a-fA-F]{7,64}$') { $hash } else { 'unavailable' }
+    "$when, measured commit ``$commit``, measured squad source hash ``$hash``, model ``$model``, Copilot CLI ``$cli``, $count run$(if ($count -ne 1) { 's' }); not an identity of the current checkout"
 }
 
 function Get-ScoreRow {
@@ -276,7 +400,7 @@ function Get-ScoreRow {
     $has = $scored -gt 0
     $findings = $summary['criticalHighFindings']
     $perRun = if ($has -and $null -ne $findings) { $findings / $scored }
-    [ordered]@{
+    $rows = [ordered]@{
         quality = @{
             Label = 'Document quality (median, out of 100)'
             Text = if ($has) { Format-ScoreNumber $summary['quality'] } else { 'n/a' }
@@ -285,22 +409,37 @@ function Get-ScoreRow {
         functional = @{ Label = 'Functional (runs passing)'; Text = "$($summary['functional'])/$requested"; Number = $summary['functional'] / $requested }
         workflow = @{ Label = 'Workflow (runs passing)'; Text = "$($summary['workflow'])/$requested"; Number = $summary['workflow'] / $requested }
         findings = @{
-            Label = 'Critical/high findings'
-            Text = if ($null -ne $perRun) { "$findings ($(Format-ScoreNumber $perRun) per run)" } else { 'n/a' }
+            Label = 'JUDGE-ONLY critical/high findings'
+            Text = if ($null -ne $perRun) { "$findings ($(Format-ScoreNumber $perRun) per scored run)" } else { 'unavailable' }
             Number = $perRun
         }
         seconds = @{
-            Label = 'Average time per run'
+            Label = 'Average time per scored run'
             Text = if ($null -ne $summary['averageSeconds']) { Format-ScoreDuration $summary['averageSeconds'] } else { 'n/a' }
             Number = $summary['averageSeconds']
         }
         credits = @{
-            Label = 'Average credits per run'
+            Label = 'Average credits per scored run'
             Text = if ($null -ne $summary['averageCredits']) { Format-ScoreNumber $summary['averageCredits'] } else { 'n/a' }
             Number = $summary['averageCredits']
         }
         scored = @{ Label = 'Runs that produced a score'; Text = "$scored/$requested"; Number = $scored / $requested }
     }
+    foreach ($pair in @(@('Seconds', 'seconds', 'time'), @('Credits', 'credits', 'credits'))) {
+        $all = Get-ScoreField $summary 'allRequested'
+        $covered = Get-ScoreField $all "$($pair[1])Covered"
+        $coverage = if ($null -ne $covered) { "$covered/$requested requested runs covered" } else { 'coverage unavailable' }
+        foreach ($kind in 'total', 'average') {
+            $value = Get-ScoreField $all "$kind$($pair[0])"
+            $text = if ($null -eq $value) { 'unavailable' } elseif ($pair[1] -eq 'seconds') { Format-ScoreDuration $value } else { Format-ScoreNumber $value }
+            $rows["all$kind$($pair[0])"] = @{
+                Label = "All-requested $($pair[2]) ($kind observed)"
+                Text = "$text; $coverage"
+                Number = $null
+            }
+        }
+    }
+    $rows
 }
 
 function Get-ActivityReportMarkdown {
@@ -325,12 +464,22 @@ function Get-ActivityReportMarkdown {
 function Get-BenchmarkReportMarkdown {
     [CmdletBinding()]
     param([Parameter(Mandatory)][Collections.IDictionary]$Score, [AllowNull()][Collections.IDictionary]$EarlierScore)
+    $Score = Read-ScoreData $Score
+    if ($null -ne $EarlierScore) { $EarlierScore = Read-ScoreData $EarlierScore }
     $lines = [Collections.Generic.List[string]]::new()
     $lines.AddRange([string[]]@('# Benchmark score', '', "Measured: $(Get-ScoreProvenance $Score)."))
     if ($Score['source']['uncommittedChanges']) { $lines.Add('The squad source had uncommitted changes when this was measured.') }
     $lines.AddRange([string[]]@('', '| Measure | Result |', '| --- | --- |'))
     $rows = Get-ScoreRow $Score
     foreach ($row in $rows.Values) { $lines.Add("| $($row.Label) | $($row.Text) |") }
+    $lines.Add('')
+    $lines.Add("Scored-only averages use $($Score['runs']['scored']) scored run(s); all-requested totals/means use only the covered slots, including unscored trials, without imputing missing data.")
+    $lines.Add('JUDGE-ONLY findings cover only the inputs supplied to the unchanged document judge, not whole-workflow risk coverage. Stage reviews are separate sources and are never added together; unavailable severity coverage is not zero.')
+    $lines.Add((Get-ScoreReviewMarkdown -Score $Score -Label 'Latest'))
+    if ($null -ne $EarlierScore) {
+        $comparison = Get-ScoreComparability $EarlierScore $Score
+        $lines.Add("Comparison identity: $($comparison.Status). Missing identities: $($comparison.Unknown -join ', '). Differing identities: $($comparison.Changed -join ', '). Figures are descriptive, not a controlled causal comparison.")
+    }
     $lines.Add('')
     $lines.Add((Get-ActivityReportMarkdown -Earlier $EarlierScore -Latest $Score))
     if ($null -ne $EarlierScore) { $lines.Add("Earlier run: $(Get-ScoreProvenance $EarlierScore).") }
@@ -339,7 +488,7 @@ function Get-BenchmarkReportMarkdown {
         $lines.AddRange([string[]]@('', '## Document quality by dimension (median, out of 20)', '', '| Dimension | Score |', '| --- | --- |'))
         foreach ($name in $script:Dimensions.Keys) { $lines.Add("| $($script:Dimensions[$name]) | $(Format-ScoreNumber $Score['summary']['dimensions'][$name]) |") }
     }
-    $lines.AddRange([string[]]@('', '## Runs', '', '| Run | Scored | Quality | Functional | Workflow | Critical/high | Time | Credits |', '| --- | --- | --- | --- | --- | --- | --- | --- |'))
+    $lines.AddRange([string[]]@('', '## Runs', '', '| Run | Scored | Quality | Functional | Workflow | JUDGE-ONLY critical/high | Time | Credits |', '| --- | --- | --- | --- | --- | --- | --- | --- |'))
     $yes = { param($value) if ($value) { 'yes' } else { 'no' } }
     foreach ($trial in $Score['trials']) {
         $quality = if ($trial['scored']) { Format-ScoreNumber $trial['quality'] } else { 'n/a' }
@@ -370,6 +519,8 @@ function Write-BenchmarkScore {
         [Parameter(Mandatory)][string]$Directory,
         [AllowNull()][Collections.IDictionary]$EarlierScore
     )
+    $Score = Read-ScoreData $Score
+    if ($null -ne $EarlierScore) { $EarlierScore = Read-ScoreData $EarlierScore }
     [void][IO.Directory]::CreateDirectory($Directory)
     $files = [ordered]@{
         'score.json' = ($Score | ConvertTo-Json -Depth 8) + "`n"
@@ -417,6 +568,11 @@ function Read-BenchmarkScore {
     param([Parameter(Mandatory)][string]$Path)
     if ((Get-Item -LiteralPath $Path).Length -gt 1MB) { throw 'The score file is too large.' }
     $raw = Get-Content -LiteralPath $Path -Raw | ConvertFrom-Json -AsHashtable
+    Read-ScoreData $raw
+}
+
+function Read-ScoreData {
+    param($Raw)
     if ((Get-ScoreField $raw 'schema') -cne $script:Schema) { throw 'Unsupported score schema.' }
 
     $requested = ConvertTo-ScoreInteger (Get-ScoreField $raw 'runs', 'requested') 1 3
@@ -430,6 +586,24 @@ function Read-BenchmarkScore {
         averageSeconds = ConvertTo-ScoreDouble (Get-ScoreField $raw 'summary', 'averageSeconds') 0 10000000
         averageCredits = ConvertTo-ScoreDouble (Get-ScoreField $raw 'summary', 'averageCredits') 0 10000000
         activity = Read-ScoreActivity (Get-ScoreField $raw 'summary', 'activity')
+        allRequested = $null
+    }
+    $all = Get-ScoreField $raw 'summary', 'allRequested'
+    if ($null -ne $all) {
+        if ($all -isnot [Collections.IDictionary]) { throw 'Invalid all-requested metrics.' }
+        $summary['allRequested'] = [ordered]@{}
+        foreach ($pair in @(@('Seconds', 'seconds'), @('Credits', 'credits'))) {
+            $covered = ConvertTo-ScoreInteger (Get-ScoreField $all "$($pair[1])Covered") 0 $requested
+            $total = ConvertTo-ScoreDouble (Get-ScoreField $all "total$($pair[0])") 0 30000000
+            $average = ConvertTo-ScoreDouble (Get-ScoreField $all "average$($pair[0])") 0 10000000
+            if (($covered -eq 0 -and ($null -ne $total -or $null -ne $average)) -or
+                ($covered -gt 0 -and ($null -eq $total -or $null -eq $average -or [Math]::Abs($total / $covered - $average) -gt 1e-6))) {
+                throw 'Invalid all-requested coverage.'
+            }
+            $summary['allRequested']["$($pair[1])Covered"] = $covered
+            $summary['allRequested']["total$($pair[0])"] = $total
+            $summary['allRequested']["average$($pair[0])"] = $average
+        }
     }
     if ($scored -gt 0) {
         if ($null -eq $summary['quality'] -or $null -eq $summary['criticalHighFindings']) { throw 'A scored run needs quality and findings.' }
@@ -442,19 +616,67 @@ function Read-BenchmarkScore {
         }
     }
     $commit = Get-ScoreField $raw 'source', 'commit'
+    $hash = Get-ScoreField $raw 'source', 'squadSourceHash'
+    $scenario = Get-ScoreField $raw 'scenario'
+    $rawTrials = Get-ScoreField $raw 'trials'
+    $trials = @()
+    if ($null -ne $rawTrials) {
+        if ($rawTrials -isnot [array] -or $rawTrials.Count -gt $requested) { throw 'Invalid trial list.' }
+        $seen = [Collections.Generic.HashSet[int]]::new()
+        $trials = @(
+            foreach ($trial in $rawTrials) {
+                $run = ConvertTo-ScoreInteger (Get-ScoreField $trial 'run') 1 $requested
+                if (-not $seen.Add($run)) { throw 'Duplicate trial.' }
+                $failedChecks = Get-ScoreField $trial 'failedChecks'
+                if ($null -eq $failedChecks) { $failedChecks = @() }
+                if ($failedChecks -isnot [array] -or @($failedChecks | Where-Object { $_ -isnot [string] }).Count) {
+                    throw 'Invalid failed checks.'
+                }
+                $dimensions = $null
+                if ((Get-ScoreField $trial 'scored') -eq $true) {
+                    $dimensions = [ordered]@{}
+                    foreach ($name in $script:Dimensions.Keys) {
+                        $dimensions[$name] = ConvertTo-ScoreDouble (Get-ScoreField $trial 'dimensions', $name) 0 20
+                        if ($null -eq $dimensions[$name]) { throw 'A trial dimension is missing.' }
+                    }
+                }
+                [ordered]@{
+                    run = $run; scored = (Get-ScoreField $trial 'scored') -eq $true
+                    quality = ConvertTo-ScoreDouble (Get-ScoreField $trial 'quality') 0 100
+                    dimensions = $dimensions
+                    functional = (Get-ScoreField $trial 'functional') -eq $true
+                    workflow = (Get-ScoreField $trial 'workflow') -eq $true
+                    criticalHighFindings = ConvertTo-ScoreDouble (Get-ScoreField $trial 'criticalHighFindings') 0 1000000
+                    seconds = ConvertTo-ScoreDouble (Get-ScoreField $trial 'seconds') 0 10000000
+                    credits = ConvertTo-ScoreDouble (Get-ScoreField $trial 'credits') 0 10000000
+                    failedChecks = @($failedChecks | Select-Object -First 12 | ForEach-Object { Format-SafeText $_ 60 })
+                    note = if (Get-ScoreField $trial 'note') { Format-SafeText (Get-ScoreField $trial 'note') 120 } else { '' }
+                    activity = Read-ScoreActivity (Get-ScoreField $trial 'activity')
+                    sourceReviews = Read-ScoreReview (Get-ScoreField $trial 'sourceReviews')
+                }
+            }
+        )
+    }
     [ordered]@{
         schema = $script:Schema
+        scenario = if ($scenario -is [string] -and $scenario -cmatch '^[A-Za-z0-9._-]{1,80}$') { $scenario } else { $null }
         measuredAt = ConvertTo-ScoreTime (Get-ScoreField $raw 'measuredAt')
         source = [ordered]@{
             commit = if ($commit -is [string] -and $commit -cmatch '^[0-9a-f]{7,40}$') { $commit } else { 'unknown' }
+            squadSourceHash = if ($hash -is [string] -and $hash -cmatch '^[0-9a-fA-F]{7,64}$') { $hash } else { $null }
             uncommittedChanges = (Get-ScoreField $raw 'source', 'uncommittedChanges') -eq $true
         }
         environment = [ordered]@{
             model = Format-SafeText (Get-ScoreField $raw 'environment', 'model')
             cli = Format-SafeText (Get-ScoreField $raw 'environment', 'cli')
+            powershell = if ((Get-ScoreField $raw 'environment', 'powershell') -cmatch '^\d+\.\d+\.\d+(?:-[A-Za-z0-9.-]+)?$') {
+                Get-ScoreField $raw 'environment', 'powershell'
+            } else { $null }
         }
+        compatibility = Read-ScoreCompatibility (Get-ScoreField $raw 'compatibility')
         runs = [ordered]@{ requested = $requested; scored = $scored; failed = $requested - $scored }
         summary = $summary
+        trials = $trials
     }
 }
 
@@ -473,7 +695,7 @@ function Get-ScoreChange {
         { $_ -in 'functional', 'workflow', 'scored' } { "$sign$(Format-ScoreNumber ($size * 100)) pts" }
         'seconds' { "$sign$(if ($size -lt 60) { "$(Format-ScoreNumber $size) s" } else { Format-ScoreDuration $size })$percent" }
         'credits' { "$sign$(Format-ScoreNumber $size)$percent" }
-        'findings' { "$sign$(Format-ScoreNumber $size) per run" }
+        'findings' { "$sign$(Format-ScoreNumber $size) per scored run" }
         default { "$sign$(Format-ScoreNumber $size)" }
     }
 }
@@ -482,9 +704,9 @@ function Compare-BenchmarkScore {
     <# .SYNOPSIS
     Describes how a pull request's score differs from its base. Warns about lower scores and failed runs; never fails.
     .DESCRIPTION
-    Scores that differ in run count, model or CLI are still compared on a best-effort basis
-    (pass rates and per-run averages), with a note. A missing or unreadable score only
-    changes what is shown. Returns Warnings, Notes and the Markdown comment.
+    Displays descriptive differences, explicitly flagging missing or incompatible executing identities.
+    A missing or unreadable score only changes what is shown. Returns Warnings, Notes,
+    Comparability and the Markdown comment, never authorization or a controlled causal claim.
     #>
     [CmdletBinding()]
     param(
@@ -495,11 +717,26 @@ function Compare-BenchmarkScore {
         [switch]$Unchanged,
         [switch]$SquadSourceChanged
     )
+    if ($null -ne $Base) { $Base = Read-ScoreData $Base }
+    if ($null -ne $Head) { $Head = Read-ScoreData $Head }
     $warnings = [Collections.Generic.List[string]]::new()
     $notes = [Collections.Generic.List[string]]::new()
     $baseRows = if ($null -ne $Base) { Get-ScoreRow $Base }
     $headRows = if ($null -ne $Head) { Get-ScoreRow $Head }
     $mode = if ($null -ne $Base -and $null -ne $Head -and -not $Unchanged) { 'compare' } elseif ($null -ne $Head) { 'head' } elseif ($null -ne $Base) { 'base' } else { 'none' }
+    $comparability = 'unavailable'
+    if ($null -ne $Base -and $null -ne $Head) {
+        $identity = Get-ScoreComparability $Base $Head
+        $comparability = $identity.Status
+        $notes.Add("Comparison identity: $comparability. Descriptive differences are not evidence of a controlled causal comparison.")
+        if ($identity.Unknown.Count) { $notes.Add("Missing/invalid compatibility identities: $($identity.Unknown -join ', '). Legacy or incomplete evidence is unavailable, not a match.") }
+        if ($identity.Changed.Count) { $notes.Add("Incompatible compatibility identities: $($identity.Changed -join ', ').") }
+    }
+    elseif ($mode -ne 'none') {
+        $identity = Get-ScoreComparability $Base $Head
+        $notes.Add('Comparison identity: unavailable (two scores are required).')
+        $notes.Add("Missing/invalid compatibility identities on one or both sides: $($identity.Unknown -join ', ').")
+    }
 
     if ($mode -eq 'compare') {
         $b = $Base['summary']; $h = $Head['summary']
@@ -508,7 +745,7 @@ function Compare-BenchmarkScore {
             if ($h['quality'] -lt $b['quality'] - 1e-9) { $warnings.Add("Document quality is lower than on the base branch: $(Format-ScoreNumber $h['quality']) vs $(Format-ScoreNumber $b['quality']).") }
             $lower = @($script:Dimensions.Keys | Where-Object { $h['dimensions'][$_] -lt $b['dimensions'][$_] - 1e-9 })
             if ($lower.Count) { $warnings.Add('Lower quality dimension medians than on the base branch: ' + (($lower | ForEach-Object { "$($script:Dimensions[$_]) $(Format-ScoreNumber $h['dimensions'][$_]) vs $(Format-ScoreNumber $b['dimensions'][$_])" }) -join ', ') + '.') }
-            if ($headRows.findings.Number -gt $baseRows.findings.Number + 1e-9) { $warnings.Add("More critical/high findings per run than on the base branch: $(Format-ScoreNumber $headRows.findings.Number) vs $(Format-ScoreNumber $baseRows.findings.Number).") }
+            if ($headRows.findings.Number -gt $baseRows.findings.Number + 1e-9) { $warnings.Add("More JUDGE-ONLY critical/high findings per scored run than on the base branch: $(Format-ScoreNumber $headRows.findings.Number) vs $(Format-ScoreNumber $baseRows.findings.Number).") }
         }
         foreach ($key in 'functional', 'workflow') {
             if ($headRows[$key].Number -lt $baseRows[$key].Number - 1e-9) { $warnings.Add("The $key pass rate is lower than on the base branch: $($headRows[$key].Text) vs $($baseRows[$key].Text).") }
@@ -556,6 +793,11 @@ function Compare-BenchmarkScore {
         foreach ($key in $source.Keys) { $labels[$key] = $source[$key].Label }
         & $table @($source.Keys) $labels $baseRows $headRows
         $lines.Add('')
+        $lines.Add('JUDGE-ONLY findings cover only the supplied document-judge inputs, not whole-workflow risk coverage. Requirements/build reviews are separate, potentially overlapping sources, never summed; unavailable severity coverage is not zero.')
+        $lines.Add('Scored-only averages use each score''s scored-run count. All-requested totals/means include measured unscored trials and use the explicitly covered slots, not imputed missing data.')
+        if ($null -ne $Base) { $lines.Add((Get-ScoreReviewMarkdown -Score $Base -Label 'Base branch')) }
+        if ($null -ne $Head) { $lines.Add((Get-ScoreReviewMarkdown -Score $Head -Label 'This pull request')) }
+        $lines.Add('')
         $lines.Add((Get-ActivityReportMarkdown -Earlier $Base -Latest $Head))
         $shown = if ($null -ne $Head) { $Head } else { $Base }
         if ($shown['runs']['scored'] -gt 0 -and ($mode -ne 'compare' -or ($Base['runs']['scored'] -gt 0 -and $Head['runs']['scored'] -gt 0))) {
@@ -578,7 +820,7 @@ function Compare-BenchmarkScore {
     if ($warnings.Count) { $lines.Add('**Warnings**'); $lines.Add(''); foreach ($w in $warnings) { $lines.Add("- :warning: $w") }; $lines.Add('') }
     if ($notes.Count) { $lines.Add('**Notes**'); $lines.Add(''); foreach ($n in $notes) { $lines.Add("- $n") }; $lines.Add('') }
     $lines.Add("<sub>Informational only: this check never fails a pull request. Scores are measured locally with ``$script:RefreshCommand`` and saved in ``benchmarks/efficiency/`` (see its README).</sub>")
-    [pscustomobject]@{ Warnings = @($warnings); Notes = @($notes); Markdown = ($lines -join "`n") + "`n" }
+    [pscustomobject]@{ Warnings = @($warnings); Notes = @($notes); Comparability = $comparability; Markdown = ($lines -join "`n") + "`n" }
 }
 
 Export-ModuleMember -Function ConvertTo-BenchmarkRunSummary, Get-BenchmarkRunIdentity, ConvertTo-BenchmarkScore, Get-BenchmarkBadgeText, Get-BenchmarkBadgeSvg, Get-BenchmarkReportMarkdown, Write-BenchmarkScore, Read-BenchmarkScore, Compare-BenchmarkScore

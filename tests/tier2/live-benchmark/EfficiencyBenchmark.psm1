@@ -760,26 +760,501 @@ function Get-EfficiencyHistoryDeliverable {
     }
 }
 
-function Test-EfficiencyWorkflow {
+function Resolve-EfficiencyPlainPath {
     <# .SYNOPSIS
-    Checks stage-specific artifacts and history before advancement; defaults to final build verification.
+    Refuses linked paths before reading executable trees or resolving write destinations.
     #>
     [CmdletBinding()]
-    param([Parameter(Mandatory)][string]$Workspace, [AllowNull()]$Metrics, [ValidateSet('init', 'requirements', 'build')][string]$Stage = 'build')
+    [OutputType([string])]
+    param([string]$Path, [string]$Base = (Get-Location).Path)
+    $Full = [IO.Path]::GetFullPath($Path, $Base)
+    $Cursor = $Full
+    while ($Cursor) {
+        $Item = Get-Item -LiteralPath $Cursor -Force -ErrorAction SilentlyContinue
+        if ($Item -and ($Item.Attributes -band [IO.FileAttributes]::ReparsePoint)) { throw 'Linked evidence/helper path refused.' }
+        $Cursor = Split-Path -Parent $Cursor
+    }
+    $Full.TrimEnd([IO.Path]::DirectorySeparatorChar)
+}
+
+function Test-EfficiencyPathWithin {
+    <# .SYNOPSIS
+    Tests containment including the directory itself.
+    #>
+    [CmdletBinding()]
+    [OutputType([bool])]
+    param([string]$Path, [string]$Root)
+    $Path -ieq $Root -or $Path.StartsWith($Root.TrimEnd('\', '/') + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase)
+}
+
+function Assert-EfficiencyScriptTree {
+    <# .SYNOPSIS
+    Compares every executable-tree file with reviewed source without loading candidate code.
+    #>
+    [CmdletBinding()]
+    param([string]$Reviewed, [string]$Candidate, [hashtable]$IntegrityContext = @{})
+    $Reviewed = Resolve-EfficiencyPlainPath $Reviewed
+    $Candidate = Resolve-EfficiencyPlainPath $Candidate
+    if (-not (Test-Path -LiteralPath $Candidate -PathType Container)) { throw 'Squad script tree is unavailable.' }
+    if ($Candidate -ieq $Reviewed) { return }
+    $Manifests = @(
+        foreach ($Root in @($Reviewed, $Candidate)) {
+            if ($IntegrityContext.ContainsKey($Root)) { $IntegrityContext[$Root]; continue }
+            $Manifest = @{}
+            $Pending = [Collections.Generic.Stack[string]]::new()
+            $Pending.Push($Root)
+            while ($Pending.Count) {
+                foreach ($Item in Get-ChildItem -LiteralPath $Pending.Pop() -Force) {
+                    if ($Item.Attributes -band [IO.FileAttributes]::ReparsePoint) { throw 'Linked helper tree refused.' }
+                    if ($Item.PSIsContainer) { $Pending.Push($Item.FullName) }
+                    else { $Manifest[[IO.Path]::GetRelativePath($Root, $Item.FullName)] = (Get-FileHash -LiteralPath $Item.FullName -Algorithm SHA256).Hash }
+                }
+            }
+            $IntegrityContext[$Root] = $Manifest
+            $Manifest
+        }
+    )
+    $Expected = $Manifests[0]; $Actual = $Manifests[1]
+    if ($Actual.Count -ne $Expected.Count) { throw 'Squad helper tree differs from reviewed source.' }
+    foreach ($Key in $Actual.Keys) {
+        if (-not $Expected.ContainsKey($Key) -or $Actual[$Key] -cne $Expected[$Key]) {
+            throw 'Squad helper tree differs from reviewed source.'
+        }
+    }
+}
+
+function New-EfficiencyCheckDirectory {
+    <# .SYNOPSIS
+    Creates an owned disposable directory in the caller's out directory, never in shipped code.
+    #>
+    [CmdletBinding()]
+    [OutputType([string])]
+    param([string]$Workspace, [string]$EvidenceRoot)
+    $Root = Resolve-EfficiencyPlainPath $Workspace
+    if (-not $EvidenceRoot) { $EvidenceRoot = Join-Path (Split-Path -Parent $Root) 'out' }
+    $Out = Resolve-EfficiencyPlainPath $EvidenceRoot
+    if ((Test-EfficiencyPathWithin $Out $Root) -or -not (Test-Path -LiteralPath $Out -PathType Container)) {
+        throw 'An existing caller-owned EvidenceRoot outside Workspace is required (default: sibling out).'
+    }
+    $Directory = Join-Path $Out ('.efficiency-check-' + [guid]::NewGuid())
+    $null = New-Item -ItemType Directory -Path $Directory
+    $Directory
+}
+
+function Resolve-EfficiencySquadScript {
+    <# .SYNOPSIS
+    Returns reviewed source; only actually executed copies must match that arm's source.
+    #>
+    [CmdletBinding()]
+    [OutputType([string])]
+    param([string]$Name, [string]$SourceRoot, [string]$InstallRoot, [string]$Workspace, [string]$ExecutionPath)
+    Resolve-EfficiencySquadScriptCore @PSBoundParameters -IntegrityContext @{}
+}
+
+function Resolve-EfficiencySquadScriptCore {
+    <# .SYNOPSIS
+    Uses a private extraction-local integrity context, never caller evidence or a global cache.
+    #>
+    [CmdletBinding()]
+    [OutputType([string])]
+    param([string]$Name, [string]$SourceRoot, [string]$InstallRoot, [string]$Workspace, [string]$ExecutionPath, [hashtable]$IntegrityContext)
+    if ($Name -notmatch '^[A-Za-z][A-Za-z0-9-]+\.(?:ps1|psm1)$') { throw 'A fixed shipped helper name is required.' }
+    $Reviewed = Resolve-EfficiencyPlainPath (Join-Path $SourceRoot 'squad-src\.github\skills\squad\scripts')
+    $Expected = Join-Path $Reviewed $Name
+    if (-not (Test-Path -LiteralPath $Expected -PathType Leaf)) { throw "Reviewed Squad helper '$Name' is unavailable." }
+    $Candidates = [Collections.Generic.List[string]]::new()
+    $Candidates.Add($Reviewed)
+    if ($Workspace) {
+        $Workspace = Resolve-EfficiencyPlainPath $Workspace
+        if (Test-EfficiencyPathWithin $Reviewed $Workspace) { throw 'Reviewed helpers cannot be inside the model workspace.' }
+    }
+    if ($InstallRoot) {
+        $InstallRoot = Resolve-EfficiencyPlainPath $InstallRoot
+        if ($Workspace -and (Test-EfficiencyPathWithin $InstallRoot $Workspace)) { throw 'Prepared installation cannot be inside the model workspace.' }
+        foreach ($Relative in @('.agents\skills\squad\scripts', 'skills\squad\scripts')) { $Candidates.Add((Join-Path $InstallRoot $Relative)) }
+    }
+    if ($ExecutionPath) {
+        $ExecutionPath = Resolve-EfficiencyPlainPath $ExecutionPath
+        if ($Workspace) {
+            foreach ($Relative in @('.agents\skills\squad\scripts', 'skills\squad\scripts')) { $Candidates.Add((Join-Path $Workspace $Relative)) }
+        }
+        $Matched = $false
+        foreach ($Candidate in $Candidates) {
+            if ($ExecutionPath -ine (Join-Path $Candidate $Name)) { continue }
+            Assert-EfficiencyScriptTree -Reviewed $Reviewed -Candidate $Candidate -IntegrityContext $IntegrityContext
+            $Matched = $true
+            break
+        }
+        if (-not $Matched) { throw 'Executed writer is outside the reviewed/verified script trees.' }
+    }
+    $Expected
+}
+
+function Get-EfficiencyBookkeepingEvidence {
+    <# .SYNOPSIS
+    Extracts local-only, paired execution receipts, never assistant narrative or evaluated commands.
+    .DESCRIPTION
+    This evidence contains local paths and bound writer arguments. Do not serialize it into
+    portable metrics or reports. Only literal arguments and literal/Get-Location assignments
+    are understood; unsupported shell expressions fail closed.
+    #>
+    [CmdletBinding()]
+    [OutputType([pscustomobject])]
+    param(
+        [Parameter(Mandatory)][string]$Path,
+        [string]$Workspace = (Get-Location).Path,
+        [string]$SourceRoot = (Join-Path $PSScriptRoot '..\..\..'),
+        [string]$InstallRoot,
+        [string]$ExpectedSessionId
+    )
+    $Root = [IO.Path]::GetFullPath($Workspace)
+    $IntegrityContext = @{}
+    $Starts = @{}; $Seen = [Collections.Generic.HashSet[string]]::new()
+    $Executions = [Collections.Generic.List[object]]::new()
+    $ScribeStarts = @{}; $ScribeRuns = [Collections.Generic.List[object]]::new()
+    $SessionId = $null; $Sessions = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+    foreach ($Line in [IO.File]::ReadLines((Resolve-Path -LiteralPath $Path).Path)) {
+        try { $Event = $Line | ConvertFrom-Json -AsHashtable -Depth 100 }
+        catch { continue }
+        if ($Event -isnot [Collections.IDictionary] -or $Event['data'] -isnot [Collections.IDictionary]) { continue }
+        $Data = $Event.data
+        if ($Event['type'] -eq 'session.start' -and -not $Event['agentId']) {
+            $SessionId = [string]$Data['sessionId']
+            if ($SessionId) { $null = $Sessions.Add($SessionId) }
+        }
+        if ($Event['type'] -eq 'subagent.started' -and $Data['agentName'] -eq 'Squad Scribe' -and $Data['toolCallId'] -and
+            -not [string]::IsNullOrWhiteSpace([string]$Event['agentId'])) {
+            $ScribeStarts[[string]$Data.toolCallId] = $Event
+        }
+        if ($Event['type'] -eq 'subagent.completed' -and $Data['toolCallId'] -and $ScribeStarts.ContainsKey([string]$Data.toolCallId)) {
+            $ScribeStart = $ScribeStarts[[string]$Data.toolCallId]
+            if ([string]$ScribeStart['agentId'] -ceq [string]$Event['agentId']) {
+                $ScribeRuns.Add(@{ actorId = [string]$Event['agentId']; startedAt = $ScribeStart['timestamp']; completedAt = $Event['timestamp']; toolCallId = [string]$Data.toolCallId })
+            }
+        }
+        if ($Event['type'] -eq 'tool.execution_start' -and $Data['toolName'] -in @('powershell', 'functions.powershell') -and $Data['toolCallId']) {
+            $Starts[[string]$Data.toolCallId] = $Event
+        }
+        if ($Event['type'] -ne 'tool.execution_complete' -or -not $Data['toolCallId'] -or
+            -not $Starts.ContainsKey([string]$Data.toolCallId) -or -not $Seen.Add([string]$Data.toolCallId)) { continue }
+        $Start = $Starts[[string]$Data.toolCallId]
+        try {
+        if ($Data['success'] -ne $true -or $Data['shellExecution'] -isnot [Collections.IDictionary] -or
+            -not $Data.shellExecution.Contains('exitCode') -or $Data.shellExecution.exitCode -ne 0) { continue }
+        if ([string]::IsNullOrWhiteSpace([string]$Start.data['turnId']) -or
+            [string]$Start.data['turnId'] -cne [string]$Data['turnId'] -or [string]$Start['agentId'] -cne [string]$Event['agentId']) { continue }
+        if (-not $Start['timestamp'] -or -not $Event['timestamp'] -or
+            [DateTimeOffset]$Start.timestamp -gt [DateTimeOffset]$Event.timestamp) { continue }
+        if ($Start.data['arguments'] -isnot [Collections.IDictionary] -or $Data['result'] -isnot [Collections.IDictionary]) { continue }
+        $Command = [string]$Start.data.arguments['command']
+        $Tokens = $null; $Errors = $null
+        $Ast = [Management.Automation.Language.Parser]::ParseInput($Command, [ref]$Tokens, [ref]$Errors)
+        if ($Errors.Count -or $Ast.ParamBlock -or $Ast.BeginBlock -or $Ast.ProcessBlock -or
+            $Ast.CleanBlock -or $Ast.ScriptRequirements -or $Ast.UsingStatements.Count) { continue }
+        $Variables = @{}; $SafeStatements = $true
+        foreach ($Statement in $Ast.EndBlock.Statements) {
+            if ($Statement -is [Management.Automation.Language.PipelineAst]) {
+                if (@($Statement.PipelineElements | Where-Object { $_ -isnot [Management.Automation.Language.CommandAst] }).Count) { $SafeStatements = $false }
+            }
+            elseif ($Statement -isnot [Management.Automation.Language.AssignmentStatementAst]) { $SafeStatements = $false }
+        }
+        foreach ($Assignment in $Ast.FindAll({ param($Node) $Node -is [Management.Automation.Language.AssignmentStatementAst] }, $true)) {
+            if ($Assignment.Left -isnot [Management.Automation.Language.VariableExpressionAst] -or
+                $Variables.ContainsKey($Assignment.Left.VariablePath.UserPath)) { $SafeStatements = $false; break }
+            $Key = $Assignment.Left.VariablePath.UserPath
+            $Right = $Assignment.Right.Extent.Text.Trim()
+            if ($Right -match '^\(Get-Location\)\.(?:Path|ProviderPath)$') { $Value = $Root }
+            elseif ($Right -match "^'(?<value>[^']*)'$") { $Value = $Matches.value }
+            else { $SafeStatements = $false; break }
+            $Variables[$Key] = @{ value = $Value; offset = $Assignment.Extent.EndOffset }
+        }
+        if (-not $SafeStatements) { continue }
+        $ValueOf = {
+            param($Node)
+            if ($Node -is [Management.Automation.Language.StringConstantExpressionAst]) { return $Node.Value }
+            if ($Node -is [Management.Automation.Language.ConstantExpressionAst] -and $Node.Value -is [ValueType]) {
+                return [Convert]::ToString($Node.Value, [Globalization.CultureInfo]::InvariantCulture)
+            }
+            if ($Node -is [Management.Automation.Language.VariableExpressionAst]) {
+                if ($Variables.ContainsKey($Node.VariablePath.UserPath) -and $Variables[$Node.VariablePath.UserPath].offset -lt $Node.Extent.StartOffset) { return $Variables[$Node.VariablePath.UserPath].value }
+                throw 'Unbound shell variable.'
+            }
+            if ($Node -is [Management.Automation.Language.ExpandableStringExpressionAst]) {
+                $Value = $Node.Value
+                foreach ($Nested in $Node.NestedExpressions) {
+                    if ($Nested -isnot [Management.Automation.Language.VariableExpressionAst] -or -not $Variables.ContainsKey($Nested.VariablePath.UserPath) -or
+                        $Variables[$Nested.VariablePath.UserPath].offset -ge $Nested.Extent.StartOffset) { throw 'Unsupported shell expression.' }
+                    $Value = $Value.Replace($Nested.Extent.Text, $Variables[$Nested.VariablePath.UserPath].value)
+                }
+                return $Value
+            }
+            throw 'Nonliteral shell argument.'
+        }
+        try {
+            $Calls = @($Ast.FindAll({ param($Node) $Node -is [Management.Automation.Language.CommandAst] }, $true))
+            $WriterCalls = [Collections.Generic.List[object]]::new()
+            foreach ($Call in $Calls) {
+                $Elements = @($Call.CommandElements)
+                $Name = & $ValueOf $Elements[0]
+                if ($Name -in @('Get-Location', 'Test-Path', 'Select', 'Select-Object', 'Out-Null', 'New-Item', 'Copy-Item')) {
+                    if ($Name -in @('Select', 'Select-Object') -and
+                        @($Elements | Where-Object { $_ -is [Management.Automation.Language.CommandParameterAst] -and $_.ParameterName -notin @('First', 'Last', 'Skip') }).Count) { throw 'Output-producing selection refused.' }
+                    foreach ($Element in @($Elements | Select-Object -Skip 1)) {
+                        if ($Element -is [Management.Automation.Language.CommandParameterAst]) {
+                            if ($Element.Argument) { $null = & $ValueOf $Element.Argument }
+                        }
+                        else { $null = & $ValueOf $Element }
+                    }
+                    if ($Name -in @('Copy-Item', 'New-Item')) {
+                            $Options = @{}; $Positionals = [Collections.Generic.List[string]]::new()
+                            for ($Index = 1; $Index -lt $Elements.Count; $Index++) {
+                                $Element = $Elements[$Index]
+                                if ($Element -is [Management.Automation.Language.CommandParameterAst]) {
+                                    $Key = $Element.ParameterName
+                                    if ($Key -in @('Force', 'Recurse')) { continue }
+                                    if ($Key -notin @('Path', 'LiteralPath', 'Destination', 'ItemType', 'Value') -or $Options.ContainsKey($Key)) { throw 'Unsupported file operation.' }
+                                    if ($Element.Argument) { $Options[$Key] = & $ValueOf $Element.Argument }
+                                    else { $Index++; $Options[$Key] = & $ValueOf $Elements[$Index] }
+                                }
+                                else { $Positionals.Add((& $ValueOf $Element)) }
+                            }
+                            if ($Name -eq 'Copy-Item') {
+                                $Destination = if ($Options.ContainsKey('Destination')) { $Options.Destination } elseif ($Positionals.Count -eq 2) { $Positionals[1] } else { throw 'An exact copy destination is required.' }
+                            }
+                            else {
+                                if ($Options.ContainsKey('ItemType') -and $Options.ItemType -notin @('Directory', 'File')) { throw 'Linked file creation refused.' }
+                                $Destination = if ($Options.ContainsKey('Path')) { $Options.Path } elseif ($Positionals.Count -eq 1) { $Positionals[0] } else { throw 'An exact creation path is required.' }
+                            }
+                            if ($Destination -match '[*?\[\]]') { throw 'Wildcard write destination refused.' }
+                            $Destination = Resolve-EfficiencyPlainPath -Path $Destination -Base $Root
+                            if (-not (Test-EfficiencyPathWithin $Destination $Root)) { throw 'File operation leaves the workspace.' }
+                            foreach ($Protected in @('.copilot-tracking\squad', '.agents', '.github', 'skills')) {
+                                $ProtectedPath = Join-Path $Root $Protected
+                                if ((Test-EfficiencyPathWithin $Destination $ProtectedPath) -or (Test-EfficiencyPathWithin $ProtectedPath $Destination)) { throw 'File operation changes protected state or helpers.' }
+                            }
+                    }
+                    continue
+                }
+                $Offset = 0
+                if ([IO.Path]::GetFileNameWithoutExtension($Name) -eq 'pwsh') {
+                    if ($Name -match '[/\\]' -and [IO.Path]::GetFullPath($Name, $Root) -ine (Get-Command pwsh).Source) { throw 'Untrusted PowerShell executable.' }
+                    $Offset = -1
+                    for ($Index = 1; $Index -lt $Elements.Count; $Index++) {
+                        if ($Elements[$Index] -is [Management.Automation.Language.CommandParameterAst] -and $Elements[$Index].ParameterName -eq 'File') { $Offset = $Index + 1; break }
+                    }
+                    if ($Offset -lt 0 -or $Offset -ge $Elements.Count) { throw 'Not a script execution.' }
+                    for ($Index = 1; $Index -lt ($Offset - 1); $Index++) {
+                        if ($Elements[$Index] -isnot [Management.Automation.Language.CommandParameterAst] -or
+                            $Elements[$Index].ParameterName -notin @('NoProfile', 'NonInteractive', 'NoLogo') -or
+                            $Elements[$Index].Argument) { throw 'Ambiguous PowerShell invocation.' }
+                    }
+                    $Name = & $ValueOf $Elements[$Offset]
+                }
+                $Script = [IO.Path]::GetFileName($Name)
+                if ($Script -eq 'Get-SquadInitContext.ps1') {
+                    $null = Resolve-EfficiencySquadScriptCore -Name $Script -SourceRoot $SourceRoot -InstallRoot $InstallRoot -Workspace $Root -ExecutionPath ([IO.Path]::GetFullPath($Name, $Root)) -IntegrityContext $IntegrityContext
+                    foreach ($Element in @($Elements | Select-Object -Skip ($Offset + 1))) {
+                        if ($Element -isnot [Management.Automation.Language.CommandParameterAst]) { $null = & $ValueOf $Element }
+                        elseif ($Element.Argument) { $null = & $ValueOf $Element.Argument }
+                    }
+                    continue
+                }
+                if ($Script -notin @('Initialize-Squad.ps1', 'Write-SquadHandoff.ps1')) { throw 'Unsupported command alongside receipt.' }
+                $null = Resolve-EfficiencySquadScriptCore -Name $Script -SourceRoot $SourceRoot -InstallRoot $InstallRoot -Workspace $Root -ExecutionPath ([IO.Path]::GetFullPath($Name, $Root)) -IntegrityContext $IntegrityContext
+                $Bound = @{}
+                for ($Index = $Offset + 1; $Index -lt $Elements.Count; $Index++) {
+                    $Parameter = $Elements[$Index]
+                    if ($Parameter -isnot [Management.Automation.Language.CommandParameterAst] -or $Parameter.Argument -or $Bound.ContainsKey($Parameter.ParameterName)) { throw 'Ambiguous writer argument.' }
+                    $Key = $Parameter.ParameterName
+                    $Allowed = if ($Script -eq 'Initialize-Squad.ps1') { @('RepoRoot', 'AgentRepoRoot', 'PayloadPath', 'Direct') }
+                    else { @('SquadRoot', 'PayloadPath', 'RunId', 'Agent', 'Request', 'Deliverable', 'Outcome', 'SelectionCue', 'Mode', 'Turn', 'Since', 'SessionLog', 'Quiet') }
+                    if ($Key -notin $Allowed) { throw 'Unsupported writer parameter.' }
+                    if ($Key -in @('Direct', 'Quiet')) { $Bound[$Key] = $true }
+                    else { $Index++; $Bound[$Key] = & $ValueOf $Elements[$Index] }
+                }
+                $WriterCalls.Add(@{ script = $Script; parameters = $Bound })
+            }
+            if ($WriterCalls.Count -ne 1) { continue }
+            $Receipts = @(
+                foreach ($OutputLine in ([string]$Data.result['content'] -split '\r?\n')) {
+                    try {
+                        $Receipt = $OutputLine | ConvertFrom-Json -AsHashtable -ErrorAction Stop
+                        if ($Receipt -is [Collections.IDictionary] -and $Receipt.Contains('status') -and $Receipt.Contains('turn')) { $Receipt }
+                    }
+                    catch { }
+                }
+            )
+            if ($Receipts.Count -ne 1) { continue }
+            $Executions.Add([pscustomobject]@{
+                script = $WriterCalls[0].script; parameters = $WriterCalls[0].parameters; receipt = $Receipts[0]
+                toolCallId = [string]$Data.toolCallId; hostTurnId = [string]$Data['turnId']; actorId = [string]$Start['agentId']
+                startedAt = $Start['timestamp']; completedAt = $Event['timestamp']
+            })
+        }
+        catch { Write-Verbose $_.Exception.Message; continue }
+        }
+        catch { Write-Verbose $_.Exception.Message; continue }
+    }
+    if ($ExpectedSessionId -and ($Sessions.Count -ne 1 -or -not $Sessions.Contains($ExpectedSessionId))) {
+        $SessionId = $null; $Executions.Clear(); $ScribeRuns.Clear()
+    }
+    [pscustomobject]@{ path = (Resolve-Path -LiteralPath $Path).Path; sessionId = $SessionId; executions = $Executions.ToArray(); scribeRuns = $ScribeRuns.ToArray() }
+}
+
+function Test-EfficiencyBookkeeping {
+    <# .SYNOPSIS
+    Binds execution receipts to the current root, run, turn, history and state.
+    #>
+    [CmdletBinding()]
+    [OutputType([bool])]
+    param([string]$Root, [string]$Squad, [string]$Stage, [string]$EventsPath, [string]$SourceRoot, [string]$InstallRoot, $Metrics, [string]$ExpectedSessionId, [string]$EvidenceRoot)
+    try {
+        $Evidence = Get-EfficiencyBookkeepingEvidence -Path $EventsPath -Workspace $Root -SourceRoot $SourceRoot -InstallRoot $InstallRoot -ExpectedSessionId $ExpectedSessionId
+        if (-not $Evidence.sessionId) { return $false }
+        $State = Get-Content -LiteralPath (Join-Path $Squad 'state.json') -Raw | ConvertFrom-Json -AsHashtable
+        $Ledger = Get-Content -LiteralPath (Join-Path $Squad 'consumption.md') -Raw
+        $Run = [regex]::Match($Ledger, '(?m)^# Squad Consumption Ledger \(Run: (?<id>[^)\r\n]+)\)')
+        if (-not $Run.Success) { return $false }
+        $Records = [Collections.Generic.List[object]]::new()
+        $Latest = $null; $LatestActive = @()
+        foreach ($Execution in $Evidence.executions) {
+            $RecordCountBefore = $Records.Count
+            try {
+            $Bound = $Execution.parameters; $Receipt = $Execution.receipt
+            $ScribeActor = $false
+            if ($Execution.actorId) {
+                foreach ($ScribeRun in $Evidence.scribeRuns) {
+                    if ($ScribeRun.actorId -ceq $Execution.actorId -and $ScribeRun.startedAt -and $ScribeRun.completedAt -and
+                        [DateTimeOffset]$ScribeRun.startedAt -le [DateTimeOffset]$Execution.startedAt -and
+                        [DateTimeOffset]$ScribeRun.completedAt -ge [DateTimeOffset]$Execution.completedAt) { $ScribeActor = $true }
+                }
+                if (-not $ScribeActor) { continue }
+            }
+            if (-not $Receipt.Contains('ledgerCheck') -or $Receipt.ledgerCheck -ne 'PASS' -or
+                -not $Receipt.Contains('turn') -or ($Receipt.turn -isnot [int] -and $Receipt.turn -isnot [long]) -or
+                $Receipt.turn -lt 1 -or $Receipt.turn -gt $State.turn) { continue }
+            $Payload = $null
+            if ($Bound.ContainsKey('PayloadPath')) {
+                $Payload = Get-Content -LiteralPath ([IO.Path]::GetFullPath($Bound.PayloadPath, $Root)) -Raw | ConvertFrom-Json -AsHashtable
+            }
+            if ($Execution.script -eq 'Initialize-Squad.ps1') {
+                if ($Stage -ne 'init' -or $null -eq $Payload -or $Receipt['status'] -ne 'PASS' -or
+                    $Receipt['verified'] -ne $true -or $Receipt['rosterCheck'] -ne 'PASS' -or $Receipt.turn -ne 1 -or
+                    [IO.Path]::GetFullPath([string]$Receipt['squadRoot'], $Root) -ine $Squad -or
+                    [IO.Path]::GetFullPath([string]$Payload.squadRoot, $Root) -ine $Squad -or
+                    ($Bound.ContainsKey('RepoRoot') -and [IO.Path]::GetFullPath([string]$Bound['RepoRoot'], $Root) -ine $Root) -or $Payload.runId -cne $Run.Groups['id'].Value) { continue }
+                $Actors = @(if ($Bound.ContainsKey('Direct')) { 'coordinator' } else { 'coordinator'; 'scribe' })
+                if (($Receipt['actors'] -join ',') -cne ($Actors -join ',') -or $Receipt['historyEntries'] -ne $Actors.Count) { continue }
+                if (('scribe' -in $Actors) -ne $ScribeActor) { continue }
+                $History = Get-Content -LiteralPath (Join-Path $Squad 'history\Squad Scribe.md') -Raw
+                foreach ($Actor in $Actors) {
+                    if ($History -notmatch ('(?ms)^### [^\r\n]+ Initialization ' + $Actor + '\r?\n(?:(?!^### ).)*^\* Turn: 1\r?$')) { throw 'Missing actual Init actor history.' }
+                }
+                foreach ($Row in $Payload.roster) {
+                    if ((Get-Content -LiteralPath (Join-Path $Squad 'team.md') -Raw) -notmatch ('(?m)^\|[^\r\n]*\b' + [regex]::Escape($Row['Agent Name (Primary)']) + '\s*\|')) { throw 'Init roster no longer matches.' }
+                }
+                $LatestActive = @()
+            }
+            else {
+                if ($Stage -eq 'init' -or $Receipt['status'] -ne 'written' -or $Receipt['dispatchEntries'] -lt 1) { continue }
+                if ($Receipt['historyCounts'] -isnot [Collections.IDictionary]) { continue }
+                if ([IO.Path]::GetFullPath([string]$Bound['SquadRoot'], $Root) -ine $Squad) { continue }
+                if ($null -eq $Payload) {
+                    $Payload = @{
+                        runId = $Bound['RunId']
+                        historyRecords = @(@{ agent = $Bound['Agent']; request = $Bound['Request']; deliverable = $Bound['Deliverable'] })
+                        stateAdvance = @{ activeRoles = @($Bound['Agent']) }
+                    }
+                }
+                if ($Payload.runId -cne $Run.Groups['id'].Value -or $Payload.historyRecords.Count -ne $Receipt.dispatchEntries -or
+                    ($Payload.Contains('turn') -and $Payload.turn -ne $Receipt.turn)) { continue }
+                foreach ($Record in $Payload.historyRecords) {
+                    if ($null -eq $Metrics -or -not $Metrics.dispatches.Contains($Record.agent) -or $Record.agent -eq 'Squad Scribe') { throw 'Missing real worker dispatch.' }
+                    if (-not $Receipt.historyCounts.Contains($Record.agent) -or
+                        ($Receipt.historyCounts[$Record.agent] -isnot [int] -and $Receipt.historyCounts[$Record.agent] -isnot [long]) -or
+                        $Receipt.historyCounts[$Record.agent] -lt 1) { throw 'Missing writer history count.' }
+                    $History = Get-Content -LiteralPath (Join-Path $Squad "history\$($Record.agent).md") -Raw
+                    if (@([regex]::Matches($History, '(?m)^### ')).Count -lt $Receipt.historyCounts[$Record.agent]) { throw 'History is shorter than its receipt.' }
+                    $Copy = @{}; foreach ($Key in $Record.Keys) { $Copy[$Key] = $Record[$Key] }
+                    $Copy['turn'] = $Receipt.turn
+                    $Records.Add($Copy)
+                }
+                $LatestActive = @($Payload.stateAdvance.activeRoles)
+            }
+            $Latest = $Execution
+            }
+            catch {
+                if ($Records.Count -gt $RecordCountBefore) { $Records.RemoveRange($RecordCountBefore, $Records.Count - $RecordCountBefore) }
+                continue
+            }
+        }
+        if ($null -eq $Latest -or $Latest.receipt.turn -ne $State.turn) { return $false }
+        $Updated = [DateTimeOffset]$State.updated
+        if ($Updated -lt ([DateTimeOffset]$Latest.startedAt).AddMinutes(-5) -or
+            $Updated -gt ([DateTimeOffset]$Latest.completedAt).AddMinutes(5)) { return $false }
+        $CurrentAgents = @(if ($Stage -eq 'init') { 'Squad Scribe' } else { $LatestActive })
+        foreach ($Agent in $CurrentAgents) {
+            $History = Get-Content -LiteralPath (Join-Path $Squad "history\$Agent.md") -Raw
+            $CurrentEntries = @([regex]::Matches($History, '(?ms)^### (?<time>\S+)[^\r\n]*\r?\n(?<body>.*?)(?=^### |\z)') |
+                Where-Object { $_.Groups['body'].Value -match ('(?m)^\* Turn: ' + $State.turn + '\r?$') })
+            if (-not @($CurrentEntries | Where-Object { [DateTimeOffset]$_.Groups['time'].Value -eq $Updated }).Count) { return $false }
+        }
+        if ($Stage -eq 'init' -and ($State.turn -ne 1 -or @($State.activeRoles).Count -ne 0)) { return $false }
+        $Required = @(if ($Stage -ne 'init') { 'BRD Builder'; 'PRD Builder'; 'BRD Quality Reviewer'; 'PRD Quality Reviewer' })
+        foreach ($Agent in $Required) { if ($Agent -notin @($Records | ForEach-Object { $_.agent })) { return $false } }
+        $Proof = @{
+            runId = $Run.Groups['id'].Value; squadRoot = $Squad; turn = $State.turn
+            historyRecords = $Records.ToArray(); stateAdvance = @{ activeRoles = $LatestActive }
+        }
+        $Directory = New-EfficiencyCheckDirectory -Workspace $Root -EvidenceRoot $EvidenceRoot
+        $ProofPath = Join-Path $Directory 'proof.json'
+        try {
+            $Proof | ConvertTo-Json -Depth 30 | Set-Content -LiteralPath $ProofPath -Encoding utf8NoBOM
+            $Helper = Resolve-EfficiencySquadScript -Name 'SquadCoordinator.psm1' -SourceRoot $SourceRoot -InstallRoot $InstallRoot -Workspace $Root
+            Import-Module $Helper -Force
+            $Result = Invoke-SquadLocalScript -Name 'Test-SquadTurnCompletion.ps1' -Arguments @('-RepoRoot', $Root, '-SquadRoot', $Squad, '-ProofPath', $ProofPath, '-ExpectedTurn', [string]$State.turn)
+            if ($Result.exitCode -ne 0) { return $false }
+            $Verified = $Result.stdout | ConvertFrom-Json -AsHashtable
+            return $Verified['verified'] -eq $true -and $Verified['ledgerCheck'] -eq 'PASS' -and $Verified['dispatchEntries'] -eq $Records.Count
+        }
+        finally { Remove-Item -LiteralPath $Directory -Recurse -Force -ErrorAction SilentlyContinue }
+    }
+    catch { Write-Verbose $_.Exception.Message; return $false }
+}
+
+function Test-EfficiencyWorkflow {
+    <# .SYNOPSIS
+    Checks stage artifacts and actual bookkeeping proof before advancement; defaults to build.
+    .DESCRIPTION
+    EventsPath is a frozen local CLI log. BookkeepingEvidence may instead be the local-only
+    Get-EfficiencyBookkeepingEvidence result; its path is re-read, never its claimed receipts.
+    Helpers execute only from reviewed SourceRoot; prepared InstallRoot/workspace copies must
+    match its script tree. ExpectedSessionId optionally binds a benchmark trial. EvidenceRoot
+    is an existing caller-owned output directory outside Workspace (default: sibling out).
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][string]$Workspace, [AllowNull()]$Metrics,
+        [ValidateSet('init', 'requirements', 'build')][string]$Stage = 'build',
+        [string]$EventsPath,
+        [AllowNull()]$BookkeepingEvidence,
+        [string]$SourceRoot = (Join-Path $PSScriptRoot '..\..\..'),
+        [string]$InstallRoot,
+        [string]$ExpectedSessionId,
+        [string]$EvidenceRoot
+    )
     $Checks = [ordered]@{}
     $ReviewPaths = [Collections.Generic.List[string]]::new()
     $Root = [IO.Path]::GetFullPath($Workspace)
     $Squad = Join-Path $Root '.copilot-tracking/squad'
+    if ($null -ne $BookkeepingEvidence -and $BookkeepingEvidence.PSObject.Properties['path']) { $EventsPath = [string]$BookkeepingEvidence.path }
     foreach ($Name in @('team.md', 'routing.md', 'state.json', 'decisions.md', 'consumption.md', 'consumption-rates.md')) {
         $Path = Join-Path $Squad $Name
         $Checks[$Name] = (Test-Path -LiteralPath $Path -PathType Leaf) -and (Get-Item -LiteralPath $Path).Length -gt 0
     }
     $Checks['dispatchEvidence'] = $null -ne $Metrics -and $null -ne $Metrics.dispatches
     if ($Stage -in @('init', 'requirements')) {
-        $ScribeHistory = Join-Path $Squad 'history/Squad Scribe.md'
-        $Checks['scribeHistory'] = $Checks['dispatchEvidence'] -and $Metrics.dispatches.Contains('Squad Scribe') -and
-            (Test-Path -LiteralPath $ScribeHistory -PathType Leaf) -and
-            ((Get-Content -LiteralPath $ScribeHistory -Raw) -match '(?m)^# History: Squad Scribe\s*$')
+        $Checks['bookkeepingEvidence'] = $EventsPath -and (Test-EfficiencyBookkeeping -Root $Root -Squad $Squad -Stage $Stage -EventsPath $EventsPath -SourceRoot $SourceRoot -InstallRoot $InstallRoot -Metrics $Metrics -ExpectedSessionId $ExpectedSessionId -EvidenceRoot $EvidenceRoot)
     }
     if ($Stage -eq 'requirements') {
         foreach ($Name in @('brd.md', 'prd.md')) {
@@ -823,13 +1298,18 @@ function Test-EfficiencyWorkflow {
         $Checks['reviewOutcome'] = $ReviewText -match ($OutcomePrefix + '(?:\*\*)?' + $PositiveOutcome)
     }
     $Checker = Join-Path $PSScriptRoot '../../../scripts/Test-SquadScribeOutput.ps1'
-    $Temp = Join-Path ([IO.Path]::GetTempPath()) ('efficiency-state-' + [guid]::NewGuid() + '.json')
+    $Directory = $null
     try {
-        $Result = Invoke-EfficiencyProcess -FilePath (Get-Command pwsh).Source -Arguments @('-NoProfile', '-File', $Checker, '-SquadRoot', $Squad) -WorkingDirectory $Root -OutputPath $Temp -TimeoutSeconds 60
+        $Directory = New-EfficiencyCheckDirectory -Workspace $Root -EvidenceRoot $EvidenceRoot
+        $Temp = Join-Path $Directory 'state.json'
+        $Arguments = @('-NoProfile', '-File', $Checker, '-SquadRoot', $Squad, '-SourceRoot', $SourceRoot)
+        if ($InstallRoot) { $Arguments += @('-InstallRoot', $InstallRoot) }
+        if ($ExpectedSessionId) { $Arguments += @('-ExpectedSessionId', $ExpectedSessionId) }
+        $Result = Invoke-EfficiencyProcess -FilePath (Get-Command pwsh).Source -Arguments $Arguments -WorkingDirectory $Root -OutputPath $Temp -TimeoutSeconds 60
         $Checks['stateVerifier'] = ($Result.exitCode -eq 0 -and $Result.stopCause -eq 'none')
     }
     catch { $Checks['stateVerifier'] = $false }
-    finally { Remove-Item -LiteralPath $Temp, ($Temp + '.stderr') -Force -ErrorAction SilentlyContinue }
+    finally { if ($Directory) { Remove-Item -LiteralPath $Directory -Recurse -Force -ErrorAction SilentlyContinue } }
     [pscustomobject]@{ passed = (@($Checks.Values | Where-Object { -not $_ }).Count -eq 0); checks = $Checks; reviewPath = if ($ReviewPath) { [IO.Path]::GetRelativePath($Root, $ReviewPath).Replace('\', '/') } else { $null } }
 }
 
@@ -1277,4 +1757,4 @@ function Invoke-EfficiencySeries {
     [pscustomobject]@{ report = $Report; controls = $Controls; runs = @($Runs); exitCode = if ($Outcome -in @('passed', 'baseline-established', 'baseline-recorded')) { 0 } else { 2 } }
 }
 
-Export-ModuleMember -Function Copy-EfficiencySnapshot, Measure-EfficiencyEvents, Get-EfficiencyRecoveryPolicy, Get-EfficiencyRecoveryDecision, Invoke-EfficiencyCompaction, Save-EfficiencyAttemptEvidence, Write-EfficiencyProgress, Invoke-EfficiencyProcess, Get-EfficiencyTreeHash, Test-EfficiencyWorkflow, Test-EfficiencyJudge, Invoke-EfficiencyJudge, Compare-EfficiencyRuns, Save-EfficiencyBaseline, Get-EfficiencyCompatibility, Test-EfficiencyRun, Test-EfficiencyObservation, Invoke-EfficiencySeries
+Export-ModuleMember -Function Copy-EfficiencySnapshot, Measure-EfficiencyEvents, Resolve-EfficiencySquadScript, Get-EfficiencyBookkeepingEvidence, Get-EfficiencyRecoveryPolicy, Get-EfficiencyRecoveryDecision, Invoke-EfficiencyCompaction, Save-EfficiencyAttemptEvidence, Write-EfficiencyProgress, Invoke-EfficiencyProcess, Get-EfficiencyTreeHash, Test-EfficiencyWorkflow, Test-EfficiencyJudge, Invoke-EfficiencyJudge, Compare-EfficiencyRuns, Save-EfficiencyBaseline, Get-EfficiencyCompatibility, Test-EfficiencyRun, Test-EfficiencyObservation, Invoke-EfficiencySeries
