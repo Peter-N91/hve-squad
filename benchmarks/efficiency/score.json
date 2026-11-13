@@ -1,10 +1,10 @@
 {
   "schema": "benchmark-score-v1",
   "scenario": "task-cli-cold-start",
-  "measuredAt": "2026-11-12T18:02:49Z",
+  "measuredAt": "2026-11-12T23:30:32Z",
   "source": {
-    "commit": "6d178b059ff1cac5134c831207f32360ed1e267b",
-    "squadSourceHash": "a307835b4384c73821a3c4919b85eeb25726e5d5fadcb1acfae3dbb878144ac4",
+    "commit": "4dc0a3a0333e142347b188d8b0faf21d22694883",
+    "squadSourceHash": "74079ce3be48cbb9c4835c8523152274389d7f83f95847ddbf7e8e85d394cfbb",
     "uncommittedChanges": false
   },
   "environment": {
@@ -14,29 +14,29 @@
   },
   "runs": {
     "requested": 3,
-    "scored": 2,
-    "failed": 1
+    "scored": 3,
+    "failed": 0
   },
   "summary": {
-    "quality": 81.5,
+    "quality": 81.0,
     "dimensions": {
-      "businessClarity": 17.0,
-      "scopeFidelity": 18.0,
-      "acceptanceCriteria": 16.5,
-      "traceability": 15.0,
+      "businessClarity": 18.0,
+      "scopeFidelity": 16.0,
+      "acceptanceCriteria": 17.0,
+      "traceability": 16.0,
       "risksAndDecisions": 15.0
     },
-    "functional": 3,
+    "functional": 1,
     "workflow": 0,
     "criticalHighFindings": 0,
-    "averageSeconds": 1362.393,
-    "averageCredits": 320.31289875,
+    "averageSeconds": 1955.393,
+    "averageCredits": 392.0507583333333,
     "activity": {
       "scribeDispatches": 0.0,
       "scribeModelRequests": 0.0,
       "scribeSeconds": 0.0,
       "scribeCredits": 0.0,
-      "coordinatorModelRequests": 45.5,
+      "coordinatorModelRequests": 49.666666666666664,
       "authorModelRequests": 7.0
     }
   },
@@ -44,22 +44,23 @@
     {
       "run": 1,
       "scored": true,
-      "quality": 82.0,
+      "quality": 85.0,
       "dimensions": {
         "businessClarity": 18.0,
-        "scopeFidelity": 18.0,
+        "scopeFidelity": 17.0,
         "acceptanceCriteria": 17.0,
-        "traceability": 14.0,
-        "risksAndDecisions": 15.0
+        "traceability": 16.0,
+        "risksAndDecisions": 17.0
       },
       "functional": true,
       "workflow": false,
       "criticalHighFindings": 0,
-      "seconds": 1467.4560000000001,
-      "credits": 335.28284399999995,
+      "seconds": 1481.361,
+      "credits": 393.0184605,
       "failedChecks": [
         "init/scribeHistory",
         "requirements/scribeHistory",
+        "requirements/PRD Quality Reviewer",
         "requirements/reviewOutcome",
         "requirements/stateVerifier",
         "build/stateVerifier"
@@ -70,56 +71,64 @@
         "scribeModelRequests": 0.0,
         "scribeSeconds": 0.0,
         "scribeCredits": 0.0,
-        "coordinatorModelRequests": 44.0,
-        "authorModelRequests": 6.0
+        "coordinatorModelRequests": 57.0,
+        "authorModelRequests": 7.0
       }
     },
     {
       "run": 2,
-      "scored": false,
-      "quality": null,
-      "dimensions": null,
-      "functional": true,
+      "scored": true,
+      "quality": 81.0,
+      "dimensions": {
+        "businessClarity": 18.0,
+        "scopeFidelity": 15.0,
+        "acceptanceCriteria": 17.0,
+        "traceability": 16.0,
+        "risksAndDecisions": 15.0
+      },
+      "functional": false,
       "workflow": false,
-      "criticalHighFindings": null,
-      "seconds": 1965.296,
-      "credits": null,
+      "criticalHighFindings": 0,
+      "seconds": 2045.3639999999998,
+      "credits": 356.3114865,
       "failedChecks": [
+        "functional/id-boundary-preserves-store",
         "init/scribeHistory",
         "requirements/scribeHistory",
-        "requirements/reviewOutcome",
         "requirements/stateVerifier",
         "build/stateVerifier"
       ],
-      "note": "the judge result is missing or invalid",
+      "note": "",
       "activity": {
         "scribeDispatches": 0.0,
         "scribeModelRequests": 0.0,
         "scribeSeconds": 0.0,
         "scribeCredits": 0.0,
-        "coordinatorModelRequests": 48.0,
-        "authorModelRequests": 7.0
+        "coordinatorModelRequests": 46.0,
+        "authorModelRequests": 6.0
       }
     },
     {
       "run": 3,
       "scored": true,
-      "quality": 81.0,
+      "quality": 76.0,
       "dimensions": {
         "businessClarity": 16.0,
-        "scopeFidelity": 18.0,
+        "scopeFidelity": 16.0,
         "acceptanceCriteria": 16.0,
-        "traceability": 16.0,
-        "risksAndDecisions": 15.0
+        "traceability": 14.0,
+        "risksAndDecisions": 14.0
       },
-      "functional": true,
+      "functional": false,
       "workflow": false,
       "criticalHighFindings": 0,
-      "seconds": 1257.3300000000002,
-      "credits": 305.3429535,
+      "seconds": 2339.4539999999997,
+      "credits": 426.82232799999997,
       "failedChecks": [
+        "functional/id-boundary-preserves-store",
         "init/scribeHistory",
         "requirements/scribeHistory",
+        "requirements/reviewOutcome",
         "requirements/stateVerifier",
         "build/stateVerifier"
       ],
@@ -129,7 +138,7 @@
         "scribeModelRequests": 0.0,
         "scribeSeconds": 0.0,
         "scribeCredits": 0.0,
-        "coordinatorModelRequests": 47.0,
+        "coordinatorModelRequests": 46.0,
         "authorModelRequests": 8.0
       }
     }

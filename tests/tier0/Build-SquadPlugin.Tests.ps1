@@ -643,7 +643,7 @@ Describe 'PKG-14 Plugin host discovery and hook commands' -Tag 'Unit' {
         }
     }
 
-    It 'installs the plugin with Copilot CLI and validates a blocking hook command from the installed root' -Skip:(-not (Get-Command copilot -ErrorAction SilentlyContinue)) {
+    It 'installs the plugin with Copilot CLI and validates a blocking hook command from the installed root' -Tag 'Native' -Skip:(-not (Get-Command copilot -ErrorAction SilentlyContinue)) {
         $copilotHome = Join-Path $TestDrive 'copilot-hook-smoke'
         $previousCopilotHome = $env:COPILOT_HOME
         $locationPushed = $false
@@ -697,5 +697,150 @@ Describe 'PKG-14 Plugin host discovery and hook commands' -Tag 'Unit' {
 
         { Write-PluginHookManifest -OutputRoot $dryRunRoot -DryRun } | Should -Not -Throw
         Test-Path -LiteralPath (Join-Path $dryRunRoot 'hooks.json') | Should -BeFalse
+    }
+}
+
+Describe 'Squad hook input and consumer paths (RAI-08)' -Tag 'Unit' {
+    BeforeAll {
+        function Invoke-BackstopFixture {
+            param([string]$Name, [string]$InputText, [string]$Engine = 'pwsh', [string]$Root = $script:OutputRoot)
+            try {
+                Push-Location $script:OutputRoot
+                $output = $InputText | & $Engine -NoProfile -File (Join-Path $Root "hooks/scripts/$Name.ps1") 2>&1 | Out-String
+                [pscustomobject]@{ ExitCode = $LASTEXITCODE; Text = $output; Value = ($output | ConvertFrom-Json) }
+            }
+            finally { Pop-Location }
+        }
+        $script:HookConsumer = Join-Path $TestDrive 'hook-consumer'
+        $script:ConsumerState = Join-Path $script:HookConsumer '.copilot-tracking/squad'
+        $script:PluginState = Join-Path $script:OutputRoot '.copilot-tracking/squad'
+        $script:ConsumerLog = Join-Path $script:ConsumerState 'hooks-audit.log'
+        foreach ($path in @($script:ConsumerState, $script:PluginState)) { New-Item -ItemType Directory -Path $path -Force | Out-Null }
+    }
+
+    It 'decodes supported command shapes before applying the existing action matcher' {
+        foreach ($inputText in @(
+                '{"toolName":"bash","toolArgs":{"command":"git\u0020push"}}'
+                '{"toolName":"powershell","toolArgs":{"command":"git\npush"}}'
+                '{"toolName":"bash","toolArgs":"{\"command\":\"git push\"}"}'
+                '{"tool_name":"Bash","tool_input":{"command":"git push"}}'
+                '{"toolCalls":[{"name":"bash","args":{"command":"git status"}},{"name":"powershell","args":"{\"command\":\"git push\"}"}]}'
+            )) {
+            $result = Invoke-BackstopFixture -Name 'impactful-action-gate' -InputText $inputText
+            $result.ExitCode | Should -Be 0 -Because $result.Text
+            $result.Value.permissionDecision | Should -BeExactly 'ask'
+        }
+        (Invoke-BackstopFixture -Name 'impactful-action-gate' -InputText '{"toolArgs":{"command":"git status","description":"git push"},"metadata":"terraform apply"}').Value.permissionDecision | Should -BeExactly 'allow'
+    }
+
+    It 'denies malformed or unsupported pre-action inputs without echoing values' {
+        foreach ($inputText in @(
+                '{not-json do-not-disclose-fixture', '{}', '[{"toolArgs":{"command":"git status"}}]'
+                '{"toolArgs":{"command":42}}'
+                '{"toolArgs":{"command":"git status"},"tool_input":{"command":"git push"}}'
+                '{"toolCalls":[]}'
+                '{"toolCalls":[{"name":"bash","args":{"command":"git push"}},{"name":"bash","args":null}]}'
+            )) {
+            $result = Invoke-BackstopFixture -Name 'impactful-action-gate' -InputText $inputText
+            $result.ExitCode | Should -Be 0 -Because $result.Text
+            $result.Value.permissionDecision | Should -BeExactly 'deny'
+            $result.Text | Should -Not -Match 'do-not-disclose-fixture'
+        }
+    }
+
+    It 'uses consumer-relative Windows, normalized and absolute member paths for create protection' {
+        foreach ($relative in @('.copilot-tracking\squad\decisions.md', '.copilot-tracking/squad/history/../decisions.md', '.copilot-tracking/squad/members/issue-1/history/dev.md', '.copilot-tracking/squad/history/archive/dev.md', '.copilot-tracking/squad/members/issue-1/history/archive/dev.md')) {
+            $path = Join-Path $script:HookConsumer $relative
+            New-Item -ItemType Directory -Path (Split-Path $path -Parent) -Force | Out-Null
+            Set-Content -LiteralPath $path -Value 'preserve fixture'
+            $inputPath = if ($relative -match 'members') { $path } else { $relative }
+            $inputText = @{ cwd = $script:HookConsumer; toolName = 'create'; toolArgs = @{ path = $inputPath } } | ConvertTo-Json -Depth 5 -Compress
+            $result = Invoke-BackstopFixture -Name 'state-write-guard' -InputText $inputText
+            $result.Value.permissionDecision | Should -BeExactly 'deny'
+            $result.Value.permissionDecisionReason | Should -Match 'existing squad record'
+            [IO.File]::ReadAllText($path).Trim() | Should -BeExactly 'preserve fixture'
+        }
+    }
+
+    It 'preserves new/create and edit behavior and checks batched JSON-string file paths' {
+        Set-Content -LiteralPath (Join-Path $script:ConsumerState 'decisions.md') -Value 'preserve fixture'
+        foreach ($case in @(
+                @{ Name = 'create'; Path = '.copilot-tracking/squad/new.md'; Expected = 'allow' }
+                @{ Name = 'edit'; Path = '.copilot-tracking/squad/decisions.md'; Expected = 'allow' }
+                @{ Name = 'create'; Path = '.copilot-tracking/squad/decisions.md'; Expected = 'deny' }
+            )) {
+            $inputText = @{ cwd = $script:HookConsumer; toolCalls = @(@{ name = $case.Name; args = (@{ file_path = $case.Path } | ConvertTo-Json -Compress) }) } | ConvertTo-Json -Depth 6 -Compress
+            (Invoke-BackstopFixture -Name 'state-write-guard' -InputText $inputText).Value.permissionDecision | Should -BeExactly $case.Expected
+        }
+        foreach ($inputText in @(
+                '{"toolName":"create","toolArgs":{"path":".copilot-tracking/squad/decisions.md"}}'
+                '{"toolName":"edit","toolArgs":null}'
+                (@{ cwd = $script:HookConsumer; toolName = 'create'; toolArgs = @{ path = '..\outside.md' } } | ConvertTo-Json -Depth 5 -Compress)
+                (@{ cwd = $script:HookConsumer; toolName = 'create'; toolArgs = @{ path = 5 } } | ConvertTo-Json -Depth 5 -Compress)
+            )) { (Invoke-BackstopFixture -Name 'state-write-guard' -InputText $inputText).Value.permissionDecision | Should -BeExactly 'deny' }
+    }
+
+    It 'records a value-free notification observation in the consumer only' {
+        $inputText = @{ cwd = $script:HookConsumer; toolArgs = @{ command = 'Invoke-RestMethod https://example.invalid/do-not-disclose-fixture' } } | ConvertTo-Json -Depth 5 -Compress
+        $result = Invoke-BackstopFixture -Name 'notification-audit' -InputText $inputText
+        $result.ExitCode | Should -Be 0 -Because $result.Text
+        $result.Text.Trim() | Should -BeExactly '{}'
+        $log = [IO.File]::ReadAllText($script:ConsumerLog)
+        $log | Should -Match 'notification-shaped command observed'
+        $log | Should -Not -Match 'example.invalid|do-not-disclose-fixture|Invoke-RestMethod'
+        Test-Path -LiteralPath (Join-Path $script:PluginState 'hooks-audit.log') | Should -BeFalse
+    }
+
+    It 'does not audit metadata, malformed input or missing/relative consumer cwd' {
+        if (Test-Path -LiteralPath $script:ConsumerLog) { Remove-Item -LiteralPath $script:ConsumerLog }
+        foreach ($inputText in @(
+                '{"toolArgs":{"command":"Invoke-RestMethod do-not-disclose-fixture"}}'
+                '{"cwd":".","toolArgs":{"command":"Invoke-RestMethod do-not-disclose-fixture"}}'
+                '{not-json do-not-disclose-fixture'
+                (@{ cwd = $script:HookConsumer; toolArgs = @{ command = 'git status'; description = 'Invoke-RestMethod' } } | ConvertTo-Json -Depth 5 -Compress)
+            )) {
+            (Invoke-BackstopFixture -Name 'notification-audit' -InputText $inputText).Text.Trim() | Should -BeExactly '{}'
+            Test-Path -LiteralPath $script:ConsumerLog | Should -BeFalse
+            Test-Path -LiteralPath (Join-Path $script:PluginState 'hooks-audit.log') | Should -BeFalse
+        }
+    }
+
+    It 'does not follow a linked consumer audit directory' -Skip:(-not $IsWindows) {
+        $repo = Join-Path $TestDrive 'audit-linked-consumer'; $target = Join-Path $TestDrive 'audit-link-target'
+        New-Item -ItemType Directory -Path (Join-Path $repo '.copilot-tracking') -Force | Out-Null
+        New-Item -ItemType Directory -Path $target -Force | Out-Null
+        $link = Join-Path $repo '.copilot-tracking/squad'
+        New-Item -ItemType Junction -Path $link -Target $target | Out-Null
+        try {
+            $inputText = @{ cwd = $repo; toolArgs = @{ command = 'gh issue list' } } | ConvertTo-Json -Depth 5 -Compress
+            (Invoke-BackstopFixture -Name 'notification-audit' -InputText $inputText).Text.Trim() | Should -BeExactly '{}'
+            Test-Path -LiteralPath (Join-Path $target 'hooks-audit.log') | Should -BeFalse
+        }
+        finally { Remove-Item -LiteralPath $link -Force }
+    }
+
+    It 'ships runnable exported guards with the parser and denies its absence' {
+        $root = Join-Path $TestDrive 'exported-backstop'; $drop = Join-Path $root 'hooks/scripts'
+        New-Item -ItemType Directory -Path $drop -Force | Out-Null
+        foreach ($name in @('hook-input', 'impactful-action-gate', 'state-write-guard', 'notification-audit')) {
+            Copy-Item -LiteralPath (Join-Path $script:OutputRoot "hooks/scripts/$name.ps1") -Destination $drop
+        }
+        $inputText = '{"toolName":"bash","toolArgs":{"command":"git push"}}'
+        (Invoke-BackstopFixture -Name 'impactful-action-gate' -InputText $inputText -Root $root).Value.permissionDecision | Should -BeExactly 'ask'
+        Remove-Item -LiteralPath (Join-Path $drop 'hook-input.ps1')
+        (Invoke-BackstopFixture -Name 'impactful-action-gate' -InputText $inputText -Root $root).Value.permissionDecision | Should -BeExactly 'deny'
+        [IO.File]::ReadAllText((Join-Path $script:OutputRoot 'skills/squad/invocations/squad-init-hooks/SKILL.md')) | Should -Match 'shared `hook-input.ps1`'
+    }
+
+    It 'retains Windows PowerShell command-entry compatibility' -Skip:(-not $IsWindows) {
+        $result = Invoke-BackstopFixture -Name 'impactful-action-gate' -InputText '{"toolName":"bash","toolArgs":{"command":"git\u0020push"}}' -Engine 'powershell.exe'
+        $result.ExitCode | Should -Be 0 -Because $result.Text
+        $result.Value.permissionDecision | Should -BeExactly 'ask'
+    }
+
+    It 'uses the same decoded decision through the Bash wrapper' -Skip:($IsWindows -or -not (Get-Command bash -ErrorAction SilentlyContinue)) {
+        $output = '{"toolName":"bash","toolArgs":{"command":"git\u0020push"}}' | & bash (Join-Path $script:OutputRoot 'hooks/scripts/impactful-action-gate.sh') | Out-String
+        $LASTEXITCODE | Should -Be 0
+        ($output | ConvertFrom-Json).permissionDecision | Should -BeExactly 'ask'
     }
 }

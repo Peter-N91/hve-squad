@@ -37,6 +37,13 @@ Describe 'Responsible Use entrypoint and handoff contracts (RAI-01, RAI-03, RAI-
         Test-Path -LiteralPath (Join-Path $SourceRoot 'squad-src/.github/skills' $script:PolicyLocator) | Should -BeTrue
     }
 
+    It 'states the approved engineering purpose without authorizing consequential decisions (RAI-09)' {
+        $script:Policy | Should -Match 'repositories the user is authorized to access'
+        $script:Policy | Should -Match 'not professional advice or authorization to deploy high-consequence'
+        $script:Policy | Should -Match 'Do not independently make medical, legal, employment, credit, eligibility or\s+physical-safety decisions about people'
+        $script:Policy | Should -Match 'an agent or model council cannot approve these uses'
+    }
+
     It 'reuses policy within a context and passes the resolved path to isolated workers' {
         $script:Policy | Should -Match 'Load once per independent context'
         $script:Policy | Should -Match 'other agent, skill, prompt or instruction pointers\s+do not require another copy'

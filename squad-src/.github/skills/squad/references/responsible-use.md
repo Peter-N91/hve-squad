@@ -22,6 +22,17 @@ When dispatching a worker whose policy context is not established, pass this
 resolved policy-file path in its brief, including for bundled upstream agents. Native
 preloading or actual inheritance can satisfy the read; do not assume either.
 
+## Intended use and reliance
+
+Use Squad for software-engineering research, planning, implementation, testing and
+review in repositories the user is authorized to access. Outputs are engineering
+assistance, not professional advice or authorization to deploy high-consequence
+systems.
+
+Do not independently make medical, legal, employment, credit, eligibility or
+physical-safety decisions about people. Preserve the applicable human decision,
+approval and deployment gates; an agent or model council cannot approve these uses.
+
 ## Contract
 
 * No independent usage reporting: never send prompts, source, identities, model

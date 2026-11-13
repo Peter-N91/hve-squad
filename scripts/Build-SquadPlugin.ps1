@@ -1123,9 +1123,9 @@ This is a **single-purpose action**: it drops hook files into the consuming repo
 ## Flow
 
 1. **Read the plugin's own `hooks.json`** and its referenced scripts under `hooks/scripts/`.
-2. **Keep the cross-platform command entries.** Preserve each hook's Bash and PowerShell commands. Cloud agent ignores PowerShell, while local Windows clients use it. PowerShell 7.4+ remains required for the dispatch guard; disclose this prerequisite rather than installing it or claiming a hook executed.
+2. **Keep the cross-platform command entries.** Preserve each hook's Bash and PowerShell commands. Cloud agent ignores PowerShell, while local Windows clients use it. PowerShell 7.4+ remains required for the dispatch guard. Bash action/state/audit wrappers also use `pwsh` for consistent JSON parsing; missing runtime denies pre-action calls and skips audit writes. Disclose prerequisites rather than installing them or claiming a hook executed.
 3. **Write the hook configuration** to `<targetDir>/hve-squad.json`, replacing the plugin-only `${PLUGIN_ROOT}` working directory with the repository root and rewriting command paths relative to that root.
-4. **Copy both script variants** to `<targetDir>/hve-squad/`, including `dispatch-guards.ps1` and `dispatch-guards.sh`, and preserve executable Bash files. Copy the skill's `scripts/SquadCoordinator.psm1`, `scripts/Resolve-SquadConnectorDispatch.ps1` and `scripts/SquadAgentDiscovery.ps1` into `<targetDir>/hve-squad/runtime/`; these are the dispatch guard's required dependencies.
+4. **Copy both script variants** to `<targetDir>/hve-squad/`, including `dispatch-guards.ps1` and `dispatch-guards.sh`, plus the shared `hook-input.ps1` beside the action/state/audit scripts, and preserve executable Bash files. Copy the skill's `scripts/SquadCoordinator.psm1`, `scripts/Resolve-SquadConnectorDispatch.ps1` and `scripts/SquadAgentDiscovery.ps1` into `<targetDir>/hve-squad/runtime/`; these are the dispatch guard's required dependencies.
 5. **Report exactly what was written** — the hook file path, each script path, whether local execution was tested, and a note that the drop must be committed before cloud agent can see it. An uncommitted drop can still serve a local CLI session.
 
 ## Idempotency
