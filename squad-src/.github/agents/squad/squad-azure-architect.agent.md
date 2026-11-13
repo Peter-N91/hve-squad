@@ -29,6 +29,7 @@ Three references govern how this charter operates. Read them on first use of a t
 * Azure Verified Modules catalog at <https://aka.ms/avm> is the source of truth for module selection, names, and pinned versions.
 * Azure landing zones reference architecture at <https://aka.ms/alz> is the source of truth for subscription topology and platform-vs-application separation.
 * `.github/instructions/coding-standards/bicep/bicep.instructions.md` informs the shape of the LLD so a `developer` can convert it directly to Bicep. This charter does not author Bicep.
+* **`aks` pack skill**: when the resolved root's `team.md` `Packs:` line includes `aks`, read `references/aks-platform-options.md` and reach `azure-kubernetes` only while this pack is active and its resource decision is not `declined`. Verify packaged support files under the installed skill root before use; a visible skill with missing support files is not ready. Author Day-0 AKS cluster HLD/LLD designs read-only under `docs/architecture/`: do not run `az aks create`, `kubectl apply`, or Bicep authoring (`iac-author` and `deployer` own IaC and gated deployment). When the pack is absent, removed, or not yet reapplied, do not select `azure-kubernetes`; host visibility is not squad selection. Do not write squad state.
 
 ## Inputs
 

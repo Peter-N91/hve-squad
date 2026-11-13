@@ -22,7 +22,7 @@ Run `Get-SquadInitContext.ps1 -RepoRoot <repo>` for the installed root, profiles
 packs, naming choices and project metadata; add `-Profile <id>` for resolved
 Primaries and availability. Use repository/request signals to recommend a
 profile; explicit `profile=` wins, then discovery, then `default`. Offer packs
-when their domain fits, never impose one. Offer `fabric` for Warehouse, Eventhouse, Spark, or Dataflow work beyond the Lakehouse primer, and offer `dotnet` for `.NET` upgrades, NuGet CPM, `.NET` test/API review, performance, or EF Core/ASP.NET Core work; do not apply either pack, and do not select its skills, unless that pack is active. A pack adds to a profile and is not a
+when their domain fits, never impose one. Offer `fabric` for Warehouse, Eventhouse, Spark, or Dataflow work beyond the Lakehouse primer, `dotnet` for `.NET` upgrades, NuGet CPM, `.NET` test/API review, performance, or EF Core/ASP.NET Core work, `aks` for AKS cluster design, container manifests, AKS Automatic readiness, Day-2 AKS incidents, or AKS cost optimization, and `azure-functions` for Azure Functions apps, triggers/bindings, Function App triage/review, or Hosted Skills; do not apply any pack, and do not select its skills, unless that pack is active. A pack adds to a profile and is not a
 federation. A missing external agent is offered with its install path, not seeded.
 Pack Primaries for `power-platform` and `m365-copilot` are local charters.
 Read each row's Selection Cue: a broad match selects the community Alternate,

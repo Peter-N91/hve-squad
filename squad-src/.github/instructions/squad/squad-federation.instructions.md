@@ -24,9 +24,9 @@ Two consequences matter before anyone builds a federation to solve a capability 
 * **A federation does not reach a technology vertical any faster than a plain squad does.** A sub-squad is seeded from a profile, so a vertical arrives on it by applying the pack, exactly as on any other roster. Building a sub-squad named after a vertical still requires the pack, and adds a duplicated methodology spine, a second state tree, and a second consumption ledger for no additional reach.
 * **Splitting one piece of work across two sub-squads splits its record.** Each sub-squad keeps its own `decisions.md`, `history/`, and deliverable roots rebased under `members/<name>/`, so two halves of one decision are taken in two councils that never met. A pack keeps those roles in one turn, one council, one plan, and one review.
 
-Federate when the sub-squads own genuinely separate outcomes — a business team's discovery work beside an architecture team's infrastructure build, or Watch Mode giving each triggering event its own sub-squad and its own pull request. Do not federate to obtain a role.
+Federate when sub-squads own separate outcomes — discovery work beside an infrastructure build, or Watch Mode giving each triggering event its own sub-squad and pull request. Do not federate to obtain a role.
 
-Registered packs are `power-platform`, `m365-copilot`, `aws`, `foundry`, `fabric`, and `dotnet`; Foundry is normally `profile=azure pack=foundry`.
+Registered packs are `power-platform`, `m365-copilot`, `aws`, `foundry`, `fabric`, `dotnet`, `aks`, and `azure-functions`; Foundry is normally `profile=azure pack=foundry`.
 
 ## Squad Root (`squadRoot`)
 

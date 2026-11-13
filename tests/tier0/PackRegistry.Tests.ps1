@@ -819,3 +819,175 @@ Describe '.NET official pack' -Tag 'Unit' {
         }
     }
 }
+
+Describe 'AKS and Azure Functions official packs' -Tag 'Unit' {
+    It 'reuses existing roles for aks and azure-functions, orders AKS sub-skills ahead of parent, and blocklists archived/colliding candidates (SRC-17)' {
+        function Get-RoleSet {
+            param([string]$Body, [string]$Header, [string]$Name)
+            $rows = @(Get-MarkdownTableRows -Body $Body -HeaderCell $Header)
+            $row = @($rows | Where-Object { $_[1].Trim().Trim('`') -eq $Name })
+            $row | Should -HaveCount 1
+            @($row[0][2] -split ',' | ForEach-Object { $_.Trim().Trim('`') } | Where-Object { $_ } | Sort-Object -Unique)
+        }
+
+        $aksAdds = Get-RoleSet -Body $script:RosterBody -Header 'Pack' -Name 'aks'
+        $aksMirror = Get-RoleSet -Body $script:ProfilesBody -Header 'Pack' -Name 'aks'
+        ($aksMirror -join ',') | Should -BeExactly ($aksAdds -join ',')
+        ($aksAdds -join ',') | Should -BeExactly 'azure-architect,azure-diagnose,cost-manager,developer,modernizer'
+
+        $fnAdds = Get-RoleSet -Body $script:RosterBody -Header 'Pack' -Name 'azure-functions'
+        $fnMirror = Get-RoleSet -Body $script:ProfilesBody -Header 'Pack' -Name 'azure-functions'
+        ($fnMirror -join ',') | Should -BeExactly ($fnAdds -join ',')
+        ($fnAdds -join ',') | Should -BeExactly 'azure-diagnose,deployer,developer,modernizer,tester'
+
+        $full = Get-RoleSet -Body $script:RosterBody -Header 'Profile' -Name 'full'
+        $azure = Get-RoleSet -Body $script:RosterBody -Header 'Profile' -Name 'azure'
+        $default = Get-RoleSet -Body $script:RosterBody -Header 'Profile' -Name 'default'
+        $operations = Get-RoleSet -Body $script:RosterBody -Header 'Profile' -Name 'operations'
+        @($aksAdds | Where-Object { $_ -notin $full }) | Should -BeNullOrEmpty
+        @($aksAdds | Where-Object { $_ -notin $azure }) | Should -BeNullOrEmpty
+        (@($aksAdds | Where-Object { $_ -notin $default } | Sort-Object) -join ',') | Should -BeExactly 'azure-architect,azure-diagnose,cost-manager,modernizer'
+        (@($aksAdds | Where-Object { $_ -notin $operations } | Sort-Object) -join ',') | Should -BeExactly 'azure-architect,cost-manager,modernizer'
+        @($fnAdds | Where-Object { $_ -notin $full }) | Should -BeNullOrEmpty
+        @($fnAdds | Where-Object { $_ -notin $azure }) | Should -BeNullOrEmpty
+        (@($fnAdds | Where-Object { $_ -notin $default } | Sort-Object) -join ',') | Should -BeExactly 'azure-diagnose,deployer,modernizer'
+        @($fnAdds | Where-Object { $_ -notin $operations }) | Should -BeExactly @('modernizer')
+
+        $rows = @(Get-MarkdownTableRows `
+                -Body (Get-MarkdownSectionBody -Body $script:RosterCatalogBody -Heading 'Registered External Cast') `
+                -HeaderCell 'Role')
+        $packSkillRows = @(Get-MarkdownTableRows `
+                -Body (Get-MarkdownSectionBody -Body $script:RosterCatalogBody -Heading 'Registered Pack Skills') `
+                -HeaderCell 'Pack')
+
+        $aksOrdered = @($packSkillRows | Where-Object { $_[1].Trim() -eq 'aks' } | ForEach-Object { $_[2].Trim().Trim('`') })
+        $aksOrdered | Should -HaveCount 7
+        $aksOrdered.IndexOf('azure-kubernetes-app-deploy') | Should -BeLessThan $aksOrdered.IndexOf('azure-kubernetes')
+        $aksOrdered.IndexOf('azure-kubernetes-automatic-readiness') | Should -BeLessThan $aksOrdered.IndexOf('azure-kubernetes')
+
+        $aksSkills = @($rows | Where-Object { $_[3].Trim().Trim('`') -in $aksOrdered })
+        $aksSkills | Should -HaveCount 7
+        foreach ($row in $aksSkills) {
+            $row[2].Trim() | Should -BeExactly 'opt-in'
+            $row[4].Trim() | Should -BeExactly 'skill'
+            $row[5].Trim() | Should -Match '^`microsoft/azure-skills` \(`vendor-official`\), `(\.github/plugins/aks-skills/skills/[^`]+|skills/azure-kubernetes(?:/[^`]+)?)/SKILL\.md`$'
+            $row[6].Trim() | Should -Match '^`apm install microsoft/azure-skills/[^#]+#968f7bfaa01672e782dae2c6bab4fb9505ae047a --target copilot`$'
+            $row[6].Trim() | Should -Not -Match '/SKILL\.md'
+            $row[7].Trim() | Should -BeExactly 'MIT'
+            $row[8].Trim() | Should -Match 'Reach only while `aks` is active'
+            $row[8].Trim() | Should -Match 'Do not auto-install'
+            $row[10].Trim() | Should -BeExactly '2026-11-13'
+        }
+
+        $fnOrdered = @($packSkillRows | Where-Object { $_[1].Trim() -eq 'azure-functions' } | ForEach-Object { $_[2].Trim().Trim('`') })
+        $fnOrdered | Should -HaveCount 10
+        $fnSkills = @($rows | Where-Object { $_[5].Trim() -match '^`Azure/azure-functions-skills`' })
+        $fnSkills | Should -HaveCount 10
+        (@($fnOrdered | Sort-Object) -join ',') | Should -BeExactly (@($fnSkills | ForEach-Object { $_[3].Trim().Trim('`') } | Sort-Object) -join ',')
+        foreach ($row in $fnSkills) {
+            $row[2].Trim() | Should -BeExactly 'opt-in'
+            $row[4].Trim() | Should -BeExactly 'skill'
+            $row[5].Trim() | Should -Match '^`Azure/azure-functions-skills` \(`vendor-official`\), `\.github/plugins/azure-functions-skills/skills/[^`]+/SKILL\.md`$'
+            $row[6].Trim() | Should -Match '^`apm install Azure/azure-functions-skills/\.github/plugins/azure-functions-skills/skills/[^#]+#34e17220ff073b29a0be5bd541f32d287118165f --target copilot`$'
+            $row[6].Trim() | Should -Not -Match '/SKILL\.md'
+            $row[7].Trim() | Should -BeExactly 'MIT'
+            $row[8].Trim() | Should -Match 'Reach only while `azure-functions` is active'
+            $row[8].Trim() | Should -Match 'Do not auto-install'
+            $row[10].Trim() | Should -BeExactly '2026-11-13'
+        }
+        foreach ($preview in @('azure-functions-update', 'azure-functions-hosted-skills')) {
+            $row = @($fnSkills | Where-Object { $_[3].Trim().Trim('`') -eq $preview })
+            $row | Should -HaveCount 1
+            $row[0][8] | Should -Match 'Preview'
+            $row[0][8] | Should -Match 'explicit preview approval'
+        }
+
+        foreach ($packName in @('aks', 'azure-functions')) {
+            $profileRow = @(Get-MarkdownTableRows -Body $script:ProfilesBody -HeaderCell 'Resource pack' |
+                    Where-Object { $_[1].Trim().Trim('`') -eq $packName })[0]
+            $expected = if ($packName -eq 'aks') { $aksOrdered } else { $fnOrdered }
+            (@($profileRow[2] -split ',' | ForEach-Object { $_.Trim() } | Sort-Object) -join ',') |
+                Should -BeExactly ((@($expected | Sort-Object)) -join ',')
+        }
+
+        @($rows | Where-Object { $_[3].Trim().Trim('`') -in @(
+                    'aks-network-capture', 'airunway-aks-setup', 'azure-search-nav',
+                    'azure-functions-help', 'azure-functions-setup', 'azure-functions-feedback',
+                    'azure-functions-hosted-skills-migrate', 'azure-functions-connector-create',
+                    'azure-functions-connector-mcp', 'azure-functions-connector-validate'
+                ) }) | Should -BeNullOrEmpty
+
+        $blocklist = Get-MarkdownSectionBody -Body $script:RosterCatalogBody -Heading 'External Cast Blocklist'
+        $blocklistResources = @(Get-MarkdownTableRows -Body $blocklist -HeaderCell 'Resource' | ForEach-Object { $_[1] }) -join ' '
+        $blocklistResources | Should -Match '`aks`'
+        $blocklistResources | Should -Match '`platform-sre-kubernetes`'
+        foreach ($preserved in @('azure-deployment-preflight', 'azure-pricing', 'az-cost-optimize', 'azure-well-architected-review')) {
+            @($rows | Where-Object { $_[3].Trim().Trim('`') -eq $preserved }) | Should -Not -BeNullOrEmpty
+            $blocklistResources | Should -Not -Match ('`' + [regex]::Escape($preserved) + '`')
+        }
+    }
+
+    It 'guards AKS and Azure Functions preview selection, packaged support files, and read-only/gated charter boundaries in charters and docs (SRC-18)' {
+        $aksGuidance = Get-Content -LiteralPath (Join-Path $script:ReferenceRoot 'aks-platform-options.md') -Raw
+        $aksGuidance | Should -Match 'Host visibility is not selection'
+        $aksGuidance | Should -Match 'declined resource stays unavailable'
+        $aksGuidance | Should -Match 'aks-network-capture'
+        $aksGuidance | Should -Match 'airunway-aks-setup'
+        $aksGuidance | Should -Match 'ghcfa-telem'
+        $aksGuidance | Should -Match 'not registered squad capabilities'
+        $aksGuidance | Should -Match 'https://peter-n91\.github\.io/hve-squad/usage\.html#aks-setup'
+
+        $fnGuidance = Get-Content -LiteralPath (Join-Path $script:ReferenceRoot 'azure-functions-platform-options.md') -Raw
+        $fnGuidance | Should -Match 'Host visibility is not selection'
+        $fnGuidance | Should -Match 'declined resource stays unavailable'
+        $fnGuidance | Should -Match 'Preview is not the default'
+        $fnGuidance | Should -Match 'azure-functions-setup'
+        $fnGuidance | Should -Match 'telemetry\.mjs'
+        $fnGuidance | Should -Match 'azure-prepare'
+        $fnGuidance | Should -Match 'not registered squad capabilities'
+        $fnGuidance | Should -Match 'https://peter-n91\.github\.io/hve-squad/usage\.html#azure-functions-setup'
+
+        $script:ProfilesBody | Should -Match '(?s)For `aks`, read \[aks-platform-options\.md\].*?before asking to install resources'
+        $script:ProfilesBody | Should -Match '(?s)For `azure-functions`, read \[azure-functions-platform-options\.md\].*?before asking to install resources'
+        $script:RoutingBody | Should -Match 'only while that pack is active'
+
+        foreach ($name in @(
+                'squad-azure-architect', 'squad-azure-diagnose', 'squad-cost-manager',
+                'squad-implementor', 'squad-modernization-planner')) {
+            $charter = Get-Content -LiteralPath (Join-Path $SourceRoot "squad-src/.github/agents/squad/$name.agent.md") -Raw
+            $charter | Should -Match 'aks-platform-options\.md'
+            $charter | Should -Match 'only while this pack is active'
+            $charter | Should -Match 'decision is not `declined`'
+            $charter | Should -Match 'missing support files is not ready'
+            $charter | Should -Match 'Do not write squad state'
+        }
+        foreach ($name in @(
+                'squad-azure-diagnose', 'squad-deployer', 'squad-implementor',
+                'squad-modernization-planner', 'squad-reviewer')) {
+            $charter = Get-Content -LiteralPath (Join-Path $SourceRoot "squad-src/.github/agents/squad/$name.agent.md") -Raw
+            $charter | Should -Match 'azure-functions-platform-options\.md'
+            $charter | Should -Match 'only while this pack is active'
+            $charter | Should -Match 'decision is not `declined`'
+            $charter | Should -Match 'missing support files is not ready'
+            $charter | Should -Match 'Do not write squad state'
+        }
+        foreach ($name in @('squad-implementor', 'squad-modernization-planner')) {
+            $charter = Get-Content -LiteralPath (Join-Path $SourceRoot "squad-src/.github/agents/squad/$name.agent.md") -Raw
+            $charter | Should -Match 'user explicitly approved the preview'
+        }
+        $deployerCharter = Get-Content -LiteralPath (Join-Path $SourceRoot 'squad-src/.github/agents/squad/squad-deployer.agent.md') -Raw
+        $deployerCharter | Should -Match 'do not chain into unregistered `azure-prepare`/`azure-validate`/`azure-deploy`'
+        $deployerCharter | Should -Match 'do not run `telemetry\.mjs`'
+
+        foreach ($docs in @($script:EnglishDocs, $script:FrenchDocs)) {
+            $docs | Should -Match 'id="aks-setup"'
+            $docs | Should -Match 'id="azure-functions-setup"'
+            $docs | Should -Match 'aks-troubleshooting#968f7bfaa01672e782dae2c6bab4fb9505ae047a --target copilot'
+            $docs | Should -Match 'azure-skills-968f7bf'
+            $docs | Should -Match 'azure-functions-common#34e17220ff073b29a0be5bd541f32d287118165f --target copilot'
+            $docs | Should -Match 'azure-functions-update#34e17220ff073b29a0be5bd541f32d287118165f --target copilot'
+            $docs | Should -Match 'azure-functions-hosted-skills#34e17220ff073b29a0be5bd541f32d287118165f --target copilot'
+            $docs | Should -Match 'azure-functions-skills-34e1722'
+        }
+    }
+}

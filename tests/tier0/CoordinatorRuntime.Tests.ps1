@@ -529,6 +529,124 @@ Describe 'Compact confirmed initialization (COORD-01..03)' {
         Get-FixtureHash $repo | Should -BeExactly $before
     }
 
+    It 'lists AKS and Azure Functions resources only for their active proposals and distinguishes disk from host visibility (SRC-17)' {
+        $repo = New-FixtureRepo
+        Write-FixtureText (Join-Path $repo '.agents/skills/aks-troubleshooting/SKILL.md') "---`nname: aks-troubleshooting`ndescription: Fixture.`n---`n"
+        Write-FixtureText (Join-Path $repo '.agents/skills/azure-functions-update/SKILL.md') "---`nname: azure-functions-update`ndescription: Fixture.`n---`n"
+        $without = Invoke-Local 'Get-SquadInitContext.ps1' $repo @('-RepoRoot', $repo)
+        $without.ExitCode | Should -Be 0 -Because $without.Output
+        @(($without.Output | ConvertFrom-Json).packResources) | Should -BeNullOrEmpty
+
+        $withAks = Invoke-Local 'Get-SquadInitContext.ps1' $repo @('-RepoRoot', $repo, '-Pack', 'aks')
+        $withAks.ExitCode | Should -Be 0 -Because $withAks.Output
+        $aksContext = $withAks.Output | ConvertFrom-Json
+        @($aksContext.packResources) | Should -HaveCount 7
+        @($aksContext.members | ForEach-Object role | Sort-Object) | Should -Be @('azure-architect', 'azure-diagnose', 'cost-manager', 'developer', 'modernizer')
+        $aksDisk = @($aksContext.packResources | Where-Object resource -eq 'aks-troubleshooting')[0]
+        $aksDisk.installedOnDisk | Should -BeTrue
+        $aksDisk.hostVisible | Should -BeFalse
+        $aksDisk.installed | Should -BeFalse
+        $aksDisk.installOrEntry | Should -Match 'apm install microsoft/azure-skills/\.github/plugins/aks-skills/skills/aks-troubleshooting#968f7bfaa01672e782dae2c6bab4fb9505ae047a --target copilot'
+
+        $withFn = Invoke-Local 'Get-SquadInitContext.ps1' $repo @('-RepoRoot', $repo, '-Pack', 'azure-functions')
+        $withFn.ExitCode | Should -Be 0 -Because $withFn.Output
+        $fnContext = $withFn.Output | ConvertFrom-Json
+        @($fnContext.packResources) | Should -HaveCount 10
+        @($fnContext.members | ForEach-Object role | Sort-Object) | Should -Be @('azure-diagnose', 'deployer', 'developer', 'modernizer', 'tester')
+        $fnPreview = @($fnContext.packResources | Where-Object resource -eq 'azure-functions-update')[0]
+        $fnPreview.installedOnDisk | Should -BeTrue
+        $fnPreview.hostVisible | Should -BeFalse
+        $fnPreview.installed | Should -BeFalse
+        $fnPreview.installOrEntry | Should -Match 'apm install Azure/azure-functions-skills/\.github/plugins/azure-functions-skills/skills/azure-functions-update#34e17220ff073b29a0be5bd541f32d287118165f --target copilot'
+
+        $visibleAks = Invoke-Local 'Get-SquadInitContext.ps1' $repo @(
+            '-RepoRoot', $repo, '-Pack', 'aks', '-AvailableSkill', 'aks-troubleshooting'
+        )
+        $visibleAks.ExitCode | Should -Be 0 -Because $visibleAks.Output
+        @((($visibleAks.Output | ConvertFrom-Json).packResources) | Where-Object resource -eq 'aks-troubleshooting')[0].installed | Should -BeTrue
+
+        $visibleFn = Invoke-Local 'Get-SquadInitContext.ps1' $repo @(
+            '-RepoRoot', $repo, '-Pack', 'azure-functions', '-AvailableSkill', 'azure-functions-update'
+        )
+        $visibleFn.ExitCode | Should -Be 0 -Because $visibleFn.Output
+        @((($visibleFn.Output | ConvertFrom-Json).packResources) | Where-Object resource -eq 'azure-functions-update')[0].installed | Should -BeTrue
+        Test-Path -LiteralPath (Join-Path $repo '.copilot-tracking') | Should -BeFalse
+    }
+
+    It 'requires every AKS and Azure Functions disposition while allowing Functions preview skills to be declined and previews pinned directory installs (SRC-19)' {
+        $repo = New-FixtureRepo
+        $data = Get-SquadInitData -RepoRoot $repo
+        $index = 0
+        foreach ($cast in $data.cast) {
+            $primary = $cast['Primary Agent (`name:`)']
+            if ($primary -notmatch '^[A-Za-z]' -or $primary -match '[/\\:]') { continue }
+            Write-FixtureText (Join-Path $repo '.github/agents' "fixture-$index.agent.md") "---`nname: $primary`n---`n"
+            $index++
+        }
+        $choices = New-Choices
+        $choices.packs = @('aks', 'azure-functions')
+        { New-SquadInitPayload -Choices $choices -RepoRoot $repo } | Should -Throw '*resourceDecisions*'
+        $choices.resourceDecisions = Get-PackResourceDecisions -Repo $repo -Packs @('aks', 'azure-functions')
+        $choices.resourceDecisions.Remove('azure-functions-hosted-skills')
+        { New-SquadInitPayload -Choices $choices -RepoRoot $repo } | Should -Throw '*Missing pack resource decision: azure-functions-hosted-skills*'
+        $choices.resourceDecisions['azure-functions-hosted-skills'] = 'declined'
+        $choices.resourceDecisions['azure-functions-update'] = 'available'
+        { New-SquadInitPayload -Choices $choices -RepoRoot $repo } | Should -Throw '*not visible*'
+        $choices.resourceDecisions['azure-functions-update'] = 'declined'
+
+        $payload = New-SquadInitPayload -Choices $choices -RepoRoot $repo
+        $payload.packResources.Count | Should -Be 17
+        $payload.packResources['azure-functions-update'] | Should -BeExactly 'declined'
+        $payload.packResources['azure-functions-hosted-skills'] | Should -BeExactly 'declined'
+        @($payload.roster | ForEach-Object Role | Sort-Object) |
+            Should -Be @('azure-architect', 'azure-diagnose', 'cost-manager', 'deployer', 'developer', 'lead', 'modernizer', 'researcher', 'scribe', 'tester')
+
+        $choices.availableSkills = @('aks-troubleshooting', 'azure-functions-update')
+        $choices.resourceDecisions['aks-troubleshooting'] = 'available'
+        $choices.resourceDecisions['azure-functions-update'] = 'available'
+        $accepted = New-SquadInitPayload -Choices $choices -RepoRoot $repo
+        $accepted.packResources['aks-troubleshooting'] | Should -BeExactly 'available'
+        $accepted.packResources['azure-functions-update'] | Should -BeExactly 'available'
+        $accepted.packResources['azure-functions-hosted-skills'] | Should -BeExactly 'declined'
+        $choices.resourceDecisions['azure-functions-setup'] = 'available'
+        { New-SquadInitPayload -Choices $choices -RepoRoot $repo } | Should -Throw '*Unknown pack resource decision: azure-functions-setup*'
+
+        $before = Get-FixtureHash $repo
+        $allAks = Invoke-Local 'Install-SquadPackResources.ps1' $repo @(
+            '-RepoRoot', $repo, '-Pack', 'aks', '-Confirmed', '-WhatIf'
+        )
+        $allAks.ExitCode | Should -Be 0 -Because $allAks.Output
+        $aksReceipt = (@($allAks.Output -split '\r?\n' | Where-Object { $_ -match '^\{"schemaVersion"' })[-1]) | ConvertFrom-Json
+        $aksReceipt.status | Should -BeExactly 'PLANNED'
+        @($aksReceipt.resources) | Should -HaveCount 7
+        $aksNames = @($aksReceipt.resources | ForEach-Object resource)
+        $aksNames.IndexOf('azure-kubernetes-app-deploy') | Should -BeLessThan $aksNames.IndexOf('azure-kubernetes')
+        (@($aksReceipt.resources | ForEach-Object commands) -join "`n") | Should -Not -Match '/SKILL\.md'
+        (@($aksReceipt.resources | ForEach-Object commands) -join "`n") | Should -Match 'aks-troubleshooting#968f7bfaa01672e782dae2c6bab4fb9505ae047a --target copilot'
+
+        $allFn = Invoke-Local 'Install-SquadPackResources.ps1' $repo @(
+            '-RepoRoot', $repo, '-Pack', 'azure-functions', '-Confirmed', '-WhatIf'
+        )
+        $allFn.ExitCode | Should -Be 0 -Because $allFn.Output
+        $fnReceipt = (@($allFn.Output -split '\r?\n' | Where-Object { $_ -match '^\{"schemaVersion"' })[-1]) | ConvertFrom-Json
+        $fnReceipt.status | Should -BeExactly 'PLANNED'
+        @($fnReceipt.resources) | Should -HaveCount 10
+        (@($fnReceipt.resources | ForEach-Object commands) -join "`n") | Should -Not -Match '/SKILL\.md'
+        (@($fnReceipt.resources | ForEach-Object commands) -join "`n") | Should -Match 'azure-functions-common#34e17220ff073b29a0be5bd541f32d287118165f --target copilot'
+
+        $subset = Invoke-Local 'Install-SquadPackResources.ps1' $repo @(
+            '-RepoRoot', $repo, '-Pack', 'azure-functions', '-Resource', 'azure-functions-hosted-skills',
+            '-Confirmed', '-WhatIf'
+        )
+        $subset.ExitCode | Should -Be 0 -Because $subset.Output
+        $subsetLine = @($subset.Output -split '\r?\n' | Where-Object { $_ -match '^\{"schemaVersion"' })[-1]
+        $subsetReceipt = $subsetLine | ConvertFrom-Json
+        @($subsetReceipt.resources) | Should -HaveCount 1
+        $subsetReceipt.resources[0].commands | Should -Be @('apm install Azure/azure-functions-skills/.github/plugins/azure-functions-skills/skills/azure-functions-hosted-skills#34e17220ff073b29a0be5bd541f32d287118165f --target copilot')
+        $subsetReceipt.prerequisitesInstalled | Should -BeFalse
+        Get-FixtureHash $repo | Should -BeExactly $before
+    }
+
     It 'requires pack resource dispositions and persists the accepted Foundry activation' {
         $repo = New-FixtureRepo
         $data = Get-SquadInitData -RepoRoot $repo

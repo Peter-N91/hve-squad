@@ -305,11 +305,9 @@ A pack and a federation both add capability a single profile does not carry, so 
 > **One piece of work that needs extra expertise is a profile plus a pack.** Those roles must share a plan, a council, and a review.
 > **Two streams of work with separate deliverables and owners is a federation.** Those teams need coordination, not the same room.
 
-The reason is mechanical rather than stylistic. A pack composes *within* one roster: `pp-architect` and `privacy` are dispatched in the same turn against the same request, and both findings land in one Council Verdict, one plan, and one review. A federation coordinates *between* rosters: each `members/<name>/` is a complete squad with its own `team.md`, `decisions.md`, `history/`, and consumption ledger, and meta-routing decides which sub-squad owns a turn. Split one piece of work across two sub-squads and its two halves are decided in two councils that never met.
+A pack composes *within* one roster: `pp-architect` and `privacy` run in the same turn against one request and land in one Council Verdict, plan, and review. A federation coordinates *between* rosters: each `members/<name>/` keeps its own `team.md`, `decisions.md`, `history/`, and ledger, and meta-routing picks the sub-squad. Splitting one piece of work across two sub-squads splits its decision across two councils.
 
-Federation also does not remove the need for a pack — it multiplies it. A sub-squad is seeded from a profile, and a technology vertical reaches that sub-squad the same way it reaches any roster: by applying the pack to it. There is no path from federation to `pp-architect` that does not go through `power-platform`.
-
-A compliance-plus-Power-Platform project is therefore `profile=compliance pack=power-platform`, not two sub-squads, because compliance is a lens on the work rather than a stream of it. Two sub-squads earn their keep when there really are two products — a Power Platform app and an Azure data platform, different owners, shipping separately — and the first of those still carries the pack. See `.github/instructions/squad/squad-federation.instructions.md` for the federation mechanics.
+A sub-squad is seeded from a profile, so a vertical still arrives on it by applying the pack (`power-platform` for `pp-architect`). Compliance on Power Platform is `profile=compliance pack=power-platform`, whereas two separate products with distinct owners earn two sub-squads. See `.github/instructions/squad/squad-federation.instructions.md`.
 
 #### Composition Rules
 
@@ -346,6 +344,8 @@ Optional `Guidance` files go only to the accepted pack's roles and the methodolo
 | `foundry`        | architect, azure-architect, deployer, prompt-engineer, security, rai, observability, cost-manager, data-scientist | `foundry-blueprint.md`; `foundry-platform-options.md` | Designing or delivering a Microsoft Foundry agentic AI project | Opt-in. Reuses existing roles and registered external skills; adds no replacement agent |
 | `fabric` | data-scientist | `fabric-blueprint.md` | Warehouse, Eventhouse, Spark, or Dataflow beyond the primer | Opt-in. No new role |
 | `dotnet` | modernizer, tester, performance, developer | `dotnet-platform-options.md` | .NET upgrades, NuGet CPM, test/API review, perf, or EF Core/ASP.NET | Opt-in. No new role |
+| `aks` | azure-architect, developer, modernizer, azure-diagnose, cost-manager | `aks-platform-options.md` | AKS cluster design, manifests, AKS Automatic, Day-2 triage, or AKS cost | Opt-in. No new role |
+| `azure-functions` | developer, deployer, tester, azure-diagnose, modernizer | `azure-functions-platform-options.md` | Azure Functions apps, triggers/bindings, Function App triage/review, or Hosted Skills | Opt-in. No new role |
 
 **AWS is a pack while `azure` is a profile, and that asymmetry is deliberate.** `azure` predates the pack mechanism and stays a profile by the decision recorded in *Profile or Pack*: this repository's work is intrinsically Azure-shaped, so an Azure squad behaves as the dominant team shape rather than as an addition to one. AWS is new capability, so the three tests govern it, and all three say pack — it carries no methodology spine, it is not incoherent alongside any profile, and it answers "what is it built on". The practical consequence is the one the tests intend: a multi-cloud project takes `profile=azure` plus `pack=aws` and gets both, where two competing profiles would have forced a false choice. An AWS-only project takes whichever profile matches its *work* — usually `architecture` or `default` — plus the pack. Carrying the `aws` pack says the squad can reason about AWS; it does not imply general multi-cloud capability, and it says nothing at all about Google Cloud, which has no coverage anywhere (see the `gcp` row in the *Cast Catalog*).
 
@@ -360,6 +360,8 @@ Optional `Guidance` files go only to the accepted pack's roles and the methodolo
 | Planning a Microsoft Foundry support assistant                   | `azure`        | `foundry`                     |
 | Fabric Warehouse work | `azure` | `fabric` |
 | Modernizing and tuning a .NET service | `modernization` | `dotnet` |
+| Operating and rightsizing an AKS cluster | `operations` | `aks` |
+| Building and triaging an Azure Functions app | `azure` | `azure-functions` |
 | On call for a live AWS workload                                  | `operations`   | `aws`                         |
 | A Microsoft 365 Copilot agent that handles personal data         | `security`     | `m365-copilot`                |
 | A Power Platform solution fronted by an M365 Copilot agent       | `default`      | `power-platform`, `m365-copilot` |
