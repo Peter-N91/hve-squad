@@ -17,6 +17,7 @@ name: Deploy Bicep
 
 on:
   workflow_dispatch:
+    # checkov:skip=CKV_GHA_7:Manual dispatch (write access required); project and environment inputs are passed via env and environment bindings, never interpolated into run commands.
     inputs:
       project:
         description: "Project folder under infra/bicep/"

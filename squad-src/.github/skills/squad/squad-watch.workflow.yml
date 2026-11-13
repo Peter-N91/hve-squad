@@ -161,6 +161,7 @@ on:
   schedule:
     - cron: '0 6 * * 1'          # Mondays 06:00 UTC — adjust or remove
   workflow_dispatch:
+    # checkov:skip=CKV_GHA_7:Manual dispatch (write access required); inputs are allowlist-validated or passed as data via env, never interpolated into shell commands.
     inputs:
       request:
         description: "Free-form request for the squad (leave issue_number blank)"

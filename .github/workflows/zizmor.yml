@@ -4,11 +4,14 @@ name: Zizmor Actions Security Scan
 on:
   workflow_dispatch:
   push:
-    branches: ["dev", "main", "jmservera/security-review"]
+    branches: ["main"]
     paths:
       - ".github/workflows/**"
+      - ".github/dependabot.yml"
+      - "squad-src/.github/**/*.workflow.yml"
+      - "squad-src/**/*.workflow.yml"
   pull_request:
-    branches: ["dev", "main"]
+    branches: ["main"]
   schedule:
     - cron: "30 4 * * 1"
 permissions: {}
@@ -37,22 +40,74 @@ jobs:
           enable-cache: false
 
       - name: Run zizmor (SARIF)
+        id: scan
+        # zizmor discovers GitHub Actions workflows under `.github/workflows/`,
+        # so shipped `.workflow.yml` templates under `squad-src/` are staged
+        # ephemerally and remapped back to `squad-src/...` in `results.sarif`.
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           ZIZMOR_VERSION: '1.29.0'
-        run: uvx "zizmor==${ZIZMOR_VERSION}" --format sarif .github/workflows/ > results.sarif || true
+        run: |
+          set -euo pipefail
+
+          map_file="${RUNNER_TEMP}/zizmor-uri-map.json"
+          staged_files=()
+          cleanup() {
+            if (( ${#staged_files[@]} > 0 )); then
+              rm -f "${staged_files[@]}"
+            fi
+          }
+          trap cleanup EXIT
+
+          mapfile -t templates < <(find squad-src -type f -name '*.workflow.yml' | LC_ALL=C sort)
+          if (( ${#templates[@]} == 0 )); then
+            echo "::error::No shipped .workflow.yml templates found under squad-src/."
+            exit 1
+          fi
+
+          printf '{}' > "$map_file"
+          idx=0
+          for tpl in "${templates[@]}"; do
+            idx=$((idx + 1))
+            base=$(basename "${tpl%.workflow.yml}" | tr -cs 'a-zA-Z0-9-' '-')
+            staged=".github/workflows/staged-template-${idx}-${base}.yml"
+            cp "$tpl" "$staged"
+            staged_files+=("$staged")
+            bare="${staged#.github/workflows/}"
+            jq --arg s "$staged" --arg b "$bare" --arg t "$tpl" \
+              '. + {($s): $t, ($b): $t}' "$map_file" > "${map_file}.tmp"
+            mv "${map_file}.tmp" "$map_file"
+          done
+
+          suppressed=$( (grep -rEoh '#[[:space:]]*zizmor:[[:space:]]*ignore\[[a-z0-9,[:space:]-]+\]' .github/workflows || true) | wc -l | tr -d '[:space:]' )
+          echo "suppressed=${suppressed}" >> "$GITHUB_OUTPUT"
+
+          uvx "zizmor==${ZIZMOR_VERSION}" --format sarif . > "${RUNNER_TEMP}/zizmor.raw.sarif"
+
+          jq --slurpfile map "$map_file" '
+            ($map[0]) as $m
+            | walk(
+                if type == "object" and (.uri? | type == "string") then
+                  (($m[.uri] // $m[(.uri | sub("^(?:\\./|/)+"; ""))]) // null) as $mapped
+                  | if $mapped != null then .uri = $mapped else . end
+                else
+                  .
+                end
+              )
+          ' "${RUNNER_TEMP}/zizmor.raw.sarif" > results.sarif
 
       - name: Zizmor summary
         if: (!cancelled())
         # zizmor drops `# zizmor: ignore[...]` findings from the SARIF entirely
-        # rather than emitting them as suppressions, so count the comments instead.
+        # rather than emitting them as suppressions, so use the precomputed count.
+        env:
+          SUPPRESSED: ${{ steps.scan.outputs.suppressed }}
         run: |
           {
             echo "### Zizmor scan"
             echo ""
             if [[ -s results.sarif ]]; then
-              suppressed=$(grep -rEoh '#[[:space:]]*zizmor:[[:space:]]*ignore\[[a-z0-9,[:space:]-]+\]' .github/workflows | wc -l)
-              jq -r --arg suppressed "$suppressed" '
+              jq -r --arg suppressed "${SUPPRESSED:-0}" '
                 [.runs[].results[]] as $all
                 | "| Level | Count |",
                   "| --- | ---: |",
@@ -78,7 +133,7 @@ jobs:
             fi
             echo ""
             echo "Findings are reported to the Security tab under the \`zizmor-scan\` category."
-            echo "Accepted findings carry an inline \`# zizmor: ignore[<rule>]\` comment."
+            echo "This check is blocking on unsuppressed errors and warnings; accepted findings carry an inline \`# zizmor: ignore[<rule>]\` comment."
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload SARIF file
@@ -95,3 +150,28 @@ jobs:
           name: zizmor-sarif
           path: results.sarif
           retention-days: 30
+
+      - name: Enforce zero unsuppressed errors or warnings
+        if: (!cancelled())
+        run: |
+          set -euo pipefail
+          if [[ ! -s results.sarif ]]; then
+            echo "::error::Zizmor did not produce a non-empty results.sarif file."
+            exit 1
+          fi
+          blocking_count=$(jq '
+            [
+              .runs[].results[]
+              | select(((.suppressions // []) | length == 0) and (.level == "error" or .level == "warning"))
+            ] | length
+          ' results.sarif)
+          if (( blocking_count > 0 )); then
+            jq -r '
+              .runs[].results[]
+              | select(((.suppressions // []) | length == 0) and (.level == "error" or .level == "warning"))
+              | "::\(.level) file=\(.locations[0].physicalLocation.artifactLocation.uri // "unknown"),line=\(.locations[0].physicalLocation.region.startLine // 1)::[\(.ruleId)] \(.message.text | gsub("[\\r\\n]+"; " "))"
+            ' results.sarif
+            echo "::error::Zizmor reported ${blocking_count} unsuppressed error/warning finding(s)."
+            exit 1
+          fi
+          echo "Zizmor gate passed with 0 unsuppressed error/warning findings."

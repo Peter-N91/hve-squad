@@ -837,12 +837,13 @@ Describe 'CI-06 Workflow supply-chain pinning and template SDL hygiene' {
     BeforeAll {
         $script:SourceRootCi06 = (Resolve-Path -LiteralPath $SourceRoot).Path
         $script:LiveWorkflowPaths = @(
-            Get-ChildItem -LiteralPath (Join-Path $script:SourceRootCi06 '.github/workflows') -File -Filter '*.yml' |
+            Get-ChildItem -LiteralPath (Join-Path $script:SourceRootCi06 '.github/workflows') -File -Force -Filter '*.yml' |
                 Sort-Object FullName |
                 ForEach-Object { $_.FullName }
         )
+        # Use -Force so Linux PowerShell traverses hidden dot-directories (`squad-src/.github`).
         $script:TemplateWorkflowPaths = @(
-            Get-ChildItem -LiteralPath (Join-Path $script:SourceRootCi06 'squad-src') -Recurse -File -Filter '*.workflow.yml' |
+            Get-ChildItem -LiteralPath (Join-Path $script:SourceRootCi06 'squad-src') -Recurse -File -Force -Filter '*.workflow.yml' |
                 Sort-Object FullName |
                 ForEach-Object { $_.FullName }
         )
@@ -1131,3 +1132,204 @@ async function runCase(c) {
         $results[3].comments[0] | Should -Match ([regex]::Escape("Note: ``Fix 'auth' scriptalert(1)/script ping @sec-team Closes #99``"))
     }
 }
+
+Describe 'CI-07 Security scanner workflow coverage and blocking gate' {
+    BeforeAll {
+        $script:SourceRootCi07 = (Resolve-Path -LiteralPath $SourceRoot).Path
+    }
+
+    It 'CI-07 removes stale branches from security workflows, enforces Dependabot cooldown, and documents CKV_GHA_7 skips' {
+        $python = Get-Command python -ErrorAction Stop
+        $inspector = @'
+import json, os, sys, yaml
+from pathlib import Path
+
+root = Path(sys.argv[1])
+sec = {}
+for name in ("zizmor.yml", "checkov.yml", "codeql.yml"):
+    p = root / ".github" / "workflows" / name
+    doc = yaml.safe_load(p.read_text(encoding="utf-8"))
+    on_block = doc.get("on") or doc.get(True) or {}
+    sec[name] = {
+        "pushBranches": list((on_block.get("push") or {}).get("branches") or []),
+        "pushPaths": list((on_block.get("push") or {}).get("paths") or []),
+        "prBranches": list((on_block.get("pull_request") or {}).get("branches") or []),
+        "prHasPaths": "paths" in (on_block.get("pull_request") or {}),
+    }
+
+dep = yaml.safe_load((root / ".github" / "dependabot.yml").read_text(encoding="utf-8"))
+gha_cooldowns = [
+    ((u.get("cooldown") or {}).get("default-days") or 0)
+    for u in (dep.get("updates") or [])
+    if u.get("package-ecosystem") == "github-actions"
+]
+
+live_wf = sorted((root / ".github" / "workflows").glob("*.yml"))
+template_wf = sorted((root / "squad-src").rglob("*.workflow.yml"))
+missing_ckv7 = []
+for p in live_wf + template_wf:
+    raw = p.read_text(encoding="utf-8")
+    doc = yaml.safe_load(raw)
+    on_block = doc.get("on") or doc.get(True) or {}
+    wd = on_block.get("workflow_dispatch") if isinstance(on_block, dict) else None
+    if isinstance(wd, dict) and wd.get("inputs"):
+        if "checkov:skip=CKV_GHA_7:" not in raw:
+            missing_ckv7.append(p.relative_to(root).as_posix())
+
+print(json.dumps({
+    "security": sec,
+    "ghaCooldowns": gha_cooldowns,
+    "templateCount": len(template_wf),
+    "missingCkv7": missing_ckv7,
+}))
+'@
+        $json = & $python.Source -c $inspector $script:SourceRootCi07
+        $LASTEXITCODE | Should -Be 0 -Because ($json -join "`n")
+        $data = $json | ConvertFrom-Json
+        [int]$data.templateCount | Should -Be 5 -Because 'Python Path.rglob must discover all 5 shipped .workflow.yml templates under squad-src/.github'
+
+        foreach ($wf in @('zizmor.yml', 'checkov.yml', 'codeql.yml')) {
+            @($data.security.$wf.pushBranches) | Should -Be @('main') -Because "$wf push trigger must target only main"
+            @($data.security.$wf.prBranches) | Should -Be @('main') -Because "$wf pull_request trigger must target only main"
+        }
+        @($data.security.'zizmor.yml'.pushPaths) | Should -Contain '.github/workflows/**'
+        @($data.security.'zizmor.yml'.pushPaths) | Should -Contain '.github/dependabot.yml'
+        @($data.security.'zizmor.yml'.pushPaths) | Should -Contain 'squad-src/.github/**/*.workflow.yml'
+        @($data.security.'zizmor.yml'.pushPaths) | Should -Contain 'squad-src/**/*.workflow.yml'
+        $data.security.'zizmor.yml'.prHasPaths | Should -BeFalse -Because 'zizmor pull_request check must run unconditionally so required checks never hang'
+        $data.security.'checkov.yml'.prHasPaths | Should -BeFalse -Because 'checkov pull_request check must run unconditionally so required checks never hang'
+
+        @($data.ghaCooldowns).Count | Should -BeGreaterOrEqual 1
+        foreach ($days in @($data.ghaCooldowns)) {
+            [int]$days | Should -BeGreaterOrEqual 7 -Because 'Dependabot github-actions updates must enforce at least a 7-day cooldown'
+        }
+        @($data.missingCkv7) | Should -BeNullOrEmpty -Because 'every workflow or template with workflow_dispatch.inputs must document a justified # checkov:skip=CKV_GHA_7: annotation'
+    }
+
+    It 'CI-07 stages shipped workflow templates, remaps SARIF URIs, and gates Zizmor on unsuppressed errors and warnings after upload' {
+        $python = Get-Command python -ErrorAction Stop
+        $bash = Get-Command bash -ErrorAction Stop
+        $jq = Get-Command jq -ErrorAction Stop
+
+        $zizmorPath = Join-Path $script:SourceRootCi07 '.github/workflows/zizmor.yml'
+        $checkovPath = Join-Path $script:SourceRootCi07 '.github/workflows/checkov.yml'
+        $extractor = @'
+import json, sys, yaml
+from pathlib import Path
+
+out = {}
+for label, p in (("zizmor", sys.argv[1]), ("checkov", sys.argv[2])):
+    doc = yaml.safe_load(Path(p).read_text(encoding="utf-8"))
+    job = next(iter(doc["jobs"].values()))
+    steps = job["steps"]
+    out[label] = {
+        "stepNames": [s.get("name") or "" for s in steps],
+        "runScripts": {s.get("name") or str(i): s["run"] for i, s in enumerate(steps) if "run" in s},
+    }
+print(json.dumps(out))
+'@
+        $json = & $python.Source -c $extractor $zizmorPath $checkovPath
+        $LASTEXITCODE | Should -Be 0 -Because ($json -join "`n")
+        $meta = $json | ConvertFrom-Json
+
+        foreach ($prop in $meta.zizmor.runScripts.PSObject.Properties) {
+            ([string]$prop.Value).Replace("`r`n", "`n") | & $bash.Source -n
+            $LASTEXITCODE | Should -Be 0 -Because "zizmor.yml '$($prop.Name)' bash script must parse"
+        }
+        foreach ($prop in $meta.checkov.runScripts.PSObject.Properties) {
+            ([string]$prop.Value).Replace("`r`n", "`n") | & $bash.Source -n
+            $LASTEXITCODE | Should -Be 0 -Because "checkov.yml '$($prop.Name)' bash script must parse"
+        }
+
+        $zizmorScan = [string]$meta.zizmor.runScripts.'Run zizmor (SARIF)'
+        $zizmorScan | Should -Match "find squad-src -type f -name '\*\.workflow\.yml'"
+        $zizmorScan | Should -Match 'trap cleanup EXIT'
+        $zizmorScan | Should -Match 'uvx "zizmor==\$\{ZIZMOR_VERSION\}" --format sarif \.'
+        $zizmorScan | Should -Not -Match '\|\|\s*true\s*$' -Because 'zizmor execution must not swallow crash/invocation failures with trailing || true'
+
+        $checkovScan = [string]$meta.checkov.runScripts.'Run Checkov (blocking, SARIF)'
+        $checkovScan | Should -Match "find squad-src -type f -name '\*\.workflow\.yml'"
+        $checkovScan | Should -Match 'trap cleanup EXIT'
+        $checkovScan | Should -Match 'walk\('
+        $checkovScan | Should -Match 'exit "\$rc"'
+
+        $stepNames = @($meta.zizmor.stepNames)
+        $uploadIdx = $stepNames.IndexOf('Upload SARIF file')
+        $gateIdx = $stepNames.IndexOf('Enforce zero unsuppressed errors or warnings')
+        $uploadIdx | Should -BeGreaterThan 0
+        $gateIdx | Should -BeGreaterThan $uploadIdx -Because 'SARIF upload must precede the blocking Zizmor gate so findings reach Code Scanning first'
+
+        $dir = Join-Path $TestDrive ('scanner-sarif-' + [guid]::NewGuid().ToString('n'))
+        New-Item -ItemType Directory -Path $dir | Out-Null
+        $mapPath = Join-Path $dir 'map.json'
+        $sarifPath = Join-Path $dir 'sample.sarif'
+        Set-Content -LiteralPath $mapPath -Encoding utf8 -Value '{"staged-template-1-squad-watch.yml":"squad-src/.github/skills/squad/squad-watch.workflow.yml",".github/workflows/staged-template-1-squad-watch.yml":"squad-src/.github/skills/squad/squad-watch.workflow.yml"}'
+        Set-Content -LiteralPath $sarifPath -Encoding utf8 -Value @'
+{
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": { "driver": { "name": "test" } },
+      "results": [
+        {
+          "ruleId": "self-repository",
+          "level": "note",
+          "message": { "text": "informational note" },
+          "locations": [
+            { "physicalLocation": { "artifactLocation": { "uri": "./.github/workflows/staged-template-1-squad-watch.yml" }, "region": { "startLine": 10 } } }
+          ]
+        },
+        {
+          "ruleId": "CKV_GHA_7",
+          "level": "warning",
+          "suppressions": [{ "kind": "inSource", "justification": "manual trigger" }],
+          "message": { "text": "suppressed warning" },
+          "locations": [
+            { "physicalLocation": { "artifactLocation": { "uri": "/.github/workflows/staged-template-1-squad-watch.yml" }, "region": { "startLine": 20 } } }
+          ]
+        }
+      ]
+    }
+  ]
+}
+'@
+        $remapExpr = '($map[0]) as $m | walk(if type == "object" and (.uri? | type == "string") then (($m[.uri] // $m[(.uri | sub("^(?:\\./|/)+"; ""))]) // null) as $mapped | if $mapped != null then .uri = $mapped else . end else . end)'
+        $remappedJson = & $jq.Source --slurpfile map $mapPath $remapExpr $sarifPath
+        $LASTEXITCODE | Should -Be 0
+        $remapped = ($remappedJson -join "`n") | ConvertFrom-Json
+        $uris = @($remapped.runs[0].results | ForEach-Object { $_.locations[0].physicalLocation.artifactLocation.uri })
+        $uris | Should -Be @(
+            'squad-src/.github/skills/squad/squad-watch.workflow.yml',
+            'squad-src/.github/skills/squad/squad-watch.workflow.yml'
+        )
+
+        $gateExpr = '[.runs[].results[] | select(((.suppressions // []) | length == 0) and (.level == "error" or .level == "warning"))] | length'
+        $cleanCount = [int]((& $jq.Source $gateExpr $sarifPath) -join '').Trim()
+        $cleanCount | Should -Be 0 -Because 'notes and suppressed findings must not fail the Zizmor gate'
+
+        $failingSarifPath = Join-Path $dir 'failing.sarif'
+        Set-Content -LiteralPath $failingSarifPath -Encoding utf8 -Value @'
+{
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": { "driver": { "name": "zizmor" } },
+      "results": [
+        {
+          "ruleId": "unpinned-uses",
+          "level": "error",
+          "message": { "text": "action is not pinned to a hash" },
+          "locations": [
+            { "physicalLocation": { "artifactLocation": { "uri": "squad-src/.github/skills/squad/squad-watch.workflow.yml" }, "region": { "startLine": 42 } } }
+          ]
+        }
+      ]
+    }
+  ]
+}
+'@
+        $failCount = [int]((& $jq.Source $gateExpr $failingSarifPath) -join '').Trim()
+        $failCount | Should -Be 1 -Because 'unsuppressed warning or error findings must fail the Zizmor gate'
+    }
+}
+

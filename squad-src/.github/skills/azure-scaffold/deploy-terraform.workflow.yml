@@ -18,6 +18,7 @@ name: Deploy Terraform
 
 on:
   workflow_dispatch:
+    # checkov:skip=CKV_GHA_7:Manual dispatch (write access required); project and environment inputs select the working directory and protected environment, never interpolated into run commands.
     inputs:
       project:
         description: "Project folder under infra/terraform/"

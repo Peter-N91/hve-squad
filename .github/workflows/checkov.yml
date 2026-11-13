@@ -9,13 +9,11 @@ on:
   push:
     branches:
       - main
-      - jmservera/security-review
   pull_request:
     branches:
       - main
 
-permissions:
-  contents: read
+permissions: {}
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -50,7 +48,42 @@ jobs:
       - name: Run Checkov (blocking, SARIF)
         # Phase C: blocking. No --soft-fail — a failed check fails the build.
         # Accepted findings must use a justified inline `# checkov:skip`.
+        # Checkov's `github_actions` runner only inspects files under
+        # `.github/workflows/`, so shipped `.workflow.yml` templates under
+        # `squad-src/` are staged ephemerally and remapped in SARIF.
         run: |
+          set -euo pipefail
+
+          map_file="${RUNNER_TEMP}/checkov-uri-map.json"
+          staged_files=()
+          cleanup() {
+            if (( ${#staged_files[@]} > 0 )); then
+              rm -f "${staged_files[@]}"
+            fi
+          }
+          trap cleanup EXIT
+
+          mapfile -t templates < <(find squad-src -type f -name '*.workflow.yml' | LC_ALL=C sort)
+          if (( ${#templates[@]} == 0 )); then
+            echo "::error::No shipped .workflow.yml templates found under squad-src/."
+            exit 1
+          fi
+
+          printf '{}' > "$map_file"
+          idx=0
+          for tpl in "${templates[@]}"; do
+            idx=$((idx + 1))
+            base=$(basename "${tpl%.workflow.yml}" | tr -cs 'a-zA-Z0-9-' '-')
+            staged=".github/workflows/staged-template-${idx}-${base}.yml"
+            cp "$tpl" "$staged"
+            staged_files+=("$staged")
+            bare="${staged#.github/workflows/}"
+            jq --arg s "$staged" --arg b "$bare" --arg t "$tpl" \
+              '. + {($s): $t, ($b): $t}' "$map_file" > "${map_file}.tmp"
+            mv "${map_file}.tmp" "$map_file"
+          done
+
+          rc=0
           checkov \
             --directory . \
             --framework github_actions secrets \
@@ -59,7 +92,30 @@ jobs:
             --compact \
             --output cli \
             --output sarif \
-            --output-file-path console,checkov-results.sarif
+            --output-file-path console,checkov-results.sarif || rc=$?
+
+          if [[ -s checkov-results.sarif ]]; then
+            jq --slurpfile map "$map_file" '
+              ($map[0]) as $m
+              | walk(
+                  if type == "object" and (.uri? | type == "string") then
+                    (($m[.uri] // $m[(.uri | sub("^(?:\\./|/)+"; ""))]) // null) as $mapped
+                    | if $mapped != null then .uri = $mapped else . end
+                  else
+                    .
+                  end
+                )
+              | (.runs[].results) |= unique_by([
+                  .ruleId,
+                  (.locations[0].physicalLocation.artifactLocation.uri // ""),
+                  (.locations[0].physicalLocation.region.startLine // 0),
+                  ((.suppressions // []) | length)
+                ])
+            ' checkov-results.sarif > "${RUNNER_TEMP}/checkov-results.remapped.sarif"
+            mv "${RUNNER_TEMP}/checkov-results.remapped.sarif" checkov-results.sarif
+          fi
+
+          exit "$rc"
 
       - name: Checkov summary
         if: always()
