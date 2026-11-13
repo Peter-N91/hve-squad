@@ -2809,4 +2809,40 @@ $(Format-WatchSelectionMarkdown)
         $appliedScript | Should -Match 'TrustedBaseSha \$sha'
         $appliedScript | Should -Match 'StableRef \$env:STABLE_REF'
     }
+
+    It 'resolves consumer and repository Watch skill roots from pinned git blobs and rejects unsafe SQUAD_WATCH_SKILL_ROOT paths' {
+        foreach ($layout in @('.agents/skills/squad', '.github/skills/squad', 'squad-src/.github/skills/squad')) {
+            $slug = ($layout -replace '[^a-z0-9]+', '-').Trim('-')
+            $root = Join-Path $TestDrive ("skill-root-" + $slug)
+            New-Item -ItemType Directory -Path $root -Force | Out-Null
+            Invoke-WatchModeGit -Repository $root -Arguments @('init', '-q') | Out-Null
+            Invoke-WatchModeGit -Repository $root -Arguments @('config', 'user.email', 'watch@example.test') | Out-Null
+            Invoke-WatchModeGit -Repository $root -Arguments @('config', 'user.name', 'Watch') | Out-Null
+            foreach ($rel in @(
+                "$layout/scripts/SquadWatch.psm1",
+                "$layout/scripts/SquadWatch.Delivery.ps1",
+                "$layout/scripts/Assert-SquadWatchTrustedCheckout.ps1",
+                "$layout/scripts/Invoke-SquadWatchAppliedPatch.ps1",
+                "$layout/scripts/Invoke-SquadWatchMarkedBody.ps1",
+                "$layout/references/profiles-and-packs.md"
+            )) {
+                $dest = Join-Path $root ($rel -replace '/', [System.IO.Path]::DirectorySeparatorChar)
+                New-Item -ItemType Directory -Path (Split-Path -Parent $dest) -Force | Out-Null
+                $sourceRel = $rel -replace ([regex]::Escape($layout)), 'squad-src/.github/skills/squad'
+                Copy-Item -LiteralPath (Join-Path $script:SourceRootResolved ($sourceRel -replace '/', [System.IO.Path]::DirectorySeparatorChar)) -Destination $dest -Force
+                Invoke-WatchModeGit -Repository $root -Arguments @('add', '--', $rel) | Out-Null
+            }
+            Invoke-WatchModeGit -Repository $root -Arguments @('commit', '-q', '-m', 'seed skill') | Out-Null
+            $sha = (Invoke-WatchModeGit -Repository $root -Arguments @('rev-parse', 'HEAD')).Output[-1].Trim()
+            Resolve-SquadWatchSkillRoot -TrustedRoot $root -ExpectedSha $sha | Should -BeExactly $layout
+            { Assert-SquadWatchTrustedCheckout -TrustedRoot $root -ExpectedSha $sha } | Should -Not -Throw
+        }
+
+        $apmRoot = Join-Path $TestDrive 'skill-root-agents-skills-squad'
+        $apmSha = (Invoke-WatchModeGit -Repository $apmRoot -Arguments @('rev-parse', 'HEAD')).Output[-1].Trim()
+        foreach ($badRoot in @('../escape', '/etc/passwd', '-option', 'custom:colon')) {
+            { Resolve-SquadWatchSkillRoot -TrustedRoot $apmRoot -ExpectedSha $apmSha -SkillRoot $badRoot } | Should -Throw '*Invalid SQUAD_WATCH_SKILL_ROOT*'
+        }
+        { Resolve-SquadWatchSkillRoot -TrustedRoot $apmRoot -ExpectedSha $apmSha -SkillRoot 'missing/skills/squad' } | Should -Throw '*missing SquadWatch.psm1*'
+    }
 }

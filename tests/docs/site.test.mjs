@@ -330,7 +330,7 @@ test('paired EN/FR Watch concept sections state the same delivery contract', () 
     ['usage.html', 'fr/usage.html', 'what-every-watch-run-does', 'ce-que-fait-chaque-ex-cution-watch'],
     ['usage.html', 'fr/usage.html', 'one-delivery-at-a-time', 'une-seule-livraison-la-fois'],
     ['usage.html', 'fr/usage.html', 'pull-request-comments-and-publication', 'commentaires-de-pull-request-et-publication'],
-    ['usage.html', 'fr/usage.html', 'the-shipped-workflow-is-a-scaffold', 'le-workflow-livr-est-une-ossature'],
+    ['usage.html', 'fr/usage.html', 'the-shipped-reference-workflow', 'le-workflow-de-r-f-rence-livr'],
     ['maintaining.html', 'fr/maintaining.html', 'watch-delivery-rules', 'r-gles-de-livraison-watch'],
   ];
   for (const [enPage, frPage, enSlug, frSlug] of pairs) {

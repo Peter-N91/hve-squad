@@ -303,14 +303,15 @@ flowchart TD
         ships.
       </p>
       <p>
-        <code>squad-watch.workflow.yml</code> remains a non-turnkey scaffold. Its broad write
-        permissions, checkout credentials, and <code>--allow-all-tools</code> are pre-existing
-        exposure. Trigger parity is not security parity. The live <code>squad-watch.yml</code> in this
-        repository is the split-job workflow. Copying the scaffold does not reproduce that boundary.
-        The repository checkout precedes the nested <code>.squad-trusted</code> checkout, so a later
-        root checkout does not delete the pinned helpers. Helpers are imported only after
-        <code>git show &lt;trustedBaseSha&gt;</code> verifies the verifier and the helper files,
-        including that <code>.squad-trusted</code> HEAD matches that SHA.
+        <code>squad-watch.workflow.yml</code> mirrors the live <code>squad-watch.yml</code> split-job
+        boundary: read-only <code>interpret</code> with <code>persist-credentials: false</code>, runtime
+        zero-write verification of <code>COPILOT_GITHUB_TOKEN</code> before <code>--allow-all-tools</code>,
+        and separate write jobs. The repository checkout precedes the nested <code>.squad-trusted</code>
+        checkout, so a later root checkout does not delete the pinned helpers. Helpers resolve across
+        <code>.agents/skills/squad</code>, <code>.github/skills/squad</code>, and
+        <code>squad-src/.github/skills/squad</code> (or <code>SQUAD_WATCH_SKILL_ROOT</code>) and are
+        imported only after <code>git show &lt;trustedBaseSha&gt;</code> verifies the verifier and the
+        helper files, including that <code>.squad-trusted</code> HEAD matches that SHA.
         Impactful-Action Gates and injection safety are unchanged. The template does not claim the
         live issue-to-PR mapping. When that mapping does not apply, the live workflow fails closed to
         <code>pr-&lt;N&gt;</code>.

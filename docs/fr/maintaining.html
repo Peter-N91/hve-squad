@@ -286,11 +286,16 @@ flowchart TD
         ne sont livrés.
       </p>
       <p>
-        <code>squad-watch.workflow.yml</code> reste une ossature non prête à l’emploi. Ses autorisations d’écriture
-        larges, ses informations d’identification de checkout et <code>--allow-all-tools</code> sont une
-        exposition préexistante. La parité des déclencheurs n’est pas une parité de sécurité. Le <code>squad-watch.yml</code> actif de ce
-        dépôt est le workflow à jobs séparés. Copier l’ossature ne reproduit pas cette frontière. Le checkout du dépôt précède le checkout imbriqué <code>.squad-trusted</code>, afin qu’un checkout racine ultérieur ne supprime pas les aides épinglées. Les aides ne sont importées qu’après que <code>git show &lt;trustedBaseSha&gt;</code> a vérifié le vérificateur et les fichiers d’aide, y compris la correspondance du HEAD de <code>.squad-trusted</code> avec ce SHA.
-        Les Impactful-Action Gates et la sécurité contre l’injection sont inchangés. L’ossature ne
+        <code>squad-watch.workflow.yml</code> reproduit la frontière à jobs séparés du <code>squad-watch.yml</code>
+        actif : <code>interpret</code> en lecture seule avec <code>persist-credentials: false</code>, vérification à
+        l’exécution de l’absence de droits d’écriture sur <code>COPILOT_GITHUB_TOKEN</code> avant
+        <code>--allow-all-tools</code>, et jobs d’écriture distincts. Le checkout du dépôt précède le checkout imbriqué
+        <code>.squad-trusted</code>, afin qu’un checkout racine ultérieur ne supprime pas les aides épinglées. Les aides
+        se résolvent dans <code>.agents/skills/squad</code>, <code>.github/skills/squad</code> et
+        <code>squad-src/.github/skills/squad</code> (ou <code>SQUAD_WATCH_SKILL_ROOT</code>) et ne sont
+        importées qu’après que <code>git show &lt;trustedBaseSha&gt;</code> a vérifié le vérificateur et les
+        fichiers d’aide, y compris la correspondance du HEAD de <code>.squad-trusted</code> avec ce SHA.
+        Les Impactful-Action Gates et la sécurité contre l’injection sont inchangés. Le modèle ne
         revendique pas le rattachement actif d’une issue vers une pull request. Lorsque ce rattachement
         ne s’applique pas, le workflow actif échoue de façon fermée vers <code>pr-&lt;N&gt;</code>.
       </p>

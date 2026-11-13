@@ -18,20 +18,47 @@ param(
     [Parameter(Mandatory)]
     [string]$ExpectedSha,
 
-    [string[]]$RelativePaths
+    [string]$SkillRoot,
+
+    [string[]]$RelativePaths,
+
+    [string[]]$AdditionalRelativePaths
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
-if (-not $RelativePaths -or $RelativePaths.Count -eq 0) {
-    $RelativePaths = @(
-        'squad-src/.github/skills/squad/scripts/SquadWatch.psm1',
-        'squad-src/.github/skills/squad/scripts/SquadWatch.Delivery.ps1',
-        'squad-src/.github/skills/squad/scripts/Invoke-SquadWatchMarkedBody.ps1',
-        'scripts/New-ChangeFragment.ps1',
-        'tests/lib/SquadInstall.psm1'
+function Resolve-PinnedSkillRoot {
+    param(
+        [Parameter(Mandatory)][string]$Root,
+        [Parameter(Mandatory)][string]$Sha,
+        [AllowNull()][string]$Configured
     )
+
+    if (-not [string]::IsNullOrWhiteSpace($Configured)) {
+        $normalized = ($Configured.Trim() -replace '\\', '/').TrimEnd('/')
+        if ([string]::IsNullOrWhiteSpace($normalized) -or
+            [System.IO.Path]::IsPathRooted($normalized) -or
+            $normalized.StartsWith('-') -or
+            $normalized -match '[:\x00-\x1f]' -or
+            $normalized -match '(^|/)\.\.?(/|$)') {
+            throw "Invalid SQUAD_WATCH_SKILL_ROOT '$Configured': must be a safe repository-relative path."
+        }
+        & git -C $Root cat-file -e "${Sha}:${normalized}/scripts/SquadWatch.psm1" 2>$null
+        if ($LASTEXITCODE -ne 0) {
+            throw "Pinned Squad Watch skill root '$normalized' is missing SquadWatch.psm1 at $Sha."
+        }
+        return $normalized
+    }
+
+    foreach ($candidate in @('.agents/skills/squad', '.github/skills/squad', 'squad-src/.github/skills/squad')) {
+        & git -C $Root cat-file -e "${Sha}:${candidate}/scripts/SquadWatch.psm1" 2>$null
+        if ($LASTEXITCODE -eq 0) {
+            return $candidate
+        }
+    }
+
+    throw "Pinned Squad Watch skill root not found at $Sha (checked .agents/skills/squad, .github/skills/squad, squad-src/.github/skills/squad)."
 }
 
 function ConvertTo-SquadWatchPinnedText {
@@ -46,6 +73,30 @@ if ($LASTEXITCODE -ne 0) {
 $head = ([string]$headLines[-1]).Trim()
 if ($head -cne $ExpectedSha) {
     throw "Trusted checkout HEAD '$head' is not pinned '$ExpectedSha'."
+}
+
+if (-not $RelativePaths -or $RelativePaths.Count -eq 0) {
+    $configuredRoot = if (-not [string]::IsNullOrWhiteSpace($SkillRoot)) { $SkillRoot } else { [string]$env:SQUAD_WATCH_SKILL_ROOT }
+    $resolvedSkillRoot = Resolve-PinnedSkillRoot -Root $TrustedRoot -Sha $ExpectedSha -Configured $configuredRoot
+    $RelativePaths = @(
+        "$resolvedSkillRoot/scripts/SquadWatch.psm1",
+        "$resolvedSkillRoot/scripts/SquadWatch.Delivery.ps1",
+        "$resolvedSkillRoot/scripts/Invoke-SquadWatchMarkedBody.ps1",
+        "$resolvedSkillRoot/references/profiles-and-packs.md"
+    )
+    if (-not [string]::IsNullOrWhiteSpace($env:SQUAD_WATCH_ADDITIONAL_PATHS)) {
+        $AdditionalRelativePaths = @(@($AdditionalRelativePaths) + @($env:SQUAD_WATCH_ADDITIONAL_PATHS))
+    }
+}
+
+if ($AdditionalRelativePaths -and $AdditionalRelativePaths.Count -gt 0) {
+    $extras = @(
+        $AdditionalRelativePaths |
+            ForEach-Object { ([string]$_) -split '[,;]' } |
+            ForEach-Object { ($_.Trim() -replace '\\', '/').TrimStart('/') } |
+            Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
+    )
+    $RelativePaths = @(@($RelativePaths) + @($extras) | Select-Object -Unique)
 }
 
 foreach ($relative in $RelativePaths) {

@@ -985,7 +985,7 @@ jobs:
           if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($assertBlob)) { throw 'Pinned trusted-checkout verifier is missing from git show.' }
           $assertPath = Join-Path $env:RUNNER_TEMP 'Assert-SquadWatchTrustedCheckout.ps1'
           [System.IO.File]::WriteAllText($assertPath, $assertBlob)
-          & $assertPath -TrustedRoot $trusted -ExpectedSha $env:SQUAD_WATCH_TRUSTED_SHA
+          & $assertPath -TrustedRoot $trusted -ExpectedSha $env:SQUAD_WATCH_TRUSTED_SHA -AdditionalRelativePaths @('scripts/New-ChangeFragment.ps1', 'tests/lib/SquadInstall.psm1')
           Import-Module $watchModule -Force
           Assert-SquadWatchTrustedHelper -TrustedRoot $trusted -Path $installModule | Out-Null
           Assert-SquadWatchTrustedHelper -TrustedRoot $trusted -Path $watchModule | Out-Null
@@ -998,7 +998,7 @@ jobs:
           if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($assertBlob)) { throw 'Pinned trusted-checkout verifier is missing from git show.' }
           $assertPath = Join-Path $env:RUNNER_TEMP 'Assert-SquadWatchTrustedCheckout.ps1'
           [System.IO.File]::WriteAllText($assertPath, $assertBlob)
-          & $assertPath -TrustedRoot $trusted -ExpectedSha $env:SQUAD_WATCH_TRUSTED_SHA
+          & $assertPath -TrustedRoot $trusted -ExpectedSha $env:SQUAD_WATCH_TRUSTED_SHA -AdditionalRelativePaths @('scripts/New-ChangeFragment.ps1', 'tests/lib/SquadInstall.psm1')
           Import-Module $installModule -Force
           $workspace = (Resolve-Path .).Path
           $memberRoot = Join-Path $workspace ".copilot-tracking/squad/members/$env:SUB_SQUAD"
@@ -1172,6 +1172,63 @@ jobs:
           [System.IO.File]::WriteAllText($path, $validator)
           "validatorHash=$((Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLowerInvariant())" |
             Add-Content -LiteralPath $env:GITHUB_OUTPUT
+
+      - name: Verify COPILOT_GITHUB_TOKEN least privilege
+        if: steps.prep.outputs.authorized == 'true' && steps.prep.outputs.suppressInterpret != 'true'
+        env:
+          COPILOT_GITHUB_TOKEN: ${{ secrets.COPILOT_GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          API_URL: ${{ github.api_url }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${COPILOT_GITHUB_TOKEN}" ]]; then
+            echo "::error::Secret COPILOT_GITHUB_TOKEN is not set. Watch Mode needs a dedicated fine-grained PAT with only the 'Copilot Requests' permission; GH_TOKEN and SYNC_DEPS_TOKEN cannot substitute for it."
+            exit 1
+          fi
+          case "${COPILOT_GITHUB_TOKEN}" in
+            ghp_*|gho_*|ghs_*)
+              echo "::error::COPILOT_GITHUB_TOKEN uses a classic or server token prefix. Supply a dedicated fine-grained PAT with only 'Copilot Requests' and zero repository write permissions."
+              exit 1
+              ;;
+          esac
+          headers_file="$RUNNER_TEMP/copilot-token-headers.txt"
+          body_file="$RUNNER_TEMP/copilot-token-repo.json"
+          trap 'rm -f "$headers_file" "$body_file"' EXIT
+          http_code="$(curl -sS -D "$headers_file" -o "$body_file" -w '%{http_code}' \
+            -H "Authorization: Bearer ${COPILOT_GITHUB_TOKEN}" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "${API_URL}/repos/${REPO}")"
+          if grep -qiE '^x-oauth-scopes:\s*[^[:space:]]' "$headers_file"; then
+            echo "::error::COPILOT_GITHUB_TOKEN returned classic OAuth scopes. Supply a fine-grained PAT with only 'Copilot Requests' and zero repository write permissions."
+            exit 1
+          fi
+          case "$http_code" in
+            401)
+              echo "::error::COPILOT_GITHUB_TOKEN was rejected by GitHub API (HTTP 401). Rotate or replace the fine-grained Copilot token."
+              exit 1
+              ;;
+            403|404)
+              echo "Verified COPILOT_GITHUB_TOKEN has no repository scope on ${REPO} (HTTP ${http_code})."
+              ;;
+            200)
+              has_write="$(node -e '
+                const fs = require("fs");
+                const data = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+                const p = data && data.permissions ? data.permissions : {};
+                process.stdout.write((p.push || p.maintain || p.admin) ? "true" : "false");
+              ' "$body_file")"
+              if [[ "$has_write" == "true" ]]; then
+                echo "::error::COPILOT_GITHUB_TOKEN carries push, maintain, or admin permission on ${REPO}. Refusing to expose a repository-write PAT to an unattended --allow-all-tools run."
+                exit 1
+              fi
+              echo "Verified COPILOT_GITHUB_TOKEN carries no push, maintain, or admin permission on ${REPO}."
+              ;;
+            *)
+              echo "::error::Unexpected HTTP ${http_code} while verifying COPILOT_GITHUB_TOKEN repository permissions; failing closed."
+              exit 1
+              ;;
+          esac
 
       - name: Run the squad
         id: run_squad
@@ -1501,7 +1558,7 @@ jobs:
             exit 1
           fi
           git -C "$trusted" show "${TRUSTED_BASE_SHA}:squad-src/.github/skills/squad/scripts/Assert-SquadWatchTrustedCheckout.ps1" > "$RUNNER_TEMP/Assert-SquadWatchTrustedCheckout.ps1"
-          pwsh -NoProfile -File "$RUNNER_TEMP/Assert-SquadWatchTrustedCheckout.ps1" -TrustedRoot "$trusted" -ExpectedSha "$TRUSTED_BASE_SHA"
+          pwsh -NoProfile -File "$RUNNER_TEMP/Assert-SquadWatchTrustedCheckout.ps1" -TrustedRoot "$trusted" -ExpectedSha "$TRUSTED_BASE_SHA" -AdditionalRelativePaths "scripts/New-ChangeFragment.ps1,tests/lib/SquadInstall.psm1"
           fetched=false
           if git fetch origin "$BRANCH"; then
             fetched=true

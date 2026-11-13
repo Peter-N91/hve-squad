@@ -700,9 +700,9 @@ flowchart TD
           les PR plutôt que cette option.)
         </li>
         <li>
-          <strong>Installez le workflow de déclenchement.</strong> Copiez le workflow de référence
+          <strong>Installez le workflow de déclenchement.</strong> Copiez le workflow de référence à jobs séparés
           <code>.github/skills/squad/squad-watch.workflow.yml</code> vers
-          <code>.github/workflows/squad-watch.yml</code>, examinez-le comme une ossature non prête à l'emploi, et ne créez le commit qu'après avoir isolé les informations d'identification et la frontière d'application. Copier le fichier n'est pas une parité de sécurité.
+          <code>.github/workflows/squad-watch.yml</code>, vérifiez ses déclencheurs et le chemin de compétence pour votre dépôt, puis validez-le délibérément.
         </li>
         <li>
           <strong>Installez le dispositif de surveillance des approbations</strong> (si ce n'est pas déjà fait) pour que les approbations
@@ -951,8 +951,8 @@ dispatch-9911223344         # a free-form manual dispatch (workflow run id)</cod
         avant de nettoyer le runtime. En cas d'échec, il autorise une seule correction des enregistrements
         dans la même session d'agent, puis vérifie à nouveau. Le staging final répète les contrôles avec
         un validateur protégé par empreinte. Un travail inachevé bloque toujours la publication ; cette
-        reprise ne relance pas le pipeline. L'ossature consommateur documente le format des statuts,
-        mais ne fournit pas ce mécanisme de reprise.
+        reprise ne relance pas le pipeline. Le workflow actif comme le modèle de référence livré
+        intègrent ce précontrôle et cette reprise unique.
       </p>
       <p>
         L'exécution sélectionne exactement un profil canonique, et les packs éventuels, à partir de la demande. Elle consigne
@@ -1045,17 +1045,20 @@ dispatch-9911223344         # a free-form manual dispatch (workflow run id)</cod
         publiés : les noms de domaine nus, les e-mails, les mentions, les liens, les mots-clés de clôture et le HTML sont neutralisés, et la longueur est plafonnée.
       </p>
 
-      <h3>Le workflow livré est une ossature</h3>
+      <h3>Le workflow de référence livré</h3>
       <p>
-        <code>squad-watch.workflow.yml</code> est une ossature qui n'est pas prête à l'emploi. La copier ne revendique pas
-        une parité de sécurité avec un workflow à jobs séparés. Ses autorisations d'écriture larges, ses informations d'identification de checkout
-        et <code>--allow-all-tools</code> sont une exposition préexistante. Ce changement n'élargit pas l'autorisation des acteurs.
-        Isolez les informations d'identification, les aides de confiance et la frontière d'application avant d'activer
-        la copie. Le checkout du dépôt précède le checkout imbriqué <code>.squad-trusted</code>, afin qu'un checkout racine
-        ultérieur ne supprime pas les aides épinglées. Les aides ne sont importées qu'après que
+        <code>squad-watch.workflow.yml</code> livre le même modèle de privilèges à jobs séparés :
+        <code>interpret</code> en lecture seule avec <code>persist-credentials: false</code>, vérification à l'exécution
+        de l'absence de droits d'écriture sur <code>COPILOT_GITHUB_TOKEN</code> avant <code>--allow-all-tools</code>,
+        et jobs d'écriture distincts pour l'application du patch, les commentaires de revue et les escalades. Vérifiez
+        les déclencheurs, les protections de branche et l'expiration du jeton avant de valider une copie. Le checkout
+        du dépôt précède le checkout imbriqué <code>.squad-trusted</code>, afin qu'un checkout racine ultérieur ne
+        supprime pas les aides épinglées. Les aides se résolvent dans
+        <code>.agents/skills/squad</code> et <code>.github/skills/squad</code> (ou
+        <code>SQUAD_WATCH_SKILL_ROOT</code>) et ne sont importées qu'après que
         <code>git show &lt;trustedBaseSha&gt;</code> a vérifié le vérificateur et les fichiers d'aide,
         y compris la correspondance du HEAD de <code>.squad-trusted</code> avec ce SHA.
-        L'ossature ne revendique pas le rattachement actif d'une issue vers une pull request. Lorsque ce
+        Le modèle ne revendique pas le rattachement actif d'une issue vers une pull request. Lorsque ce
         rattachement ne s'applique pas, le workflow actif échoue de façon fermée vers <code>pr-&lt;N&gt;</code>.
       </p>
 

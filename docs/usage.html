@@ -696,9 +696,9 @@ flowchart TD
           creation instead of this toggle.)
         </li>
         <li>
-          <strong>Install the trigger workflow.</strong> Copy the reference workflow
+          <strong>Install the trigger workflow.</strong> Copy the split-job reference workflow
           <code>.github/skills/squad/squad-watch.workflow.yml</code> to
-          <code>.github/workflows/squad-watch.yml</code>, review it as a non-turnkey scaffold, and commit it only after you isolate credentials and the apply boundary. Copying the file is not security parity.
+          <code>.github/workflows/squad-watch.yml</code>, review its triggers and skill-root path for your repository, and commit it deliberately.
         </li>
         <li>
           <strong>Install the approval watcher</strong> (if you have not already) so gate approvals
@@ -948,7 +948,7 @@ dispatch-9911223344         # a free-form manual dispatch (workflow run id)</cod
         before runtime cleanup. If that check fails, it allows one record-only repair in the same
         agent session, then checks again. Final staging repeats the checks with a hash-protected
         validator. Unfinished work still blocks publication; this recovery does not rerun the pipeline.
-        The consumer scaffold documents the status format but does not supply this recovery wiring.
+        Both the live workflow and the shipped reference template wire this preflight and single-repair recovery.
       </p>
       <p>
         The run selects exactly one canonical profile, and any packs, from the demand. It records
@@ -1053,14 +1053,16 @@ dispatch-9911223344         # a free-form manual dispatch (workflow run id)</cod
         and length is capped.
       </p>
 
-      <h3>The shipped workflow is a scaffold</h3>
+      <h3>The shipped reference workflow</h3>
       <p>
-        <code>squad-watch.workflow.yml</code> is a non-turnkey scaffold. Copying it does not claim
-        security parity with a split-job workflow. Its broad write permissions, checkout credentials,
-        and <code>--allow-all-tools</code> are pre-existing exposure. This change does not widen actor
-        authorization. Isolate credentials, trusted helpers, and the apply boundary before you enable
-        the copy. The repository checkout precedes the nested <code>.squad-trusted</code> checkout, so a
-        later root checkout does not delete the pinned helpers. Helpers are imported only after
+        <code>squad-watch.workflow.yml</code> ships the same split-job privilege model: read-only
+        <code>interpret</code> with <code>persist-credentials: false</code>, runtime zero-write verification of
+        <code>COPILOT_GITHUB_TOKEN</code> before <code>--allow-all-tools</code>, and separate write jobs for patch
+        application, review comments, and escalations. Review triggers, branch protections, and token expiry before
+        committing a copy. The repository checkout precedes the nested <code>.squad-trusted</code> checkout, so a
+        later root checkout does not delete the pinned helpers. Helpers resolve across
+        <code>.agents/skills/squad</code> and <code>.github/skills/squad</code> (or
+        <code>SQUAD_WATCH_SKILL_ROOT</code>) and are imported only after
         <code>git show &lt;trustedBaseSha&gt;</code> verifies the verifier and the helper files,
         including that <code>.squad-trusted</code> HEAD matches that SHA.
         The template does not claim the live issue-to-PR mapping. When that mapping does not

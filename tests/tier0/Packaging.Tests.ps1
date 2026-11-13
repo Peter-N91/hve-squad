@@ -539,14 +539,66 @@ console.log(JSON.stringify(results));
         $script:RepoSquadWatch | Should -Match ([regex]::Escape('ref: ${{ needs.interpret.outputs.sourceSha }}'))
     }
 
-    It 'narrows the consumer reference claim and names every deterministic handoff prerequisite' {
-        $script:ReferenceSquadWatch | Should -Match ([regex]::Escape('does NOT claim the source repository''s enforced patch'))
-        $script:ReferenceSquadWatch | Should -Match ([regex]::Escape('.agents/skills/squad/scripts/SquadWatch.psm1'))
+    It 'enforces split-job least privilege, credential non-persistence, and deterministic patch handoff in squad-watch.workflow.yml' {
+        $python = Get-Command python -ErrorAction Stop
+        $templatePath = Join-Path $script:SourceRootResolved 'squad-src/.github/skills/squad/squad-watch.workflow.yml'
+        $inspector = @'
+import json, sys, yaml
+from pathlib import Path
+doc = yaml.safe_load(Path(sys.argv[1]).read_text(encoding="utf-8"))
+jobs = doc.get("jobs") or {}
+checkouts = []
+uses = []
+for job_name, job in jobs.items():
+    if not isinstance(job, dict):
+        continue
+    for step in (job.get("steps") or []):
+        if not isinstance(step, dict):
+            continue
+        u = str(step.get("uses") or "")
+        if u:
+            uses.append(u)
+        if u.startswith("actions/checkout"):
+            w = step.get("with") or {}
+            checkouts.append({"job": job_name, "name": step.get("name") or "", "persist": w.get("persist-credentials")})
+print(json.dumps({
+    "topPermissions": doc.get("permissions"),
+    "jobNames": list(jobs.keys()),
+    "jobPermissions": {k: (v.get("permissions") if isinstance(v, dict) else None) for k, v in jobs.items()},
+    "checkouts": checkouts,
+    "uses": uses,
+}))
+'@
+        $parsed = (& $python.Source -c $inspector $templatePath | ConvertFrom-Json)
+        $LASTEXITCODE | Should -Be 0
+        $parsed.topPermissions.contents | Should -Be 'read'
+        $parsed.topPermissions.PSObject.Properties.Name | Should -Not -Contain 'pull-requests'
+        $parsed.topPermissions.PSObject.Properties.Name | Should -Not -Contain 'issues'
+        $parsed.jobNames | Should -Contain 'interpret'
+        $parsed.jobNames | Should -Contain 'apply'
+        $parsed.jobNames | Should -Contain 'post-review'
+        $parsed.jobNames | Should -Contain 'escalate-unauthorized'
+        $parsed.jobNames | Should -Contain 'escalate-failure'
+        $parsed.jobNames | Should -Not -Contain 'watch'
+        $parsed.jobPermissions.interpret.contents | Should -Be 'read'
+        $parsed.jobPermissions.interpret.issues | Should -Be 'read'
+        $parsed.jobPermissions.interpret.'pull-requests' | Should -Be 'read'
+        $parsed.jobPermissions.'escalate-unauthorized'.issues | Should -Be 'write'
+        $parsed.jobPermissions.'escalate-unauthorized'.PSObject.Properties.Name | Should -HaveCount 1
+        $parsed.jobPermissions.'escalate-failure'.issues | Should -Be 'write'
+        $parsed.jobPermissions.'escalate-failure'.PSObject.Properties.Name | Should -HaveCount 1
+        foreach ($checkout in @($parsed.checkouts)) {
+            $checkout.persist | Should -BeFalse -Because "checkout '$($checkout.name)' in job '$($checkout.job)' must set persist-credentials: false"
+        }
+        foreach ($useRef in @($parsed.uses)) {
+            $useRef | Should -Match '^[^@]+@[0-9a-f]{40}$' -Because "consumer template action '$useRef' must be SHA-pinned"
+        }
         $script:ReferenceSquadWatch | Should -Match ([regex]::Escape('New-SquadWatchBaseline'))
         $script:ReferenceSquadWatch | Should -Match ([regex]::Escape('New-SquadWatchHandoff'))
-        $script:ReferenceSquadWatch | Should -Match ([regex]::Escape('recorded source SHA'))
-        $script:ReferenceSquadWatch | Should -Match ([regex]::Escape('separate,'))
-        $script:ReferenceSquadWatch | Should -Match ([regex]::Escape('minimally-scoped write job'))
+        $script:ReferenceSquadWatch | Should -Match ([regex]::Escape('Verify COPILOT_GITHUB_TOKEN least privilege'))
+        $script:RepoSquadWatch | Should -Match ([regex]::Escape('Verify COPILOT_GITHUB_TOKEN least privilege'))
+        $script:ReferenceSquadWatch | Should -Match ([regex]::Escape('sourceSha: ${{ steps.source.outputs.sha }}'))
+        $script:ReferenceSquadWatch | Should -Match ([regex]::Escape('ref: ${{ needs.interpret.outputs.sourceSha }}'))
     }
 
     It 'requires per-case/per-ask squad composition and the full RPI lifecycle in sync-hve-core.yml adaptation briefs' {

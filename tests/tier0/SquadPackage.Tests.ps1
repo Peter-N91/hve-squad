@@ -728,12 +728,15 @@ Describe 'GATE-48 Watch Mode per-case/per-ask squad selection and full RPI lifec
         $script:WatchWorkflowTemplate | Should -Match ([regex]::Escape('Run /squad-federation mode=autopilot ${watchArg({ source: ''workflow_dispatch'''))
     }
 
-    It 'ships the handoff module and explicitly scopes the reference template prerequisites' {
+    It 'ships the handoff module and split-job least-privilege reference workflow' {
         Test-Path -LiteralPath (Join-Path $script:Model.SquadSkillRoot 'scripts/SquadWatch.psm1') -PathType Leaf |
             Should -BeTrue -Because 'installed consumers need the deterministic handoff helper in the deployed squad skill'
         $script:WatchWorkflowTemplate | Should -Match ([regex]::Escape('New-SquadWatchBaseline'))
         $script:WatchWorkflowTemplate | Should -Match ([regex]::Escape('New-SquadWatchHandoff'))
-        $script:WatchWorkflowTemplate | Should -Match ([regex]::Escape('rather than as lifecycle-enforcement parity'))
+        $script:WatchWorkflowTemplate | Should -Match ([regex]::Escape('Verify COPILOT_GITHUB_TOKEN least privilege'))
+        $script:WatchWorkflowTemplate | Should -Match '(?m)^  interpret:\s*$'
+        $script:WatchWorkflowTemplate | Should -Match '(?m)^  apply:\s*$'
+        $script:WatchWorkflowTemplate | Should -Match '(?m)^  post-review:\s*$'
     }
 }
 
