@@ -148,16 +148,27 @@ jobs:
           Set-StrictMode -Version Latest
           $env:TIER0_BASE_SHA = (git rev-parse HEAD).Trim()
           $repoRoot = (Resolve-Path -LiteralPath '.').Path
-          $tier0Config = New-PesterConfiguration
-          $tier0Config.Run.Container = @(
-            New-PesterContainer -Path './tests/tier0/HotFileBudget.Tests.ps1' -Data @{ SourceRoot = $repoRoot }
-            New-PesterContainer -Path './tests/tier0/Performance.Tests.ps1' -Data @{ SourceRoot = $repoRoot }
-          )
-          $tier0Config.Run.PassThru = $true
-          $tier0Config.Output.Verbosity = 'Normal'
-          $tier0Res = Invoke-Pester -Configuration $tier0Config
-          if ($tier0Res.FailedCount -gt 0 -or $tier0Res.Result -ne 'Passed') {
-            throw "Tier 0 budget/contract checks failed ($($tier0Res.FailedCount) failure(s)); refusing to propose an invalid catalog or rates template."
+          $stageRoot = Join-Path ([System.IO.Path]::GetTempPath()) "sync-model-pkg-$([guid]::NewGuid().ToString('N').Substring(0, 8))"
+          try {
+            $skillDest = Join-Path $stageRoot '.agents/skills/squad'
+            New-Item -ItemType Directory -Path (Split-Path -Parent $skillDest) -Force | Out-Null
+            Copy-Item -LiteralPath (Join-Path $repoRoot 'squad-src/.github/skills/squad') -Destination $skillDest -Recurse -Force
+
+            $tier0Config = New-PesterConfiguration
+            $tier0Config.Run.Container = @(
+              New-PesterContainer -Path './tests/tier0/HotFileBudget.Tests.ps1' -Data @{ SourceRoot = $repoRoot }
+              New-PesterContainer -Path './tests/tier0/Performance.Tests.ps1' -Data @{ SourceRoot = $repoRoot }
+              New-PesterContainer -Path './tests/tier0/GetSquadDispatchBrief.Tests.ps1' -Data @{ PackageRoot = $stageRoot }
+            )
+            $tier0Config.Run.PassThru = $true
+            $tier0Config.Output.Verbosity = 'Normal'
+            $tier0Res = Invoke-Pester -Configuration $tier0Config
+            if ($tier0Res.FailedCount -gt 0 -or $tier0Res.Result -ne 'Passed') {
+              throw "Tier 0 budget/contract checks failed ($($tier0Res.FailedCount) failure(s)); refusing to propose an invalid catalog or rates template."
+            }
+          }
+          finally {
+            Remove-Item -LiteralPath $stageRoot -Recurse -Force -ErrorAction SilentlyContinue
           }
 
           $config = New-PesterConfiguration
