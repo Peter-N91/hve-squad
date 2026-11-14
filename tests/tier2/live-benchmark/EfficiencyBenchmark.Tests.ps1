@@ -81,6 +81,8 @@ while($null -ne ($Line=[Console]::In.ReadLine())) {
 Describe 'Efficiency event analysis' -Tag 'Unit' {
     It 'handles receipt extraction for a <Mutation> execution envelope' -ForEach @(
         @{ Mutation = 'safe-selection' }
+        @{ Mutation = 'safe-prefix' }
+        @{ Mutation = 'shifted-prefix' }
         @{ Mutation = 'snapshot-cache' }
         @{ Mutation = 'safe-copy' }
         @{ Mutation = 'copy-state' }
@@ -121,6 +123,8 @@ Describe 'Efficiency event analysis' -Tag 'Unit' {
         }
         switch ($Mutation) {
             safe-selection { $command += ' | Select-Object -First 1' }
+            safe-prefix { $command += ' | Out-String | % { $_.Substring(0,[Math]::Min(2500,$_.Length)) }' }
+            shifted-prefix { $command += ' | Out-String | % { $_.Substring(1,[Math]::Min(2500,$_.Length)) }' }
             safe-copy { $command = "Copy-Item 'source.md' 'docs/copied.md'; $command" }
             copy-state { $command = "Copy-Item 'source.md' '.copilot-tracking/squad/state.json'; $command" }
             copy-helper { $command = "Copy-Item 'source.md' '.agents/skills/squad/scripts/SquadCoordinator.psm1'; $command" }
@@ -159,7 +163,7 @@ Describe 'Efficiency event analysis' -Tag 'Unit' {
             }
         ) | Set-Content $path
         $evidence = Get-EfficiencyBookkeepingEvidence -Path $path -Workspace $workspace -SourceRoot $source
-        @($evidence.executions).Count | Should -Be $(if ($Mutation -eq 'snapshot-cache') { 4 } elseif ($Mutation -in @('safe-selection', 'safe-copy', 'malformed-then-valid')) { 1 } else { 0 })
+        @($evidence.executions).Count | Should -Be $(if ($Mutation -eq 'snapshot-cache') { 4 } elseif ($Mutation -in @('safe-selection', 'safe-prefix', 'safe-copy', 'malformed-then-valid')) { 1 } else { 0 })
         if ($Mutation -eq 'snapshot-cache') {
             $files = @([IO.Directory]::EnumerateFiles($scripts, '*', [IO.SearchOption]::AllDirectories)).Count
             Should -Invoke Get-FileHash -ModuleName EfficiencyBenchmark -Times ($files * 2) -Exactly
@@ -884,7 +888,11 @@ Describe 'Efficiency stage readiness' -Tag 'Unit' {
         }
         AfterEach { $PSDefaultParameterValues.Remove('Test-EfficiencyWorkflow:EventsPath') }
         foreach ($Name in @('brd.md', 'prd.md')) { Set-Content (Join-Path $script:StageWorkspace "docs/requirements/$Name") 'synthetic published requirements' }
-        Mock Invoke-EfficiencyProcess -ModuleName EfficiencyBenchmark { [pscustomobject]@{ exitCode = 0; stopCause = 'none' } }
+        Mock Invoke-EfficiencyProcess -ModuleName EfficiencyBenchmark {
+            $resultPath = $Arguments[[array]::IndexOf($Arguments, '-OutputPath') + 1]
+            @{ passed = $true; failures = @() } | ConvertTo-Json | Set-Content -LiteralPath $resultPath
+            [pscustomobject]@{ exitCode = 0; stopCause = 'none' }
+        }
         Mock Test-EfficiencyBookkeeping -ModuleName EfficiencyBenchmark {
             (Get-Content -LiteralPath (Join-Path $Squad 'history\Squad Scribe.md') -Raw) -match '(?m)^# History: Squad Scribe\r?$'
         }
@@ -896,6 +904,30 @@ Describe 'Efficiency stage readiness' -Tag 'Unit' {
         $Malformed.checks['stateVerifier'] | Should -BeTrue
         $Malformed.checks['bookkeepingEvidence'] | Should -BeFalse
         $Malformed.passed | Should -BeFalse
+    }
+    It 'preserves failed or unavailable state-verifier evidence for <Mode>' -ForEach @(
+        @{ Mode = 'failed'; ExitCode = 1; StopCause = 'none' },
+        @{ Mode = 'invalid'; ExitCode = 0; StopCause = 'none' },
+        @{ Mode = 'missing'; ExitCode = 0; StopCause = 'none' },
+        @{ Mode = 'timeout'; ExitCode = -1; StopCause = 'timeout' }
+    ) {
+        Mock Invoke-EfficiencyProcess -ModuleName EfficiencyBenchmark {
+            if ($Mode -in @('failed', 'invalid')) {
+                $resultPath = $Arguments[[array]::IndexOf($Arguments, '-OutputPath') + 1]
+                @{ passed = $(if ($Mode -eq 'invalid') { 1 } else { $false }); failures = @('native accounting coverage is incomplete') } |
+                    ConvertTo-Json | Set-Content -LiteralPath $resultPath
+            }
+            Set-Content -LiteralPath ($OutputPath + '.stderr') -Value 'local checker diagnostic'
+            [pscustomobject]@{ exitCode = $ExitCode; stopCause = $StopCause }
+        }
+        $result = Test-EfficiencyWorkflow -Workspace $script:StageWorkspace -Metrics $script:StageMetrics -Stage init
+        $result.passed | Should -BeFalse
+        $result.checks.stateVerifier | Should -BeFalse
+        $result.diagnostics.stateVerifier.exitCode | Should -Be $ExitCode
+        $result.diagnostics.stateVerifier.stopCause | Should -Be $StopCause
+        $result.diagnostics.stateVerifier.stderr | Should -Be 'local checker diagnostic'
+        if ($Mode -eq 'failed') { $result.diagnostics.stateVerifier.failures | Should -Contain 'native accounting coverage is incomplete' }
+        @(Get-ChildItem -LiteralPath (Join-Path $TestDrive 'out') -Filter '.efficiency-check-*').Count | Should -Be 0
     }
     It 'accepts requirements with both author and reviewer evidence' {
         (Test-EfficiencyWorkflow -Workspace $script:StageWorkspace -Metrics $script:StageMetrics -Stage requirements).passed | Should -BeTrue
@@ -1107,6 +1139,17 @@ Describe 'Efficiency actual direct bookkeeping proof' -Tag 'Unit' {
         @{ Stage = 'init'; Mutation = 'wrong-script'; Pass = $false }
         @{ Stage = 'init'; Mutation = 'missing-history'; Pass = $false }
         @{ Stage = 'init'; Mutation = 'cleaned-payload-expandable'; Pass = $true }
+        @{ Stage = 'init'; Mutation = 'location-literal'; Pass = $true }
+        @{ Stage = 'requirements'; Mutation = 'location-literal'; Pass = $true }
+        @{ Stage = 'init'; Mutation = 'location-variable'; Pass = $true }
+        @{ Stage = 'init'; Mutation = 'location-prefix'; Pass = $true }
+        @{ Stage = 'requirements'; Mutation = 'location-literalpath'; Pass = $true }
+        @{ Stage = 'init'; Mutation = 'location-relative'; Pass = $true }
+        @{ Stage = 'init'; Mutation = 'location-outside'; Pass = $false }
+        @{ Stage = 'init'; Mutation = 'location-child'; Pass = $false }
+        @{ Stage = 'init'; Mutation = 'location-late'; Pass = $false }
+        @{ Stage = 'init'; Mutation = 'location-repeated'; Pass = $false }
+        @{ Stage = 'init'; Mutation = 'location-dynamic'; Pass = $false }
         @{ Stage = 'requirements'; Mutation = 'background-shell-progressive-runs'; Pass = $true }
         @{ Stage = 'requirements'; Mutation = 'missing-history'; Pass = $false }
         @{ Stage = 'requirements'; Mutation = 'missing-dispatch'; Pass = $false }
@@ -1121,6 +1164,27 @@ Describe 'Efficiency actual direct bookkeeping proof' -Tag 'Unit' {
         $lines = @(Get-Content -LiteralPath $fixture.events | ForEach-Object { $_ | ConvertFrom-Json -AsHashtable })
         $last = @($lines | Where-Object { $_.type -eq 'tool.execution_complete' })[-1]
         switch ($Mutation) {
+            { $_ -like 'location-*' } {
+                foreach ($line in $lines) {
+                    if ($line.type -ne 'tool.execution_start') { continue }
+                    $command = $line.data.arguments.command
+                    $prefix = switch ($Mutation) {
+                        location-literal { "cd '$($fixture.root)'; " }
+                        location-variable { "`$r='$($fixture.root)'; cd `$r; " }
+                        location-prefix { "cd '$($fixture.root)'; " }
+                        location-literalpath { "Set-Location -LiteralPath '$($fixture.root)'; " }
+                        location-relative { "chdir '.'; " }
+                        location-outside { "cd '..'; " }
+                        location-child { "cd 'docs'; " }
+                        location-repeated { "cd '$($fixture.root)'; cd '$($fixture.root)'; " }
+                        location-dynamic { 'cd $env:TEMP; ' }
+                        default { '' }
+                    }
+                    $line.data.arguments.command = $prefix + $command
+                    if ($Mutation -eq 'location-prefix') { $line.data.arguments.command += ' | Out-String | % { $_.Substring(0,[Math]::Min(2500,$_.Length)) }' }
+                    if ($Mutation -eq 'location-late') { $line.data.arguments.command += "; cd '$($fixture.root)'" }
+                }
+            }
             cold-unbound { foreach ($line in $lines) { if ($line.type -like 'tool.*') { $line.Remove('agentId') } } }
             cold-wrong-window { foreach ($line in $lines) { if ($line.type -like 'subagent.*') { $line.timestamp = [DateTimeOffset]::UtcNow.AddDays(-1).ToString('o') } } }
             { $_ -in @('cold-writer', 'cold-missing-required') } {
@@ -1243,6 +1307,11 @@ Describe 'Efficiency actual direct bookkeeping proof' -Tag 'Unit' {
         $result = Test-EfficiencyWorkflow -Workspace $fixture.root -Metrics $metrics -Stage $Stage -BookkeepingEvidence $evidence -SourceRoot $selectedSource -InstallRoot $install -ExpectedSessionId $session
         $result.passed | Should -Be $Pass -Because ($result.checks | ConvertTo-Json -Compress)
         $result.checks.bookkeepingEvidence | Should -Be $Pass
+        if ($Mutation -like 'location-*' -and -not $Pass) {
+            $evidence.executions.Count | Should -Be 0
+            $evidence.rejections.Count | Should -BeGreaterThan 0
+            $result.diagnostics.bookkeepingEvidence | Should -Match 'No accepted writer execution'
+        }
         @(Get-ChildItem -LiteralPath (Join-Path $TestDrive 'out') -Filter '.efficiency-check-*').Count | Should -Be 0
     }
 }
@@ -1832,6 +1901,21 @@ Describe 'Unattended series lifecycle' -Tag 'Unit' {
 }
 
 Describe 'Runtime limits and closing review evidence' -Tag 'Unit' {
+    It 'keeps checker diagnostics local in both stage and attempt readiness' {
+        $run = @(New-TestRuns -ObservationOnly)[0]
+        $readiness = @{ passed = $false; checks = @{ stateVerifier = $false }; reviewPath = 'reviews/closing.md';
+            diagnostics = @{ stateVerifier = @{ stderr = 'PRIVATE CHECKER OUTPUT'; failures = @('PRIVATE CHECKER FAILURE') } } }
+        $run.stages[0].readiness = $readiness
+        $run.stages[0].attempts = @(@{ kind = 'stage'; readiness = $readiness })
+        InModuleScope EfficiencyBenchmark -Parameters @{ Run = $run } {
+            param($Run)
+            $summary = ConvertTo-EfficiencyRunSummary $Run
+            ($summary | ConvertTo-Json -Depth 20) | Should -Not -Match 'PRIVATE CHECKER|diagnostics'
+            $summary.stages[0].readiness.checks.stateVerifier | Should -BeFalse
+            $summary.stages[0].attempts[0].readiness.reviewPath | Should -Be 'reviews/closing.md'
+            $Run.stages[0].readiness.diagnostics.stateVerifier.stderr | Should -Be 'PRIVATE CHECKER OUTPUT'
+        }
+    }
     It 'stops a subprocess when the observed request budget is exhausted' {
         $Events = Join-Path $TestDrive 'budget-events.jsonl'
         $Encoded = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes(((New-TestUsage) + "`n")))
@@ -1841,7 +1925,11 @@ Describe 'Runtime limits and closing review evidence' -Tag 'Unit' {
     }
     It 'requires a passing outcome in the actual closing review artifact' {
         $null = New-Item -ItemType Directory -Path (Join-Path $TestDrive 'out') -Force
-        Mock Invoke-EfficiencyProcess -ModuleName EfficiencyBenchmark { @{ exitCode = 0; stopCause = 'none' } }
+        Mock Invoke-EfficiencyProcess -ModuleName EfficiencyBenchmark {
+            $resultPath = $Arguments[[array]::IndexOf($Arguments, '-OutputPath') + 1]
+            @{ passed = $true; failures = @() } | ConvertTo-Json | Set-Content -LiteralPath $resultPath
+            @{ exitCode = 0; stopCause = 'none' }
+        }
         $Root = Join-Path $TestDrive 'workflow'; $Squad = Join-Path $Root '.copilot-tracking/squad'
         New-Item -ItemType Directory -Path (Join-Path $Squad 'history'), (Join-Path $Root 'artifacts') -Force | Out-Null
         foreach ($Name in @('routing.md', 'state.json', 'decisions.md', 'consumption.md', 'consumption-rates.md')) { Set-Content (Join-Path $Squad $Name) 'fixture' }

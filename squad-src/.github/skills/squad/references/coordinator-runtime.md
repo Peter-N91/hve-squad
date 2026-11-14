@@ -1,4 +1,5 @@
 ---
+name: squad-coordinator-runtime
 description: "Coordinator runtime."
 ---
 <!--
@@ -57,7 +58,7 @@ Read applicable `gates-and-modes.md` sections with
 | Trigger | Names or additional reference |
 |---------|-------------------------------|
 | Substantive output, except an eligible quick bounded task | `implementation` |
-| Requirement/input artifacts advancing toward a plan or deliverable | `intake`; BRD/PRD also `requirements-quality.md` (read `requirements-quality.md` before dispatch) |
+| Requirement/input artifacts advancing toward a plan or deliverable | `intake`; for BRD/PRD read `requirements-quality.md` before dispatch |
 | `product`/`full`, goal rather than settled task, no input artifact, attended | `discovery` |
 | Explicit council/cross-check or implementation+risk across two council domains, or RAI concern | `council` |
 | Supplied or same-run inherited ceiling | `cost-preflight`, then `consumption.md` |
@@ -86,7 +87,7 @@ Put roles, routes, endpoints, dependencies, write sets, host models, supplied ac
 squad state. Run
 `New-SquadDispatchPlan.ps1 -RepoRoot <repo> -InputPath <json> -ApplyModelRouting`.
 It applies the hash-bound routing refresh and returns `routingReady: true`.
-Pass available `agentTypes`; use resolved native IDs, not guessed names.
+Pass available `agentTypes`; use resolved native IDs.
 For active routing, `task` hosts pass their complete `availableModels` enum;
 `auto` is not inventory. A host without an enum may pass a concrete priced
 session model. Unresolved availability stops before refresh or dispatch.
@@ -107,8 +108,8 @@ Admit settled slots before children; at/above ceiling starts nothing.
 
 ## 4. Native Work and Persistence
 
-For nontrivial work also load `Get-SquadProcedure.ps1 -Name progress`.
-Its outcome-based progress UI is coordinator-owned, never role work or state.
+For nontrivial work load `Get-SquadProcedure.ps1 -Name progress`.
+Progress UI: coordinator-owned, never role work or state.
 
 Dispatch each planned endpoint with native `task`/`runSubagent`, the request,
 scoped context, exact output-root argument, read-only inputs, and any admitted
@@ -116,9 +117,9 @@ Decision Ref/round/slot. Pass non-empty `endpoint.model` exactly as the native
 `model`; omit only when empty. Never use `pricingModel` or frontmatter instead.
 If the native tool cannot accept a model override, stop and disclose it; do not
 drop the route or edit frontmatter.
-Parallelize only an independent wave.
-Require final model identity, tool-call count, paths, outcome and open questions.
-Review after owners' final returns; use write-set snapshot/verify when needed.
+Parallelize independent waves only.
+Require final model identity, tool-call count, paths, outcome, open questions.
+Review owners' final returns; use write-set snapshot/verify as needed.
 
 Run `Write-SquadHandoff.ps1 -Quiet` synchronously per `economy-scribe.md`.
 Exit 0 requires Section 5 proof before progress/next task; routing/artifact is
@@ -134,8 +135,9 @@ For cold Scribe dispatches only, pipeline per references/gates-and-modes.md.
 
 ## 5. Complete Mechanically
 
+Separate writers from capture/cleanup; keep full receipts.
 Check each native process exit immediately; a successful outer shell is not a successful writer.
-Refusal stops dependent dispatch. Validate JSON status, turn/counts and warnings, then run
+Refusal stops dependent dispatch. Validate JSON status, turn/counts and warnings; separately run
 `Test-SquadTurnCompletion.ps1 -RepoRoot <repo> -SquadRoot <root>
 -ProofPath <actual handoff JSON> -ExpectedTurn <receipt turn>`.
 Cold consultative proofs include `role`, `findingsOnly` and `decisionRef`.
@@ -146,5 +148,5 @@ Complete only with verified evidence. Backfill history, not the producer.
 `ledger-only` is never PASS. Missing proof, invented paths, unmatched agents or
 unadmitted slots require repair/escalation.
 
-Return classification, agents/tiers, findings, verified paths/receipt and open
-gates. Forward paths/excerpts only.
+Return classification, agents/tiers, findings, verified paths/receipt, open
+gates; forward paths/excerpts.

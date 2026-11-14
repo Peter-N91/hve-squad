@@ -91,6 +91,12 @@ before the next stage launches. Initialization requires nonempty shared state,
 canonical history, verified script-backed execution or a real cold-Scribe dispatch,
 and the state verifier. Script receipts must match the run, turn and persisted
 artifacts; narrative receipts and zero Scribe dispatches alone prove nothing.
+The proof parser permits a single literal or previously bound `cd`, `chdir` or
+`Set-Location` to the exact workspace before the writer. Other roots, subdirectories,
+dynamic or post-writer locations remain rejected. Run writers separately from
+capture, copy, cleanup and probes; preserve the full receipt and invoke turn
+completion with its actual payload and expected turn. A bounded output prefix is
+usable only when the complete receipt survives; truncated JSON is not proof.
 Exact-native ledgers are checked against native coverage, not repriced history
 estimates; fallback estimates retain their independent rate checks. Requirements
 also require the published BRD/PRD and dispatch-backed history pointing to nonempty
@@ -107,6 +113,12 @@ and review findings are never summed across potentially overlapping records. Rep
 also distinguish scored-only timing/credit means from all-requested observations and
 their actual coverage. Compatibility fingerprints identify differing executing inputs;
 historical scores are descriptive evidence, not reusable controls after evaluator changes.
+
+Raw local `run.json` readiness includes `diagnostics` for failed bookkeeping,
+closing-review and native-state predicates. Checker JSON, exit/stop cause and stderr
+are retained there before disposable probes are cleaned. These diagnostics may
+contain private data; portable series summaries and published score artifacts do
+not include them. An exit-zero checker without its structured passing result fails.
 
 ### Bounded context recovery
 

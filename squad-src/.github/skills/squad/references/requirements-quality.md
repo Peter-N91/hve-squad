@@ -59,10 +59,19 @@ For each actual return, perform this sequence before the dependent closing teste
 
 For parallel returns, drain the existing barrier order: finish capture/verify/write/verify for one reviewer before capturing the next. Keep later actual returns untouched until their capture step; never pre-capture a wave then attempt sequential handoffs. A completed handoff advances the freshness floor, so `since` cannot reopen an earlier capture. Never touch or backdate a refused capture. Complete each required return before the dependent tester; never overlap writers at a root. No additional reviewer pass, agent, writer key or payload schema is added. Author remediation below and the existing required cold Scribe path consume their own admitted slots. Existing gates, ordinary writer, model pins and budgets remain unchanged; a failure stays a failure.
 
-Run each handoff as its own checked process. Capture its exit before any later
-command; stop on a refusal instead of printing the code and continuing the batch.
+Run each handoff as its own checked process. Keep capture, copies, cleanup and
+probes outside that invocation; preserve its complete JSON receipt without slicing.
+Capture its exit immediately; stop on a refusal instead of printing the code and
+continuing the batch. Persist the actual handoff payload, then separately run
+`Test-SquadTurnCompletion.ps1` with that `ProofPath` and the receipt's `ExpectedTurn`;
+missing arguments or a failed check block the next dispatch.
 The closing tester needs every required reviewer's verified history entry, not
 only its returned response or the first successful receipt.
+It loads the actual canonical review references and reads the complete required
+drafts, captures and state. It verifies each claimed fix against current evidence;
+an old domain verdict or an author disposition alone is not that verification.
+Return the charter's canonical closing verdict, not `Conditional`; unfinished
+required reads, unresolved substantive defects and blocked gates remain explicit.
 
 ## Author-return barrier
 

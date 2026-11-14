@@ -932,6 +932,7 @@ function Get-EfficiencyBookkeepingEvidence {
     $Starts = @{}; $Seen = [Collections.Generic.HashSet[string]]::new()
     $BackgroundShells = @{}
     $Executions = [Collections.Generic.List[object]]::new()
+    $Rejections = [Collections.Generic.List[object]]::new()
     $ScribeStarts = @{}; $ScribeRuns = [Collections.Generic.List[object]]::new()
     $SessionId = $null; $Sessions = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
     foreach ($Line in [IO.File]::ReadLines((Resolve-Path -LiteralPath $Path).Path)) {
@@ -1136,6 +1137,12 @@ function Get-EfficiencyBookkeepingEvidence {
             foreach ($InvokeExpr in $Subtree.FindAll({ param($N) $N -is [Management.Automation.Language.InvokeMemberExpressionAst] }, $true)) {
                 $MemberName = $InvokeExpr.Member.Extent.Text
                 $AllowedMethods = if ($ForStdoutExpression) { @('Contains', 'StartsWith', 'EndsWith', 'Matches', 'IsMatch') } else { @('Contains', 'Substring', 'StartsWith', 'EndsWith', 'Min', 'Max', 'Matches', 'IsMatch') }
+                $PrefixPattern = '^(?:\$_|\$PSItem)\.Substring\(\s*0\s*,\s*\[Math\]::Min\(\s*[1-9][0-9]*\s*,\s*(?:\$_|\$PSItem)\.Length\s*\)\s*\)$'
+                # A bounded prefix cannot manufacture receipt fields; truncated JSON still fails parsing.
+                if ($ForStdoutExpression -and (
+                    ($MemberName -eq 'Substring' -and $InvokeExpr.Extent.Text -match $PrefixPattern) -or
+                    ($MemberName -eq 'Min' -and $InvokeExpr.Parent -is [Management.Automation.Language.InvokeMemberExpressionAst] -and
+                        $InvokeExpr.Parent.Extent.Text -match $PrefixPattern))) { continue }
                 if ($MemberName -notin $AllowedMethods) {
                     throw "Disallowed method call '$MemberName' alongside receipt."
                 }
@@ -1210,6 +1217,7 @@ function Get-EfficiencyBookkeepingEvidence {
         }
         try {
             $WriterCalls = [Collections.Generic.List[object]]::new()
+            $LocationSelected = $false
             $WriterStatementIndex = -1
             $PostWriterCompletionIndex = -1
             $ImmediateExitMarkerAfterWriter = $false
@@ -1267,6 +1275,23 @@ function Get-EfficiencyBookkeepingEvidence {
                         $Call.InvocationOperator -ne [Management.Automation.Language.TokenKind]::Unknown) { throw 'Unsupported pipeline element.' }
                     $Elements = @($Call.CommandElements)
                     $Name = & $ValueOf $Elements[0]
+                    if ($Name -in @('cd', 'chdir', 'Set-Location')) {
+                        if ($LocationSelected -or $WriterCalls.Count -gt 0 -or $PipeIndex -ne 0 -or $Statement.PipelineElements.Count -ne 1) {
+                            throw 'Workspace location must be selected once, before the writer.'
+                        }
+                        $LocationNode = if ($Elements.Count -eq 2 -and $Elements[1] -isnot [Management.Automation.Language.CommandParameterAst]) {
+                            $Elements[1]
+                        }
+                        elseif ($Elements.Count -eq 3 -and $Elements[1] -is [Management.Automation.Language.CommandParameterAst] -and
+                            $Elements[1].ParameterName -in @('Path', 'LiteralPath') -and -not $Elements[1].Argument) {
+                            $Elements[2]
+                        }
+                        else { throw 'An explicit workspace location is required.' }
+                        $Location = Resolve-EfficiencyPlainPath -Path (& $ValueOf $LocationNode) -Base $Root
+                        if ($Location -ine $Root.TrimEnd('\', '/')) { throw 'Location changes outside the authorized workspace root are refused.' }
+                        $LocationSelected = $true
+                        continue
+                    }
                     if ($Name -in $ReadOnlyCommands) {
                         if ($PipeIndex -eq 0 -and $Name -in $PipelineFilterCommands) {
                             throw 'Pipeline filter command cannot start a standalone statement alongside a writer.'
@@ -1424,14 +1449,22 @@ function Get-EfficiencyBookkeepingEvidence {
                 startedAt = $Start['timestamp']; completedAt = $Event['timestamp']
             })
         }
-        catch { Write-Verbose $_.Exception.Message; continue }
+        catch {
+            $Rejections.Add([pscustomobject]@{ toolCallId = [string]$Data.toolCallId; reason = $_.Exception.Message })
+            Write-Verbose $_.Exception.Message
+            continue
         }
-        catch { Write-Verbose $_.Exception.Message; continue }
+        }
+        catch {
+            $Rejections.Add([pscustomobject]@{ toolCallId = [string]$Data.toolCallId; reason = $_.Exception.Message })
+            Write-Verbose $_.Exception.Message
+            continue
+        }
     }
     if ($ExpectedSessionId -and ($Sessions.Count -ne 1 -or -not $Sessions.Contains($ExpectedSessionId))) {
         $SessionId = $null; $Executions.Clear(); $ScribeRuns.Clear()
     }
-    [pscustomobject]@{ path = (Resolve-Path -LiteralPath $Path).Path; sessionId = $SessionId; executions = $Executions.ToArray(); scribeRuns = $ScribeRuns.ToArray() }
+    [pscustomobject]@{ path = (Resolve-Path -LiteralPath $Path).Path; sessionId = $SessionId; executions = $Executions.ToArray(); scribeRuns = $ScribeRuns.ToArray(); rejections = $Rejections.ToArray() }
 }
 
 function Test-EfficiencyBookkeeping {
@@ -1440,10 +1473,18 @@ function Test-EfficiencyBookkeeping {
     #>
     [CmdletBinding()]
     [OutputType([bool])]
-    param([string]$Root, [string]$Squad, [string]$Stage, [string]$EventsPath, [string]$SourceRoot, [string]$InstallRoot, $Metrics, [string]$ExpectedSessionId, [string]$EvidenceRoot)
+    param([string]$Root, [string]$Squad, [string]$Stage, [string]$EventsPath, [string]$SourceRoot, [string]$InstallRoot, $Metrics, [string]$ExpectedSessionId, [string]$EvidenceRoot, [ref]$FailureReason)
+    if ($null -ne $FailureReason) { $FailureReason.Value = 'Current-turn bookkeeping proof is incomplete.' }
     try {
         $Evidence = Get-EfficiencyBookkeepingEvidence -Path $EventsPath -Workspace $Root -SourceRoot $SourceRoot -InstallRoot $InstallRoot -ExpectedSessionId $ExpectedSessionId
-        if (-not $Evidence.sessionId) { return $false }
+        if (-not $Evidence.sessionId) {
+            if ($null -ne $FailureReason) { $FailureReason.Value = 'Bookkeeping events do not bind to the expected session.' }
+            return $false
+        }
+        if ($Evidence.executions.Count -eq 0) {
+            if ($null -ne $FailureReason) { $FailureReason.Value = 'No accepted writer execution. ' + (@($Evidence.rejections | ForEach-Object { $_.reason } | Select-Object -Unique) -join '; ') }
+            return $false
+        }
         $State = Get-Content -LiteralPath (Join-Path $Squad 'state.json') -Raw | ConvertFrom-Json -AsHashtable
         $Ledger = Get-Content -LiteralPath (Join-Path $Squad 'consumption.md') -Raw
         $Run = [regex]::Match($Ledger, '(?m)^# Squad Consumption Ledger \(Run: (?<id>[^)\r\n]+)\)')
@@ -1534,7 +1575,10 @@ function Test-EfficiencyBookkeeping {
                 continue
             }
         }
-        if ($null -eq $Latest -or $Latest.receipt.turn -ne $State.turn -or $LatestRunId -cne $Run.Groups['id'].Value) { return $false }
+        if ($null -eq $Latest -or $Latest.receipt.turn -ne $State.turn -or $LatestRunId -cne $Run.Groups['id'].Value) {
+            if ($null -ne $FailureReason) { $FailureReason.Value = 'Accepted writer proof does not match the current state turn and ledger run.' }
+            return $false
+        }
         $Updated = [DateTimeOffset]$State.updated
         if ($Updated -lt ([DateTimeOffset]$Latest.startedAt).AddMinutes(-5) -or
             $Updated -gt ([DateTimeOffset]$Latest.completedAt).AddMinutes(5)) { return $false }
@@ -1547,7 +1591,12 @@ function Test-EfficiencyBookkeeping {
         }
         if ($Stage -eq 'init' -and ($State.turn -ne 1 -or @($State.activeRoles).Count -ne 0)) { return $false }
         $Required = @(if ($Stage -ne 'init') { 'BRD Builder'; 'PRD Builder'; 'BRD Quality Reviewer'; 'PRD Quality Reviewer' })
-        foreach ($Agent in $Required) { if ($Agent -notin @($Records | ForEach-Object { $_.agent })) { return $false } }
+        foreach ($Agent in $Required) {
+            if ($Agent -notin @($Records | ForEach-Object { $_.agent })) {
+                if ($null -ne $FailureReason) { $FailureReason.Value = "Missing verified handoff for required agent '$Agent'." }
+                return $false
+            }
+        }
         $Proof = @{
             runId = $Run.Groups['id'].Value; squadRoot = $Squad; turn = $State.turn
             historyRecords = $Records.ToArray(); stateAdvance = @{ activeRoles = $LatestActive }
@@ -1559,13 +1608,20 @@ function Test-EfficiencyBookkeeping {
             $Helper = Resolve-EfficiencySquadScript -Name 'SquadCoordinator.psm1' -SourceRoot $SourceRoot -InstallRoot $InstallRoot -Workspace $Root
             Import-Module $Helper -Force
             $Result = Invoke-SquadLocalScript -Name 'Test-SquadTurnCompletion.ps1' -Arguments @('-RepoRoot', $Root, '-SquadRoot', $Squad, '-ProofPath', $ProofPath, '-ExpectedTurn', [string]$State.turn)
-            if ($Result.exitCode -ne 0) { return $false }
+            if ($Result.exitCode -ne 0) {
+                if ($null -ne $FailureReason) { $FailureReason.Value = $Result.stderr.Trim() }
+                return $false
+            }
             $Verified = $Result.stdout | ConvertFrom-Json -AsHashtable
             return $Verified['verified'] -eq $true -and $Verified['ledgerCheck'] -eq 'PASS' -and $Verified['dispatchEntries'] -eq $Records.Count
         }
         finally { Remove-Item -LiteralPath $Directory -Recurse -Force -ErrorAction SilentlyContinue }
     }
-    catch { Write-Verbose $_.Exception.Message; return $false }
+    catch {
+        if ($null -ne $FailureReason) { $FailureReason.Value = $_.Exception.Message }
+        Write-Verbose $_.Exception.Message
+        return $false
+    }
 }
 
 function Test-EfficiencyWorkflow {
@@ -1590,6 +1646,7 @@ function Test-EfficiencyWorkflow {
         [string]$EvidenceRoot
     )
     $Checks = [ordered]@{}
+    $Diagnostics = [ordered]@{}
     $ReviewPaths = [Collections.Generic.List[string]]::new()
     $Root = [IO.Path]::GetFullPath($Workspace)
     $Squad = Join-Path $Root '.copilot-tracking/squad'
@@ -1600,7 +1657,9 @@ function Test-EfficiencyWorkflow {
     }
     $Checks['dispatchEvidence'] = $null -ne $Metrics -and $null -ne $Metrics.dispatches
     if ($Stage -in @('init', 'requirements')) {
-        $Checks['bookkeepingEvidence'] = $EventsPath -and (Test-EfficiencyBookkeeping -Root $Root -Squad $Squad -Stage $Stage -EventsPath $EventsPath -SourceRoot $SourceRoot -InstallRoot $InstallRoot -Metrics $Metrics -ExpectedSessionId $ExpectedSessionId -EvidenceRoot $EvidenceRoot)
+        $BookkeepingFailure = 'A frozen events path is required.'
+        $Checks['bookkeepingEvidence'] = $EventsPath -and (Test-EfficiencyBookkeeping -Root $Root -Squad $Squad -Stage $Stage -EventsPath $EventsPath -SourceRoot $SourceRoot -InstallRoot $InstallRoot -Metrics $Metrics -ExpectedSessionId $ExpectedSessionId -EvidenceRoot $EvidenceRoot -FailureReason ([ref]$BookkeepingFailure))
+        if (-not $Checks['bookkeepingEvidence']) { $Diagnostics['bookkeepingEvidence'] = $BookkeepingFailure }
     }
     if ($Stage -eq 'requirements') {
         foreach ($Name in @('brd.md', 'prd.md')) {
@@ -1643,20 +1702,36 @@ function Test-EfficiencyWorkflow {
         $PositiveOutcome = '(?:Pass(?:-With-Findings)?|Approved|Conformant(?: with justified divergence)?)(?=[ \t]*(?:\*\*|[.,;(:]|\r?$))'
         $Checks['reviewOutcome'] = $ReviewText -match ($OutcomePrefix + '(?:\*\*)?' + $PositiveOutcome)
     }
+    if ($Stage -in @('requirements', 'build') -and -not $Checks['reviewOutcome']) {
+        $Diagnostics['reviewOutcome'] = 'The closing review has no explicit passing outcome; failed, conditional or missing reviews remain blocked.'
+    }
     $Checker = Join-Path $PSScriptRoot '../../../scripts/Test-SquadScribeOutput.ps1'
     $Directory = $null
     try {
         $Directory = New-EfficiencyCheckDirectory -Workspace $Root -EvidenceRoot $EvidenceRoot
-        $Temp = Join-Path $Directory 'state.json'
-        $Arguments = @('-NoProfile', '-File', $Checker, '-SquadRoot', $Squad, '-SourceRoot', $SourceRoot)
+        $Temp = Join-Path $Directory 'state-process.txt'
+        $StateResultPath = Join-Path $Directory 'state.json'
+        $Arguments = @('-NoProfile', '-File', $Checker, '-SquadRoot', $Squad, '-SourceRoot', $SourceRoot, '-OutputPath', $StateResultPath)
         if ($InstallRoot) { $Arguments += @('-InstallRoot', $InstallRoot) }
         if ($ExpectedSessionId) { $Arguments += @('-ExpectedSessionId', $ExpectedSessionId) }
         $Result = Invoke-EfficiencyProcess -FilePath (Get-Command pwsh).Source -Arguments $Arguments -WorkingDirectory $Root -OutputPath $Temp -TimeoutSeconds 120
-        $Checks['stateVerifier'] = ($Result.exitCode -eq 0 -and $Result.stopCause -eq 'none')
+        $StateResult = if (Test-Path -LiteralPath $StateResultPath -PathType Leaf) {
+            Get-Content -LiteralPath $StateResultPath -Raw | ConvertFrom-Json -AsHashtable
+        } else { $null }
+        $Checks['stateVerifier'] = ($Result.exitCode -eq 0 -and $Result.stopCause -eq 'none' -and
+            $StateResult -is [Collections.IDictionary] -and $StateResult['passed'] -is [bool] -and
+            $StateResult['passed'] -eq $true)
+        if (-not $Checks['stateVerifier']) {
+            $Diagnostics['stateVerifier'] = @{
+                exitCode = $Result.exitCode; stopCause = $Result.stopCause
+                failures = @(if ($null -ne $StateResult) { $StateResult['failures'] })
+                stderr = [IO.File]::ReadAllText($Temp + '.stderr').Trim()
+            }
+        }
     }
-    catch { $Checks['stateVerifier'] = $false }
+    catch { $Checks['stateVerifier'] = $false; $Diagnostics['stateVerifier'] = $_.Exception.Message }
     finally { if ($Directory) { Remove-Item -LiteralPath $Directory -Recurse -Force -ErrorAction SilentlyContinue } }
-    [pscustomobject]@{ passed = (@($Checks.Values | Where-Object { -not $_ }).Count -eq 0); checks = $Checks; reviewPath = if ($ReviewPath) { [IO.Path]::GetRelativePath($Root, $ReviewPath).Replace('\', '/') } else { $null } }
+    [pscustomobject]@{ passed = (@($Checks.Values | Where-Object { -not $_ }).Count -eq 0); checks = $Checks; reviewPath = if ($ReviewPath) { [IO.Path]::GetRelativePath($Root, $ReviewPath).Replace('\', '/') } else { $null }; diagnostics = $Diagnostics }
 }
 
 function Test-EfficiencyJudge {
@@ -1938,6 +2013,25 @@ function Test-EfficiencyRun {
     catch { return $false }
 }
 
+function ConvertTo-EfficiencyReadinessSummary {
+    <# .SYNOPSIS
+    Excludes local checker diagnostics without modifying retained raw evidence.
+    #>
+    [CmdletBinding()]
+    param([AllowNull()]$Readiness)
+    if ($null -eq $Readiness) { return $null }
+    $Summary = @{}
+    if ($Readiness -is [Collections.IDictionary]) {
+        foreach ($Key in $Readiness.Keys) { if ($Key -ne 'diagnostics') { $Summary[$Key] = $Readiness[$Key] } }
+    }
+    else {
+        foreach ($Property in $Readiness.PSObject.Properties) {
+            if ($Property.Name -ne 'diagnostics') { $Summary[$Property.Name] = $Property.Value }
+        }
+    }
+    $Summary
+}
+
 function ConvertTo-EfficiencyRunSummary {
     <# .SYNOPSIS
     Projects only safe result fields, excluding document text and judge explanations.
@@ -1958,7 +2052,22 @@ function ConvertTo-EfficiencyRunSummary {
     $Summary['qualityScores'] = if ($Run['judge'] -and $Run['judge']['valid'] -and $Run['judge']['response']) { $Run['judge']['response']['scores'] } else { $null }
     $Summary['judgeMetrics'] = if ($Run['judge']) { $Run['judge']['metrics'] } else { $null }
     $Summary['collection'] = $Run['collection']
-    $Summary['stages'] = @($Run['stages'] | ForEach-Object { @{ name = $_['name']; passed = $_['passed']; process = $_['process']; readiness = $_['readiness']; attempts = $_['attempts']; recovery = $_['recovery'] } })
+    $Summary['stages'] = @(
+        foreach ($Stage in $Run['stages']) {
+            $Attempts = @(
+                foreach ($Attempt in $Stage['attempts']) {
+                    $Copy = @{}
+                    foreach ($Key in $Attempt.Keys) {
+                        $Copy[$Key] = if ($Key -eq 'readiness') { ConvertTo-EfficiencyReadinessSummary $Attempt[$Key] } else { $Attempt[$Key] }
+                    }
+                    $Copy
+                }
+            )
+            @{ name = $Stage['name']; passed = $Stage['passed']; process = $Stage['process'];
+                readiness = ConvertTo-EfficiencyReadinessSummary $Stage['readiness'];
+                attempts = $Attempts; recovery = $Stage['recovery'] }
+        }
+    )
     $Summary
 }
 

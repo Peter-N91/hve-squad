@@ -145,7 +145,7 @@ Describe 'Requirements document quality source contracts (RQ-01..15)' -Tag 'Requ
         $contract | Should -Match 'Read only `references/coordinator-runtime\.md` at startup'
         $contract | Should -Not -Match 'requirements-quality\.md'
         $script:RequirementsCoordinator | Should -Match 'conditionally uses `references/requirements-quality\.md`'
-        $script:RequirementsRuntime | Should -Match 'BRD/PRD also `requirements-quality\.md`'
+        $script:RequirementsRuntime | Should -Match 'for BRD/PRD read `requirements-quality\.md` before dispatch'
     }
 
     It 'RQ-02 carries canonical author checks, exact relationships and honest business gaps' {
