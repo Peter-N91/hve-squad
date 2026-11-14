@@ -1,10 +1,10 @@
 {
   "schema": "benchmark-score-v1",
   "scenario": "task-cli-cold-start",
-  "measuredAt": "2026-11-13T13:46:14Z",
+  "measuredAt": "2026-11-13T21:16:58Z",
   "source": {
-    "commit": "55a6a1457c9a294533b5d6c2ff31c2b39d40f85d",
-    "squadSourceHash": "0837686ea435cbac29cb267ff06a29b459c236662df34216e34c93dff8c247af",
+    "commit": "28dcec0ebc584cd04c12343dd2c13f99993b857f",
+    "squadSourceHash": "6ed4aa9fd381d68dfe5026055262a6dbbcdd973d956a18f6965a3df350ed7c73",
     "uncommittedChanges": true
   },
   "environment": {
@@ -17,13 +17,13 @@
     "rubric": "b56405ace95fba82698b65dbe243c788265e26c0a682b5a5e5a1f6f0f867f703",
     "hostProfile": "d0b5857b0ed4b4b5f4b0d70d7cced697877ba54d346d224406ad5b218664da86",
     "scenarioHash": "56c7b0b6ca58cf0fd601bf3f71159e4b07bb779171ef7430fb1b558bcffb2593",
-    "parserHash": "66b1fab19e022009005abbd01c260f55b1363e6f98b9652ea2cbad7815e993ea",
-    "exerciseHash": "dd3b2d2e80189582f1a9453d9bcc8893476f3b6fab8856fb9fb6f70a7b82d6c6",
+    "parserHash": "737918e34007ce3f5ed25a9d827350594ba310204fa3bf757c75ff9b3ffcc338",
+    "exerciseHash": "063918dcfdd4df464e38a35a3f7701c19072b2658c5e5950784ee3cfca559249",
     "preparationHash": "521f36306928b3158fcfc259e13228db9a3e0b31dd452df1d3b446c180299055",
     "graderHash": "5ea4adc4add775e313f5370061e56a371954b953562e1d976cfafbfec62b5720",
     "verifierHash": "f7ad13aa5526bae59660a73aa42e913fc5a702cf599ddbee4bb9325528c0510d",
     "converterHash": "4eef28e7fff0dbad286a7fbfe74da7e7e624bc2603031dfbe13f1875d086a177",
-    "installHash": "7f2808e2b2ed97132a9bd392f2a07ff5f95cb04786e0105ae2dc21e032c389c0",
+    "installHash": "3f7ffeff450ef74472f539787a96285bde1b5d87b9bfecb8076d52a544aa38c5",
     "model": "4ae60805f94e4d2e6d4726588a7d7e44572ab35a1d3b4bd5e44b74e0ce9f852b",
     "cli": "be553eb30c2799d3306ec949d88209f0a980d155d3a6266da1047c5dcad2d3a4",
     "powershell": "475c2ccaebf82353b2e7c16de13e8d3b93d08e605365f36430e6a4f2239ca58b",
@@ -36,57 +36,57 @@
   },
   "runs": {
     "requested": 3,
-    "scored": 2,
-    "failed": 1
+    "scored": 3,
+    "failed": 0
   },
   "summary": {
-    "quality": 75.5,
+    "quality": 80.0,
     "dimensions": {
-      "businessClarity": 15.0,
-      "scopeFidelity": 15.0,
-      "acceptanceCriteria": 15.5,
-      "traceability": 15.0,
+      "businessClarity": 16.0,
+      "scopeFidelity": 16.0,
+      "acceptanceCriteria": 16.0,
+      "traceability": 16.0,
       "risksAndDecisions": 15.0
     },
     "functional": 3,
     "workflow": 0,
-    "criticalHighFindings": 4.0,
-    "averageSeconds": 2472.7495,
-    "averageCredits": 631.5778625,
+    "criticalHighFindings": 3.0,
+    "averageSeconds": 2305.0766666666664,
+    "averageCredits": 617.3679989999999,
     "activity": {
       "scribeDispatches": 0.0,
       "scribeModelRequests": 0.0,
       "scribeSeconds": 0.0,
       "scribeCredits": 0.0,
-      "coordinatorModelRequests": 57.5,
-      "authorModelRequests": 32.0
+      "coordinatorModelRequests": 48.333333333333336,
+      "authorModelRequests": 49.0
     },
     "allRequested": {
       "secondsCovered": 3,
-      "totalSeconds": 8054.842,
-      "averageSeconds": 2684.947333333333,
-      "creditsCovered": 2,
-      "totalCredits": 1263.155725,
-      "averageCredits": 631.5778625
+      "totalSeconds": 6915.23,
+      "averageSeconds": 2305.0766666666664,
+      "creditsCovered": 3,
+      "totalCredits": 1852.103997,
+      "averageCredits": 617.3679989999999
     }
   },
   "trials": [
     {
       "run": 1,
       "scored": true,
-      "quality": 78.0,
+      "quality": 76.0,
       "dimensions": {
         "businessClarity": 15.0,
         "scopeFidelity": 16.0,
-        "acceptanceCriteria": 16.0,
-        "traceability": 16.0,
+        "acceptanceCriteria": 15.0,
+        "traceability": 15.0,
         "risksAndDecisions": 15.0
       },
       "functional": true,
       "workflow": false,
-      "criticalHighFindings": 3.0,
-      "seconds": 2253.3050000000003,
-      "credits": 596.495199,
+      "criticalHighFindings": 2.0,
+      "seconds": 2397.567,
+      "credits": 625.9495355,
       "failedChecks": [
         "init/bookkeepingEvidence",
         "requirements/bookkeepingEvidence",
@@ -100,18 +100,18 @@
         "scribeModelRequests": 0.0,
         "scribeSeconds": 0.0,
         "scribeCredits": 0.0,
-        "coordinatorModelRequests": 61.0,
-        "authorModelRequests": 32.0
+        "coordinatorModelRequests": 50.0,
+        "authorModelRequests": 56.0
       },
       "sourceReviews": {
         "requirements": {
           "outcome": "failed",
-          "reviewPath": ".copilot-tracking/reviews/2026-11-13/task-cli-requirements-closing-review.md",
+          "reviewPath": ".copilot-tracking/reviews/2026-11-13/closing-review.md",
           "criticalHighFindings": null
         },
         "build": {
           "outcome": "passed",
-          "reviewPath": ".copilot-tracking/reviews/2026-11-13/task-cli-implementation-closing-review.md",
+          "reviewPath": ".copilot-tracking/reviews/2026-11-13/implementation-closing-review.md",
           "criticalHighFindings": null
         }
       }
@@ -119,19 +119,19 @@
     {
       "run": 2,
       "scored": true,
-      "quality": 73.0,
+      "quality": 80.0,
       "dimensions": {
-        "businessClarity": 15.0,
-        "scopeFidelity": 14.0,
-        "acceptanceCriteria": 15.0,
-        "traceability": 14.0,
+        "businessClarity": 17.0,
+        "scopeFidelity": 15.0,
+        "acceptanceCriteria": 17.0,
+        "traceability": 16.0,
         "risksAndDecisions": 15.0
       },
       "functional": true,
       "workflow": false,
       "criticalHighFindings": 1.0,
-      "seconds": 2692.194,
-      "credits": 666.660526,
+      "seconds": 2253.939,
+      "credits": 603.420478,
       "failedChecks": [
         "init/bookkeepingEvidence",
         "requirements/bookkeepingEvidence",
@@ -145,8 +145,8 @@
         "scribeModelRequests": 0.0,
         "scribeSeconds": 0.0,
         "scribeCredits": 0.0,
-        "coordinatorModelRequests": 54.0,
-        "authorModelRequests": 32.0
+        "coordinatorModelRequests": 49.0,
+        "authorModelRequests": 40.0
       },
       "sourceReviews": {
         "requirements": {
@@ -163,14 +163,20 @@
     },
     {
       "run": 3,
-      "scored": false,
-      "quality": null,
-      "dimensions": null,
+      "scored": true,
+      "quality": 83.0,
+      "dimensions": {
+        "businessClarity": 16.0,
+        "scopeFidelity": 17.0,
+        "acceptanceCriteria": 16.0,
+        "traceability": 18.0,
+        "risksAndDecisions": 16.0
+      },
       "functional": true,
       "workflow": false,
-      "criticalHighFindings": null,
-      "seconds": 3109.343,
-      "credits": null,
+      "criticalHighFindings": 0.0,
+      "seconds": 2263.724,
+      "credits": 622.7339835,
       "failedChecks": [
         "init/bookkeepingEvidence",
         "requirements/bookkeepingEvidence",
@@ -178,24 +184,24 @@
         "requirements/stateVerifier",
         "build/stateVerifier"
       ],
-      "note": "the judge result is missing or invalid",
+      "note": "",
       "activity": {
         "scribeDispatches": 0.0,
         "scribeModelRequests": 0.0,
         "scribeSeconds": 0.0,
         "scribeCredits": 0.0,
-        "coordinatorModelRequests": 48.0,
-        "authorModelRequests": 35.0
+        "coordinatorModelRequests": 46.0,
+        "authorModelRequests": 51.0
       },
       "sourceReviews": {
         "requirements": {
           "outcome": "failed",
-          "reviewPath": ".copilot-tracking/reviews/2026-11-13/task-cli-requirements-closing-review.md",
+          "reviewPath": ".copilot-tracking/reviews/2026-11-13/task-cli-closing-review.md",
           "criticalHighFindings": null
         },
         "build": {
           "outcome": "passed",
-          "reviewPath": ".copilot-tracking/reviews/2026-11-13/task-cli-implementation-closing-review.md",
+          "reviewPath": ".copilot-tracking/reviews/2026-11-13/task-cli-implementation-review.md",
           "criticalHighFindings": null
         }
       }
