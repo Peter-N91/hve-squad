@@ -1006,3 +1006,19 @@ Source: `squad-src/.github/agents/squad/squad-doctor.agent.md`,
 | SDOC-04 | Escaping/linked paths, malformed inventory, unsafe federation locations, missing runtime, and writer contention fail closed. | 0 |
 | SDOC-05 | Federation checks stay on registered members; explicit member scope never repairs siblings. Partial state and unsupported faults remain blockers. | 0 |
 | SDOC-06 | Coordinators stop affected work, invoke Doctor once, retain approvals/gates, and retry the original failing check only after verified repair. | 0 |
+
+## HVE Squad Studio
+
+Source: `squad-src/.github/skills/squad/extensions/hve-squad-studio/extension.mjs`,
+`squad-src/.github/skills/squad/extensions/hve-squad-studio/lib/catalog.mjs`,
+`squad-src/.github/skills/squad/extensions/hve-squad-studio/lib/squad-initializer.mjs`,
+`squad-src/.github/skills/squad/scripts/Install-SquadStudioExtension.ps1`, and
+`scripts/Build-SquadPlugin.ps1`.
+
+| ID | Contract | Tier |
+|---|---|---|
+| STUDIO-01 | The `hve-squad-studio` canvas extension ships under `skills/squad/extensions/hve-squad-studio/` in both plugin (`plugin.json` `extensions`) and APM packages with zero byte growth in hot-file or agent prompt budgets. | 0 |
+| STUDIO-02 | Product chrome uses **HVE Squad** / **HVE Squad Studio** (reserving bare *squad* for the user's chosen squad), binds its UI server strictly to loopback (`127.0.0.1`), enforces CSRF and path-traversal/symlink guards, and preserves manual-only coexistence preferences for chat users. | 0 |
+| STUDIO-03 | `Install-SquadStudioExtension.ps1` deterministically materializes repository, user, and session extension copies, rejects symlinks/reparse points, and detects drift with `-Check`. | 0 |
+| STUDIO-04 | Goal launching composes sanitized coordinator requests with predefined single-squad initialization (`layout=single`, matched `profile`, `naming=skip`, `notify={"approvalChannel":"in-chat","enabled":false}`), safe `.copilot-tracking/studio-inputs/` document upload for Intake Gate checkups, auto-detected platform packs with preview helpers off by default, and Council checkup/waiver handling. | 0 |
+

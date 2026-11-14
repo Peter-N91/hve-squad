@@ -55,7 +55,7 @@ Licensed under the MIT license.
           <code>promote</code>, <em>interactive</em> and <em>autopilot</em>, the words this page and the Squad Coach use.
         </p>
         <p>
-          The path on this page: install (1), optionally ask the Coach (2), initialize (3), send a work request (4), then
+          The path on this page: install (1), optionally ask the Coach (2) or open <a href="#use-hve-squad-studio">HVE Squad Studio</a> in the Copilot app, initialize (3), send a work request (4), then
           find your results and continue (5).
         </p>
       </div>
@@ -423,6 +423,40 @@ targets:
             <tr><td>Continue or resume</td><td>Return to the same coordinator conversation and describe the next outcome. Existing state is reused; in a federation, target a member when needed rather than reinitializing.</td></tr>
           </tbody>
         </table>
+      </div>
+
+      <h2 id="use-hve-squad-studio" data-release-change="20261114-hve-squad-studio-canvas">Prefer a visual workspace? Use HVE Squad Studio</h2>
+      <p>
+        If you work in the <strong>GitHub Copilot app</strong> and prefer guided cards and buttons over typing chat commands, open <strong>HVE Squad Studio</strong> (<code>hve-squad-studio</code>). Installing the <code>hve-squad</code> plugin in the GitHub Copilot app includes <strong>HVE Squad Studio</strong> automatically in every new project session.
+      </p>
+      <p>
+        If you installed HVE Squad through the repository-local APM fallback instead of the plugin, run this one-time helper command in your project (or pass <code>-Scope user</code> to register it across your user profile), then start a fresh session:
+      </p>
+      <pre><code>pwsh -File .agents/skills/squad/scripts/Install-SquadStudioExtension.ps1 -Scope repository</code></pre>
+      <h3>How to start HVE Squad Studio</h3>
+      <p>
+        You do <strong>not</strong> need to select an agent first or type <code>init</code>. Start a project session in the GitHub Copilot app and open <strong>HVE Squad Studio</strong> in either of two ways:
+      </p>
+      <ul>
+        <li><strong>From the Canvas picker:</strong> open the <strong>Canvas</strong> panel in the session header and select <strong>HVE Squad Studio</strong>.</li>
+        <li><strong>From chat in plain words:</strong> send <code>Open HVE Squad Studio</code> in the chat box, with or without an agent selected, and Copilot opens the side panel for you.</li>
+      </ul>
+      <h3>What happens step by step</h3>
+      <ol>
+        <li>
+          <p><strong>Choose What to Build (Step 1).</strong> Pick a starter card (website, project plan, presentation deck, document, or file improvement), or click <strong>Not sure where to start?</strong> for a three-question helper. Optionally attach existing notes or documents (<code>.docx</code>, <code>.pdf</code>, <code>.pptx</code>, <code>.xlsx</code>, <code>.md</code>, <code>.txt</code>) so HVE Squad runs its intake checkup automatically, review any auto-suggested specialist add-ons (packs, with preview helpers off by default) and optional safety, budget, and design checkups (councils), then click <strong>Start Building with HVE Squad</strong>. Behind the scenes, <strong>HVE Squad Studio</strong> selects <strong>Squad Coordinator</strong> automatically and pre-initializes one single chosen squad under <code>.copilot-tracking/squad/</code> with a matched profile, skipped member naming, and in-app approvals.</p>
+        </li>
+        <li>
+          <p><strong>Watch Progress &amp; Decide (Step 2).</strong> Follow plain-language updates from your chosen squad, review <strong>Document Checkup</strong> and <strong>Safety, Budget &amp; Design Checkup</strong> cards, and answer one-question decision cards (or skip optional checkups) with a single click. When the host app asks for a security confirmation, a clear banner explains when to click <strong>Allow</strong>.</p>
+        </li>
+        <li>
+          <p><strong>Your Finished Work (Step 3).</strong> Open completed deliverables directly in the editor, read plain-language summaries, or request one-click adjustments (<strong>Change how it looks</strong>, <strong>Add a feature</strong>, or <strong>Fix something</strong>).</p>
+        </li>
+      </ol>
+      <div class="callout">
+        <p>
+          <strong>Technical chat users stay completely unaffected.</strong> <strong>HVE Squad Studio</strong> is 100% opt-in, includes a <strong>Keep HVE Squad Studio manual-only</strong> preference in its settings, and leaves chat and CLI workflows in VS Code, Copilot CLI, and the GitHub Copilot app unchanged.
+        </p>
       </div>
 
       <h2 id="testing-the-pre-release" data-release-change="20261106-in-repo-self-contained-plugin">Install and test the pre-release</h2>
