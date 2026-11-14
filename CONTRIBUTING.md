@@ -31,12 +31,13 @@ or comments.
 Open an issue at
 [github.com/Peter-N91/hve-squad/issues](https://github.com/Peter-N91/hve-squad/issues)
 using the **Bug report** template. It asks for the version, the host you ran on,
-what you expected against what happened, and steps to reproduce. Squad state
+what you expected against what happened, and steps to reproduce. HVE Squad state
 (`team.md` or `federation.md`, plus the relevant `history/` entry) is usually
 what pins a routing or ledger defect down, so include it when you can.
 
 Issues are triaged by a maintainer. There is no service-level agreement, but
-a report that reproduces helps maintainers investigate.
+a report that reproduces helps maintainers investigate. See [SUPPORT.md](SUPPORT.md)
+for support scope and help resources.
 
 Two things do not belong in a public issue:
 
