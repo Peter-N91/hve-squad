@@ -65,6 +65,25 @@ initialization-to-completion example. The Coach uses the terms defined on
 [Concepts](https://peter-n91.github.io/hve-squad/concepts.html): read it first if team, federation, profile,
 pack, `init` or `promote` is new to you.
 
+## Prefer a visual workspace instead of chat commands? Open HVE Squad Studio
+
+Non-technical users, first-time AI users, and beginners working in the **GitHub Copilot app** can use **HVE Squad Studio** (`hve-squad-studio`)—an opt-in side-panel canvas that guides you through cards, uploads, and buttons instead of chat syntax, while keeping chat and CLI workflows completely unchanged for technical users.
+
+- **Installed with the plugin:** Installing `hve-squad` in the GitHub Copilot app (**Customize → Plugins**) includes **HVE Squad Studio** automatically in every new project session.
+- **Installed with the APM fallback (`apm install`):** Run this one-time helper command in your project (or pass `-Scope user` for your personal Copilot profile), then start a new session:
+
+```powershell
+pwsh -File .agents/skills/squad/scripts/Install-SquadStudioExtension.ps1 -Scope repository
+```
+
+- **How to start it (no agent selection or `init` needed):** Open the **Canvas** panel in the GitHub Copilot app and select **HVE Squad Studio**, or simply send `Open HVE Squad Studio` in chat—even without selecting an agent first.
+- **How it works in 3 steps:**
+  1. **Choose What to Build:** Pick a starter card (or use **Not sure where to start?**), optionally upload existing notes or documents for an automatic **Intake Gate** checkup, review any auto-suggested platform add-ons (packs) and optional **Safety, Budget & Design Checkups** (councils), and click **Start Building with HVE Squad**. Behind the scenes, **HVE Squad Studio** selects **Squad Coordinator** and pre-initializes a single chosen squad automatically.
+  2. **Watch Progress & Decide:** Follow plain-language progress, read checkup verdict cards, and answer one-question decision cards with a single click.
+  3. **Your Finished Work:** Open finished deliverables in your editor, read plain-English summaries, or apply one-click adjustments.
+
+See [Getting Started → HVE Squad Studio](https://peter-n91.github.io/hve-squad/getting-started.html#use-hve-squad-studio) for the full step-by-step guide.
+
 ## Documentation
 
 [![Observed efficiency benchmark: document quality, acceptance and average benchmark time](benchmarks/efficiency/badge.svg)](benchmarks/efficiency/report.md)
@@ -82,7 +101,7 @@ Full documentation lives on the project site:
 | Page                                                                          | What it covers                                                           |
 |-------------------------------------------------------------------------------|--------------------------------------------------------------------------|
 | [Concepts](https://peter-n91.github.io/hve-squad/concepts.html)               | The vocabulary in one place: teams, federations, profiles, packs, `init`, `promote`, autopilot, and where state lives |
-| [Getting Started](https://peter-n91.github.io/hve-squad/getting-started.html) | Plugin install and updates, preview testing, APM fallback, first run       |
+| [Getting Started](https://peter-n91.github.io/hve-squad/getting-started.html) | Plugin install and updates, Squad Coach, HVE Squad Studio, preview testing, APM fallback, first run |
 | [Usage](https://peter-n91.github.io/hve-squad/usage.html)                     | Profiles, autonomy modes, cost ceilings, remote approval, and Init Mode  |
 | [Ecosystem](https://peter-n91.github.io/hve-squad/ecosystem.html)             | The plugin, APM fallback, MCP server, MAF host, and which surface to use |
 | [Maintaining](https://peter-n91.github.io/hve-squad/maintaining.html)         | Dependency generation, author workflow, customization, release process   |

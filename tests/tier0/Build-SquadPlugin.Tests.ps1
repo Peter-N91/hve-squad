@@ -268,6 +268,10 @@ Describe 'PKG-14 Plugin host discovery and hook commands' -Tag 'Unit' {
         @($manifest.rules) | Should -Contain '.github/instructions/security/identity.instructions.md'
         @($manifest.skills) | Should -Contain '.github/skills/security/secure-by-design'
         @($manifest.extensions) | Should -Contain '.github/extensions/hve-core'
+        @($manifest.extensions) | Should -Contain 'skills/squad/extensions'
+        Test-Path -LiteralPath (Join-Path $script:OutputRoot 'skills/squad/extensions/hve-squad-studio/extension.mjs') -PathType Leaf | Should -BeTrue
+        (Get-FileHash -LiteralPath (Join-Path $script:OutputRoot 'skills/squad/extensions/hve-squad-studio/extension.mjs')).Hash |
+            Should -BeExactly (Get-FileHash -LiteralPath (Join-Path $script:SourceRootResolved 'squad-src/.github/skills/squad/extensions/hve-squad-studio/extension.mjs')).Hash
         Test-Path -LiteralPath (Join-Path $script:OutputRoot '.github/agents/security/security-planner.agent.md') | Should -BeTrue
         Test-Path -LiteralPath (Join-Path $script:OutputRoot '.github/skills/security/secure-by-design/SKILL.md') | Should -BeTrue
     }

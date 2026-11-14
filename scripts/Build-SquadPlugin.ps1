@@ -1272,9 +1272,12 @@ if ($MyInvocation.InvocationName -ne '.') {
             }
 
             # Skill files cite the instruction files too (00-index.md names them by path),
-            # so they get the same rewrite the agents do — otherwise the index points at
-            # files the plugin does not ship.
-            $content = Convert-AgentCitations -FileName $subPath -Content $content
+            # so skill assets outside extensions/ get the same rewrite the agents do —
+            # otherwise workflow/template files point at files the plugin does not ship,
+            # while extension assets copy byte-identically.
+            if ($subPath -notlike 'extensions/*') {
+                $content = Convert-AgentCitations -FileName $subPath -Content $content
+            }
 
             Write-TextFile -Path (Join-Path $OutputRoot "skills/squad/$subPath") -Content $content -DryRun:$DryRun
         }
@@ -1311,6 +1314,12 @@ if ($MyInvocation.InvocationName -ne '.') {
         $hveCoreRules = @($hveCore.Components['rules'])
         $hveCoreSkills = @($hveCore.Components['skills'])
         $hveCoreExtensions = @($hveCore.Components['extensions'])
+        $squadExtensions = if (@($skillPaths | Where-Object { $_ -like 'squad-src/.github/skills/squad/extensions/*' }).Count -gt 0) {
+            @('skills/squad/extensions')
+        }
+        else {
+            @()
+        }
         $pluginManifest = [ordered]@{
             name        = 'hve-squad'
             version     = $source.PluginVersion
@@ -1328,7 +1337,7 @@ if ($MyInvocation.InvocationName -ne '.') {
             rules       = @($hveCoreRules | Sort-Object -Unique)
             skills      = @((@('skills/squad/') + $hveCoreSkills) | Sort-Object -Unique)
             hooks       = 'hooks.json'
-            extensions  = @($hveCoreExtensions | Sort-Object -Unique)
+            extensions  = @((@($squadExtensions) + $hveCoreExtensions) | Sort-Object -Unique)
         }
         $pluginManifestContent = ($pluginManifest | ConvertTo-Json -Depth 10) + "`n"
         Write-TextFile -Path (Join-Path $OutputRoot '.github/plugin/plugin.json') `
