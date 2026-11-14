@@ -51,7 +51,7 @@ Licensed under the MIT license.
   <main class="content">
     <div class="container">
       <h2>Invoke the coordinator</h2>
-      <p>Use the matching Squad agent's conversation for requests, not your system shell. In VS Code Copilot Harness, choose the agent from the agents dropdown; CLI and App also use the corresponding agent. See <a href="getting-started.html">Getting Started</a> for installation and your first conversation.</p>
+      <p>Use the matching HVE Squad agent's conversation for requests, not your system shell. In VS Code Copilot Harness, choose the agent from the agents dropdown; CLI and App also use the corresponding agent. See <a href="getting-started.html">Getting Started</a> for installation and your first conversation.</p>
       <p>Not initialized yet, or unsure how to reach your goal? Select the advisory <strong>Squad Coach</strong> agent in VS Code, CLI, or App. It reads current code and documentation and provides a detailed, copy-ready runbook without changing state. See <a href="getting-started.html#chat-with-the-squad-coach">the Coach guide</a>.</p>
       <pre><code>/squad request="add input validation to the login form"</code></pre>
 
@@ -1559,40 +1559,40 @@ apm install Azure/azure-functions-skills/.github/plugins/azure-functions-skills/
         connector, so nothing reaches a live environment without you doing it.
       </p>
       <section data-release-change="20261111-power-platform-pack-parity">
-        <h3 id="power-platform-setup">Power Platform setup, with help from Squad</h3>
+        <h3 id="power-platform-setup">Power Platform setup, with help from HVE Squad</h3>
         <p>
           You do not need to choose technical package names yourself. Open your project in the host
-          where Squad is installed, then send this request. A pack adds expertise; it is not a
+          where HVE Squad is installed, then send this request. A pack adds expertise; it is not a
           Power Platform licence, a connected environment, or permission to publish.
         </p>
         <pre><code>/squad request="Set up the Power Platform pack. Explain what will be installed, ask before installing, and leave the Copilot Studio preview out unless I approve it." pack=power-platform</code></pre>
         <ol>
           <li>
-            <strong>Choose what you need.</strong> Squad lists the missing resources and explains the
+            <strong>Choose what you need.</strong> HVE Squad lists the missing resources and explains the
             jobs they enable. The existing official set has six skills for Power Pages planning,
             model-driven app authoring, Dataverse, and MCP tools/widgets. You can install all six,
             select a subset, add the community supplements, or continue without them. The two
             Copilot Studio preview skills are a separate choice, not a condition of using the pack.
           </li>
           <li>
-            <strong>Approve installation, not tenant access.</strong> Squad uses
+            <strong>Approve installation, not tenant access.</strong> HVE Squad uses
             <code>Install-SquadPackResources.ps1</code> for your approved selections. You should see
             the actual commands and a receipt, not just advice to install them later. A
             <code>PASS</code> receipt means the payload installation succeeded;
             <code>PLANNED</code> means nothing was installed. If a command fails or you cancel,
-            Squad keeps the resource missing and explains the remedy. It does not install a CLI,
+            HVE Squad keeps the resource missing and explains the remedy. It does not install a CLI,
             configure MCP, sign in, or grant consent for you.
           </li>
           <li>
             <strong>Keep the support files.</strong> Some existing skills need shared files outside
-            their skill directory. Squad checks those files before using them. With your separate
+            their skill directory. HVE Squad checks those files before using them. With your separate
             approval, it can fetch the exact source snapshots below into the ignored dependency
             folder, without activating their hooks, MCP configuration, or extra skills. If a folder
-            already exists, Squad checks its revision and contents instead of overwriting it.
+            already exists, HVE Squad checks its revision and contents instead of overwriting it.
           </li>
           <li>
             <strong>Reload and verify.</strong> Reload or restart the host after installation, then
-            ask Squad to check again. Squad uses the host's actual skill list, not the install
+            ask HVE Squad to check again. HVE Squad uses the host's actual skill list, not the install
             receipt alone, and records each resource as <code>available</code> or
             <code>declined</code>. Missing support files or prerequisites still block the affected
             job. A visible skill is not proof of tenant connectivity.
@@ -1606,10 +1606,10 @@ apm install Azure/azure-functions-skills/.github/plugins/azure-functions-skills/
         </ol>
         <h4>Manual fallback: existing skills and support files</h4>
         <p>
-          If Squad cannot run the installer, open a terminal at your project root. Check that Git,
+          If HVE Squad cannot run the installer, open a terminal at your project root. Check that Git,
           APM, and Node.js are available; the preview requires Node.js 18 or later. If one is missing,
           stop and follow <a href="getting-started.html">Getting started</a> and the
-          <a href="https://nodejs.org/en/download">Node.js installation instructions</a>, or ask Squad
+          <a href="https://nodejs.org/en/download">Node.js installation instructions</a>, or ask HVE Squad
           for steps for your operating system. Do not approve unrelated global installations.
           Run only the six pinned PP commands in the command block above that you actually chose.
           They target directories: adding <code>/SKILL.md</code> makes these APM commands invalid.
@@ -1617,7 +1617,7 @@ apm install Azure/azure-functions-skills/.github/plugins/azure-functions-skills/
         <p>
           For the shared support files, run the following only when the destination folders do not
           exist. These are source checkouts, not activated plugins. The revision printed by each
-          final command must match the preceding full commit ID. Give Squad these support roots:
+          final command must match the preceding full commit ID. Give HVE Squad these support roots:
           <code>plugins/power-pages/</code>, <code>plugins/model-apps/</code>,
           <code>plugins/mcp-apps/</code>, and <code>.github/plugins/dataverse/</code>
           inside the corresponding checkout. Keep the checkouts uncommitted.
@@ -1636,19 +1636,19 @@ git -C apm_modules/.squad-pack-support/dataverse-skills-27e6f6a rev-parse HEAD</
           It is useful for adding knowledge files or importing a
           reviewed skill into an <em>existing, locally cloned agentic-loop agent</em>. It does not
           support Standard-agent topics through these PP charters, and it does not migrate an agent.
-          If you are unsure which agent model you have, let Squad check the local workspace first.
+          If you are unsure which agent model you have, let HVE Squad check the local workspace first.
         </p>
         <p>
           Approval installs the complete pinned payload: eight skills, four agents, two command
           prompts, shared scripts/references, and a startup hook. Only <code>add-knowledge</code>
           and <code>add-skill</code> are admitted PP jobs. The hook can run <code>npm install</code>
           for <code>keytar</code> and <code>@azure/msal-node-extensions</code> and write a local
-          plugin-path index. This needs separate approval before startup setup; Squad does not run
+          plugin-path index. This needs separate approval before startup setup; HVE Squad does not run
           the hook to complete installation. If the host cannot keep an unapproved hook from
           running, decline the preview there. You can still use the ordinary PP pack.
         </p>
         <p>
-          Once you explicitly choose the preview and resolve that hook decision, Squad can install
+          Once you explicitly choose the preview and resolve that hook decision, HVE Squad can install
           its bundle once through either preview resource entry. For a manual installation, run
           this single pinned command once, then reload the host. Do not install the two isolated
           skill files: their shared schemas and scripts would be missing.
@@ -1656,7 +1656,7 @@ git -C apm_modules/.squad-pack-support/dataverse-skills-27e6f6a rev-parse HEAD</
         <pre><code>apm install microsoft/copilot-studio-plugin#4014ae689d1228d86cb3aaab938b1e66f8e2e10d --target copilot</code></pre>
         <p>
           The complete support root is <code>apm_modules/microsoft/copilot-studio-plugin/</code>.
-          Squad checks <code>reference/knowledge-schema.md</code>, <code>reference/skill-schema.md</code>,
+          HVE Squad checks <code>reference/knowledge-schema.md</code>, <code>reference/skill-schema.md</code>,
           and <code>scripts/add-skill.js</code> there; startup setup is not needed to find them.
           Local authoring does not authorize an authenticated SharePoint/OneDrive access pre-check,
           executing an imported skill, cloud synchronization, or publication.
@@ -1664,9 +1664,9 @@ git -C apm_modules/.squad-pack-support/dataverse-skills-27e6f6a rev-parse HEAD</
         <h4>Optional community supplements and broad-work Alternates</h4>
         <p>
           The three community skills are also selectable in PP preflight. The two community agents
-          remain optional Alternates for broader work; Squad offers their exact installation remedy
+          remain optional Alternates for broader work; HVE Squad offers their exact installation remedy
           when needed and does not silently substitute a local charter. If you choose a manual
-          installation, run only the relevant lines below, then reload and ask Squad to verify.
+          installation, run only the relevant lines below, then reload and ask HVE Squad to verify.
           Additional connector validation tools are prerequisites, not installed by these commands.
         </p>
         <pre><code>apm install github/awesome-copilot/skills/power-platform-architect#9db369d00f121542e1c99fd9b6cd6f707bade765 --target copilot
@@ -1678,9 +1678,9 @@ apm install github/awesome-copilot/agents/power-platform-mcp-integration-expert.
         <table>
           <thead><tr><th>What you see</th><th>What to do</th></tr></thead>
           <tbody>
-            <tr><td>Installer or prerequisite not found</td><td>Keep the resource missing. Ask Squad for the named tool's setup steps; do not approve a blanket install.</td></tr>
+            <tr><td>Installer or prerequisite not found</td><td>Keep the resource missing. Ask HVE Squad for the named tool's setup steps; do not approve a blanket install.</td></tr>
             <tr><td>Installed on disk, but not in the host's skill list</td><td>Reload the host, reopen the same project, and rerun PP preflight. Do not mark the resource available from the receipt alone.</td></tr>
-            <tr><td>Missing shared script/schema or wrong source revision</td><td>Ask Squad to check the support root and pinned revision above. Do not guess a schema or run an unrelated setup script.</td></tr>
+            <tr><td>Missing shared script/schema or wrong source revision</td><td>Ask HVE Squad to check the support root and pinned revision above. Do not guess a schema or run an unrelated setup script.</td></tr>
             <tr><td>Windows reports a path is too long</td><td>Use the repository-local long-path option in the snapshot commands above, or choose a shorter new support-folder path. Do not overwrite a partial checkout or change global Git settings.</td></tr>
             <tr><td>Standard-agent workspace or a sign-in/consent request</td><td>Stop the preview job. Keep the existing agent model and use the broad-work Alternate or a separately approved setup path.</td></tr>
             <tr><td>Cancelled or failed installation</td><td>Keep completed files, report the failed step, and choose an approved retry or decline that resource. The rest of the pack can remain active.</td></tr>
@@ -1696,17 +1696,17 @@ apm install github/awesome-copilot/agents/power-platform-mcp-integration-expert.
         neither provisions an agent or publishes it to your tenant.
       </p>
       <section data-release-change="20261112-m365-pack-parity">
-        <h3 id="m365-copilot-setup">Microsoft 365 Copilot setup, with help from Squad</h3>
+        <h3 id="m365-copilot-setup">Microsoft 365 Copilot setup, with help from HVE Squad</h3>
         <p>
           You do not need to memorize repository paths or package flags. Open your project in the
-          host where Squad is installed, then send this request. Applying the pack adds M365
+          host where HVE Squad is installed, then send this request. Applying the pack adds M365
           specialist roles and guidance; it is not a Microsoft 365 Copilot licence, tenant admin
           consent, or permission to provision or publish an agent.
         </p>
         <pre><code>/squad request="Set up the Microsoft 365 Copilot pack. Explain what will be installed, ask before installing, and leave the Work IQ preview skills out unless I approve them." pack=m365-copilot</code></pre>
         <ol>
           <li>
-            <strong>Choose what you need.</strong> Squad lists the missing M365 resources and
+            <strong>Choose what you need.</strong> HVE Squad lists the missing M365 resources and
             explains the jobs each one enables. The core official set has six Microsoft 365 Agents
             SDK skills for .NET production readiness, Teams app manifests, .NET/TypeScript/Python
             OpenTelemetry, and Azure Bot/Entra provisioning plans. You can install all six, select a
@@ -1715,22 +1715,22 @@ apm install github/awesome-copilot/agents/power-platform-mcp-integration-expert.
             choice, not a condition of using the pack.
           </li>
           <li>
-            <strong>Approve installation, not tenant actions.</strong> Squad uses
+            <strong>Approve installation, not tenant actions.</strong> HVE Squad uses
             <code>Install-SquadPackResources.ps1</code> for your approved selections and shows the
             exact commands and receipt. A <code>PASS</code> receipt confirms the skill payloads were
             installed; <code>PLANNED</code> means nothing was written. If a command fails or you
-            cancel, Squad keeps the resource missing and explains how to retry. It never installs a
+            cancel, HVE Squad keeps the resource missing and explains how to retry. It never installs a
             CLI or VS Code extension, accepts a tool EULA, signs in, or grants tenant consent.
           </li>
           <li>
             <strong>Verify packaged support files.</strong> Each pinned M365 directory install
             includes its own <code>references/</code> and <code>assets/</code> files without hooks
-            or MCP servers. Squad verifies those packaged files before claiming a job is ready, and
+            or MCP servers. HVE Squad verifies those packaged files before claiming a job is ready, and
             asks separately if you want an offline reference-sample checkout.
           </li>
           <li>
             <strong>Reload and verify.</strong> Reload or restart the host after installation, then
-            ask Squad to rerun M365 preflight. Squad checks the host's live skill inventory rather
+            ask HVE Squad to rerun M365 preflight. HVE Squad checks the host's live skill inventory rather
             than trusting the install receipt alone, and records every listed resource as
             <code>available</code> or <code>declined</code>. A visible skill is not proof of tenant
             readiness.
@@ -1744,12 +1744,12 @@ apm install github/awesome-copilot/agents/power-platform-mcp-integration-expert.
         </ol>
         <h4>Manual fallback: core Agents SDK skills and optional reference snapshot</h4>
         <p>
-          If Squad cannot run the installer, open a terminal at your project root and confirm Git
+          If HVE Squad cannot run the installer, open a terminal at your project root and confirm Git
           and APM are available; TypeScript and preview CLI workflows also need Node.js on your
           machine when you run them yourself. If a prerequisite is missing, stop and follow
           <a href="getting-started.html">Getting started</a> and the
           <a href="https://nodejs.org/en/download">Node.js installation instructions</a>, or ask
-          Squad for steps for your operating system. Run only the six pinned Agents SDK commands in
+          HVE Squad for steps for your operating system. Run only the six pinned Agents SDK commands in
           the block above that match your stack. They target skill directories: adding
           <code>/SKILL.md</code> makes APM validation fail.
         </p>
@@ -1773,17 +1773,17 @@ git -C apm_modules/.squad-pack-support/agents-a5caf57 rev-parse HEAD</code></pre
           widgets, and local MCP plugin manifests.
         </p>
         <p>
-          Squad installs only those two self-contained pinned directories, never the whole toolkit
+          HVE Squad installs only those two self-contained pinned directories, never the whole toolkit
           plugin. Running the public-preview <code>@microsoft/m365-copilot-eval</code> CLI (including
           its human EULA prompt, WorkIQ admin consent, deployed agent, and Azure OpenAI judge) stays
-          a separate manual action outside Squad. Upstream <code>declarative-agent-developer</code>,
+          a separate manual action outside HVE Squad. Upstream <code>declarative-agent-developer</code>,
           <code>wiqd</code>, and <code>setup-sso-ui-widget</code> remain excluded so offline
           declarative-agent authoring is never blocked by an experimental CLI or live Entra script.
         </p>
         <pre><code>apm install microsoft/work-iq/plugins/microsoft-365-agents-toolkit/skills/m365-agent-evaluator#72c889460aa7ac6d7ed3bb02179332abafc963d4 --target copilot
 apm install microsoft/work-iq/plugins/microsoft-365-agents-toolkit/skills/ui-widget-developer#72c889460aa7ac6d7ed3bb02179332abafc963d4 --target copilot</code></pre>
         <p>
-          After reload, Squad checks <code>.agents/skills/m365-agent-evaluator/</code> and
+          After reload, HVE Squad checks <code>.agents/skills/m365-agent-evaluator/</code> and
           <code>.agents/skills/ui-widget-developer/</code> for
           <code>references/prompts-schema.json</code> and
           <code>references/copilot-widget-protocol.md</code>. Approval authorizes local file
@@ -1794,7 +1794,7 @@ apm install microsoft/work-iq/plugins/microsoft-365-agents-toolkit/skills/ui-wid
           The six community declarative-agent, TypeSpec, Microsoft Graph, and MCP skills are
           selectable in M365 preflight because no official skill supersedes them. The two community
           agents remain optional Alternates for declarative-agent architecture, TypeSpec, API
-          plugins, Graph SDK, and broader MCP integration; Squad offers their exact pinned commands
+          plugins, Graph SDK, and broader MCP integration; HVE Squad offers their exact pinned commands
           when needed and never substitutes a local charter silently.
         </p>
         <pre><code>apm install github/awesome-copilot/skills/declarative-agents#9db369d00f121542e1c99fd9b6cd6f707bade765 --target copilot
@@ -1809,27 +1809,27 @@ apm install github/awesome-copilot/agents/mcp-m365-agent-expert.agent.md#9db369d
         <table>
           <thead><tr><th>What you see</th><th>What to do</th></tr></thead>
           <tbody>
-            <tr><td>Installer or prerequisite not found</td><td>Keep the resource missing. Ask Squad for setup steps for the named tool; do not approve unrelated global installs.</td></tr>
+            <tr><td>Installer or prerequisite not found</td><td>Keep the resource missing. Ask HVE Squad for setup steps for the named tool; do not approve unrelated global installs.</td></tr>
             <tr><td>Installed on disk, but not in the host's skill list</td><td>Reload the host, reopen the same project, and rerun M365 preflight. Do not mark the resource available from the receipt alone.</td></tr>
             <tr><td>Missing packaged schema/reference or wrong source revision</td><td>Check the installed skill directory or detached snapshot commit ID above before retrying; do not guess schemas from memory.</td></tr>
             <tr><td>Windows reports a path is too long</td><td>Use the repository-local long-path option in the snapshot commands above, or pick a shorter support path without changing global Git config.</td></tr>
-            <tr><td>Preview CLI asks for EULA acceptance, a tunnel, or tenant sign-in</td><td>Stop the worker step. Keep Squad on local files and run live evaluation, tunnel, or provisioning steps yourself only if you choose to.</td></tr>
+            <tr><td>Preview CLI asks for EULA acceptance, a tunnel, or tenant sign-in</td><td>Stop the worker step. Keep HVE Squad on local files and run live evaluation, tunnel, or provisioning steps yourself only if you choose to.</td></tr>
             <tr><td>Cancelled or failed installation</td><td>Keep completed files, report the failed resource, and retry or decline that entry. The rest of the M365 pack remains usable.</td></tr>
           </tbody>
         </table>
       </section>
       <section data-release-change="20261112-dotnet-pack">
-        <h3 id="dotnet-setup">.NET setup, with help from Squad</h3>
+        <h3 id="dotnet-setup">.NET setup, with help from HVE Squad</h3>
         <p>
           You do not need to memorize plugin paths or commit hashes. Open your project in the host
-          where Squad is installed, then send this request. Applying the pack adds .NET guidance and
+          where HVE Squad is installed, then send this request. Applying the pack adds .NET guidance and
           missing specialist roles from the existing cast; it does not install a .NET SDK, workload,
           global tool, or MCP server on your machine.
         </p>
         <pre><code>/squad request="Set up the .NET pack. Explain what will be installed, ask before installing, and leave the .NET 11 and experimental mock-analysis preview skills out unless I approve them." pack=dotnet</code></pre>
         <ol>
           <li>
-            <strong>Choose what you need.</strong> Squad lists the missing .NET resources and
+            <strong>Choose what you need.</strong> HVE Squad lists the missing .NET resources and
             explains the jobs each one enables. The core official set has eighteen skills across
             .NET 8-to-9 and 9-to-10 upgrades, nullable reference types, Native AOT readiness, legacy
             MSBuild modernization, NuGet Central Package Management, VSTest-to-MTP migration,
@@ -1840,28 +1840,28 @@ apm install github/awesome-copilot/agents/mcp-m365-agent-expert.agent.md#9db369d
             using the pack.
           </li>
           <li>
-            <strong>Approve skill installation, not toolchain changes.</strong> Squad runs
+            <strong>Approve skill installation, not toolchain changes.</strong> HVE Squad runs
             <code>Install-SquadPackResources.ps1</code> for your approved selections and shows the
             exact commands and receipt. A <code>PASS</code> receipt confirms the skill payloads were
             installed; <code>PLANNED</code> means nothing was written. If a command fails or you
-            cancel, Squad keeps the resource missing and explains how to retry. It never installs a
+            cancel, HVE Squad keeps the resource missing and explains how to retry. It never installs a
             .NET SDK, workload, global tool, or MCP server.
           </li>
           <li>
             <strong>Verify packaged support files.</strong> Each pinned .NET directory install
             carries its own <code>references/</code> and <code>scripts/</code> files without hooks,
-            LSP configs, or MCP servers. Squad verifies those packaged files before claiming a job
+            LSP configs, or MCP servers. HVE Squad verifies those packaged files before claiming a job
             is ready, and asks separately if you want an offline source snapshot.
           </li>
           <li>
             <strong>Reload and verify.</strong> Reload or restart the host after installation, then
-            ask Squad to rerun .NET preflight. Squad checks the host's live skill inventory rather
+            ask HVE Squad to rerun .NET preflight. HVE Squad checks the host's live skill inventory rather
             than trusting the install receipt alone, and records every listed resource as
             <code>available</code> or <code>declined</code>. A visible skill does not prove that the
             target .NET SDK band or diagnostic tool is installed.
           </li>
           <li>
-            <strong>Keep planning and review read-only.</strong> In Squad, <code>modernizer</code>,
+            <strong>Keep planning and review read-only.</strong> In HVE Squad, <code>modernizer</code>,
             <code>tester</code>, and <code>performance</code> stay read-only on your source and
             tests, while <code>developer</code> applies edits only from an approved plan and never
             runs <code>git commit</code> or database migrations automatically.
@@ -1869,11 +1869,11 @@ apm install github/awesome-copilot/agents/mcp-m365-agent-expert.agent.md#9db369d
         </ol>
         <h4>Manual fallback: core .NET skills and optional reference snapshot</h4>
         <p>
-          If Squad cannot run the installer, open a terminal at your project root and confirm Git,
+          If HVE Squad cannot run the installer, open a terminal at your project root and confirm Git,
           APM, and your project's target .NET SDK are available. If a prerequisite is missing, stop
           and follow <a href="getting-started.html">Getting started</a> and the
           <a href="https://dotnet.microsoft.com/download">.NET SDK download instructions</a>, or ask
-          Squad for steps for your operating system. Run only the eighteen pinned .NET commands in
+          HVE Squad for steps for your operating system. Run only the eighteen pinned .NET commands in
           the block above that match your workload. They target skill directories: adding
           <code>/SKILL.md</code> makes APM validation fail.
         </p>
@@ -1896,15 +1896,15 @@ git -C apm_modules/.squad-pack-support/dotnet-skills-2877c71 rev-parse HEAD</cod
           control-flow audits of Moq, NSubstitute, and FakeItEasy test setups.
         </p>
         <p>
-          Squad installs only those two self-contained pinned directories, never a whole plugin.
-          Squad never runs <code>dotnet-install</code>, <code>setup-local-sdk</code>, or the
+          HVE Squad installs only those two self-contained pinned directories, never a whole plugin.
+          HVE Squad never runs <code>dotnet-install</code>, <code>setup-local-sdk</code>, or the
           prerelease <code>Microsoft.AITools.BinlogMcp</code> server; installing a preview .NET SDK
-          stays a separate manual choice outside Squad.
+          stays a separate manual choice outside HVE Squad.
         </p>
         <pre><code>apm install dotnet/skills/plugins/dotnet-upgrade/skills/migrate-dotnet10-to-dotnet11#2877c712edc20643b72f64e2983b168e6661d607 --target copilot
 apm install dotnet/skills/plugins/dotnet-experimental/skills/exp-mock-usage-analysis#2877c712edc20643b72f64e2983b168e6661d607 --target copilot</code></pre>
         <p>
-          After reload, Squad checks <code>.agents/skills/migrate-dotnet10-to-dotnet11/</code> for
+          After reload, HVE Squad checks <code>.agents/skills/migrate-dotnet10-to-dotnet11/</code> for
           <code>references/core-libraries-dotnet10to11.md</code> and verifies
           <code>.agents/skills/exp-mock-usage-analysis/SKILL.md</code>. Approval authorizes read-only
           planning and review (plus approved plan edits), not SDK installation or automatic commits.
@@ -1923,9 +1923,9 @@ apm install dotnet/skills/plugins/dotnet-experimental/skills/exp-mock-usage-anal
         </table>
       </section>
       <section data-release-change="20261113-aks-and-azure-functions-packs">
-        <h3 id="aks-setup">AKS setup, with help from Squad</h3>
+        <h3 id="aks-setup">AKS setup, with help from HVE Squad</h3>
         <p>
-          Open your project in the host where Squad is installed and send this request. Applying
+          Open your project in the host where HVE Squad is installed and send this request. Applying
           <code>aks</code> adds AKS guidance and any missing specialist roles from the existing
           cast; it never installs <code>az</code>, <code>kubectl</code>, <code>jq</code>, cluster
           credentials, telemetry hooks, or MCP servers.
@@ -1933,7 +1933,7 @@ apm install dotnet/skills/plugins/dotnet-experimental/skills/exp-mock-usage-anal
         <pre><code>/squad request="Set up the AKS pack. Explain what will be installed and ask before installing." pack=aks</code></pre>
         <ol>
           <li>
-            <strong>Choose what you need.</strong> Squad lists the seven official AKS skills from
+            <strong>Choose what you need.</strong> HVE Squad lists the seven official AKS skills from
             <a href="https://github.com/microsoft/azure-skills">microsoft/azure-skills</a>: Day-0
             cluster design (<code>azure-kubernetes</code>), app containerization and Deployment
             Safeguard manifests (<code>azure-kubernetes-app-deploy</code>), AKS Automatic migration
@@ -1945,7 +1945,7 @@ apm install dotnet/skills/plugins/dotnet-experimental/skills/exp-mock-usage-anal
             without them.
           </li>
           <li>
-            <strong>Approve skill directories only.</strong> Squad runs
+            <strong>Approve skill directories only.</strong> HVE Squad runs
             <code>Install-SquadPackResources.ps1</code> for your approved selections and requires a
             <code>PASS</code> receipt rather than <code>PLANNED</code>. Install
             <code>azure-kubernetes-app-deploy</code> and
@@ -1964,7 +1964,7 @@ apm install dotnet/skills/plugins/dotnet-experimental/skills/exp-mock-usage-anal
         </ol>
         <h4>Manual fallback and optional AKS reference snapshot</h4>
         <p>
-          If Squad cannot run the installer, confirm Git and APM are available (see
+          If HVE Squad cannot run the installer, confirm Git and APM are available (see
           <a href="getting-started.html">Getting started</a> and the
           <a href="https://learn.microsoft.com/azure/aks/">AKS documentation</a>) and run the seven
           pinned AKS directory commands in the block above without appending <code>/SKILL.md</code>.
@@ -1985,9 +1985,9 @@ git -C apm_modules/.squad-pack-support/azure-skills-968f7bf rev-parse HEAD</code
         </table>
       </section>
       <section data-release-change="20261113-aks-and-azure-functions-packs">
-        <h3 id="azure-functions-setup">Azure Functions setup, with help from Squad</h3>
+        <h3 id="azure-functions-setup">Azure Functions setup, with help from HVE Squad</h3>
         <p>
-          Open your project in the host where Squad is installed and send this request. Applying
+          Open your project in the host where HVE Squad is installed and send this request. Applying
           <code>azure-functions</code> adds Azure Functions guidance and missing specialist roles
           from the existing cast; it never installs Azure Functions Core Tools (<code>func</code>),
           <code>az</code>, <code>azd</code>, telemetry hooks, or MCP servers.
@@ -1995,7 +1995,7 @@ git -C apm_modules/.squad-pack-support/azure-skills-968f7bf rev-parse HEAD</code
         <pre><code>/squad request="Set up the Azure Functions pack. Explain what will be installed, ask before installing, and leave the isolated-worker update and Hosted Skills preview skills out unless I approve them." pack=azure-functions</code></pre>
         <ol>
           <li>
-            <strong>Choose core skills first.</strong> Squad lists eight core skills from
+            <strong>Choose core skills first.</strong> HVE Squad lists eight core skills from
             <a href="https://github.com/Azure/azure-functions-skills">Azure/azure-functions-skills</a>:
             <code>azure-functions-common</code>, <code>azure-functions-create</code>,
             <code>azure-functions-deploy</code>, <code>azure-functions-doctor</code>,
@@ -2006,7 +2006,7 @@ git -C apm_modules/.squad-pack-support/azure-skills-968f7bf rev-parse HEAD</code
             references resolve.
           </li>
           <li>
-            <strong>Approve skill directories, reload, and verify.</strong> Squad runs
+            <strong>Approve skill directories, reload, and verify.</strong> HVE Squad runs
             <code>Install-SquadPackResources.ps1</code>, requires a <code>PASS</code> receipt, stops
             for a host reload, reruns preflight for explicit <code>available</code> or
             <code>declined</code> dispositions, and verifies packaged support files without running
@@ -2022,7 +2022,7 @@ git -C apm_modules/.squad-pack-support/azure-skills-968f7bf rev-parse HEAD</code
         </ol>
         <h4>Manual fallback and optional Azure Functions reference snapshot</h4>
         <p>
-          If Squad cannot run the installer, confirm Git and APM are available (see
+          If HVE Squad cannot run the installer, confirm Git and APM are available (see
           <a href="getting-started.html">Getting started</a> and the
           <a href="https://learn.microsoft.com/azure/azure-functions/functions-run-local">Azure Functions Core Tools guide</a>)
           and run the eight pinned Azure Functions commands in the block above without appending
@@ -2037,14 +2037,14 @@ git -C apm_modules/.squad-pack-support/azure-functions-skills-34e1722 rev-parse 
           Two preview skills from <code>0.0.7-preview</code> can be approved separately:
           <code>azure-functions-update</code> (draft C# in-process to .NET isolated worker migration
           planning) and <code>azure-functions-hosted-skills</code> (local authoring on
-          <code>azurefunctions-agents-runtime</code>). Squad installs only their pinned skill
+          <code>azurefunctions-agents-runtime</code>). HVE Squad installs only their pinned skill
           directories and never provisions Connector Namespaces or runs <code>azd up</code> without
           approval.
         </p>
         <pre><code>apm install Azure/azure-functions-skills/.github/plugins/azure-functions-skills/skills/azure-functions-update#34e17220ff073b29a0be5bd541f32d287118165f --target copilot
 apm install Azure/azure-functions-skills/.github/plugins/azure-functions-skills/skills/azure-functions-hosted-skills#34e17220ff073b29a0be5bd541f32d287118165f --target copilot</code></pre>
         <p>
-          After reload, Squad verifies
+          After reload, HVE Squad verifies
           <code>.agents/skills/azure-functions-update/references/dotnet-isolated.md</code> and
           <code>.agents/skills/azure-functions-hosted-skills/references/agent-authoring.md</code>
           before selecting either preview workflow.
@@ -2055,7 +2055,7 @@ apm install Azure/azure-functions-skills/.github/plugins/azure-functions-skills/
           <tbody>
             <tr><td>Shared language or trigger reference missing</td><td>Install <code>azure-functions-common</code> alongside the review or diagnostic skill, reload the host, and rerun preflight.</td></tr>
             <tr><td>Installed on disk, but not in the host's skill list</td><td>Reload the host, reopen the same project, and rerun Azure Functions preflight before marking the resource available.</td></tr>
-            <tr><td>Deployment step asks for <code>azure@azure-skills</code> or Connector consent</td><td>Keep Squad Deployer on its own OIDC dry-run and Impactful-Action Gate; handle whole-plugin installs or Connector Namespace consent manually outside Squad.</td></tr>
+            <tr><td>Deployment step asks for <code>azure@azure-skills</code> or Connector consent</td><td>Keep Squad Deployer on its own OIDC dry-run and Impactful-Action Gate; handle whole-plugin installs or Connector Namespace consent manually outside HVE Squad.</td></tr>
           </tbody>
         </table>
       </section>
@@ -2727,7 +2727,7 @@ layouts:
       <h2>Running on other hosts</h2>
       <p>
         The squad ships both prompts and agents. <strong>VS Code Copilot Harness, GitHub Copilot CLI,
-        and the GitHub Copilot app all run Squad workflows through user-invocable agents.</strong>
+        and the GitHub Copilot app all run HVE Squad workflows through user-invocable agents.</strong>
         Prompt files remain an alternative in VS Code, but selecting the mapped agent avoids an
         intermediary call and is the invocation model that works everywhere.
       </p>
