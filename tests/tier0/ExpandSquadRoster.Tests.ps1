@@ -205,6 +205,24 @@ BeforeAll {
                         $decisions[$resource] = 'declined'
                     }
                 }
+                elseif ($pack -eq 'aks') {
+                    foreach ($resource in @(
+                            'azure-kubernetes-app-deploy', 'azure-kubernetes-automatic-readiness',
+                            'azure-kubernetes', 'aks-troubleshooting', 'aks-known-issues',
+                            'aks-gpu-inference', 'aks-cost-optimization')) {
+                        $decisions[$resource] = 'declined'
+                    }
+                }
+                elseif ($pack -eq 'azure-functions') {
+                    foreach ($resource in @(
+                            'azure-functions-common', 'azure-functions-create',
+                            'azure-functions-deploy', 'azure-functions-doctor',
+                            'azure-functions-best-practices', 'azure-functions-inventory',
+                            'azure-functions-health-status', 'azure-functions-diagnostics',
+                            'azure-functions-update', 'azure-functions-hosted-skills')) {
+                        $decisions[$resource] = 'declined'
+                    }
+                }
             }
             if ($decisions.Count) { $Choices.resourceDecisions = $decisions }
         }
@@ -1139,5 +1157,56 @@ Describe 'All-present registered pack expansion' {
         @($fullPlan.Receipt.addedRoles) | Should -BeNullOrEmpty
         (Invoke-Expansion -Repo $fullRepo -Plan $fullPlan).ExitCode | Should -Be 0
         [IO.File]::ReadAllText((Join-Path $fullRoot 'team.md')) | Should -Match '(?m)^Packs: dotnet$'
+    }
+
+    It 'applies, cold-removes, and reapplies aks and azure-functions while reusing existing roles and adding zero roles on azure and full (SRC-18)' {
+        $repo = New-RepoFixture
+        $root = Initialize-PlainSquad $repo
+        $aksPlan = New-ExpansionPlanReady -Repo $repo -Choices @{
+            confirmed = $true
+            runId = 'aks-apply'
+            packs = @('aks')
+        }
+        $aksPlan.Result.ExitCode | Should -Be 0 -Because $aksPlan.Result.Output
+        (@($aksPlan.Receipt.addedRoles | Sort-Object) -join ',') | Should -BeExactly 'azure-architect,azure-diagnose,cost-manager,modernizer'
+        $aksPlan.Receipt.packResources.Count | Should -Be 7
+        (Invoke-Expansion -Repo $repo -Plan $aksPlan).ExitCode | Should -Be 0
+        $teamPath = Join-Path $root 'team.md'
+        $applied = [IO.File]::ReadAllText($teamPath)
+        $applied | Should -Match '(?m)^Packs: aks$'
+        $applied | Should -Match 'Squad Azure Architect'
+        $applied | Should -Match 'Squad Azure Diagnose'
+
+        $removed = $applied -replace '(?m)^Packs: aks\r?\n', ''
+        $removed = [regex]::Replace($removed, '(?m)^\| (azure-architect|azure-diagnose|cost-manager|modernizer) \|.*\r?\n', '')
+        [IO.File]::WriteAllText($teamPath, $removed, [Text.UTF8Encoding]::new($false))
+        [IO.File]::ReadAllText($teamPath) | Should -Not -Match '(?m)^\| azure-diagnose \|'
+
+        $fnPlan = New-ExpansionPlanReady -Repo $repo -Choices @{
+            confirmed = $true
+            runId = 'azure-functions-apply'
+            packs = @('azure-functions')
+        }
+        $fnPlan.Result.ExitCode | Should -Be 0 -Because $fnPlan.Result.Output
+        (@($fnPlan.Receipt.addedRoles | Sort-Object) -join ',') | Should -BeExactly 'azure-diagnose,deployer,modernizer'
+        $fnPlan.Receipt.packResources.Count | Should -Be 10
+        $fnPlan.Receipt.packResources['azure-functions-update'] | Should -BeExactly 'declined'
+        $fnPlan.Receipt.packResources['azure-functions-hosted-skills'] | Should -BeExactly 'declined'
+        (Invoke-Expansion -Repo $repo -Plan $fnPlan).ExitCode | Should -Be 0
+        $afterFn = [IO.File]::ReadAllText($teamPath)
+        $afterFn | Should -Match '(?m)^Packs: azure-functions$'
+        $afterFn | Should -Match 'Squad Deployer'
+
+        $azureRepo = New-RepoFixture
+        $azureRoot = Initialize-ProfileSquad -Repo $azureRepo -Profile 'azure'
+        $azurePlan = New-ExpansionPlan -Repo $azureRepo -Root $azureRoot -Choices @{
+            confirmed = $true
+            runId = 'azure-both-packs'
+            packs = @('aks', 'azure-functions')
+        }
+        $azurePlan.Result.ExitCode | Should -Be 0 -Because $azurePlan.Result.Output
+        @($azurePlan.Receipt.addedRoles) | Should -BeNullOrEmpty
+        (Invoke-Expansion -Repo $azureRepo -Plan $azurePlan).ExitCode | Should -Be 0
+        [IO.File]::ReadAllText((Join-Path $azureRoot 'team.md')) | Should -Match '(?m)^Packs: aks, azure-functions$'
     }
 }

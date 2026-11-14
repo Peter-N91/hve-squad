@@ -72,7 +72,7 @@ Licensed under the MIT license.
           propose un profil recommandé avant toute création.
         </li>
         <li>
-          <code>pack=power-platform</code>, <code>pack=m365-copilot</code>, <code>pack=aws</code>, <code data-release-change="20261008-foundry-agentic-pack">pack=foundry</code>, <code>pack=fabric</code> ou <code>pack=dotnet</code>
+          <code>pack=power-platform</code>, <code>pack=m365-copilot</code>, <code>pack=aws</code>, <code data-release-change="20261008-foundry-agentic-pack">pack=foundry</code>, <code>pack=fabric</code>, <code>pack=dotnet</code>, <code>pack=aks</code> ou <code>pack=azure-functions</code>
           &mdash; ajoute au profil
           les rôles spécialisés, les consignes ciblées ou les deux pour un domaine technologique. Un pack ne remplace jamais le profil, et vous
           pouvez en appliquer plusieurs, séparés par des virgules. Voir <em>Packs</em> ci-dessous.
@@ -1437,7 +1437,7 @@ flowchart TD
       <p data-release-change="20261104-official-source-packs">
         Un pack enregistré dont les rôles sont déjà dans l'équipe met à jour <code>Packs:</code> et
         ajoute une décision. Il n'invente pas de membre. <code>full +foundry</code>,
-        <code>full +fabric</code> et <code>full +dotnet</code> sont ce cas. Un pack déjà listé dans <code>Packs:</code> est rejeté. Retirer un pack arrête la sélection de la squad et la
+        <code>full +fabric</code>, <code>full +dotnet</code>, <code>full +aks</code> et <code>full +azure-functions</code> sont ce cas. Un pack déjà listé dans <code>Packs:</code> est rejeté. Retirer un pack arrête la sélection de la squad et la
         transmission des consignes. Cela ne désinstalle pas une compétence que l'hôte peut encore voir,
         et ne la cache pas.
       </p>
@@ -1503,7 +1503,22 @@ apm install dotnet/skills/plugins/dotnet-aspnetcore/skills/dotnet-webapi#2877c71
 apm install dotnet/skills/plugins/dotnet-blazor/skills/author-component#2877c712edc20643b72f64e2983b168e6661d607 --target copilot
 apm install dotnet/skills/plugins/dotnet-data/skills/optimizing-ef-core-queries#2877c712edc20643b72f64e2983b168e6661d607 --target copilot
 apm install dotnet/skills/plugins/dotnet/skills/csharp-refactoring#2877c712edc20643b72f64e2983b168e6661d607 --target copilot
-apm install dotnet/skills/plugins/dotnet/skills/msbuild#2877c712edc20643b72f64e2983b168e6661d607 --target copilot</code></pre>
+apm install dotnet/skills/plugins/dotnet/skills/msbuild#2877c712edc20643b72f64e2983b168e6661d607 --target copilot
+apm install microsoft/azure-skills/skills/azure-kubernetes/azure-kubernetes-app-deploy#968f7bfaa01672e782dae2c6bab4fb9505ae047a --target copilot
+apm install microsoft/azure-skills/skills/azure-kubernetes/azure-kubernetes-automatic-readiness#968f7bfaa01672e782dae2c6bab4fb9505ae047a --target copilot
+apm install microsoft/azure-skills/skills/azure-kubernetes#968f7bfaa01672e782dae2c6bab4fb9505ae047a --target copilot
+apm install microsoft/azure-skills/.github/plugins/aks-skills/skills/aks-troubleshooting#968f7bfaa01672e782dae2c6bab4fb9505ae047a --target copilot
+apm install microsoft/azure-skills/.github/plugins/aks-skills/skills/aks-known-issues#968f7bfaa01672e782dae2c6bab4fb9505ae047a --target copilot
+apm install microsoft/azure-skills/.github/plugins/aks-skills/skills/aks-gpu-inference#968f7bfaa01672e782dae2c6bab4fb9505ae047a --target copilot
+apm install microsoft/azure-skills/.github/plugins/aks-skills/skills/aks-cost-optimization#968f7bfaa01672e782dae2c6bab4fb9505ae047a --target copilot
+apm install Azure/azure-functions-skills/.github/plugins/azure-functions-skills/skills/azure-functions-common#34e17220ff073b29a0be5bd541f32d287118165f --target copilot
+apm install Azure/azure-functions-skills/.github/plugins/azure-functions-skills/skills/azure-functions-create#34e17220ff073b29a0be5bd541f32d287118165f --target copilot
+apm install Azure/azure-functions-skills/.github/plugins/azure-functions-skills/skills/azure-functions-deploy#34e17220ff073b29a0be5bd541f32d287118165f --target copilot
+apm install Azure/azure-functions-skills/.github/plugins/azure-functions-skills/skills/azure-functions-doctor#34e17220ff073b29a0be5bd541f32d287118165f --target copilot
+apm install Azure/azure-functions-skills/.github/plugins/azure-functions-skills/skills/azure-functions-best-practices#34e17220ff073b29a0be5bd541f32d287118165f --target copilot
+apm install Azure/azure-functions-skills/.github/plugins/azure-functions-skills/skills/azure-functions-inventory#34e17220ff073b29a0be5bd541f32d287118165f --target copilot
+apm install Azure/azure-functions-skills/.github/plugins/azure-functions-skills/skills/azure-functions-health-status#34e17220ff073b29a0be5bd541f32d287118165f --target copilot
+apm install Azure/azure-functions-skills/.github/plugins/azure-functions-skills/skills/azure-functions-diagnostics#34e17220ff073b29a0be5bd541f32d287118165f --target copilot</code></pre>
       <table>
         <thead>
           <tr><th>Pack</th><th>Ajoute</th><th>À utiliser lorsque</th></tr>
@@ -1515,6 +1530,8 @@ apm install dotnet/skills/plugins/dotnet/skills/msbuild#2877c712edc20643b72f64e2
           <tr><td data-release-change="20261008-foundry-agentic-pack"><code>foundry</code></td><td>architect, azure-architect, deployer, prompt-engineer, security, rai, observability, cost-manager, data-scientist</td><td>Planification, revue indépendante et déploiement contrôlé d'un projet Microsoft Foundry avec un blueprint en sept blocs, des preuves de source et une vérification SDK/API ; réutilise les rôles existants, dont data-scientist pour Foundry IQ</td></tr>
           <tr><td><code>fabric</code></td><td>data-scientist</td><td>Entrepôt Fabric, Eventhouse, Spark ou Dataflow au-delà de l'introduction Lakehouse. Activation explicite ; réutilise <code>data-scientist</code> et n'ajoute aucun rôle. Les commandes d'installation restent dans le catalogue. Rien n'est installé automatiquement.</td></tr>
           <tr><td><code>dotnet</code></td><td>modernizer, tester, performance, developer</td><td>Le projet repose sur .NET &mdash; mises à niveau de SDK et de framework cible, gestion centralisée des paquets NuGet, migration du runner VSTest vers MTP, revue des tests .NET et des changements cassants, planification des performances sur les chemins critiques et BenchmarkDotNet, ou implémentation EF Core, ASP.NET Core Web API, Blazor, C# et MSBuild. Activation explicite ; réutilise <code>modernizer</code>, <code>tester</code>, <code>performance</code> et <code>developer</code> sans ajouter de rôle.</td></tr>
+          <tr><td><code>aks</code></td><td>azure-architect, developer, modernizer, azure-diagnose, cost-manager</td><td>Le projet s'exécute sur Azure Kubernetes Service (AKS) &mdash; conception de cluster Day-0, conteneurisation d'applications et manifestes conformes aux Deployment Safeguards, préparation à AKS Automatic, diagnostic Day-2 d'incidents de cluster ou GPU, ou optimisation des coûts AKS orientée Kubernetes. Activation explicite ; réutilise <code>azure-architect</code>, <code>developer</code>, <code>modernizer</code>, <code>azure-diagnose</code> et <code>cost-manager</code> sans ajouter de rôle.</td></tr>
+          <tr><td><code>azure-functions</code></td><td>developer, deployer, tester, azure-diagnose, modernizer</td><td>Le projet repose sur Azure Functions &mdash; création de projets v4 et de déclencheurs, vérification contrôlée de déploiement Functions, audit d'espace de travail local et de bonnes pratiques, inventaire/santé/diagnostic de Function App, migration vers le worker isolé ou Hosted Skills. Activation explicite ; réutilise <code>developer</code>, <code>deployer</code>, <code>tester</code>, <code>azure-diagnose</code> et <code>modernizer</code> sans ajouter de rôle.</td></tr>
         </tbody>
       </table>
       <p>
@@ -1919,6 +1936,151 @@ apm install dotnet/skills/plugins/dotnet-experimental/skills/exp-mock-usage-anal
           </tbody>
         </table>
       </section>
+      <section data-release-change="20261113-aks-and-azure-functions-packs">
+        <h3 id="aks-setup">Configurer AKS avec l'aide de Squad</h3>
+        <p>
+          Ouvrez votre projet dans l'hôte où Squad est installé et envoyez cette demande. Appliquer
+          <code>aks</code> ajoute les consignes AKS et les rôles spécialistes manquants de la
+          distribution existante ; cela n'installe jamais <code>az</code>, <code>kubectl</code>,
+          <code>jq</code>, d'identifiants de cluster, de hooks de télémétrie ni de serveurs MCP.
+        </p>
+        <pre><code>/squad request="Set up the AKS pack. Explain what will be installed and ask before installing." pack=aks</code></pre>
+        <ol>
+          <li>
+            <strong>Choisissez le nécessaire.</strong> Squad liste les sept compétences AKS
+            officielles issues de
+            <a href="https://github.com/microsoft/azure-skills">microsoft/azure-skills</a> :
+            conception de cluster Day-0 (<code>azure-kubernetes</code>), conteneurisation
+            d'applications et manifestes Deployment Safeguards
+            (<code>azure-kubernetes-app-deploy</code>), préparation à AKS Automatic
+            (<code>azure-kubernetes-automatic-readiness</code>), dépannage Day-2 de cluster
+            (<code>aks-troubleshooting</code>), recherche de signatures d'erreur exactes
+            (<code>aks-known-issues</code>), diagnostic d'inférence GPU et KAITO
+            (<code>aks-gpu-inference</code>) et analyse des coûts orientée Kubernetes
+            (<code>aks-cost-optimization</code>). Installez les sept, choisissez un sous-ensemble ou
+            continuez sans elles.
+          </li>
+          <li>
+            <strong>Approuvez uniquement les dossiers de compétences.</strong> Squad exécute
+            <code>Install-SquadPackResources.ps1</code> pour vos choix approuvés et exige un reçu
+            <code>PASS</code> plutôt que <code>PLANNED</code>. Installez
+            <code>azure-kubernetes-app-deploy</code> et
+            <code>azure-kubernetes-automatic-readiness</code> avant <code>azure-kubernetes</code>
+            afin que chaque sous-compétence dispose de son propre dossier racine dans
+            <code>.agents/skills/</code> plutôt que d'une simple copie imbriquée.
+          </li>
+          <li>
+            <strong>Rechargez, vérifiez les fichiers inclus et gardez les clusters en lecture seule.</strong>
+            Rechargez l'hôte, relancez le contrôle préalable AKS pour enregistrer chaque compétence
+            comme <code>available</code> ou <code>declined</code>, et vérifiez les fichiers inclus
+            tels que <code>.agents/skills/aks-troubleshooting/references/symptom-map.md</code>. Les
+            chartes de conception, préparation, diagnostic et coût restent en lecture seule ; le
+            déploiement en direct reste derrière <code>deployer</code>.
+          </li>
+        </ol>
+        <h4>Solution manuelle et copie de référence AKS facultative</h4>
+        <p>
+          Si Squad ne peut pas exécuter l'installateur, vérifiez que Git et APM sont disponibles
+          (voir le <a href="getting-started.html">guide de démarrage</a> et la
+          <a href="https://learn.microsoft.com/azure/aks/">documentation AKS</a>) et exécutez les
+          sept commandes de dossiers AKS épinglées du bloc ci-dessus sans ajouter
+          <code>/SKILL.md</code>. Pour une copie source hors ligne en lecture seule sans activer de
+          hooks ni de configuration MCP, exécutez les commandes ci-dessous lorsque le dossier cible
+          n'existe pas.
+        </p>
+        <pre><code>git clone --config core.longpaths=true --filter=blob:none --no-checkout https://github.com/microsoft/azure-skills.git apm_modules/.squad-pack-support/azure-skills-968f7bf
+git -C apm_modules/.squad-pack-support/azure-skills-968f7bf checkout --detach 968f7bfaa01672e782dae2c6bab4fb9505ae047a
+git -C apm_modules/.squad-pack-support/azure-skills-968f7bf rev-parse HEAD</code></pre>
+        <h4>Si la configuration s'arrête</h4>
+        <table>
+          <thead><tr><th>Ce que vous voyez</th><th>Que faire</th></tr></thead>
+          <tbody>
+            <tr><td>Sous-compétence imbriquée uniquement sous <code>.agents/skills/azure-kubernetes/</code></td><td>Exécutez l'installation explicite du dossier <code>azure-kubernetes-app-deploy</code> ou <code>azure-kubernetes-automatic-readiness</code>, puis rechargez l'hôte.</td></tr>
+            <tr><td>Installé sur disque, mais absent de la liste de l'hôte</td><td>Rechargez l'hôte, rouvrez le même projet et relancez le contrôle préalable AKS avant de marquer la compétence disponible.</td></tr>
+            <tr><td>CLI du cluster ou contexte kubeconfig indisponible</td><td>Fournissez les manifestes ou journaux expurgés pour une analyse hors ligne, ou authentifiez vous-même <code>az</code> et <code>kubectl</code> ; les chartes de diagnostic n'élèvent jamais leurs droits et ne capturent pas de paquets réseau.</td></tr>
+          </tbody>
+        </table>
+      </section>
+      <section data-release-change="20261113-aks-and-azure-functions-packs">
+        <h3 id="azure-functions-setup">Configurer Azure Functions avec l'aide de Squad</h3>
+        <p>
+          Ouvrez votre projet dans l'hôte où Squad est installé et envoyez cette demande. Appliquer
+          <code>azure-functions</code> ajoute les consignes Azure Functions et les rôles
+          spécialistes manquants de la distribution existante ; cela n'installe jamais Azure
+          Functions Core Tools (<code>func</code>), <code>az</code>, <code>azd</code>, de hooks de
+          télémétrie ni de serveurs MCP.
+        </p>
+        <pre><code>/squad request="Set up the Azure Functions pack. Explain what will be installed, ask before installing, and leave the isolated-worker update and Hosted Skills preview skills out unless I approve them." pack=azure-functions</code></pre>
+        <ol>
+          <li>
+            <strong>Choisissez d'abord les compétences principales.</strong> Squad liste huit
+            compétences principales issues de
+            <a href="https://github.com/Azure/azure-functions-skills">Azure/azure-functions-skills</a> :
+            <code>azure-functions-common</code>, <code>azure-functions-create</code>,
+            <code>azure-functions-deploy</code>, <code>azure-functions-doctor</code>,
+            <code>azure-functions-best-practices</code>, <code>azure-functions-inventory</code>,
+            <code>azure-functions-health-status</code> et
+            <code>azure-functions-diagnostics</code>. Gardez <code>azure-functions-common</code>
+            sélectionné dès que vous installez des compétences de revue ou de diagnostic afin que
+            les références partagées de langages et de déclencheurs soient résolues.
+          </li>
+          <li>
+            <strong>Approuvez les dossiers de compétences, rechargez et vérifiez.</strong> Squad
+            exécute <code>Install-SquadPackResources.ps1</code>, exige un reçu <code>PASS</code>,
+            s'arrête pour un rechargement de l'hôte, relance le contrôle préalable pour obtenir une
+            décision explicite <code>available</code> ou <code>declined</code> et vérifie les
+            fichiers inclus sans exécuter <code>azure-functions-setup</code> ni
+            <code>telemetry.mjs</code>.
+          </li>
+          <li>
+            <strong>Préservez la lecture seule et les garde-fous de déploiement.</strong>
+            <code>tester</code>, <code>azure-diagnose</code> et <code>modernizer</code> restent en
+            lecture seule avec expurgation des valeurs de paramètres, tandis que
+            <code>deployer</code> n'utilise <code>azure-functions-deploy</code> que pour le contexte
+            de vérification Functions au sein de son essai à blanc OIDC et de l'Impactful-Action
+            Gate.
+          </li>
+        </ol>
+        <h4>Solution manuelle et copie de référence Azure Functions facultative</h4>
+        <p>
+          Si Squad ne peut pas exécuter l'installateur, vérifiez que Git et APM sont disponibles
+          (voir le <a href="getting-started.html">guide de démarrage</a> et le
+          <a href="https://learn.microsoft.com/azure/azure-functions/functions-run-local">guide Azure Functions Core Tools</a>)
+          et exécutez les huit commandes Azure Functions épinglées du bloc ci-dessus sans ajouter
+          <code>/SKILL.md</code>. Pour une copie source hors ligne en lecture seule, exécutez les
+          commandes ci-dessous lorsque le dossier cible n'existe pas.
+        </p>
+        <pre><code>git clone --config core.longpaths=true --filter=blob:none --no-checkout https://github.com/Azure/azure-functions-skills.git apm_modules/.squad-pack-support/azure-functions-skills-34e1722
+git -C apm_modules/.squad-pack-support/azure-functions-skills-34e1722 checkout --detach 34e17220ff073b29a0be5bd541f32d287118165f
+git -C apm_modules/.squad-pack-support/azure-functions-skills-34e1722 rev-parse HEAD</code></pre>
+        <h4>Compétences facultatives en préversion pour le worker isolé et Hosted Skills</h4>
+        <p>
+          Deux compétences en préversion issues de <code>0.0.7-preview</code> peuvent être
+          approuvées séparément : <code>azure-functions-update</code> (ébauche de planification de
+          migration C# in-process vers le worker isolé .NET) et
+          <code>azure-functions-hosted-skills</code> (rédaction locale sur
+          <code>azurefunctions-agents-runtime</code>). Squad n'installe que leurs dossiers épinglés
+          et ne provisionne jamais de Connector Namespaces ni n'exécute <code>azd up</code> sans
+          approbation.
+        </p>
+        <pre><code>apm install Azure/azure-functions-skills/.github/plugins/azure-functions-skills/skills/azure-functions-update#34e17220ff073b29a0be5bd541f32d287118165f --target copilot
+apm install Azure/azure-functions-skills/.github/plugins/azure-functions-skills/skills/azure-functions-hosted-skills#34e17220ff073b29a0be5bd541f32d287118165f --target copilot</code></pre>
+        <p>
+          Après rechargement, Squad vérifie
+          <code>.agents/skills/azure-functions-update/references/dotnet-isolated.md</code> et
+          <code>.agents/skills/azure-functions-hosted-skills/references/agent-authoring.md</code>
+          avant de sélectionner l'un de ces workflows en préversion.
+        </p>
+        <h4>Si la configuration s'arrête</h4>
+        <table>
+          <thead><tr><th>Ce que vous voyez</th><th>Que faire</th></tr></thead>
+          <tbody>
+            <tr><td>Référence partagée de langage ou de déclencheur absente</td><td>Installez <code>azure-functions-common</code> aux côtés de la compétence de revue ou de diagnostic, rechargez l'hôte et relancez le contrôle préalable.</td></tr>
+            <tr><td>Installé sur disque, mais absent de la liste de l'hôte</td><td>Rechargez l'hôte, rouvrez le même projet et relancez le contrôle préalable Azure Functions avant de marquer la ressource disponible.</td></tr>
+            <tr><td>Une étape de déploiement demande <code>azure@azure-skills</code> ou un consentement Connector</td><td>Gardez Squad Deployer sur son propre essai à blanc OIDC et l'Impactful-Action Gate ; traitez manuellement hors de Squad l'installation d'un plugin complet ou le consentement Connector Namespace.</td></tr>
+          </tbody>
+        </table>
+      </section>
       <p>
         <code>aws-architect</code> conçoit les charges de travail AWS &mdash; services à retenir, organisation des comptes et
         de la zone d'atterrissage, et code CDK, SAM ou CloudFormation pour les construire &mdash; en s'appuyant
@@ -2087,6 +2249,8 @@ apm install microsoft/skills-for-fabric/skills/sqldw-cli --target copilot</code>
           <tr><td>Planification d'un assistant de support Microsoft Foundry</td><td><code>profile=azure pack=foundry</code></td></tr>
           <tr><td>Entrepôt Fabric ou Eventhouse au-delà de l'introduction Lakehouse</td><td><code>profile=azure pack=fabric</code></td></tr>
           <tr><td>Mettre à niveau et optimiser un service ASP.NET Core et EF Core</td><td><code>profile=modernization pack=dotnet</code></td></tr>
+          <tr><td>Exploiter et dimensionner un cluster AKS</td><td><code>profile=operations pack=aks</code></td></tr>
+          <tr><td>Développer et diagnostiquer une application Azure Functions</td><td><code>profile=azure pack=azure-functions</code></td></tr>
           <tr><td>Astreinte pour une charge de travail AWS en service</td><td><code>profile=operations pack=aws</code></td></tr>
           <tr><td>Agent M365 Copilot traitant des données personnelles</td><td><code>profile=security pack=m365-copilot</code></td></tr>
           <tr><td>Solution Power Platform dont l'interface est un agent M365 Copilot</td><td><code>profile=default pack=power-platform,m365-copilot</code></td></tr>

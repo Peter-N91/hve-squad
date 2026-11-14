@@ -2207,6 +2207,8 @@ $(Format-WatchSelectionMarkdown)
         $catalog.PackSkills['foundry'] | Should -HaveCount 6
         $catalog.PackSkills['fabric'] | Should -HaveCount 8
         $catalog.PackSkills['dotnet'] | Should -HaveCount 20
+        $catalog.PackSkills['aks'] | Should -HaveCount 7
+        $catalog.PackSkills['azure-functions'] | Should -HaveCount 10
         $cases = @(
             @{ Name = 'default'; Packs = @(); Installed = @(); Roles = @($catalog.Profiles['default']); Ok = $true }
             @{ Name = 'security'; Packs = @(); Installed = @(); Roles = @($catalog.Profiles['security']); Ok = $true }
@@ -2219,6 +2221,12 @@ $(Format-WatchSelectionMarkdown)
             @{ Name = 'default'; Packs = @('dotnet'); Installed = @('dotnet'); Skills = @(); Roles = @($catalog.Profiles['default'] + $catalog.Packs['dotnet'] | Select-Object -Unique); Ok = $false }
             @{ Name = 'default'; Packs = @('dotnet'); Installed = @('dotnet'); Skills = @($catalog.PackSkills['dotnet'] | Where-Object { $_ -ne 'exp-mock-usage-analysis' }); Roles = @($catalog.Profiles['default'] + $catalog.Packs['dotnet'] | Select-Object -Unique); Ok = $false }
             @{ Name = 'default'; Packs = @('dotnet'); Installed = @('dotnet'); Skills = @($catalog.PackSkills['dotnet']); Roles = @($catalog.Profiles['default'] + $catalog.Packs['dotnet'] | Select-Object -Unique); Ok = $true }
+            @{ Name = 'default'; Packs = @('aks'); Installed = @('aks'); Skills = @(); Roles = @($catalog.Profiles['default'] + $catalog.Packs['aks'] | Select-Object -Unique); Ok = $false }
+            @{ Name = 'default'; Packs = @('aks'); Installed = @('aks'); Skills = @($catalog.PackSkills['aks'] | Where-Object { $_ -ne 'aks-troubleshooting' }); Roles = @($catalog.Profiles['default'] + $catalog.Packs['aks'] | Select-Object -Unique); Ok = $false }
+            @{ Name = 'default'; Packs = @('aks'); Installed = @('aks'); Skills = @($catalog.PackSkills['aks']); Roles = @($catalog.Profiles['default'] + $catalog.Packs['aks'] | Select-Object -Unique); Ok = $true }
+            @{ Name = 'default'; Packs = @('azure-functions'); Installed = @('azure-functions'); Skills = @(); Roles = @($catalog.Profiles['default'] + $catalog.Packs['azure-functions'] | Select-Object -Unique); Ok = $false }
+            @{ Name = 'default'; Packs = @('azure-functions'); Installed = @('azure-functions'); Skills = @($catalog.PackSkills['azure-functions'] | Where-Object { $_ -ne 'azure-functions-update' }); Roles = @($catalog.Profiles['default'] + $catalog.Packs['azure-functions'] | Select-Object -Unique); Ok = $false }
+            @{ Name = 'default'; Packs = @('azure-functions'); Installed = @('azure-functions'); Skills = @($catalog.PackSkills['azure-functions']); Roles = @($catalog.Profiles['default'] + $catalog.Packs['azure-functions'] | Select-Object -Unique); Ok = $true }
             @{ Name = 'default'; Packs = @('foundry'); Installed = @('foundry'); Skills = @(); Roles = @($catalog.Profiles['default'] + $catalog.Packs['foundry']); Ok = $false }
             @{ Name = 'default'; Packs = @('foundry'); Installed = @('foundry'); Skills = @($catalog.PackSkills['foundry']); Roles = @($catalog.Profiles['default'] + $catalog.Packs['foundry']); Ok = $true }
             @{ Name = 'security'; Packs = @(); Installed = @(); Roles = @($catalog.Profiles['security'] | Where-Object { $_ -ne 'privacy' }); Ok = $false }
@@ -2244,6 +2252,14 @@ $(Format-WatchSelectionMarkdown)
             elseif (-not $case.Ok -and $case.Packs -contains 'dotnet') {
                 $resolved.Ok | Should -BeFalse
                 $resolved.Reason | Should -Match '^pack-skill-not-visible:dotnet:'
+            }
+            elseif (-not $case.Ok -and $case.Packs -contains 'aks') {
+                $resolved.Ok | Should -BeFalse
+                $resolved.Reason | Should -Match '^pack-skill-not-visible:aks:'
+            }
+            elseif (-not $case.Ok -and $case.Packs -contains 'azure-functions') {
+                $resolved.Ok | Should -BeFalse
+                $resolved.Reason | Should -Match '^pack-skill-not-visible:azure-functions:'
             }
             elseif (-not $case.Ok -and $case.Packs -contains 'foundry') {
                 $resolved.Ok | Should -BeFalse
