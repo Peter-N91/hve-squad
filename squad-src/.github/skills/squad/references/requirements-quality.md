@@ -66,12 +66,14 @@ continuing the batch. Persist the actual handoff payload, then separately run
 `Test-SquadTurnCompletion.ps1` with that `ProofPath` and the receipt's `ExpectedTurn`;
 missing arguments or a failed check block the next dispatch.
 The closing tester needs every required reviewer's verified history entry, not
-only its returned response or the first successful receipt.
-It loads the actual canonical review references and reads the complete required
-drafts, captures and state. It verifies each claimed fix against current evidence;
+only its returned response or the first successful receipt; the coordinator
+verifies those history/ledger receipts via `Test-SquadTurnCompletion.ps1` before
+tester dispatch rather than asking the closing tester to manually audit `.copilot-tracking/squad/history/`.
+The closing tester loads the actual canonical review references and reads the complete required
+drafts (reading one file per hash-verified byte-identical draft/copy pair via `view` with explicit `view_range` slices rather than shell `Get-Content` dumps), captures and builder state before writing its review record. It verifies each claimed fix against current evidence;
 an old domain verdict or an author disposition alone is not that verification.
-Return the charter's canonical closing verdict, not `Conditional`; unfinished
-required reads, unresolved substantive defects and blocked gates remain explicit.
+Return the charter's canonical closing verdict, not `Conditional`; finish any remaining readable range before recording the verdict rather than downgrading a defect-free review to `Fail` for an uncompleted read, while keeping unfinished
+unavailable reads, unresolved substantive defects and blocked gates explicit.
 
 ## Author-return barrier
 

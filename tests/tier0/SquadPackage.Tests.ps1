@@ -346,7 +346,11 @@ Describe 'Requirements document quality source contracts (RQ-01..15)' -Tag 'Requ
         $guide | Should -Match 'post-disposition drafts'
         $guide | Should -Match 'immutable pre-review snapshot'
         $guide | Should -Match 'reconcile.+lead.+before.+author'
+        $guide | Should -Match 'hash-verified byte-identical draft/copy pair via `view` with explicit `view_range`'
+        $guide | Should -Match 'rather than asking the closing tester to manually audit `\.copilot-tracking/squad/history/`'
         $reviewer | Should -Match 'truncated.+explicit ranges'
+        $reviewer | Should -Match 'read each identical draft/copy pair once'
+        $reviewer | Should -Match 'Never leave a readable required document only partially read and then downgrade a defect-free review to `Verdict: Fail`'
         $reviewer | Should -Match 'required promotion.+blocked'
         $reviewer | Should -Match 'Preserve real findings, unavailable required runtime evidence and failed canonical gates'
     }
