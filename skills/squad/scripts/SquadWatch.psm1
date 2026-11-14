@@ -1,4 +1,5 @@
-# Copyright (c) 2026 Microsoft Corporation. All rights reserved.
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT license.
 # SPDX-License-Identifier: MIT
 
 #Requires -Version 7.4
@@ -2116,6 +2117,7 @@ Export-ModuleMember -Function @(
     'ConvertTo-SquadWatchInertReview'
     'Add-SquadWatchForcedPublicationEvidence'
     'Assert-SquadWatchTrustedCheckout'
+    'Resolve-SquadWatchSkillRoot'
     'Add-SquadWatchTrustedExclude'
     'Get-SquadWatchProfileCatalog'
     'Resolve-SquadWatchCanonicalRoster'

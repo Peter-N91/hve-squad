@@ -4,6 +4,10 @@ description: "Creates a standalone external agent or multi-agent orchestrator, o
 user-invocable: true
 agents: []
 ---
+<!--
+Copyright (c) Microsoft Corporation.
+Licensed under the MIT license.
+-->
 
 # Squad External Agent Builder
 

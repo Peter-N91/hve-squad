@@ -1,8 +1,8 @@
 # hve-squad plugin
 
 This generated branch contains the installable **hve-squad** GitHub Copilot
-plugin built from `Peter-N91/hve-squad@v0.20.0-pre`. It bundles the HVE Core
-plugin components from commit `17072823c75d6e8cdf288d8ed4371f555dcd09bb` in the same plugin root.
+plugin built from `Peter-N91/hve-squad@v0.21.0-pre`. It bundles the HVE Core
+plugin components from commit `0e5623a16e06c5b1353bbf77ad4cba49db4c28b1` in the same plugin root.
 
 The plugin contains no MCP server configuration. Install and operate
 `hve-squad-mcp` separately when an MCP host needs the outbound Squad tools.

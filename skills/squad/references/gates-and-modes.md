@@ -7,6 +7,10 @@ metadata:
   spec_version: "1.1"
   last_updated: "2026-08-19"
 ---
+<!--
+Copyright (c) Microsoft Corporation.
+Licensed under the MIT license.
+-->
 
 # Squad Gates and Modes
 
@@ -54,7 +58,7 @@ The council is the operator's pre-implementation cross-check. The coordinator tr
 
 The Implementation Gate is what makes the squad a methodology instead of a router. It holds in **every** mode — interactive, autonomous, and autopilot — and on every profile, because the methodology spine (`researcher`, `lead`, `developer`, `tester`) is seeded into every roster. The full protocol lives in `skills/squad/references/rules/squad-routing.md`; the operator's view is:
 
-1. The gate fires before dispatching any role that **produces the turn's substantive output** — implementation, a build, a deploy, a merge, or a deliverable owned by a deliverable-producing role (`analyst`, `product-owner`, `designer`, `experimenter`, `presenter`, `technical-writer`, `data-scientist`). A BRD, a roadmap, a journey map, an experiment plan, and a deck are outputs of the methodology, not shortcuts around it.
+1. The gate fires before dispatching any role that **produces the turn's substantive output** — implementation, a build, a deploy, a merge, or a deliverable owned by a deliverable-producing role (`analyst`, `product-owner`, `designer`, `experimenter`, `technical-writer`, `data-scientist`). A BRD, a roadmap, a journey map, an experiment plan, and a deck are outputs of the methodology, not shortcuts around it.
 2. **Implementation may not begin cold.** Confirm all three on disk, by listing the directory and reading the file, before dispatching the producing role:
    * a research artifact under the `researcher` Deliverable Root for the topic — if missing, dispatch `researcher` first;
    * a plan artifact under the `lead` Deliverable Root for the topic — if missing, dispatch `lead` first;

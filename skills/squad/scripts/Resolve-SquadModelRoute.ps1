@@ -1,5 +1,6 @@
 #!/usr/bin/env pwsh
-# Copyright (c) 2026 Microsoft Corporation. All rights reserved.
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT license.
 # SPDX-License-Identifier: MIT
 #Requires -Version 7.0
 
@@ -195,7 +196,13 @@ function ConvertTo-CanonicalModelIdLocal {
         return ''
     }
     $id = ($Value.Trim().ToLowerInvariant() -replace '\s*\((?:copilot|github|anthropic|openai)\)\s*$', '' -replace '[\s_]+', '-')
-    if ($id -in @('hydrafusion', 'hydrafusion-balance', 'hydrafusion-efficiency')) {
+    if ($id -in @('fusion', 'copilot-fusion', 'fusion-standard', 'copilot-fusion-standard', 'hydrafusion-standard', 'hydrafusion-efficiency')) {
+        return 'fusion-standard'
+    }
+    if ($id -in @('hydrafusion', 'fusion-high', 'copilot-fusion-high', 'hydrafusion-high', 'hydrafusion-balance')) {
+        return 'hydrafusion'
+    }
+    if ($id -in @('hydrafusion-max', 'fusion-max', 'copilot-fusion-max')) {
         return 'hydrafusion-max'
     }
     return $id

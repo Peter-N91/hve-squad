@@ -4,6 +4,10 @@ description: "Writes planned work items into a live Azure DevOps, GitHub, or Jir
 user-invocable: false
 model: Claude Sonnet 5.5 (copilot)
 ---
+<!--
+Copyright (c) Microsoft Corporation.
+Licensed under the MIT license.
+-->
 
 # Squad Backlog Executor
 

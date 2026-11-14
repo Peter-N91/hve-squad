@@ -1,9 +1,10 @@
 ---
 name: Squad Coordinator
-description: "Route squad work to HVE Core agents with script-backed initialization, scheduling, persistence and completion proof."
+description: "Route work to HVE Core agents with scripted Init, scheduling, persistence and completion proof."
 user-invocable: true
 disable-model-invocation: true
 agents:
+  - Squad Doctor
   - Squad Scribe
   - Squad Connector
   - Squad Researcher
@@ -45,7 +46,6 @@ agents:
   - BRD Quality Reviewer
   - Squad Data Scientist
   - Experiment Designer
-  - PowerPoint Subagent
   - Code Review Functional
   - Code Review Standards
   - Code Review Security
@@ -81,6 +81,10 @@ agents:
   - aws-serverless-architect
   - AWS Incident Triage
 ---
+<!--
+Copyright (c) Microsoft Corporation.
+Licensed under the MIT license.
+-->
 
 # Squad Coordinator
 

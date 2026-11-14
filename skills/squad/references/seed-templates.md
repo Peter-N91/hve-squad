@@ -7,6 +7,10 @@ metadata:
   spec_version: "1.0"
   last_updated: "2026-10-24"
 ---
+<!--
+Copyright (c) Microsoft Corporation.
+Licensed under the MIT license.
+-->
 
 # Seed Templates
 
@@ -58,7 +62,6 @@ description: "Squad roster: roles and the deployed HVE Core agents that fill the
 | prompt-engineer | Sigma       | Squad Prompt Engineer        | Vally Test Author, HVE Artifact Tester                 | conformance stimuli → Vally Test Author; artifact conformance run → HVE Artifact Tester                 | runSubagent / task | default                 | .copilot-tracking/prompts/            |
 | analyst         | Omega       | PRD Builder                  | BRD Builder, Meeting Analyst                           | business requirements → BRD Builder; transcript-to-requirements → Meeting Analyst                       | runSubagent / task | default                 | .copilot-tracking/plans/              |
 | product-owner   | Alpha-2     | Functional Planner           | Issue Triage Agent                                     | single-issue triage → Issue Triage Agent                                                                | runSubagent / task | default                 | .copilot-tracking/plans/              |
-| presenter       | Tau         | PowerPoint Subagent          | —                                                      | —                                                                                                       | runSubagent / task | default                 | .copilot-tracking/ppt/<date>/<slug>/  |
 | technical-writer | Upsilon    | Squad Technical Writer       | —                                                      | —                                                                                                       | runSubagent / task | fast                    | docs/                                 |
 | experimenter    | Beta-2      | Experiment Designer          | —                                                      | —                                                                                                       | runSubagent / task | default                 | .copilot-tracking/plans/              |
 | data-scientist  | Gamma-2     | Squad Data Scientist         | —                                                      | —                                                                                                       | runSubagent / task | default                 | outputs/                              |
@@ -114,7 +117,6 @@ description: "Squad routing: request patterns mapped to roles, autonomy tiers, a
 | create work items in ADO, push backlog to Azure DevOps, create Jira issues, apply the handoff, execute handoff, sync work items to the tracker | backlog-executor | confirm | no |
 | GitLab merge request, GitLab pipeline, GitLab issue, open an MR | product-owner        | escalate      | no                |
 | experiment, hypothesis, validate assumption, MVE, riskiest assumption | experimenter        | confirm | yes         |
-| presentation, deck, slides, executive summary, pitch | presenter                    | confirm       | no                |
 | document, write up, summarize for stakeholders, readme | technical-writer           | confirm       | no                |
 | data profile, data dictionary, EDA, exploratory analysis, notebook, dashboard, dataset, Power BI, DAX, semantic model, star schema, report design, Fabric, Lakehouse, OneLake | data-scientist | confirm | no |
 | architecture, system design, components    | architect                    | auto          | yes               |
@@ -133,8 +135,8 @@ description: "Squad routing: request patterns mapped to roles, autonomy tiers, a
 | re-platform, rewrite, port to, rebuild in, cross-stack rewrite, Node to .NET, React to Angular, convert to another language | modernizer | confirm | no |
 | Power Platform, Power Apps, canvas app, model-driven app, Power Automate, cloud flow, Dataverse, Power Pages, Copilot Studio, DLP policy, Power Platform environment, solution ALM | pp-architect | confirm | yes |
 | custom connector, connector certification, apiDefinition.swagger.json, apiProperties.json, script.csx, paconn, MCP connector, Copilot Studio MCP, agentic protocol | pp-connector | confirm | no |
-| declarative agent, Microsoft 365 Copilot agent, M365 Copilot agent, agent manifest, TypeSpec agent, API plugin, conversation starter, agent capability, Agents Toolkit | m365-agent-architect | confirm | yes |
-| Microsoft Graph, Graph SDK, Graph permission scope, MCP-backed Copilot agent, agent tool import, M365 admin center, Copilot agent rollout, agent governance in M365 | m365-agent-integrator | confirm | no |
+| declarative agent, Microsoft 365 Copilot agent, M365 Copilot agent, agent manifest, Teams app manifest, M365 evaluation suite, TypeSpec agent, API plugin, conversation starter, agent capability, Agents Toolkit | m365-agent-architect | confirm | yes |
+| Microsoft Graph, Graph SDK, Graph permission scope, Agents SDK OpenTelemetry, Agents SDK provisioning, Copilot MCP widget server, MCP-backed Copilot agent, agent tool import, M365 admin center, Copilot agent rollout, agent governance in M365 | m365-agent-integrator | confirm | no |
 | GitHub Actions, workflow file, CI pipeline, pipeline hardening, pin actions to SHA, OIDC in CI, CI minutes, build cost, deployment environment, release train, rollout plan, rollback plan, Azure DevOps pipeline | release-engineer | confirm | no |
 | AWS, Lambda, S3, DynamoDB, EC2, ECS, EKS, Fargate, API Gateway, EventBridge, Step Functions, CloudFormation, AWS CDK, SAM, AWS landing zone, AWS Organizations, Control Tower, AWS Well-Architected | aws-architect | confirm | yes |
 | CloudWatch alarm, AWS incident, AWS outage, Lambda throttling, Logs Insights, X-Ray trace, AWS root cause | aws-diagnose | auto | yes |

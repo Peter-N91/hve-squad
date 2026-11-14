@@ -1,5 +1,9 @@
 <!-- Ported from squad-src/.github/instructions/squad/squad-floor.instructions.md by scripts/Build-SquadPlugin.ps1. Source of truth lives in hve-squad; do not hand-edit here. -->
 
+<!--
+Copyright (c) Microsoft Corporation.
+Licensed under the MIT license.
+-->
 
 # Squad Agent Floor
 

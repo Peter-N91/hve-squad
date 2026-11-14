@@ -1,14 +1,16 @@
 hve-squad
-Copyright (c) 2026 Peter-N91
+Copyright (c) Microsoft Corporation.
 
-This product is licensed under the MIT License (see the LICENSE file). The MIT
+This product is licensed under the MIT License (see LICENSE.TXT). The MIT
 License applies to the original work authored in this repository: the
 `squad-src/` tree, `docs/`, `scripts/`, and package metadata files.
 
 This product is a distribution and composition layer and depends on third-party
-software that retains its own licensing. It does not redistribute the source of
-those dependencies; they are declared in `apm.yml` and fetched at install time
-into `apm_modules/` (git-ignored).
+software that retains its own licensing. The plugin distribution bundles the
+pinned HVE Core content and upstream license notices. The APM fallback declares
+dependencies in `apm.yml` and fetches them at install time into `apm_modules/`
+(git-ignored). Documentation assets and adapted resources listed below are
+included in this repository.
 
 --------------------------------------------------------------------------------
 Third-party attributions
@@ -42,6 +44,71 @@ github/awesome-copilot
   third-party developers rather than by the collection's maintainers. Each
   referenced resource passes the roster's verification gate before it is
   declared, and re-verification is required whenever its pin moves.
+
+--------------------------------------------------------------------------------
+Included resources and documentation assets
+--------------------------------------------------------------------------------
+
+fredgis/sql-migration-advisor
+  https://github.com/fredgis/sql-migration-advisor
+  Copyright (c) Microsoft Corporation.
+  Licensed under the MIT License.
+  The adapted skill retains its upstream attribution in:
+  squad-src/.github/skills/sql-migration-advisor/SKILL.md
+  Upstream license: https://github.com/fredgis/sql-migration-advisor/blob/main/LICENSE
+
+  Permission is hereby granted, free of charge, to any person obtaining a copy
+  of this software and associated documentation files (the "Software"), to deal
+  in the Software without restriction, including without limitation the rights
+  to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+  copies of the Software, and to permit persons to whom the Software is
+  furnished to do so, subject to the following conditions:
+
+  The above copyright notice and this permission notice shall be included in all
+  copies or substantial portions of the Software.
+
+  THE SOFTWARE IS PROVIDED *AS IS*, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+  FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+  SOFTWARE
+
+Manrope, Source Sans 3, and JetBrains Mono fonts
+  Licensed under the SIL Open Font License, Version 1.1.
+  The documentation site requests font files from Google Fonts rather than
+  distributing local font binaries. Original copyright statements and complete
+  license terms are preserved in:
+  docs/assets/fonts/manrope-OFL.txt
+  docs/assets/fonts/sourcesans3-OFL.txt
+  docs/assets/fonts/jetbrainsmono-OFL.txt
+  These font licenses are not replaced by this project's MIT license.
+
+Mermaid 12.2.0
+  https://github.com/mermaid-js/mermaid
+  Copyright (c) 2014 - 2022 Knut Sveidqvist
+  Mermaid itself is licensed under the MIT License. Its browser distribution
+  also bundles dependencies with their own licenses, including MIT, Apache-2.0,
+  EPL-2.0, and MPL-2.0 OR Apache-2.0 licensed components. These are not relicensed
+  under this project's MIT license. The site preserves embedded bundle notices
+  and publishes Mermaid's license at assets/vendor/mermaid-LICENSE.txt.
+  Complete versioned dependency license, copyright and attribution texts are
+  published at assets/vendor/mermaid-THIRD-PARTY-NOTICES.txt. The accompanying
+  assets/vendor/mermaid-runtime-licenses.json records all 66 embedded dependency
+  identities, exact supplier license expressions, public provenance and hashes
+  binding the unchanged runtime, build-only source map and retained legal text.
+  These files are maintained under site/assets/vendor in this repository.
+  Alternative license terms are retained without choosing a branch. This
+  inventory is not legal clearance; human review of applicable license and
+  source-availability obligations remains pending.
+
+Pagefind 1.5.2
+  https://github.com/CloudCannon/pagefind
+  Copyright (c) Pagefind
+  Licensed under the MIT License.
+  The generated documentation site publishes the upstream license at
+  assets/vendor/pagefind-LICENSE.txt.
 
 --------------------------------------------------------------------------------
 Trademark notice
