@@ -28,22 +28,26 @@ name: Sync and Adapt
 #   6. Runs Tier 0 against the candidate manifest before anything reaches main.
 #   7. Records the pin move as a change fragment under .changes/unreleased/,
 #      exactly as a contributor would.
-#   8. Commits apm.yml and the fragment, then pushes to main.
-#
-# It no longer cuts a release. The fragment reaches testers within minutes as
-# part of the rolling pre-release (preview.yml) and reaches consumers when a
-# maintainer dispatches release-prep.yml.
+#   8. Pushes `chore/sync-hve-core` and opens or updates a pull request against
+#      `main` (never pushing directly to `main`). Merging that pull request lets
+#      `preview.yml` refresh the rolling preview within minutes, and the pin
+#      ships to consumers when a maintainer dispatches `release-prep.yml`.
 #
 # No local hve-core mirror involved — all content is referenced directly
 # from microsoft/hve-core at a pinned commit SHA.
 #
 # Required configuration
-#   Secret SYNC_DEPS_TOKEN — a PAT with Contents: read and write and Issues: read
-#     and write on this repository. It is used for the push and for raising the
-#     adaptation issue. Both need a PAT rather than the built-in GITHUB_TOKEN,
-#     because events authored by GITHUB_TOKEN do not trigger downstream workflows:
-#     the issue would never reach `squad-watch.yml`, and the push would never
-#     refresh the rolling preview.
+#   Environment `automation-governance` (`deployment: false`):
+#     Preferred (`microsoft/*` org governance): configure variable
+#       `AUTOMATION_APP_CLIENT_ID` and secret `AUTOMATION_APP_PRIVATE_KEY` for an
+#       org-owned GitHub App installed on this repository with Contents, Issues,
+#       and Pull requests read/write. Each run mints a 1-hour installation token
+#       via `actions/create-github-app-token` so downstream workflows (`pr-validation.yml`,
+#       `tier0-conformance.yml`, `squad-watch.yml`) trigger without any personal PAT
+#       or branch-protection bypass on `main`.
+#     Transitional fallback (pre-transfer): when `AUTOMATION_APP_CLIENT_ID` is
+#       unset, falls back to secret `SYNC_DEPS_TOKEN` (fine-grained PAT with
+#       Contents, Issues, and Pull requests read/write on this repository).
 #   Labels `squad/auto` and `squad/review` must exist (see squad-watch.yml).
 
 on:
@@ -61,10 +65,8 @@ on:
         type: boolean
         default: false
 
-# Shared with release-prep.yml: both push a release commit to main, and two of
-# them racing means one loses to a non-fast-forward.
 concurrency:
-  group: release-main
+  group: sync-hve-core
   cancel-in-progress: false
 
 permissions:
@@ -74,10 +76,35 @@ jobs:
   sync-and-adapt:
     name: Sync hve-core SHA + adapt paths
     runs-on: ubuntu-latest
+    environment:
+      name: automation-governance
+      deployment: false
     permissions:
       contents: write
       issues: write
+      pull-requests: write
     steps:
+      - name: Generate GitHub App token
+        id: app_token
+        if: vars.AUTOMATION_APP_CLIENT_ID != '' && !inputs.dry_run
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          client-id: ${{ vars.AUTOMATION_APP_CLIENT_ID }}
+          private-key: ${{ secrets.AUTOMATION_APP_PRIVATE_KEY }}
+          permission-contents: write
+          permission-issues: write
+          permission-pull-requests: write
+
+      - name: Verify automation credential
+        if: ${{ !inputs.dry_run }}
+        env:
+          AUTOMATION_TOKEN: ${{ steps.app_token.outputs.token || secrets.SYNC_DEPS_TOKEN }}
+        run: |
+          if [[ -z "$AUTOMATION_TOKEN" ]]; then
+            echo "::error::No automation token available. Configure AUTOMATION_APP_CLIENT_ID + AUTOMATION_APP_PRIVATE_KEY in the 'automation-governance' environment (or transitional secret SYNC_DEPS_TOKEN)."
+            exit 1
+          fi
+
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -87,7 +114,7 @@ jobs:
       - name: Get latest hve-core commit SHA
         id: latest
         env:
-          GH_TOKEN: ${{ secrets.SYNC_DEPS_TOKEN }}
+          GH_TOKEN: ${{ steps.app_token.outputs.token || secrets.SYNC_DEPS_TOKEN || secrets.GITHUB_TOKEN }}
         run: |
           SHA=$(gh api 'repos/microsoft/hve-core/commits/main' --jq '.sha')
           SHORT_SHA=${SHA:0:7}
@@ -108,14 +135,28 @@ jobs:
       - name: Check if update is needed
         id: check
         env:
+          GH_TOKEN: ${{ steps.app_token.outputs.token || secrets.SYNC_DEPS_TOKEN || secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
           CURRENT: ${{ steps.current.outputs.sha }}
           LATEST: ${{ steps.latest.outputs.sha }}
           LATEST_SHORT: ${{ steps.latest.outputs.short_sha }}
           FORCE: ${{ inputs.force }}
+          DRY_RUN: ${{ inputs.dry_run }}
         run: |
           if [[ "$CURRENT" == "$LATEST" && "$FORCE" != "true" ]]; then
             echo "skip=true" >> "$GITHUB_OUTPUT"
             echo "apm.yml already pinned to ${LATEST_SHORT} — nothing to do."
+          elif [[ "$FORCE" != "true" && "$DRY_RUN" != "true" ]]; then
+            MARKER="<!-- hve-core-sync-pr:${LATEST} -->"
+            OPEN_PR=$(gh pr list --repo "$REPO" --head chore/sync-hve-core --state open --json number,body \
+              --jq ".[] | select((.body // \"\") | contains(\"$MARKER\")) | .number" | head -n1 || true)
+            if [[ -n "$OPEN_PR" ]]; then
+              echo "skip=true" >> "$GITHUB_OUTPUT"
+              echo "::notice::Sync PR #${OPEN_PR} is already open for hve-core@${LATEST_SHORT} — nothing to do."
+            else
+              echo "skip=false" >> "$GITHUB_OUTPUT"
+              echo "Update needed: ${CURRENT:-<none>} → ${LATEST_SHORT}"
+            fi
           else
             echo "skip=false" >> "$GITHUB_OUTPUT"
             echo "Update needed: ${CURRENT:-<none>} → ${LATEST_SHORT}"
@@ -159,12 +200,11 @@ jobs:
           TO_SHORT: ${{ steps.latest.outputs.short_sha }}
           FROM_SHA: ${{ steps.current.outputs.sha }}
         with:
-          # A PAT, not the built-in GITHUB_TOKEN. Events authored by GITHUB_TOKEN do
-          # not trigger other workflows, so labelling this issue with the default
-          # token would create the brief and then never fire `squad-watch.yml` — the
-          # handoff would fail silently and look like Watch Mode was simply ignoring
-          # the label. Same reason the push step below uses SYNC_DEPS_TOKEN.
-          github-token: ${{ secrets.SYNC_DEPS_TOKEN }}
+          # A GitHub App installation token (or transitional PAT), not the built-in
+          # GITHUB_TOKEN. Events authored by GITHUB_TOKEN do not trigger downstream
+          # workflows, so labelling this issue with the default token would never
+          # fire `squad-watch.yml`.
+          github-token: ${{ steps.app_token.outputs.token || secrets.SYNC_DEPS_TOKEN }}
           script: |
             const fs = require('fs');
             const { owner, repo } = context.repo;
@@ -396,25 +436,54 @@ jobs:
             -Title "sync hve-core $env:HVE_CORE_SHORT_SHA" `
             -Body $body
 
-      # ── Commit and push ───────────────────────────────────────────────────
-      - name: Commit and push
+      # ── Propose reviewed pull request ─────────────────────────────────────
+      - name: Propose sync pull request
         if: steps.check.outputs.skip != 'true' && steps.castguard.outputs.is_breaking == 'false' && inputs.dry_run != 'true'
         env:
-          GITHUB_TOKEN: ${{ secrets.SYNC_DEPS_TOKEN }}
+          GH_TOKEN: ${{ steps.app_token.outputs.token || secrets.SYNC_DEPS_TOKEN }}
+          REPO: ${{ github.repository }}
+          CURRENT_SHA: ${{ steps.current.outputs.sha }}
+          LATEST_SHA: ${{ steps.latest.outputs.sha }}
           LATEST_SHORT: ${{ steps.latest.outputs.short_sha }}
         run: |
+          BRANCH="chore/sync-hve-core"
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git remote set-url origin \
-            "https://x-access-token:${GITHUB_TOKEN}@github.com/${{ github.repository }}.git"
+            "https://x-access-token:${GH_TOKEN}@github.com/${REPO}.git"
+          git checkout -B "$BRANCH"
           git add apm.yml .changes/unreleased
           if ! git diff --cached --quiet; then
             # Deliberately not a `chore(release):` message: that prefix is how
-            # preview.yml recognises the release commit and skips it, and this
-            # commit must reach the preview so the pin move becomes installable.
-            git commit -m "chore(deps): sync hve-core to ${LATEST_SHORT}"
-            git push origin main
-            echo "::notice::Queued hve-core@${LATEST_SHORT} for the next release."
+            # preview.yml recognises the release commit and skips it, and merging
+            # this PR must reach the preview so the pin move becomes installable.
+            TITLE="chore(deps): sync hve-core to ${LATEST_SHORT}"
+            git commit -m "$TITLE"
+            git push --force origin "refs/heads/${BRANCH}"
+
+            BODY_FILE="$RUNNER_TEMP/sync-hve-core-pr-body.md"
+            cat > "$BODY_FILE" <<EOF
+          <!-- hve-core-sync-pr:${LATEST_SHA} -->
+
+          ## Summary
+
+          Automated mechanical dependency pin update from \`microsoft/hve-core@${CURRENT_SHA:0:7}\` to \`microsoft/hve-core@${LATEST_SHORT}\` (\`${LATEST_SHA}\`).
+
+          - **Cast delta verdict**: \`NON-BREAKING\` (\`Get-HveCoreCastDelta.ps1\`)
+          - **Candidate Tier 0 conformance**: **passed** before opening this PR
+
+          Merging queues this pin move under \`.changes/unreleased/\` so **Rolling Preview** refreshes within minutes.
+          EOF
+            sed -i 's/^          //' "$BODY_FILE"
+
+            EXISTING_PR=$(gh pr list --repo "$REPO" --head "$BRANCH" --base main --state open --json number --jq '.[0].number // empty')
+            if [[ -n "$EXISTING_PR" ]]; then
+              gh pr edit "$EXISTING_PR" --repo "$REPO" --title "$TITLE" --body-file "$BODY_FILE"
+              echo "::notice::Updated open sync PR #${EXISTING_PR} for hve-core@${LATEST_SHORT}."
+            else
+              PR_URL=$(gh pr create --repo "$REPO" --base main --head "$BRANCH" --title "$TITLE" --body-file "$BODY_FILE")
+              echo "::notice::Opened sync PR for hve-core@${LATEST_SHORT}: ${PR_URL}"
+            fi
           else
             echo "::notice::No changes after regeneration — nothing to commit."
           fi

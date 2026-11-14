@@ -3,7 +3,7 @@
 name: hve-squad
 version: 0.20.0
 description: APM package for hve-core and squad together
-author: Peter-N91
+author: Microsoft
 # Which agent platforms to deploy to.
 # Resolution order: --target flag > this field > auto-detect from filesystem.
 # Accepted values: copilot, claude, cursor, opencode, codex, gemini, windsurf, all

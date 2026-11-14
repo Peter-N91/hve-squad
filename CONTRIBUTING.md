@@ -187,11 +187,13 @@ retains its Pester XML report for seven days, so failures and slow cases can be
 inspected without another run.
 
 Local commands still run the complete selection by default. To reproduce one
-CI shard or run repository checks without downloading a package:
+CI shard, run repository checks without downloading a package, or audit
+first-party Microsoft MIT copyright headers directly:
 
 ```powershell
 ./tests/tier0/Invoke-Tier0Tests.ps1 -SourceRoot . -Shard Contracts
 ./tests/tier0/Invoke-Tier0Tests.ps1 -SourceRoot . -Scope Repository
+./scripts/Test-SourceHeaders.ps1
 ```
 
 The other shards are `Handoff`, `Lifecycle`, and `Coordinator`. Sharding changes
@@ -238,7 +240,13 @@ A release ships a **commit**, not a selection of fragments. The tag is cut from 
 
 That leaves two cases, and only the second one needs anything unusual.
 
-**The default branch is shippable.** Dispatch Release Prep. After the GitHub Release passes its gates, dispatch **Publish Plugin** with channel `stable`. Your fix goes out along with everything else pending, as one version. If a pending fragment asked for `minor`, that version is a minor — and it still contains your patch, so consumers get the fix. This is almost always the right answer, and the version number is not worth optimising.
+**The default branch is shippable.** Dispatch **Release Prep** and merge the
+resulting `chore/release-prep` pull request; merging dispatches `release.yml`,
+and after the GitHub Release passes its gates, dispatch **Publish Plugin** with
+channel `stable`. Your fix goes out along with everything else pending, as one
+version. If a pending fragment asked for `minor`, that version is a minor — and
+it still contains your patch, so consumers get the fix. This is almost always
+the right answer, and the version number is not worth optimising.
 
 **The default branch holds something that must not ship yet.** Then a release from it would carry that work out with your fix, so the fix has to come from somewhere that does not contain it: a hotfix branch cut off the last release tag.
 
@@ -250,7 +258,12 @@ apm run change            # Type: Fixed, Bump: patch
 git push -u origin hotfix/v0.14.1
 ```
 
-Dispatch **Release Prep** with `ref` set to `hotfix/v0.14.1`. It assembles the CHANGELOG from that branch's fragments only, bumps `apm.yml` to `0.14.1`, and cuts the tag from that branch. The rolling pre-release on the default branch is left alone, because the batch it describes is still pending.
+Dispatch **Release Prep** with `ref` set to `hotfix/v0.14.1` and merge the
+resulting `chore/release-prep-hotfix-v0-14-1` pull request into `hotfix/v0.14.1`.
+It assembles the CHANGELOG from that branch's fragments only, bumps `apm.yml` to
+`0.14.1`, and cuts the tag from that branch once merged. The rolling pre-release
+on the default branch is left alone, because the batch it describes is still
+pending.
 
 Then merge the hotfix branch back so the fix is not lost on the next release, and label that pull request `release-merge-back`. The label is what allows it to carry the `CHANGELOG.md` section and the version bump that Release Prep already wrote, both of which a normal pull request is rejected for touching.
 

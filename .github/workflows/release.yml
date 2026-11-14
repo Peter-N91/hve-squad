@@ -74,6 +74,9 @@ jobs:
       always() && needs.candidate.result == 'success' &&
       (needs.source_conformance.result == 'success' || needs.candidate.outputs.suite_present == 'false')
     runs-on: ubuntu-latest
+    environment:
+      name: automation-governance
+      deployment: false
     outputs:
       tag: ${{ steps.version.outputs.tag }}
       version: ${{ steps.version.outputs.version }}
@@ -82,6 +85,15 @@ jobs:
     permissions:
       contents: write
     steps:
+      - name: Generate GitHub App token
+        id: app_token
+        if: vars.AUTOMATION_APP_CLIENT_ID != ''
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          client-id: ${{ vars.AUTOMATION_APP_CLIENT_ID }}
+          private-key: ${{ secrets.AUTOMATION_APP_PRIVATE_KEY }}
+          permission-contents: write
+
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -89,11 +101,12 @@ jobs:
           fetch-depth: 0
           ref: ${{ needs.candidate.outputs.sha }}
 
-      # ── Manual dispatch only: bump apm.yml version if requested ─────────
+      # ── Manual dispatch only: verify or bump apm.yml version ─────────────
       - name: Bump apm.yml version (manual override)
         if: github.event_name == 'workflow_dispatch' && inputs.version != ''
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ steps.app_token.outputs.token || secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
           INPUT_VERSION: ${{ inputs.version }}
           REF: ${{ inputs.ref || 'main' }}
         run: |
@@ -106,12 +119,15 @@ jobs:
           CURRENT=$(grep '^version:' apm.yml | sed 's/version:[[:space:]]*//')
           if [[ "$CURRENT" == "$NEW_VER" ]]; then
             echo "::notice::apm.yml already at $NEW_VER — no commit needed."
+          elif [[ "$REF" == "main" ]]; then
+            echo "::error::apm.yml on main is at $CURRENT, not $NEW_VER. Run Release Prep first so the version bump lands on main through a reviewed pull request."
+            exit 1
           else
             sed -i "s/^version: .*/version: $NEW_VER/" apm.yml
             git config user.name  "github-actions[bot]"
             git config user.email "github-actions[bot]@users.noreply.github.com"
             git remote set-url origin \
-              "https://x-access-token:${GITHUB_TOKEN}@github.com/${{ github.repository }}.git"
+              "https://x-access-token:${GITHUB_TOKEN}@github.com/${REPO}.git"
             git add apm.yml
             git commit -m "chore(release): bump to $NEW_VER"
             git push origin "HEAD:${REF}"
@@ -151,14 +167,15 @@ jobs:
       - name: Pin squad self-references and create the tag
         if: steps.tag_check.outputs.exists == 'false'
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ steps.app_token.outputs.token || secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
           TAG: ${{ steps.version.outputs.tag }}
         run: |
           pwsh -File scripts/Set-SquadSelfRefPin.ps1 -ApmFile apm.yml -Ref "$TAG"
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git remote set-url origin \
-            "https://x-access-token:${GITHUB_TOKEN}@github.com/${{ github.repository }}.git"
+            "https://x-access-token:${GITHUB_TOKEN}@github.com/${REPO}.git"
           git add apm.yml
           git commit -m "chore(release): pin squad self-references to $TAG"
           git push origin "HEAD:refs/tags/$TAG"
@@ -189,10 +206,22 @@ jobs:
       always() && needs.tag.result == 'success' && needs.tag.outputs.exists == 'false' &&
       (needs.published_conformance.result == 'success' || needs.candidate.outputs.suite_present == 'false')
     runs-on: ubuntu-latest
+    environment:
+      name: automation-governance
+      deployment: false
     permissions:
       contents: write
       actions: write
     steps:
+      - name: Generate GitHub App token
+        id: app_token
+        if: vars.AUTOMATION_APP_CLIENT_ID != ''
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          client-id: ${{ vars.AUTOMATION_APP_CLIENT_ID }}
+          private-key: ${{ secrets.AUTOMATION_APP_PRIVATE_KEY }}
+          permission-contents: write
+
       - name: Checkout verified tag
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -217,7 +246,7 @@ jobs:
       - name: Create GitHub Release
         id: publish
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ steps.app_token.outputs.token || secrets.GITHUB_TOKEN }}
           TAG: ${{ needs.tag.outputs.tag }}
           VERSION: ${{ needs.tag.outputs.version }}
           DRAFT: ${{ inputs.draft }}

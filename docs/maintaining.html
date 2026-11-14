@@ -127,7 +127,7 @@ apm run install-sync</code></pre>
         <li><code>apm run sync-deps</code></li>
         <li><code>apm lock</code></li>
         <li><code>apm pack</code> (optional)</li>
-        <li><code>apm run release-prep</code> — or run the <strong>Release Prep</strong> workflow, which does the same thing and pushes.</li>
+        <li><code>apm run release-prep</code> — or run the <strong>Release Prep</strong> workflow, which opens a reviewed release pull request and triggers the tag/release once merged.</li>
       </ol>
 
       <h2>How dependency generation works</h2>
@@ -152,8 +152,8 @@ flowchart TD
     A["Cron 06:00 UTC<br/>sync-hve-core.yml"] --> B["Get-HveCoreCastDelta.ps1<br/>pinned SHA vs hve-core main"]
     B --> C{"Does squad-src still reference<br/>a removed or un-dispatched agent?"}
 
-    C -- "no (mechanical)" --> D["Bump pin + assemble release<br/>from .changes fragments + push"]
-    D --> E["release.yml<br/>tag + GitHub Release"]
+    C -- "no (mechanical)" --> D["Bump pin + change fragment<br/>propose sync PR"]
+    D --> E["Merge PR -> preview.yml<br/>rolling pre-release"]
 
     C -- "yes (breaking)" --> F["Open issue labeled squad/auto<br/>body = full adaptation brief"]
     F --> G["squad-watch.yml<br/>fires on the label"]
@@ -174,10 +174,11 @@ flowchart TD
 
       <h3>Path 1 &mdash; mechanical (no cast change)</h3>
       <p>
-        <code>sync-hve-core.yml</code> moves the pinned SHA and records the move as a change fragment,
-        exactly as a contributor would &mdash; so the pin move queues alongside whatever contributors
-        merged that day and ships with the next release someone cuts, instead of cutting a release of
-        its own every morning. It pushes and stops there. One addition to the older behavior: it runs
+        <code>sync-hve-core.yml</code> moves the pinned SHA, validates Tier 0 conformance, records the
+        move as a change fragment, and opens or updates a pull request on
+        <code>chore/sync-hve-core</code> &mdash; so the pin move is reviewed like any contribution,
+        queues alongside whatever merged that day, and ships with the next release someone cuts rather
+        than cutting a release of its own every morning. One addition to the older behavior: it runs
         the cast-delta script as a <strong>guard</strong> first. A SHA move cannot repoint a roster row,
         and shipping it anyway releases a squad whose roles resolve to nothing &mdash; which is exactly
         what happened in <code>0.10.11</code>.
@@ -303,17 +304,25 @@ flowchart TD
         ships.
       </p>
       <p>
-        <code>squad-watch.workflow.yml</code> remains a non-turnkey scaffold. Its broad write
-        permissions, checkout credentials, and <code>--allow-all-tools</code> are pre-existing
-        exposure. Trigger parity is not security parity. The live <code>squad-watch.yml</code> in this
-        repository is the split-job workflow. Copying the scaffold does not reproduce that boundary.
-        The repository checkout precedes the nested <code>.squad-trusted</code> checkout, so a later
-        root checkout does not delete the pinned helpers. Helpers are imported only after
-        <code>git show &lt;trustedBaseSha&gt;</code> verifies the verifier and the helper files,
-        including that <code>.squad-trusted</code> HEAD matches that SHA.
+        <code>squad-watch.workflow.yml</code> mirrors the live <code>squad-watch.yml</code> split-job
+        boundary: read-only <code>interpret</code> with <code>persist-credentials: false</code>, runtime
+        zero-write verification of <code>COPILOT_GITHUB_TOKEN</code> before <code>--allow-all-tools</code>,
+        and separate write jobs. The repository checkout precedes the nested <code>.squad-trusted</code>
+        checkout, so a later root checkout does not delete the pinned helpers. Helpers resolve across
+        <code>.agents/skills/squad</code>, <code>.github/skills/squad</code>, and
+        <code>squad-src/.github/skills/squad</code> (or <code>SQUAD_WATCH_SKILL_ROOT</code>) and are
+        imported only after <code>git show &lt;trustedBaseSha&gt;</code> verifies the verifier and the
+        helper files, including that <code>.squad-trusted</code> HEAD matches that SHA.
         Impactful-Action Gates and injection safety are unchanged. The template does not claim the
         live issue-to-PR mapping. When that mapping does not apply, the live workflow fails closed to
         <code>pr-&lt;N&gt;</code>.
+      </p>
+      <p>
+        In this repository's live <code>squad-watch.yml</code>, <code>interpret</code> additionally runs
+        Copilot inside <code>github/gh-aw-firewall</code> (<code>awf</code>) so
+        <code>COPILOT_GITHUB_TOKEN</code> stays in the isolated <code>api-proxy</code> sidecar outside the
+        agent container and Squid enforces outbound domain allowlisting, while both workflows scrub and
+        symlink-filter failure diagnostics before artifact upload.
       </p>
 
       <p>Run the delta check yourself at any time:</p>
@@ -323,10 +332,16 @@ flowchart TD
       <h3>Configuration required</h3>
       <ul>
         <li>
-          <strong>Secrets.</strong> <code>COPILOT_GITHUB_TOKEN</code> &mdash; a fine-grained PAT with the
-          <em>Copilot Requests</em> permission (the built-in Actions token cannot authenticate Copilot).
-          <code>SYNC_DEPS_TOKEN</code> &mdash; used to read <code>microsoft/hve-core</code> and push the
-          release commit.
+          <strong>Environments, credentials, and variables.</strong> Bind headless Copilot jobs to the
+          <code>copilot-headless</code> environment with secret <code>COPILOT_GITHUB_TOKEN</code> &mdash;
+          a dedicated fine-grained PAT carrying only the <em>Copilot Requests</em> permission (zero
+          repository write; the built-in Actions token cannot authenticate Copilot) &mdash; and set
+          repository variable <code>SQUAD_WATCH_ENABLED</code> to <code>true</code> once ready for
+          event-driven Watch triggers. Bind sync and release jobs to the
+          <code>automation-governance</code> environment with GitHub App variable
+          <code>AUTOMATION_APP_CLIENT_ID</code> and secret <code>AUTOMATION_APP_PRIVATE_KEY</code> via
+          <code>actions/create-github-app-token</code> (or transitional fine-grained PAT secret
+          <code>SYNC_DEPS_TOKEN</code> before organization transfer).
         </li>
         <li>
           <strong>Labels.</strong> Create <code>squad/auto</code> and <code>squad/review</code>. These are
@@ -338,15 +353,14 @@ flowchart TD
           <code>gh pr create</code> returns 403 and the run finishes with a branch but no PR.
         </li>
         <li>
-          <strong>Branch ruleset on <code>main</code>:</strong> requires a pull request, with the
-          repository-admin role as the only bypass actor. This is the third enforcement layer under
-          the Impactful-Action Gate, and the one most often left half-configured &mdash; a rule that
-          only forbids force pushes and deletions does <em>not</em> stop a direct push to
-          <code>main</code>, it limits the damage of one. The admin bypass is what separates the two
-          automations: <code>sync-hve-core.yml</code> pushes with a maintainer PAT and passes
-          straight through, while Watch Mode pushes as <code>github-actions[bot]</code>, which holds
-          no repository role and cannot reach <code>main</code> at all. Required approvals are set to
-          zero on purpose, so a solo maintainer is not locked out of merging their own pull request.
+          <strong>Branch ruleset on <code>main</code>:</strong> requires a pull request with no
+          personal-PAT bypass required for automation. This is the third enforcement layer under the
+          Impactful-Action Gate, and the one most often left half-configured &mdash; a rule that only
+          forbids force pushes and deletions does <em>not</em> stop a direct push to <code>main</code>,
+          it limits the damage of one. Because <code>sync-hve-core.yml</code>,
+          <code>release-prep.yml</code>, <code>sync-model-benchmarks.yml</code>, and Watch Mode
+          (<code>github-actions[bot]</code>) all open pull requests rather than pushing directly to
+          <code>main</code>, every change reaches <code>main</code> through pull-request checks.
         </li>
         <li>
           <strong>Model pin (already set).</strong> <code>squad-watch.yml</code> passes
@@ -609,8 +623,9 @@ git diff --check</code></pre>
         <li>Editing <code>CHANGELOG.md</code> in a pull request fails the check.</li>
         <li>Changing the <code>version:</code> line in <code>apm.yml</code> fails the check.</li>
         <li>
-          Moving the <code>microsoft/hve-core</code> pin fails the check, unless the branch is a Watch
-          Mode adaptation branch (<code>squad/issue-*</code>). Editing <code>dependencies:</code> is
+          Moving the <code>microsoft/hve-core</code> pin fails the check, unless the pull request is a
+          same-repository Watch Mode adaptation branch (<code>squad/issue-*</code>) or mechanical sync
+          branch (<code>chore/sync-hve-core</code>). Editing <code>dependencies:</code> is
           otherwise fine &mdash; a contributor adding a skill has to, via <code>apm run sync-deps</code>,
           which stays on the current pin by default. The check is the backstop for an explicit
           <code>-Ref main</code> that skips the cast-delta guard; its message names the SHA to pass
@@ -674,11 +689,12 @@ pwsh -File scripts/Invoke-ReleasePrep.ps1 -Version 1.0.0        # exact number, 
         <strong>Releases are cut by hand.</strong> Merging a pull request that carries a fragment
         pushes it to <code>.changes/unreleased/</code> on <code>main</code> and releases nothing.
         Nothing releases on a timer either. When the pending batch is ready, you dispatch
-        <strong>Release Prep</strong>, which ships it as one version: it resolves the level, prepends
+        <strong>Release Prep</strong>, which assembles one version: it resolves the level, prepends
         the CHANGELOG section with the consumer-install block and the link reference, writes
         <code>version:</code> into <code>apm.yml</code>, deletes the fragments it consumed, commits
-        <code>chore(release): X.Y.Z</code>, dispatches <code>release.yml</code> to cut the tag and the
-        GitHub Release, and retires the pre-release.
+        <code>chore(release): X.Y.Z</code> on <code>chore/release-prep</code>, and opens a reviewed
+        pull request; merging that pull request automatically dispatches <code>release.yml</code> to
+        cut the tag and the GitHub Release and retires the pre-release.
       </p>
       <p>
         <strong>Plugin publication is a second manual decision.</strong> Dispatch

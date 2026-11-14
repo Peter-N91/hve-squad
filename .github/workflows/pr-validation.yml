@@ -55,11 +55,64 @@ jobs:
           echo "Changed files:"
           cat /tmp/changed.txt
 
-      # Exempt only the hotfix merge-back, which carries a release that already
-      # happened on another branch: its CHANGELOG section and version bump were
-      # written by Release Prep, not by hand, and main needs both.
+      - name: Validate Release Prep pull request scope
+        if: >-
+          github.event.pull_request.head.repo.full_name == github.repository &&
+          (github.head_ref == 'chore/release-prep' || startsWith(github.head_ref, 'chore/release-prep-'))
+        env:
+          BASE_SHA: ${{ steps.diff.outputs.base_sha }}
+        run: |
+          # Release Prep PRs may only update CHANGELOG.md, bump version: in apm.yml,
+          # and delete consumed fragments under .changes/unreleased/. Reject any
+          # other path or non-version apm.yml edit so this branch prefix cannot carry
+          # unreviewed changes past the release-state checks below.
+          while IFS= read -r file; do
+            [[ -z "$file" ]] && continue
+            case "$file" in
+              CHANGELOG.md|apm.yml|.changes/unreleased/*.md) ;;
+              *)
+                echo "::error file=$file::Release Prep pull requests may only touch CHANGELOG.md, apm.yml, and .changes/unreleased/*.md (found '$file')."
+                exit 1
+                ;;
+            esac
+          done < /tmp/changed.txt
+          if git diff --name-status "$BASE_SHA" HEAD -- '.changes/unreleased/*.md' | grep -qvE '^D[[:space:]]'; then
+            echo "::error::Release Prep pull requests may only delete consumed fragments under .changes/unreleased/."
+            exit 1
+          fi
+          if git diff -U0 "$BASE_SHA" HEAD -- apm.yml | grep -E '^[+-]' | grep -vE '^(\+\+\+|---)|^[+-]version:'; then
+            echo "::error file=apm.yml::Release Prep pull requests may only update the version: line in apm.yml."
+            exit 1
+          fi
+
+      - name: Validate Sync and Adapt pull request scope
+        if: >-
+          github.event.pull_request.head.repo.full_name == github.repository &&
+          github.head_ref == 'chore/sync-hve-core'
+        env:
+          BASE_SHA: ${{ steps.diff.outputs.base_sha }}
+        run: |
+          while IFS= read -r file; do
+            [[ -z "$file" ]] && continue
+            case "$file" in
+              apm.yml|.changes/unreleased/*.md) ;;
+              *)
+                echo "::error file=$file::Sync and Adapt pull requests on chore/sync-hve-core may only touch apm.yml and .changes/unreleased/*.md (found '$file')."
+                exit 1
+                ;;
+            esac
+          done < /tmp/changed.txt
+
+      # Exempt only same-repository Release Prep PRs (scope-checked above) and the
+      # hotfix merge-back, which carries a release that already happened on another
+      # branch.
       - name: Reject edits to release state
-        if: ${{ !contains(github.event.pull_request.labels.*.name, 'release-merge-back') }}
+        if: >-
+          !contains(github.event.pull_request.labels.*.name, 'release-merge-back') &&
+          !(
+            github.event.pull_request.head.repo.full_name == github.repository &&
+            (github.head_ref == 'chore/release-prep' || startsWith(github.head_ref, 'chore/release-prep-'))
+          )
         env:
           BASE_SHA: ${{ steps.diff.outputs.base_sha }}
         run: |
@@ -79,7 +132,11 @@ jobs:
       # running `apm run sync-deps` with its default -Ref main — reaches main with no
       # check that the roster still resolves to agents the new revision ships.
       - name: Reject an unreviewed hve-core pin move
-        if: ${{ !startsWith(github.head_ref, 'squad/issue-') }}
+        if: >-
+          !(
+            github.event.pull_request.head.repo.full_name == github.repository &&
+            (startsWith(github.head_ref, 'squad/issue-') || github.head_ref == 'chore/sync-hve-core')
+          )
         env:
           BASE_SHA: ${{ steps.diff.outputs.base_sha }}
         run: |
@@ -92,7 +149,13 @@ jobs:
           fi
 
       - name: Require a change fragment
-        if: ${{ !contains(github.event.pull_request.labels.*.name, 'skip-changelog') && !contains(github.event.pull_request.labels.*.name, 'release-merge-back') }}
+        if: >-
+          !contains(github.event.pull_request.labels.*.name, 'skip-changelog') &&
+          !contains(github.event.pull_request.labels.*.name, 'release-merge-back') &&
+          !(
+            github.event.pull_request.head.repo.full_name == github.repository &&
+            (github.head_ref == 'chore/release-prep' || startsWith(github.head_ref, 'chore/release-prep-'))
+          )
         env:
           BASE_SHA: ${{ steps.diff.outputs.base_sha }}
         run: |
@@ -101,6 +164,10 @@ jobs:
             echo "::error::No change fragment found. Run 'apm run change' to create one under .changes/unreleased/, or apply the 'skip-changelog' label if this PR changes nothing a consumer would notice."
             exit 1
           fi
+
+      - name: Verify Microsoft copyright headers
+        shell: pwsh
+        run: ./scripts/Test-SourceHeaders.ps1
 
       - name: Validate pending fragments
         shell: pwsh
