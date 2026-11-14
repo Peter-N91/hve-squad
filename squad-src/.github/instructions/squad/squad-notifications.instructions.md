@@ -204,6 +204,10 @@ Append each entry at the very end of the file, in this shape:
 
 ## Privacy
 
+Apply `squad` skill's `references/responsible-use.md` Notifications first.
+Redact or stay in-chat; no raw transcript/history attachments.
+Disclose failed sends; never change destinations. Audit hooks are not consent.
+
 The approval contact is the user's own identity stored in their own project's runtime state under `.copilot-tracking/squad/`. Record only the GitHub handle, the approval repo, and an optional email in `state.json` and `notifications.md`; do not echo them into `decisions.md`, ADRs, commit messages, or any artifact shared more broadly than the project's squad state.
 
 Webhook URLs and any tokens are secrets: never store them in `state.json`, `notifications.md`, or any logged payload. Read a webhook URL at send time from a configured tool/MCP or the `SQUAD_WEBHOOK_URL` environment variable, and never echo the URL, query string, or any `Authorization` header into chat or state. When the user removes a contact or channel, the Scribe clears it from `state.json`.

@@ -88,7 +88,17 @@ are unchanged; observational collection records their failures separately.
 
 In strict mode, each stage must pass both process/telemetry checks and stage-readiness checks
 before the next stage launches. Initialization requires nonempty shared state,
-Scribe dispatch/history evidence and the existing state verifier. Requirements
+canonical history, verified script-backed execution or a real cold-Scribe dispatch,
+and the state verifier. Script receipts must match the run, turn and persisted
+artifacts; narrative receipts and zero Scribe dispatches alone prove nothing.
+The proof parser permits a single literal or previously bound `cd`, `chdir` or
+`Set-Location` to the exact workspace before the writer. Other roots, subdirectories,
+dynamic or post-writer locations remain rejected. Run writers separately from
+capture, copy, cleanup and probes; preserve the full receipt and invoke turn
+completion with its actual payload and expected turn. A bounded output prefix is
+usable only when the complete receipt survives; truncated JSON is not proof.
+Exact-native ledgers are checked against native coverage, not repriced history
+estimates; fallback estimates retain their independent rate checks. Requirements
 also require the published BRD/PRD and dispatch-backed history pointing to nonempty
 artifacts for both builders and both quality reviewers. Artifact presence does
 not replace workflow approval or final independent quality judging. Build retains
@@ -96,6 +106,19 @@ the closing-review and role-evidence checks; functional acceptance and judging
 remain mandatory. A zero-exit blocked stage is not treated as successful merely
 because the CLI returned normally. Eligible context-budget failures may use the
 bounded same-stage recovery below; other failures stop dependent work.
+
+Score summaries keep the existing judge-only finding count separate from per-stage
+review outcomes. Structured severity counts are optional; unknown counts are not zero
+and review findings are never summed across potentially overlapping records. Reports
+also distinguish scored-only timing/credit means from all-requested observations and
+their actual coverage. Compatibility fingerprints identify differing executing inputs;
+historical scores are descriptive evidence, not reusable controls after evaluator changes.
+
+Raw local `run.json` readiness includes `diagnostics` for failed bookkeeping,
+closing-review and native-state predicates. Checker JSON, exit/stop cause and stderr
+are retained there before disposable probes are cleaned. These diagnostics may
+contain private data; portable series summaries and published score artifacts do
+not include them. An exit-zero checker without its structured passing result fails.
 
 ### Bounded context recovery
 

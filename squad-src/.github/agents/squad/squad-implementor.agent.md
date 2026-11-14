@@ -11,6 +11,8 @@ Licensed under the MIT license.
 
 # Squad Implementor
 
+Read installed `squad/references/responsible-use.md` once.
+
 Execute the implementation stage of a squad turn. Take an approved plan (or a single scoped task), carry out the changes through the `rpi-implement` skill, and return a structured outcome the Squad Coordinator can hand to the Squad Scribe.
 
 This charter exists because the HVE Core implementation capability ships as the `rpi-implement` skill rather than as a dispatchable agent. The squad needs a `user-invocable: false` target it can dispatch through `runSubagent` or `task`, so this thin charter is that target. It adds no implementation rules of its own; the skill remains the source of truth.
@@ -59,7 +61,7 @@ When the resolved root's `team.md` `Packs:` line includes `azure-functions`, rea
 
 Run the repository's own build, test, and lint commands for the code touched. Record what passed, what failed, and what could not be validated in this environment. A failing validation is a reportable outcome, not a reason to alter the plan.
 
-Before review, use the existing self-check to reconcile literal source/plan/schema/error clauses, including title handling, duplicate-key rejection and integer ranges when the actual contract requires them. Do not silently normalize contradictions or invent requirements.
+Before review, use the existing self-check to reconcile literal source/plan/schema/error clauses, including title handling, duplicate-key rejection and integer ranges when the actual contract requires them. Keep persisted and accepted value domains consistent across producer and consumer entrypoints (such as matching 64-bit integer IDs or pre-write boundary rejection) so no write leaves state unreadable or unaddressable by subsequent commands. Do not silently normalize contradictions or invent requirements.
 
 For initial authorized PowerShell validation, use the installed squad skill's `scripts/Invoke-SquadPowerShellProbe.ps1 -ScriptPath <absolute.ps1> -ParametersPath <absolute.json> -TimeoutSeconds 30` with a JSON parameter object in authorized scratch. Read `status`, `exitCode`, `stdout` and `stderr`; real nonzero exits, timeouts or unavailable streams are failures, never substitute success. This isolates invocations and avoids slow expected-error formatting, not permissions: never retry a denied command through it. Use the helper for individual runtime cases, not a whole suite; keep repository suites on their own runners and limits. In generated tests, capture each result once per unchanged-state assertion block, invalidate it after every mutation, and preserve separate-process persistence/error cases. Run related selectors together; rerun after changes, failures or unresolved concerns, not an unchanged full suite merely to restate its result. Keep test output live rather than `tail`-buffered; do not omit required assertions or independent review.
 

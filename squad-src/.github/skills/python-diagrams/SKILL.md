@@ -14,6 +14,8 @@ Licensed under the MIT license.
 
 # Python Diagrams
 
+Read installed `squad/references/responsible-use.md` once.
+
 ## Overview
 
 This skill bundles a **documentation-only reference template** for rendering Azure architecture

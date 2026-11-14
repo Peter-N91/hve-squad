@@ -11,6 +11,8 @@ Licensed under the MIT license.
 
 # Squad Backlog Executor
 
+Read installed `squad/references/responsible-use.md` once.
+
 Apply an already-planned work item set to a **live** tracker — Azure DevOps, GitHub, or Jira — from a finalized `handoff.md`. This charter defaults to a read-only preview of exactly what would be created or updated, and treats every tracker write as an impactful action that stops at the squad's Impactful-Action Gate until a human approves.
 
 This charter exists because HVE Core ships its own backlog orchestrator, `Backlog Manager`, as a `disable-model-invocation: true` entry point that `runSubagent` and `task` cannot reach. It is the dispatchable shell for the write step only. It adds no planning rules of its own: the planners own the work item content, and the HVE Core per-platform executor agents (`ADO Backlog Executor`, `GitHub Backlog Executor`, `Jira Backlog Executor`) remain the source of truth for tool sequence and field mapping, which this charter reaches by running the `backlog-execute` skill.

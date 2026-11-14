@@ -3,23 +3,29 @@
 # Licensed under the MIT license.
 # SPDX-License-Identifier: MIT
 
-# preToolUse (matcher: create|edit) — squad-floor/squad-state append-only guard.
-# This hook cannot verify caller identity and only catches a full overwrite via create.
-$ErrorActionPreference = 'SilentlyContinue'
-
-$input_raw = [Console]::In.ReadToEnd()
-$toolNameMatch = [regex]::Match($input_raw, '"tool_?[Nn]ame"\s*:\s*"([^"]+)"')
-$toolName = if ($toolNameMatch.Success) { $toolNameMatch.Groups[1].Value } else { '' }
-$appendOnlyRegex = '[^"]*\.copilot-tracking/squad/[^"]*(decisions\.md|notifications\.md|federation\.md|history/[^"]*\.md)'
-
-if ($toolName -eq 'create') {
-    $pathMatch = [regex]::Match($input_raw, $appendOnlyRegex)
-    if ($pathMatch.Success -and (Test-Path -LiteralPath $pathMatch.Value -PathType Leaf)) {
-        $reason = "squad-state append-only guard: $($pathMatch.Value) already exists and is an append-only squad-state file (decisions.md, notifications.md, federation.md, or a history/*.md file). A full overwrite via the create tool is denied; append to the end of the file instead. Note: this hook cannot verify the calling agent is the Squad Scribe (preToolUse payloads carry no caller identity)."
-        $out = @{ permissionDecision = 'deny'; permissionDecisionReason = $reason } | ConvertTo-Json -Compress
-        Write-Output $out
-        exit 0
+# Create-overwrite backstop only; this does not authenticate the writer.
+$ErrorActionPreference = 'Stop'
+try {
+    . (Join-Path $PSScriptRoot 'hook-input.ps1')
+    $hook = Read-SquadHookInput -InputText ([Console]::In.ReadToEnd())
+    $calls = @(Get-SquadHookToolCall -Hook $hook)
+    foreach ($call in $calls) {
+        $arguments = Get-SquadHookArgument -Call $call
+        if ($call.Name -eq 'edit') { continue }
+        if ($call.Name -ne 'create') { throw 'Unsupported state-write tool.' }
+        $paths = @('path', 'file_path' | Where-Object { $arguments.PSObject.Properties[$_] })
+        if ($paths.Count -ne 1 -or $arguments.($paths[0]) -isnot [string]) { throw 'Expected one file path.' }
+        $root = Get-SquadHookWorkspace -Hook $hook
+        $path = Resolve-SquadHookPath -Workspace $root -Path $arguments.($paths[0])
+        $relative = $path.Substring($root.TrimEnd([char[]]'\/').Length + 1).Replace('\', '/')
+        if ($relative -match '^\.copilot-tracking/squad/(?:[^/]+/)*(?:decisions\.md|notifications\.md|federation\.md|history/(?:[^/]+/)*[^/]+\.md)$' -and
+            (Test-Path -LiteralPath $path -PathType Leaf)) {
+            Write-Output '{"permissionDecision":"deny","permissionDecisionReason":"squad-state append-only guard: this existing squad record cannot be overwritten with create; append instead. This backstop cannot verify caller identity."}'
+            exit 0
+        }
     }
+    Write-Output '{"permissionDecision":"allow"}'
 }
-
-Write-Output '{"permissionDecision":"allow"}'
+catch {
+    Write-Output '{"permissionDecision":"deny","permissionDecisionReason":"squad-state append-only guard: invalid or unsupported hook input, workspace or file path; required parser must be available."}'
+}

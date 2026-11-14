@@ -9,9 +9,9 @@ Licensed under the MIT license.
 
 # Squad Agent Floor
 
-These rules bind turns that run, resume or write a squad. Ordinary project work
-is unaffected. Detailed schemas and no-runtime/manual accounting live in the
-`squad` skill's `references/state-write-contract.md`, not every agent's context.
+Squad entrypoints: Read installed `squad/references/responsible-use.md` once.
+Other rules bind squad turns, not ordinary project work.
+Detailed schemas/manual accounting: `squad` skill's `references/state-write-contract.md`.
 
 ## Scope and Ownership
 
@@ -24,8 +24,7 @@ Keep existing paths and schemas: `team.md`, `routing.md`, `decisions.md`,
 
 Validated scripts own supported deterministic writes; cold Squad Scribe owns
 unsupported state operations and memory. Confirmed direct Init is outside Cost
-Preflight. A script invocation is not a Scribe dispatch. No coordinator or role
-hand-authors ordinary state.
+Preflight. A script is not a Scribe dispatch. Never hand-author ordinary state.
 Never overlap direct writer, cold Scribe, or Cost Preflight at one root.
 Never two Scribe subagents in flight for one root at once; queue hand-offs strictly in stage order.
 Member roots may run concurrently.

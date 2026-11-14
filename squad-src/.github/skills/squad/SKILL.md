@@ -21,6 +21,10 @@ The user-invocable Squad Coordinator dispatches HVE Core agents and persists ros
 Compact contracts and scripts own routine coordination; cold procedures preserve
 compatibility. Instructions use artifact-specific scopes, not all squad state.
 
+## Responsible Use
+
+Read [Responsible Use](references/responsible-use.md) before work.
+
 ## Prerequisites
 
 * A `runSubagent` or `task` tool is available so the coordinator can dispatch `user-invocable: false` agents.

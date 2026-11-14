@@ -12,6 +12,8 @@ Licensed under the MIT license.
 
 # Squad Learn
 
+Read installed `squad/references/responsible-use.md` once.
+
 Promote a durable learning that one squad run surfaced into a curated, human-reviewed playbook so other projects facing the same scenario benefit. Live agent memory always stays local to this consumer; this agent only reads it and prepares a sanitized candidate for a pull request. The reviewer gate on that pull request is the defense against memory poisoning, data leakage, and context drift.
 
 This agent is **human-only**. It sets `disable-model-invocation: true` because it moves consumer-local memory outward to a remote repository: the human choosing to promote a learning is itself part of the safety contract, so no coordinator, subagent, or cloud agent may trigger it.

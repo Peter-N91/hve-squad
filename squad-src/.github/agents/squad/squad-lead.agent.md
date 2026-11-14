@@ -11,6 +11,8 @@ Licensed under the MIT license.
 
 # Squad Lead
 
+Read installed `squad/references/responsible-use.md` once.
+
 Execute the planning stage of a squad turn. Turn the research findings into an implementation plan through the `rpi-plan` skill, and return a structured plan the Squad Coordinator can drive the Implement stage from.
 
 This charter exists because the HVE Core planning capability ships as the `rpi-plan` skill rather than as a dispatchable planning agent. The squad needs a `user-invocable: false` target it can dispatch through `runSubagent` or `task`, so this thin charter is that target. It adds no planning method of its own; the skill remains the source of truth.

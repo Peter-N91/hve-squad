@@ -330,7 +330,9 @@ if ($MyInvocation.InvocationName -ne '.') {
             $Saved = Save-EfficiencyAttemptEvidence -EventsPath $SessionEvents -Out $Out -Prefix $Stage
             $Metrics = $Saved.metrics; $StartLine = $Saved.lineCount
             $StagePassed = ($Result.exitCode -eq 0 -and $Result.stopCause -eq 'none' -and $null -ne $Metrics -and $Metrics.complete -and $null -ne $Metrics.modelRequests -and $Metrics.modelRequests -le $WorkflowRequestCeiling -and $Metrics.counts.questions -eq 0)
-            $Readiness = if ($StagePassed) { Test-EfficiencyWorkflow -Workspace $Workspace -Metrics $Metrics -Stage $Stage } else { [pscustomobject]@{ passed = $false; checks = @{ processEvidence = $false }; reviewPath = $null } }
+            $Readiness = if ($StagePassed) {
+                Test-EfficiencyWorkflow -Workspace $Workspace -Metrics $Metrics -Stage $Stage -EventsPath (Join-Path $Out "$Stage-events.jsonl") -SourceRoot $SourceRoot -InstallRoot $InstallRoot -ExpectedSessionId $Session -EvidenceRoot $Out
+            } else { [pscustomobject]@{ passed = $false; checks = @{ processEvidence = $false }; reviewPath = $null } }
             $StagePassed = $StagePassed -and $Readiness.passed -and $Watch.Elapsed.TotalSeconds -le $WorkflowSeconds
             $Attempts.Add(@{ kind = 'stage'; process = $Result; readiness = $Readiness; passed = $StagePassed; sessionCreditCeiling = $SessionCreditCeiling; evidence = @(@("out/$Stage-stdout.jsonl", "out/$Stage-events.jsonl", "out/$Stage-metrics.json") | Where-Object { Test-Path -LiteralPath (Join-Path $TrialRoot $_) -PathType Leaf }) })
             if (-not $StagePassed -and -not $ObservationOnly) {
@@ -358,7 +360,9 @@ if ($MyInvocation.InvocationName -ne '.') {
                         $Saved = Save-EfficiencyAttemptEvidence -EventsPath $SessionEvents -Out $Out -Prefix "$Stage-continuation"
                         $Metrics = $Saved.metrics; $StartLine = $Saved.lineCount
                         $StagePassed = ($Result.exitCode -eq 0 -and $Result.stopCause -eq 'none' -and $Metrics -and $Metrics.complete -and $null -ne $Metrics.modelRequests -and $Metrics.modelRequests -le $WorkflowRequestCeiling -and $Metrics.counts.questions -eq 0 -and $Watch.Elapsed.TotalSeconds -le $WorkflowSeconds)
-                        $Readiness = if ($StagePassed) { Test-EfficiencyWorkflow -Workspace $Workspace -Metrics $Metrics -Stage $Stage } else { [pscustomobject]@{ passed = $false; checks = @{ processEvidence = $false }; reviewPath = $null } }
+                        $Readiness = if ($StagePassed) {
+                            Test-EfficiencyWorkflow -Workspace $Workspace -Metrics $Metrics -Stage $Stage -EventsPath (Join-Path $Out "$Stage-continuation-events.jsonl") -SourceRoot $SourceRoot -InstallRoot $InstallRoot -ExpectedSessionId $Session -EvidenceRoot $Out
+                        } else { [pscustomobject]@{ passed = $false; checks = @{ processEvidence = $false }; reviewPath = $null } }
                         $StagePassed = $StagePassed -and $Readiness.passed -and $Watch.Elapsed.TotalSeconds -le $WorkflowSeconds
                         $Attempts.Add(@{ kind = 'continuation'; process = $Result; readiness = $Readiness; passed = $StagePassed; sessionCreditCeiling = $SessionCreditCeiling; evidence = @(@("out/$Stage-continuation-stdout.jsonl", "out/$Stage-continuation-events.jsonl", "out/$Stage-continuation-metrics.json") | Where-Object { Test-Path -LiteralPath (Join-Path $TrialRoot $_) -PathType Leaf }) })
                         $Recovery.status = if ($StagePassed) { 'recovered' } else { 'failed' }
@@ -389,7 +393,7 @@ if ($MyInvocation.InvocationName -ne '.') {
         $ProgressStep = 5; $ProgressLabel = 'Checking acceptance and workflow'
         Write-EfficiencyProgress -Step $ProgressStep -Label $ProgressLabel -Path $ProgressPath
         $Acceptance = & (Join-Path $PSScriptRoot 'Test-EfficiencyTask.ps1') -Workspace $Workspace | ConvertFrom-Json -AsHashtable
-        $Workflow = if ($Stages[-1].name -eq 'build') { $Stages[-1].readiness } else { Test-EfficiencyWorkflow -Workspace $Workspace -Metrics $Metrics }
+        $Workflow = if ($Stages[-1].name -eq 'build') { $Stages[-1].readiness } else { Test-EfficiencyWorkflow -Workspace $Workspace -Metrics $Metrics -SourceRoot $SourceRoot -InstallRoot $InstallRoot -ExpectedSessionId $Session -EvidenceRoot $Out }
         Write-EfficiencyProgress -Step $ProgressStep -Label $ProgressLabel -Status finished -Path $ProgressPath
         $ProgressStep = 6; $ProgressLabel = 'Judging documents'
         $Judge = $null

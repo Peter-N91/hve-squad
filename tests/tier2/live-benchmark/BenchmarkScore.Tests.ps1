@@ -207,7 +207,7 @@ Describe 'Badge, report and files' {
     }
 
     It 'summarizes the score in the badge text' {
-        Get-BenchmarkBadgeText $script:Score | Should -Be 'doc quality 83/100 | functional 3/3 | workflow 0/3 | avg benchmark time 19 min 48.5 s'
+        Get-BenchmarkBadgeText $script:Score | Should -Be 'doc quality 83/100 | functional 3/3 | workflow 0/3 | avg scored-run time 19 min 48.5 s (3/3 scored)'
     }
 
     It 'renders a well-formed SVG that is amber unless every run passed and green when all did' {
@@ -259,6 +259,8 @@ Describe 'Read-BenchmarkScore' {
         @{ Name = 'negative activity'; Edit = { param($j) $j.summary.activity = @{ scribeModelRequests = -1 } } }
         @{ Name = 'text activity'; Edit = { param($j) $j.summary.activity = @{ scribeCredits = '1.39' } } }
         @{ Name = 'boolean activity'; Edit = { param($j) $j.summary.activity = @{ scribeDispatches = $true } } }
+        @{ Name = 'non-array failed checks'; Edit = { param($j) $j.trials[0].failedChecks = 'functional/add-works' } }
+        @{ Name = 'non-text failed checks'; Edit = { param($j) $j.trials[0].failedChecks = @(@{ injected = '<script>' }) } }
     ) {
         { Read-Edited $Edit } | Should -Throw
     }
@@ -280,10 +282,14 @@ Describe 'Read-BenchmarkScore' {
             $j.environment.model = "x<img src=y onerror=z>`n@octocat ``cmd`` ::error::boom"
             $j.source.commit = 'not-a-sha'
             $j.trials[0].note = '<script>'
+            $j.trials[0].arbitrary = '<script>'
+            $j.trials[0].failedChecks = @('functional/<script>', "review/`n::error::")
         }
         $read.environment.model | Should -Not -Match '[<>@`:\r\n]'
         $read.source.commit | Should -Be 'unknown'
-        $read.Keys | Should -Not -Contain 'trials'
+        $read.trials[0].note | Should -Not -Match '[<>@`:\r\n]'
+        $read.trials[0].Keys | Should -Not -Contain 'arbitrary'
+        $read.trials[0].failedChecks | Should -Be @('functional/script', 'review/error')
     }
 }
 
@@ -323,7 +329,7 @@ Describe 'Compare-BenchmarkScore' {
         @{ Name = 'a lower dimension'; Runs = @(@{ Dimensions = @(18, 17, 16, 17, 14) }, @{ Dimensions = @(18, 17, 16, 17, 14) }, @{ Dimensions = @(18, 17, 16, 17, 14) }); Expected = 'Risks and decisions' }
         @{ Name = 'a lower functional pass rate'; Runs = @(@{ Functional = $false }, @{}, @{}); Expected = 'functional pass rate is lower' }
         @{ Name = 'a lower workflow pass rate'; Runs = @(@{ WorkflowPassed = $false }, @{}, @{}); Expected = 'workflow pass rate is lower' }
-        @{ Name = 'more findings per run'; Runs = @(@{ Findings = 3 }, @{ Findings = 3 }, @{ Findings = 3 }); Expected = 'critical/high findings per run' }
+        @{ Name = 'more findings per run'; Runs = @(@{ Findings = 3 }, @{ Findings = 3 }, @{ Findings = 3 }); Expected = 'JUDGE-ONLY critical/high findings per scored run' }
         @{ Name = 'a failed run'; Runs = @(@{}, @{}, $null); Expected = '1 of 3 benchmark runs did not produce a score' }
     ) {
         $head = New-ScoreFile -Name ('head-' + [guid]::NewGuid().ToString('N')) -Runs $Runs
@@ -380,6 +386,214 @@ Describe 'Compare-BenchmarkScore' {
     It 'notes a score measured with uncommitted changes' {
         $head = New-ScoreFile -Name 'dirty' -Uncommitted $true
         (Compare-ScoreFile -Base $script:Base -Head $head).Notes -join "`n" | Should -Match 'uncommitted changes'
+    }
+}
+
+Describe 'Honest source coverage and comparison provenance' -Tag 'Unit' {
+    BeforeAll {
+        function New-CompatibleRun {
+            $result = New-RunResult
+            $result.metadata.compatibility = @{
+                schema = 'efficiency-v1'; rubric = 'rubric-v1'; hostProfile = 'native-cli-references'
+                scenarioHash = 'a' * 64; parserHash = 'b' * 64; exerciseHash = 'c' * 64
+                preparationHash = 'd' * 64; graderHash = 'e' * 64; verifierHash = 'f' * 64
+                converterHash = '1' * 64; installHash = '2' * 64
+                model = 'test-model'; cli = '1.0.0'; powershell = '7.6.0'
+                roleModelPolicy = 'coordinator.agent.md:model: customer-controlled'
+                disabledMcpServers = ''; maxCredits = 120; continuations = 1
+                recoveryPolicy = 'bounded-v1'; evaluationPolicy = 'strict-v1'
+                privateMetadata = '<secret>must-not-survive'
+            }
+            $result.metadata.sourceHash = '3' * 64
+            $result
+        }
+
+        function Invoke-ScoreRoundTrip {
+            param($Score)
+            $directory = Join-Path $TestDrive ([guid]::NewGuid().ToString('N'))
+            $expectedChecks = @{}
+            foreach ($trial in $Score['trials']) {
+                $expectedChecks[[string]$trial['run']] = ConvertTo-Json -InputObject $trial['failedChecks'] -Compress
+            }
+            [void](Write-BenchmarkScore -Score $Score -Directory $directory)
+            $stored = Get-Content -LiteralPath (Join-Path $directory 'score.json') -Raw | ConvertFrom-Json -AsHashtable
+            $read = Read-BenchmarkScore (Join-Path $directory 'score.json')
+            [void](Write-BenchmarkScore -Score $read -Directory $directory)
+            $again = Read-BenchmarkScore (Join-Path $directory 'score.json')
+            foreach ($roundTrip in @($stored, $read, $again)) {
+                foreach ($trial in $roundTrip['trials']) {
+                    (ConvertTo-Json -InputObject $trial['failedChecks'] -Compress) | Should -BeExactly $expectedChecks[[string]$trial['run']]
+                }
+            }
+            ($again | ConvertTo-Json -Depth 10 -Compress) | Should -BeExactly ($read | ConvertTo-Json -Depth 10 -Compress)
+            $again
+        }
+    }
+
+    It 'keeps judge-zero separate from a failed requirements review with <Name>' -ForEach @(
+        @{ Name = 'unknown severity'; Counts = $null; Path = '.squad/reviews/requirements.md'; Expected = $null }
+        @{ Name = 'typed overlapping findings'; Counts = @{ critical = 0; high = 2 }; Path = '.squad/reviews/requirements.md'; Expected = 2 }
+        @{ Name = 'typed zero findings'; Counts = @{ critical = 0; high = 0 }; Path = '.squad/reviews/requirements.md'; Expected = 0 }
+        @{ Name = 'a spaced reviewer filename'; Counts = @{ critical = 0; high = 2 }; Path = '.squad\reviews\Squad Reviewer.md'; Expected = 2 }
+        @{ Name = 'spaced path segments'; Counts = @{ critical = 0; high = 2 }; Path = '.squad/review notes/Squad Reviewer.md'; Expected = 2 }
+        @{ Name = 'a partial severity pair'; Counts = @{ high = 2 }; Path = '.squad/reviews/requirements.md'; Expected = $null }
+        @{ Name = 'unparseable findings'; Counts = 'High: 2'; Path = '.squad/reviews/requirements.md'; Expected = $null }
+        @{ Name = 'negative findings'; Counts = @{ critical = -1; high = 2 }; Path = '.squad/reviews/requirements.md'; Expected = $null }
+        @{ Name = 'fractional findings'; Counts = @{ critical = 0; high = 1.5 }; Path = '.squad/reviews/requirements.md'; Expected = $null }
+        @{ Name = 'boolean findings'; Counts = @{ critical = $false; high = 2 }; Path = '.squad/reviews/requirements.md'; Expected = $null }
+        @{ Name = 'text findings'; Counts = @{ critical = 0; high = '2' }; Path = '.squad/reviews/requirements.md'; Expected = $null }
+        @{ Name = 'traversal'; Counts = @{ critical = 0; high = 2 }; Path = '..\private.md'; Expected = $null }
+        @{ Name = 'an absolute path'; Counts = @{ critical = 0; high = 2 }; Path = 'C:\private.md'; Expected = $null }
+        @{ Name = 'a markup path'; Counts = @{ critical = 0; high = 2 }; Path = '[review](https://example.test)'; Expected = $null }
+        @{ Name = 'spaced traversal'; Counts = @{ critical = 0; high = 2 }; Path = '.squad/.. /private.md'; Expected = $null }
+        @{ Name = 'a rooted path'; Counts = @{ critical = 0; high = 2 }; Path = '/private.md'; Expected = $null }
+        @{ Name = 'a network path'; Counts = @{ critical = 0; high = 2 }; Path = '\\server\private.md'; Expected = $null }
+        @{ Name = 'a control character'; Counts = @{ critical = 0; high = 2 }; Path = ".squad/reviews/line`nbreak.md"; Expected = $null }
+        @{ Name = 'backtick delimiters'; Counts = @{ critical = 0; high = 2 }; Path = '.squad/reviews/`review`.md'; Expected = $null }
+        @{ Name = 'bracket delimiters'; Counts = @{ critical = 0; high = 2 }; Path = '.squad/reviews/[review].md'; Expected = $null }
+        @{ Name = 'an alternate data stream'; Counts = @{ critical = 0; high = 2 }; Path = '.squad/reviews/review:stream.md'; Expected = $null }
+    ) {
+        $result = New-RunResult -Findings 0 -PassedStages @('init', 'build')
+        $result.stages[1].readiness.checks.reviewOutcome = $false
+        $result.stages[1].readiness.reviewPath = $Path
+        $result.stages[1].readiness.findingCounts = $Counts
+        $result.stages[2].readiness.checks.reviewOutcome = $true
+        $result.stages[2].readiness.reviewPath = '.squad/reviews/build.md'
+        $result.stages[2].readiness.findingCounts = @{ critical = 0; high = 2 }
+        $trial = ConvertTo-BenchmarkRunSummary -Run 1 -Result $result
+        $trial.sourceReviews.requirements.outcome | Should -Be 'failed'
+        if ($null -eq $Expected) { $trial.sourceReviews.requirements.criticalHighFindings | Should -BeNullOrEmpty }
+        else { $trial.sourceReviews.requirements.criticalHighFindings | Should -Be $Expected }
+        if ($Name -in 'traversal', 'an absolute path', 'a markup path', 'spaced traversal', 'a rooted path',
+            'a network path', 'a control character', 'backtick delimiters', 'bracket delimiters', 'an alternate data stream') {
+            $trial.sourceReviews.requirements.reviewPath | Should -BeNullOrEmpty
+        }
+        $trial.sourceReviews.build.criticalHighFindings | Should -Be 2
+        $trial.failedChecks | Should -Contain 'requirements/reviewOutcome'
+        $score = Invoke-ScoreRoundTrip (ConvertTo-BenchmarkScore -Trial @($trial) -Requested 1 -Commit 'abc1234')
+        $score.schema | Should -Be 'benchmark-score-v1'
+        $score.summary.quality | Should -Be 83
+        $score.summary.criticalHighFindings | Should -Be 0
+        $score.summary.workflow | Should -Be 0
+        $score.trials[0].sourceReviews.requirements.outcome | Should -Be 'failed'
+        $score.trials[0].failedChecks | Should -HaveCount 2
+        $score.trials[0].failedChecks | Should -Contain 'requirements/state-recorded'
+        $score.trials[0].failedChecks | Should -Contain 'requirements/reviewOutcome'
+        $report = Get-BenchmarkReportMarkdown $score
+        $comparison = Compare-BenchmarkScore -Base $score -Head $score
+        foreach ($text in $report, $comparison.Markdown) {
+            $text | Should -Match 'JUDGE-ONLY critical/high findings \| 0'
+            $text | Should -Match '\| 1 \| requirements \| failed \|'
+            $text | Should -Match 'unavailable severity coverage is not zero'
+            $text | Should -Not -Match 'https:|C:\\private|\.\./private'
+        }
+        if ($null -eq $Expected) { $report | Should -Match '\| 1 \| requirements \| failed \| [^\r\n]*\| unavailable \|' }
+        else {
+            $expectedPath = $Path.Replace('\', '/')
+            $score.trials[0].sourceReviews.requirements.reviewPath | Should -BeExactly $expectedPath
+            foreach ($text in $report, $comparison.Markdown) { $text | Should -Match ([regex]::Escape("``$expectedPath``")) }
+        }
+        $score.trials[0].sourceReviews.build.criticalHighFindings = 1.5
+        { Write-BenchmarkScore -Score $score -Directory (Join-Path $TestDrive 'invalid-severity') } | Should -Throw
+    }
+
+    It 'retains a slower unscored trial in all-requested costs with <Name>' -ForEach @(
+        @{ Name = 'complete credits'; Complete = $true; ExpectedCreditsCovered = 2; TotalCredits = 1001.0 }
+        @{ Name = 'incomplete unscored credits'; Complete = $false; ExpectedCreditsCovered = 1; TotalCredits = 250.75 }
+    ) {
+        $first = New-RunResult -Seconds 300
+        $second = New-RunResult -Seconds 900 -JudgeValid $false -CreditsComplete $Complete
+        $second.metrics.credits.used = 700
+        $trials = @(
+            (ConvertTo-BenchmarkRunSummary -Run 1 -Result $first)
+            (ConvertTo-BenchmarkRunSummary -Run 2 -Result $second)
+            (ConvertTo-BenchmarkRunSummary -Run 3 -Result $null)
+        )
+        $score = Invoke-ScoreRoundTrip (ConvertTo-BenchmarkScore -Trial $trials -Requested 3 -Commit 'abc1234')
+        $score.runs.scored | Should -Be 1
+        $score.summary.averageSeconds | Should -Be 300
+        $score.summary.averageCredits | Should -Be 250.75
+        $score.summary.allRequested.totalSeconds | Should -Be 1200
+        $score.summary.allRequested.averageSeconds | Should -Be 600
+        $score.summary.allRequested.secondsCovered | Should -Be 2
+        $score.summary.allRequested.creditsCovered | Should -Be $ExpectedCreditsCovered
+        $score.summary.allRequested.totalCredits | Should -Be $TotalCredits
+        $score.trials[1].quality | Should -BeNullOrEmpty
+        $score.trials[1].note | Should -Be 'the judge result is missing or invalid'
+        Get-BenchmarkBadgeText $score | Should -Match 'avg scored-run time 5 min 0 s \(1/3 scored\)'
+        foreach ($text in (Get-BenchmarkReportMarkdown $score), (Compare-BenchmarkScore -Head $score).Markdown) {
+            $text | Should -Match 'Average time per scored run \| 5 min 0 s'
+            $text | Should -Match 'All-requested time \(total observed\) \| 20 min 0 s; 2/3 requested runs covered'
+            $text | Should -Match 'All-requested time \(average observed\) \| 10 min 0 s; 2/3 requested runs covered'
+        }
+        $empty = ConvertTo-BenchmarkScore -Trial @($trials[2]) -Requested 1 -Commit 'abc1234'
+        $empty.summary.allRequested.secondsCovered | Should -Be 0
+        $empty.summary.allRequested.totalSeconds | Should -BeNullOrEmpty
+        $empty.summary.allRequested.averageCredits | Should -BeNullOrEmpty
+        $score.summary.allRequested.secondsCovered = 0
+        { Write-BenchmarkScore -Score $score -Directory (Join-Path $TestDrive 'invalid-coverage') } | Should -Throw
+    }
+
+    It 'flags <Name> identities without leaking raw metadata or truncating equality' -ForEach @(
+        @{ Name = 'complete matching'; Key = ''; Expected = 'compatible' }
+        @{ Name = 'legacy unavailable'; Key = 'legacy'; Expected = 'unknown' }
+        @{ Name = 'legacy trials with unavailable review coverage'; Key = 'legacy-trials'; Expected = 'unknown' }
+        @{ Name = 'missing scenario'; Key = 'scenario-missing'; Expected = 'unknown' }
+        @{ Name = 'different scenario'; Key = 'scenario'; Expected = 'incompatible' }
+        @{ Name = 'different rubric'; Key = 'rubric'; Expected = 'incompatible' }
+        @{ Name = 'different scenario payload'; Key = 'scenarioHash'; Expected = 'incompatible' }
+        @{ Name = 'different parser'; Key = 'parserHash'; Expected = 'incompatible' }
+        @{ Name = 'different exercise'; Key = 'exerciseHash'; Expected = 'incompatible' }
+        @{ Name = 'different preparation'; Key = 'preparationHash'; Expected = 'incompatible' }
+        @{ Name = 'different grader'; Key = 'graderHash'; Expected = 'incompatible' }
+        @{ Name = 'different verifier'; Key = 'verifierHash'; Expected = 'incompatible' }
+        @{ Name = 'different converter'; Key = 'converterHash'; Expected = 'incompatible' }
+        @{ Name = 'different installation'; Key = 'installHash'; Expected = 'incompatible' }
+        @{ Name = 'different role policy beyond display length'; Key = 'roleModelPolicy'; Expected = 'incompatible' }
+        @{ Name = 'different PowerShell'; Key = 'powershell'; Expected = 'incompatible' }
+        @{ Name = 'missing runtime'; Key = 'runtime-missing'; Expected = 'unknown' }
+        @{ Name = 'oversized runtime'; Key = 'runtime-oversized'; Expected = 'unknown' }
+        @{ Name = 'invalid fingerprint'; Key = 'fingerprint'; Expected = 'unknown' }
+    ) {
+        $before = New-CompatibleRun
+        $after = New-CompatibleRun
+        $before.metadata.compatibility.roleModelPolicy = ('x' * 100) + '<private-before>'
+        $after.metadata.compatibility.roleModelPolicy = $before.metadata.compatibility.roleModelPolicy
+        if ($Key -eq 'runtime-missing') { [void]$after.metadata.compatibility.Remove('powershell') }
+        elseif ($Key -eq 'runtime-oversized') { $after.metadata.compatibility.powershell = 'x' * 16385 }
+        elseif ($Key -notin '', 'legacy', 'legacy-trials', 'scenario', 'scenario-missing', 'fingerprint') { $after.metadata.compatibility[$Key] += '<private-after>' }
+        $trial = ConvertTo-BenchmarkRunSummary -Run 1 -Result $before
+        $base = ConvertTo-BenchmarkScore -Trial @($trial) -Requested 1 -Commit 'abc1234' -Identity (Get-BenchmarkRunIdentity $before)
+        $head = ConvertTo-BenchmarkScore -Trial @($trial) -Requested 1 -Commit 'def5678' -Identity (Get-BenchmarkRunIdentity $after)
+        if ($Key -in 'legacy', 'legacy-trials') {
+            [void]$base.Remove('compatibility'); [void]$base.Remove('scenario')
+            [void]$base.summary.Remove('allRequested')
+            if ($Key -eq 'legacy') { [void]$base.Remove('trials') }
+            else { [void]$base.trials[0].Remove('sourceReviews') }
+        }
+        elseif ($Key -eq 'scenario') { $head.scenario = 'another-scenario' }
+        elseif ($Key -eq 'scenario-missing') { $head.scenario = ('x' * 80) + '<unsafe>' }
+        elseif ($Key -eq 'fingerprint') { $head.compatibility.powershell = '<private-invalid>' }
+        $base = Invoke-ScoreRoundTrip $base
+        $head = Invoke-ScoreRoundTrip $head
+        $comparison = Compare-BenchmarkScore -Base $base -Head $head
+        $comparison.Comparability | Should -Be $Expected
+        $comparison.Markdown | Should -Match "Comparison identity: $Expected"
+        $report = Get-BenchmarkReportMarkdown -Score $head -EarlierScore $base
+        $report | Should -Match "Comparison identity: $Expected"
+        $comparison.Markdown | Should -Match 'not an identity of the current checkout'
+        $serialized = @($base, $head, $comparison.Markdown, $report) | ConvertTo-Json -Depth 12
+        $serialized | Should -Not -Match 'private-before|private-after|private-invalid|must-not-survive|privateMetadata|<unsafe>'
+        $head.source.squadSourceHash | Should -Be ('3' * 64)
+        if ($Key -in 'powershell', 'runtime-missing', 'runtime-oversized') { $head.environment.powershell | Should -BeNullOrEmpty }
+        else { $head.environment.powershell | Should -Be '7.6.0' }
+        if ($Key -in 'legacy', 'legacy-trials') {
+            $base.summary.allRequested | Should -BeNullOrEmpty
+            $base.summary.quality | Should -Be 83
+            $comparison.Markdown | Should -Match 'coverage unavailable'
+            if ($Key -eq 'legacy') { $comparison.Markdown | Should -Match '\| unavailable \| requirements/build \| unavailable' }
+            else { $comparison.Markdown | Should -Match '\| 1 \| requirements \| unavailable \| unavailable \| unavailable \|' }
+        }
     }
 }
 

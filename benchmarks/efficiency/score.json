@@ -1,20 +1,42 @@
 {
   "schema": "benchmark-score-v1",
   "scenario": "task-cli-cold-start",
-  "measuredAt": "2026-10-26T16:26:36Z",
+  "measuredAt": "2026-11-14T11:03:30Z",
   "source": {
-    "commit": "3bf61f082aa96ff195caba6d68efc7bb22c62e36",
-    "squadSourceHash": "19670b6ad9395846fef577c0c367be5d4fc951ebe0fa7e3c5029b0e835dfce0c",
+    "commit": "5928d57fa28098f9e7ad247933c7557167f8b7ff",
+    "squadSourceHash": "6ed4aa9fd381d68dfe5026055262a6dbbcdd973d956a18f6965a3df350ed7c73",
     "uncommittedChanges": false
   },
   "environment": {
     "model": "claude-sonnet-5.5",
-    "cli": "GitHub Copilot CLI 1.0.104-3. Run 'copilot update' to check for updates.",
-    "powershell": "7.6.7"
+    "cli": "GitHub Copilot CLI 1.0.106-9. Run copilot update to check for up",
+    "powershell": "7.7.0"
+  },
+  "compatibility": {
+    "schema": "6055716d1adf4d6a67811deba71f65b5b332901e75270f7210b19e018cc4b2cf",
+    "rubric": "b56405ace95fba82698b65dbe243c788265e26c0a682b5a5e5a1f6f0f867f703",
+    "hostProfile": "d0b5857b0ed4b4b5f4b0d70d7cced697877ba54d346d224406ad5b218664da86",
+    "scenarioHash": "56c7b0b6ca58cf0fd601bf3f71159e4b07bb779171ef7430fb1b558bcffb2593",
+    "parserHash": "737918e34007ce3f5ed25a9d827350594ba310204fa3bf757c75ff9b3ffcc338",
+    "exerciseHash": "063918dcfdd4df464e38a35a3f7701c19072b2658c5e5950784ee3cfca559249",
+    "preparationHash": "521f36306928b3158fcfc259e13228db9a3e0b31dd452df1d3b446c180299055",
+    "graderHash": "5ea4adc4add775e313f5370061e56a371954b953562e1d976cfafbfec62b5720",
+    "verifierHash": "f7ad13aa5526bae59660a73aa42e913fc5a702cf599ddbee4bb9325528c0510d",
+    "converterHash": "4eef28e7fff0dbad286a7fbfe74da7e7e624bc2603031dfbe13f1875d086a177",
+    "installHash": "9dc7e1e36add3c248ddc668ecd86cc37486f701b87a83fb6330dc4a836eef588",
+    "model": "4ae60805f94e4d2e6d4726588a7d7e44572ab35a1d3b4bd5e44b74e0ce9f852b",
+    "cli": "be553eb30c2799d3306ec949d88209f0a980d155d3a6266da1047c5dcad2d3a4",
+    "powershell": "475c2ccaebf82353b2e7c16de13e8d3b93d08e605365f36430e6a4f2239ca58b",
+    "roleModelPolicy": "ee80bd998cafc0d863352fbb64d2ed9cbc90b68758f39f76116ef03c9aafa39d",
+    "disabledMcpServers": "f9f1234558901fde61fe6cc9fbd675ff92b3c90121ae11b331381d2fc827171e",
+    "maxCredits": "40510175845988f13f6162ed8526f0b09f73384467fa855e1e79b44a56562a58",
+    "continuations": "40510175845988f13f6162ed8526f0b09f73384467fa855e1e79b44a56562a58",
+    "recoveryPolicy": "bf8385d4a2b08be069a01ecef790c059241ab6301275ed1ffb094395d26602d1",
+    "evaluationPolicy": "bf8385d4a2b08be069a01ecef790c059241ab6301275ed1ffb094395d26602d1"
   },
   "runs": {
-    "requested": 1,
-    "scored": 1,
+    "requested": 3,
+    "scored": 3,
     "failed": 0
   },
   "summary": {
@@ -23,51 +45,160 @@
       "businessClarity": 16.0,
       "scopeFidelity": 15.0,
       "acceptanceCriteria": 17.0,
-      "traceability": 18.0,
+      "traceability": 16.0,
       "risksAndDecisions": 16.0
     },
-    "functional": 1,
+    "functional": 3,
     "workflow": 0,
-    "criticalHighFindings": 0,
-    "averageSeconds": 1308.813,
-    "averageCredits": 496.355651,
+    "criticalHighFindings": 0.0,
+    "averageSeconds": 1654.4053333333331,
+    "averageCredits": 424.7622305,
     "activity": {
-      "scribeDispatches": 1.0,
-      "scribeModelRequests": 3.0,
-      "scribeSeconds": 11.481,
-      "scribeCredits": 0.37845,
-      "coordinatorModelRequests": 46.0,
-      "authorModelRequests": 40.0
+      "scribeDispatches": 0.0,
+      "scribeModelRequests": 0.0,
+      "scribeSeconds": 0.0,
+      "scribeCredits": 0.0,
+      "coordinatorModelRequests": 52.666666666666664,
+      "authorModelRequests": 20.0
+    },
+    "allRequested": {
+      "secondsCovered": 3,
+      "totalSeconds": 4963.215999999999,
+      "averageSeconds": 1654.4053333333331,
+      "creditsCovered": 3,
+      "totalCredits": 1274.2866915,
+      "averageCredits": 424.7622305
     }
   },
   "trials": [
     {
       "run": 1,
       "scored": true,
-      "quality": 82.0,
+      "quality": 79.0,
       "dimensions": {
         "businessClarity": 16.0,
         "scopeFidelity": 15.0,
-        "acceptanceCriteria": 17.0,
-        "traceability": 18.0,
-        "risksAndDecisions": 16.0
+        "acceptanceCriteria": 16.0,
+        "traceability": 17.0,
+        "risksAndDecisions": 15.0
       },
       "functional": true,
       "workflow": false,
-      "criticalHighFindings": 0,
-      "seconds": 1308.813,
-      "credits": 496.355651,
+      "criticalHighFindings": 0.0,
+      "seconds": 2181.468,
+      "credits": 568.4914175,
       "failedChecks": [
+        "init/bookkeepingEvidence",
+        "requirements/bookkeepingEvidence",
         "requirements/reviewOutcome"
       ],
       "note": "",
       "activity": {
-        "scribeDispatches": 1.0,
-        "scribeModelRequests": 3.0,
-        "scribeSeconds": 11.481,
-        "scribeCredits": 0.37845,
-        "coordinatorModelRequests": 46.0,
-        "authorModelRequests": 40.0
+        "scribeDispatches": 0.0,
+        "scribeModelRequests": 0.0,
+        "scribeSeconds": 0.0,
+        "scribeCredits": 0.0,
+        "coordinatorModelRequests": 56.0,
+        "authorModelRequests": 34.0
+      },
+      "sourceReviews": {
+        "requirements": {
+          "outcome": "failed",
+          "reviewPath": ".copilot-tracking/reviews/2026-11-14-task-cli-closing-review-capture.md",
+          "criticalHighFindings": null
+        },
+        "build": {
+          "outcome": "passed",
+          "reviewPath": ".copilot-tracking/reviews/2026-11-14-task-cli-impl-closing-review-capture.md",
+          "criticalHighFindings": null
+        }
+      }
+    },
+    {
+      "run": 2,
+      "scored": true,
+      "quality": 82.0,
+      "dimensions": {
+        "businessClarity": 17.0,
+        "scopeFidelity": 15.0,
+        "acceptanceCriteria": 18.0,
+        "traceability": 16.0,
+        "risksAndDecisions": 16.0
+      },
+      "functional": true,
+      "workflow": false,
+      "criticalHighFindings": 0.0,
+      "seconds": 1158.9709999999998,
+      "credits": 285.8414,
+      "failedChecks": [
+        "init/bookkeepingEvidence",
+        "requirements/bookkeepingEvidence",
+        "requirements/reviewOutcome"
+      ],
+      "note": "",
+      "activity": {
+        "scribeDispatches": 0.0,
+        "scribeModelRequests": 0.0,
+        "scribeSeconds": 0.0,
+        "scribeCredits": 0.0,
+        "coordinatorModelRequests": 42.0,
+        "authorModelRequests": 6.0
+      },
+      "sourceReviews": {
+        "requirements": {
+          "outcome": "failed",
+          "reviewPath": ".copilot-tracking/reviews/task-cli-requirements-review.md",
+          "criticalHighFindings": null
+        },
+        "build": {
+          "outcome": "passed",
+          "reviewPath": ".copilot-tracking/reviews/task-cli-implementation-review.md",
+          "criticalHighFindings": null
+        }
+      }
+    },
+    {
+      "run": 3,
+      "scored": true,
+      "quality": 82.0,
+      "dimensions": {
+        "businessClarity": 16.0,
+        "scopeFidelity": 17.0,
+        "acceptanceCriteria": 17.0,
+        "traceability": 16.0,
+        "risksAndDecisions": 16.0
+      },
+      "functional": true,
+      "workflow": false,
+      "criticalHighFindings": 0.0,
+      "seconds": 1622.7769999999998,
+      "credits": 419.953874,
+      "failedChecks": [
+        "init/bookkeepingEvidence",
+        "requirements/bookkeepingEvidence",
+        "requirements/reviewOutcome",
+        "build/reviewOutcome"
+      ],
+      "note": "",
+      "activity": {
+        "scribeDispatches": 0.0,
+        "scribeModelRequests": 0.0,
+        "scribeSeconds": 0.0,
+        "scribeCredits": 0.0,
+        "coordinatorModelRequests": 60.0,
+        "authorModelRequests": 20.0
+      },
+      "sourceReviews": {
+        "requirements": {
+          "outcome": "failed",
+          "reviewPath": ".copilot-tracking/reviews/2026-11-14-task-cli-brd-prd-closing-review.md",
+          "criticalHighFindings": null
+        },
+        "build": {
+          "outcome": "failed",
+          "reviewPath": ".copilot-tracking/reviews/2026-11-14-task-cli-implementation-review.md",
+          "criticalHighFindings": null
+        }
       }
     }
   ]
