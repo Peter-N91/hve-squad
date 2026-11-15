@@ -1487,18 +1487,32 @@ apm install microsoft/Agents/agent-plugins/agents-for-net/skills/agents-sdk-dotn
 apm install microsoft/Agents/agent-plugins/agents-for-js/skills/agents-sdk-typescript-otel#a5caf57ff062369c410aa5542039b50ce1a9c7e8 --target copilot
 apm install microsoft/Agents/agent-plugins/agents-for-python/skills/agents-sdk-python-otel#a5caf57ff062369c410aa5542039b50ce1a9c7e8 --target copilot
 apm install microsoft/Agents/agent-plugins/agents-sdk-common/skills/agents-sdk-provision#a5caf57ff062369c410aa5542039b50ce1a9c7e8 --target copilot
-apm install microsoft/skills/.github/plugins/foundry-iq-skills/skills/foundry-iq/SKILL.md --target copilot
-apm install microsoft/azure-skills/skills/appinsights-instrumentation/SKILL.md --target copilot
-copilot plugin marketplace add Azure/aigateway
-copilot plugin install ai-gateway@azure
-apm install microsoft/skills-for-fabric/skills/sqldw-cli --target copilot
-apm install microsoft/skills-for-fabric/skills/sqldb-cli --target copilot
-apm install microsoft/skills-for-fabric/skills/eventhouse-cli --target copilot
-apm install microsoft/skills-for-fabric/skills/eventstream-cli --target copilot
-apm install microsoft/skills-for-fabric/skills/spark-cli --target copilot
-apm install microsoft/skills-for-fabric/skills/dataflows-cli --target copilot
-apm install microsoft/skills-for-fabric/skills/databricks-migration --target copilot
-apm install microsoft/skills-for-fabric/skills/pipeline-migration --target copilot
+apm install microsoft/azure-skills/skills/microsoft-foundry#968f7bfaa01672e782dae2c6bab4fb9505ae047a --target copilot
+apm install Azure/aigateway/skills/use-ai-gateway#8cba384de61ab9d438450a79f44fba0528c56d0a --target copilot
+apm install microsoft/azure-skills/skills/azure-aigateway#968f7bfaa01672e782dae2c6bab4fb9505ae047a --target copilot
+apm install microsoft/CAIRA/skills/caira#a36d043784b0ac899764212178df6d0f9e9b85d9 --target copilot
+apm install microsoft/azure-skills/skills/appinsights-instrumentation#968f7bfaa01672e782dae2c6bab4fb9505ae047a --target copilot
+apm install Azure/agentops/plugins/agentops/skills/agentops-agent#0f2173d03a63c73b9cf4a4d9978136cc5dec2909 --target copilot
+apm install microsoft/eval-guide/skills/eval-faq#7a22a8957ced79a35fd7b4634fd5b5eac56c308e --target copilot
+apm install Azure/agentops/plugins/agentops/skills/agentops-config#0f2173d03a63c73b9cf4a4d9978136cc5dec2909 --target copilot
+apm install Azure/agentops/plugins/agentops/skills/agentops-eval#0f2173d03a63c73b9cf4a4d9978136cc5dec2909 --target copilot
+apm install Azure/agentops/plugins/agentops/skills/agentops-report#0f2173d03a63c73b9cf4a4d9978136cc5dec2909 --target copilot
+apm install microsoft/agent-governance-toolkit/docs/skills/agt-policy-authoring#678070abf15417acdb4a5dd826667a5d83f54d67 --target copilot
+apm install microsoft/skills-for-fabric/skills/semantic-model-authoring#e31422e7d1045ef3a0906df9ff5991f2338af010 --target copilot
+apm install microsoft/skills-for-fabric/skills/powerbi-report-cli#e31422e7d1045ef3a0906df9ff5991f2338af010 --target copilot
+apm install microsoft/skills-for-fabric/skills/e2e-medallion-architecture#e31422e7d1045ef3a0906df9ff5991f2338af010 --target copilot
+apm install microsoft/skills-for-fabric/skills/sqldw-cli#e31422e7d1045ef3a0906df9ff5991f2338af010 --target copilot
+apm install microsoft/skills-for-fabric/skills/sqldb-cli#e31422e7d1045ef3a0906df9ff5991f2338af010 --target copilot
+apm install microsoft/skills-for-fabric/skills/eventhouse-cli#e31422e7d1045ef3a0906df9ff5991f2338af010 --target copilot
+apm install microsoft/skills-for-fabric/skills/eventstream-cli#e31422e7d1045ef3a0906df9ff5991f2338af010 --target copilot
+apm install microsoft/skills-for-fabric/skills/activator-cli#e31422e7d1045ef3a0906df9ff5991f2338af010 --target copilot
+apm install microsoft/skills-for-fabric/skills/spark-cli#e31422e7d1045ef3a0906df9ff5991f2338af010 --target copilot
+apm install microsoft/skills-for-fabric/skills/dataflows-cli#e31422e7d1045ef3a0906df9ff5991f2338af010 --target copilot
+apm install microsoft/skills-for-fabric/skills/onelake-catalog-cli#e31422e7d1045ef3a0906df9ff5991f2338af010 --target copilot
+apm install microsoft/skills-for-fabric/skills/databricks-migration#e31422e7d1045ef3a0906df9ff5991f2338af010 --target copilot
+apm install microsoft/skills-for-fabric/skills/synapse-migration#e31422e7d1045ef3a0906df9ff5991f2338af010 --target copilot
+apm install microsoft/skills-for-fabric/skills/hdinsight-migration#e31422e7d1045ef3a0906df9ff5991f2338af010 --target copilot
+apm install microsoft/skills-for-fabric/skills/pipeline-migration#e31422e7d1045ef3a0906df9ff5991f2338af010 --target copilot
 apm install dotnet/skills/plugins/dotnet-upgrade/skills/migrate-dotnet8-to-dotnet9#2877c712edc20643b72f64e2983b168e6661d607 --target copilot
 apm install dotnet/skills/plugins/dotnet-upgrade/skills/migrate-dotnet9-to-dotnet10#2877c712edc20643b72f64e2983b168e6661d607 --target copilot
 apm install dotnet/skills/plugins/dotnet-upgrade/skills/migrate-nullable-references#2877c712edc20643b72f64e2983b168e6661d607 --target copilot
@@ -1540,8 +1554,8 @@ apm install Azure/azure-functions-skills/.github/plugins/azure-functions-skills/
           <tr><td><code>power-platform</code></td><td>pp-architect, pp-connector</td><td>Le projet repose sur Power Platform &mdash; Power Apps, Power Automate, Dataverse, Power Pages ou Copilot Studio</td></tr>
           <tr><td><code>m365-copilot</code></td><td>m365-agent-architect, m365-agent-integrator</td><td>Le projet repose sur Microsoft 365 Copilot &mdash; agents déclaratifs, définitions d'agents TypeSpec, plugins API, agents s'appuyant sur MCP ou intégration Microsoft Graph</td></tr>
           <tr><td><code>aws</code></td><td>aws-architect, aws-diagnose</td><td>Le projet repose sur AWS &mdash; Lambda et serverless, ECS ou EKS, CDK, SAM, CloudFormation, Organizations et zones d'atterrissage, ou une charge de travail AWS en service à diagnostiquer</td></tr>
-          <tr><td data-release-change="20261008-foundry-agentic-pack"><code>foundry</code></td><td>architect, azure-architect, deployer, prompt-engineer, security, rai, observability, cost-manager, data-scientist</td><td>Planification, revue indépendante et déploiement contrôlé d'un projet Microsoft Foundry avec un blueprint en sept blocs, des preuves de source et une vérification SDK/API ; réutilise les rôles existants, dont data-scientist pour Foundry IQ</td></tr>
-          <tr><td><code>fabric</code></td><td>data-scientist</td><td>Entrepôt Fabric, Eventhouse, Spark ou Dataflow au-delà de l'introduction Lakehouse. Activation explicite ; réutilise <code>data-scientist</code> et n'ajoute aucun rôle. Les commandes d'installation restent dans le catalogue. Rien n'est installé automatiquement.</td></tr>
+          <tr><td data-release-change="20261008-foundry-agentic-pack"><code>foundry</code></td><td>architect, azure-architect, deployer, prompt-engineer, security, rai, observability, cost-manager, data-scientist</td><td>Planification d'un projet Microsoft Foundry, préparation AgentOps d'évaluation et de gouvernance, rédaction de politiques AGT, revue indépendante et déploiement contrôlé avec un blueprint en sept blocs, des preuves de source et une vérification SDK/API ; réutilise les rôles existants, dont data-scientist pour Foundry IQ</td></tr>
+          <tr><td><code>fabric</code></td><td>data-scientist</td><td>Modèles sémantiques Power BI, DAX et rapports PBIR/PBIP, ainsi que Medallion Lakehouse, Warehouse, base SQL, Eventhouse, Eventstream, Activator, Spark, Dataflow Gen2, catalogue OneLake et migrations Databricks/Synapse/HDInsight/pipelines sur Microsoft Fabric. Activation explicite ; réutilise <code>data-scientist</code> et n'ajoute aucun rôle.</td></tr>
           <tr><td><code>dotnet</code></td><td>modernizer, tester, performance, developer</td><td>Le projet repose sur .NET &mdash; mises à niveau de SDK et de framework cible, gestion centralisée des paquets NuGet, migration du runner VSTest vers MTP, revue des tests .NET et des changements cassants, planification des performances sur les chemins critiques et BenchmarkDotNet, ou implémentation EF Core, ASP.NET Core Web API, Blazor, C# et MSBuild. Activation explicite ; réutilise <code>modernizer</code>, <code>tester</code>, <code>performance</code> et <code>developer</code> sans ajouter de rôle.</td></tr>
           <tr><td><code>aks</code></td><td>azure-architect, developer, modernizer, azure-diagnose, cost-manager</td><td>Le projet s'exécute sur Azure Kubernetes Service (AKS) &mdash; conception de cluster Day-0, conteneurisation d'applications et manifestes conformes aux Deployment Safeguards, préparation à AKS Automatic, diagnostic Day-2 d'incidents de cluster ou GPU, ou optimisation des coûts AKS orientée Kubernetes. Activation explicite ; réutilise <code>azure-architect</code>, <code>developer</code>, <code>modernizer</code>, <code>azure-diagnose</code> et <code>cost-manager</code> sans ajouter de rôle.</td></tr>
           <tr><td><code>azure-functions</code></td><td>developer, deployer, tester, azure-diagnose, modernizer</td><td>Le projet repose sur Azure Functions &mdash; création de projets v4 et de déclencheurs, vérification contrôlée de déploiement Functions, audit d'espace de travail local et de bonnes pratiques, inventaire/santé/diagnostic de Function App, migration vers le worker isolé ou Hosted Skills. Activation explicite ; réutilise <code>developer</code>, <code>deployer</code>, <code>tester</code>, <code>azure-diagnose</code> et <code>modernizer</code> sans ajouter de rôle.</td></tr>
@@ -2094,6 +2108,167 @@ apm install Azure/azure-functions-skills/.github/plugins/azure-functions-skills/
           </tbody>
         </table>
       </section>
+      <section data-release-change="20261115-foundry-and-fabric-pack-parity">
+        <h3 id="foundry-setup">Configurer Microsoft Foundry avec l'aide de HVE Squad</h3>
+        <p>
+          Ouvrez votre projet dans l'hôte où HVE Squad est installé et envoyez cette demande.
+          Appliquer <code>foundry</code> ajoute le blueprint Foundry en sept blocs et les rôles
+          spécialistes manquants du catalogue existant ; cela n'installe jamais <code>az</code>,
+          <code>azd</code>, <code>agentops-accelerator</code>, <code>assert-ai</code>,
+          <code>@microsoft/agent-governance-copilot-cli</code>, des hooks de télémétrie ni des
+          serveurs MCP.
+        </p>
+        <pre><code>/squad request="Set up the Foundry pack. Explain what will be installed, ask before installing, and leave the Foundry IQ and AgentOps governance preview skills out unless I approve them." pack=foundry</code></pre>
+        <ol>
+          <li>
+            <strong>Choisissez d'abord les compétences de base.</strong> HVE Squad répertorie onze
+            compétences de base issues de
+            <a href="https://github.com/microsoft/azure-skills">microsoft/azure-skills</a>,
+            <a href="https://github.com/Azure/aigateway">Azure/aigateway</a>,
+            <a href="https://github.com/microsoft/CAIRA">microsoft/CAIRA</a>,
+            <a href="https://github.com/Azure/agentops">Azure/agentops</a>,
+            <a href="https://github.com/microsoft/eval-guide">microsoft/eval-guide</a> et
+            <a href="https://github.com/microsoft/agent-governance-toolkit">microsoft/agent-governance-toolkit</a> :
+            <code>microsoft-foundry</code>, <code>use-ai-gateway</code>,
+            <code>azure-aigateway</code>, <code>caira</code>,
+            <code>appinsights-instrumentation</code>, <code>agentops-agent</code>,
+            <code>eval-faq</code>, <code>agentops-config</code>, <code>agentops-eval</code>,
+            <code>agentops-report</code> et <code>agt-policy-authoring</code>. Installez les onze,
+            choisissez un sous-ensemble ou continuez sans elles.
+          </li>
+          <li>
+            <strong>Approuvez les dossiers épinglés, rechargez et vérifiez.</strong> HVE Squad
+            exécute <code>Install-SquadPackResources.ps1</code>, exige un reçu <code>PASS</code>
+            plutôt que <code>PLANNED</code>, s'arrête pour un rechargement de l'hôte, relance le
+            contrôle préalable pour consigner des décisions <code>available</code> ou
+            <code>declined</code> explicites, et vérifie les fichiers inclus sous
+            <code>.agents/skills/</code> sans ajouter <code>/SKILL.md</code> ni activer de hooks.
+          </li>
+          <li>
+            <strong>Gardez la planification, la politique et l'évaluation en local.</strong>
+            <code>prompt-engineer</code>, <code>observability</code>, <code>security</code> et
+            <code>rai</code> rédigent <code>agentops.yaml</code>, les plans d'instrumentation,
+            <code>.agt/policy.json</code> et les preuves de gouvernance sans exécuter
+            <code>pip install</code>, <code>az role assignment create</code>,
+            <code>agentops eval run</code> ni <code>agentops cockpit</code> ; les déploiements
+            restent derrière <code>deployer</code>.
+          </li>
+        </ol>
+        <h4>Solution manuelle et copies de référence Foundry facultatives</h4>
+        <p>
+          Si HVE Squad ne peut pas exécuter l'installateur, vérifiez que Git et APM sont disponibles
+          (voir le <a href="getting-started.html">guide de démarrage</a> et la
+          <a href="https://learn.microsoft.com/azure/ai-foundry/">documentation Microsoft Foundry</a>)
+          et exécutez les onze commandes Foundry épinglées du bloc ci-dessus sans ajouter
+          <code>/SKILL.md</code>. Pour des copies sources hors ligne en lecture seule des
+          architectures CAIRA ou de la documentation AGT, exécutez les commandes ci-dessous lorsque
+          les dossiers cibles n'existent pas.
+        </p>
+        <pre><code>git clone --config core.longpaths=true --filter=blob:none --no-checkout https://github.com/microsoft/CAIRA.git apm_modules/.squad-pack-support/caira-a36d043
+git -C apm_modules/.squad-pack-support/caira-a36d043 checkout --detach a36d043784b0ac899764212178df6d0f9e9b85d9
+git -C apm_modules/.squad-pack-support/caira-a36d043 rev-parse HEAD
+git clone --config core.longpaths=true --filter=blob:none --no-checkout https://github.com/microsoft/agent-governance-toolkit.git apm_modules/.squad-pack-support/agent-governance-toolkit-678070a
+git -C apm_modules/.squad-pack-support/agent-governance-toolkit-678070a checkout --detach 678070abf15417acdb4a5dd826667a5d83f54d67
+git -C apm_modules/.squad-pack-support/agent-governance-toolkit-678070a rev-parse HEAD</code></pre>
+        <h4>Compétences facultatives en préversion pour Foundry IQ et la gouvernance AgentOps</h4>
+        <p>
+          Deux compétences en préversion peuvent être approuvées séparément :
+          <code>foundry-iq</code> (ancrage sur base de connaissances Foundry IQ issu du plugin
+          <code>0.2.8</code> en préversion) et <code>agentops-governance</code> (configuration
+          ASSERT <code>./assert/eval_config.yaml</code>, contrats de points de contrôle ACS
+          <code>acs.yaml</code>, revue Guided Guardrail et index de préparation Red-Team sans
+          charges offensives issus de <code>0.16.2</code>). Les modes New Foundry
+          <code>execution: cloud</code> OpenAI Evals et <code>azd ai agent eval</code> au sein de
+          <code>agentops-eval</code> exigent également une approbation explicite de préversion.
+        </p>
+        <pre><code>apm install microsoft/skills/.github/plugins/foundry-iq-skills/skills/foundry-iq#f03ec5392f7a0f3aca12af47477e92f1edf7b44c --target copilot
+apm install Azure/agentops/plugins/agentops/skills/agentops-governance#0f2173d03a63c73b9cf4a4d9978136cc5dec2909 --target copilot</code></pre>
+        <p>
+          Après rechargement, HVE Squad vérifie
+          <code>.agents/skills/foundry-iq/references/intent-routing.md</code> et
+          <code>.agents/skills/agentops-governance/SKILL.md</code> avant de sélectionner l'un de
+          ces workflows en préversion.
+        </p>
+        <h4>Si la configuration s'arrête</h4>
+        <table>
+          <thead><tr><th>Ce que vous voyez</th><th>Que faire</th></tr></thead>
+          <tbody>
+            <tr><td>Une ancienne commande ajoutait <code>/SKILL.md</code> et échouait à la validation APM</td><td>Relancez avec le chemin du dossier de compétence épinglé sans <code>/SKILL.md</code>, puis rechargez l'hôte.</td></tr>
+            <tr><td>Installé sur disque, mais absent de la liste de l'hôte</td><td>Rechargez l'hôte, rouvrez le même projet et relancez le contrôle préalable Foundry avant de marquer la ressource disponible.</td></tr>
+            <tr><td>Une étape d'évaluation ou de gouvernance demande d'exécuter <code>agentops eval run</code>, <code>agentops redteam run</code> ou <code>agt-copilot</code></td><td>Gardez les chartes sur la rédaction locale et la revue de rapports fournis ; lancez vous-même les évaluations facturées ou la validation CLI, ou déléguez une tâche QA approuvée.</td></tr>
+          </tbody>
+        </table>
+      </section>
+      <section data-release-change="20261115-foundry-and-fabric-pack-parity">
+        <h3 id="fabric-setup">Configurer Microsoft Fabric et Power BI avec l'aide de HVE Squad</h3>
+        <p>
+          Ouvrez votre projet dans l'hôte où HVE Squad est installé et envoyez cette demande.
+          Appliquer <code>fabric</code> réutilise <code>data-scientist</code> sur les workflows
+          officiels Power BI et Microsoft Fabric ; cela n'installe jamais <code>az</code>,
+          <code>sqlcmd</code>, <code>fab</code> ni <code>powerbi-report-author</code>, et ne
+          demande jamais de consentement de tenant.
+        </p>
+        <pre><code>/squad request="Set up the Fabric pack. Explain what will be installed, disclose any .github/mcp.json entries first, and ask before installing." pack=fabric</code></pre>
+        <ol>
+          <li>
+            <strong>Examinez les quinze compétences officielles et la déclaration MCP.</strong> HVE
+            Squad répertorie quinze compétences issues de
+            <a href="https://github.com/microsoft/skills-for-fabric">microsoft/skills-for-fabric</a> :
+            <code>semantic-model-authoring</code>, <code>powerbi-report-cli</code>,
+            <code>e2e-medallion-architecture</code>, <code>sqldw-cli</code>, <code>sqldb-cli</code>,
+            <code>eventhouse-cli</code>, <code>eventstream-cli</code>, <code>activator-cli</code>,
+            <code>spark-cli</code>, <code>dataflows-cli</code>, <code>onelake-catalog-cli</code>,
+            <code>databricks-migration</code>, <code>synapse-migration</code>,
+            <code>hdinsight-migration</code> et <code>pipeline-migration</code>. Avant approbation,
+            HVE Squad signale que <code>semantic-model-authoring</code> et
+            <code>powerbi-report-cli</code> inscrivent <code>powerbi-modeling-mcp</code>
+            (<code>@microsoft/powerbi-modeling-mcp@latest</code>) et que <code>sqldw-cli</code>
+            ainsi que <code>synapse-migration</code> inscrivent <code>fabric-sqlendpoint</code> dans
+            <code>.github/mcp.json</code>.
+          </li>
+          <li>
+            <strong>Approuvez les dossiers épinglés, rechargez et vérifiez le socle partagé.</strong>
+            HVE Squad exécute <code>Install-SquadPackResources.ps1</code>, exige un reçu
+            <code>PASS</code>, s'arrête pour un rechargement de l'hôte, relance le contrôle
+            préalable pour consigner des décisions <code>available</code> ou <code>declined</code>
+            explicites, et vérifie à la fois les références sous <code>.agents/skills/</code> et le
+            socle partagé <code>common/COMMON-CLI.md</code>. Conservez <code>spark-cli</code> aux
+            côtés de <code>e2e-medallion-architecture</code> lorsque les références de notebooks ou
+            de MLV médaillon sont nécessaires.
+          </li>
+          <li>
+            <strong>Gardez la rédaction en local et contrôlez les écritures Fabric.</strong> La
+            revue hors ligne <code>.tmdl</code>/PBIP, l'analyse de forme DAX et la planification
+            <code>_brief/report-spec.md</code> ou <code>Design Brief:</code> fonctionnent sans
+            démarrer de serveur MCP ; la création d'espaces de travail ou d'éléments,
+            <code>updateDefinition</code>, le déploiement ou l'actualisation de modèles, la
+            publication de rapports, <code>dacpac</code>, les écritures Activator et la remédiation
+            OneLake s'arrêtent pour approbation humaine.
+          </li>
+        </ol>
+        <h4>Solution manuelle et copie de support Fabric</h4>
+        <p>
+          Si HVE Squad ne peut pas exécuter l'installateur, vérifiez que Git et APM sont disponibles
+          (voir le <a href="getting-started.html">guide de démarrage</a> et la
+          <a href="https://learn.microsoft.com/fabric/">documentation Microsoft Fabric</a>) et
+          exécutez les quinze commandes Fabric épinglées du bloc ci-dessus sans ajouter
+          <code>/SKILL.md</code>. Pour alimenter une copie source <code>common/</code> en lecture
+          seule sans modifier <code>.github/mcp.json</code>, exécutez les commandes ci-dessous
+          lorsque le dossier cible n'existe pas.
+        </p>
+        <pre><code>git clone --config core.longpaths=true --filter=blob:none --no-checkout https://github.com/microsoft/skills-for-fabric.git apm_modules/.squad-pack-support/skills-for-fabric-e31422e
+git -C apm_modules/.squad-pack-support/skills-for-fabric-e31422e checkout --detach e31422e7d1045ef3a0906df9ff5991f2338af010
+git -C apm_modules/.squad-pack-support/skills-for-fabric-e31422e rev-parse HEAD</code></pre>
+        <h4>Si la configuration s'arrête</h4>
+        <table>
+          <thead><tr><th>Ce que vous voyez</th><th>Que faire</th></tr></thead>
+          <tbody>
+            <tr><td>Référence partagée <code>common/COMMON-CLI.md</code> ou compétence sœur <code>spark-cli</code> absente</td><td>Récupérez la copie de support épinglée <code>skills-for-fabric-e31422e</code> ci-dessus et installez <code>spark-cli</code> aux côtés de <code>e2e-medallion-architecture</code>, puis rechargez l'hôte.</td></tr>
+            <tr><td>Vous ne souhaitez pas d'entrées MCP non épinglées dans <code>.github/mcp.json</code></td><td>Refusez les quatre compétences déclarant MCP et utilisez la copie de support en lecture seule, ou épinglez/retirez l'entrée ajoutée dans <code>.github/mcp.json</code> avant de recharger.</td></tr>
+            <tr><td>Installé sur disque, mais absent de la liste de l'hôte</td><td>Rechargez l'hôte, rouvrez le même projet et relancez le contrôle préalable Fabric avant de marquer la ressource disponible.</td></tr>
+          </tbody>
+        </table>
+      </section>
       <p>
         <code>aws-architect</code> conçoit les charges de travail AWS &mdash; services à retenir, organisation des comptes et
         de la zone d'atterrissage, et code CDK, SAM ou CloudFormation pour les construire &mdash; en s'appuyant
@@ -2127,24 +2302,22 @@ apm install Azure/azure-functions-skills/.github/plugins/azure-functions-skills/
         compétences, rechargez l'hôte et relancez le contrôle préalable avant de poursuivre
         l'initialisation ou l'ajout du pack.
       </p>
-      <pre><code># Microsoft Foundry and APIM AI Gateway skills
-apm install microsoft/azure-skills/skills/microsoft-foundry --target copilot
-apm install microsoft/azure-skills/skills/azure-aigateway --target copilot
+      <pre><code># Microsoft Foundry, AI Gateway, CAIRA, AgentOps, and AGT policy skill directories
+apm install microsoft/azure-skills/skills/microsoft-foundry#968f7bfaa01672e782dae2c6bab4fb9505ae047a --target copilot
+apm install Azure/aigateway/skills/use-ai-gateway#8cba384de61ab9d438450a79f44fba0528c56d0a --target copilot
+apm install microsoft/azure-skills/skills/azure-aigateway#968f7bfaa01672e782dae2c6bab4fb9505ae047a --target copilot
+apm install microsoft/CAIRA/skills/caira#a36d043784b0ac899764212178df6d0f9e9b85d9 --target copilot
+apm install Azure/agentops/plugins/agentops/skills/agentops-config#0f2173d03a63c73b9cf4a4d9978136cc5dec2909 --target copilot
+apm install microsoft/agent-governance-toolkit/docs/skills/agt-policy-authoring#678070abf15417acdb4a5dd826667a5d83f54d67 --target copilot
 
-# Consume an existing AI Gateway from GitHub Copilot CLI
-copilot plugin marketplace add Azure/aigateway
-copilot plugin install ai-gateway@azure
-
-# Inspect selected CAIRA reference components
-npx skills add github.com/microsoft/CAIRA/skills
-
-# Fabric Warehouse skill example
-apm install microsoft/skills-for-fabric/skills/sqldw-cli --target copilot</code></pre>
+# Power BI semantic model and Fabric Warehouse skill examples
+apm install microsoft/skills-for-fabric/skills/semantic-model-authoring#e31422e7d1045ef3a0906df9ff5991f2338af010 --target copilot
+apm install microsoft/skills-for-fabric/skills/sqldw-cli#e31422e7d1045ef3a0906df9ff5991f2338af010 --target copilot</code></pre>
       <p>
-        Le chemin plugin exige GitHub Copilot CLI avec la prise en charge des plugins ; CAIRA exige
-        Node.js et <code>npx</code>. Les workflows Foundry et gateway peuvent aussi nécessiter Azure
-        CLI, un compte ou projet Azure et une gateway existante. L'authentification de déploiement
-        reste exclusivement OIDC.
+        Chaque entrée de pack s'installe comme dossier de compétence APM épinglé sans ajouter
+        <code>/SKILL.md</code>. Les workflows actifs Foundry, gateway et Fabric peuvent séparément
+        nécessiter Azure CLI, un compte Azure ou espace de travail Fabric, ou une gateway existante ;
+        l'authentification de déploiement reste exclusivement OIDC.
       </p>
       <h3 data-release-change="20261008-foundry-agentic-pack">Consignes de projet Microsoft Foundry</h3>
       <pre><code>/squad request="Plan a Foundry support assistant" profile=azure pack=foundry

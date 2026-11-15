@@ -270,20 +270,31 @@ the supplied `selectionCue` is a substring of the roster cue and the agent is
 installed and dispatchable.
 
 `foundry` Adds includes existing `data-scientist` in both pack mirrors.
-`azure +foundry` adds that owner; `full +foundry` adds zero roles.
-`foundry-iq` is reached by `data-scientist` and `appinsights-instrumentation`
-by `observability` only while `foundry` is active. Pack removal stops that
+`azure +foundry` adds `data-scientist`, `observability`, `prompt-engineer`, and
+`rai`; `full +foundry` adds zero roles. All thirteen registered Foundry skills
+(`microsoft-foundry`, `use-ai-gateway`, `azure-aigateway`, `caira`,
+`foundry-iq`, `appinsights-instrumentation`, `agentops-agent`, `eval-faq`,
+`agentops-config`, `agentops-eval`, `agentops-report`, `agentops-governance`,
+and `agt-policy-authoring`) use pinned APM directory paths without `/SKILL.md`
+and are squad-selected only while `foundry` is active and not `declined`;
+`foundry-iq` and `agentops-governance` (plus preview cloud/`azd` modes inside
+`agentops-eval`) require explicit preview approval. Pack removal stops that
 squad selection and guidance. It does not uninstall or hide a host-installed skill.
 
-`fabric` is an opt-in supplement. Its Adds cell is existing `data-scientist`
-only. `full +fabric` adds zero roles. `azure +fabric` adds `data-scientist`.
-Admitted skills are `sqldw-cli`, `sqldb-cli`, `eventhouse-cli`,
-`eventstream-cli`, `spark-cli`, `dataflows-cli`, `databricks-migration`, and
-`pipeline-migration`. `data-scientist` selects one only while `fabric` is
-active and only for the matching job in `fabric-blueprint.md`. Pack absence,
-removal, and the interval before reapplication do not select them. Host
-visibility is not selection. Power BI rows and `fabric-lakehouse` stay
-registered and unchanged. No Fabric candidate is blocklisted.
+`fabric` is an opt-in official Power BI and Microsoft Fabric pack. Its Adds cell
+is existing `data-scientist` only. `full +fabric` and `product +fabric` add zero
+roles; `azure +fabric` and `default +fabric` add `data-scientist`. All fifteen
+admitted official skills (`semantic-model-authoring`, `powerbi-report-cli`,
+`e2e-medallion-architecture`, `sqldw-cli`, `sqldb-cli`, `eventhouse-cli`,
+`eventstream-cli`, `activator-cli`, `spark-cli`, `dataflows-cli`,
+`onelake-catalog-cli`, `databricks-migration`, `synapse-migration`,
+`hdinsight-migration`, and `pipeline-migration`) use pinned APM directory paths
+at `microsoft/skills-for-fabric@e31422e7d1045ef3a0906df9ff5991f2338af010` and are
+selected by `data-scientist` only while `fabric` is active and not `declined`.
+Pack absence, removal, and the interval before reapplication do not select them.
+Host visibility is not selection. All six superseded community Power BI and
+`fabric-lakehouse` rows, the five upstream Fabric agents, and four gate-failing
+skills are recorded in *External Cast Blocklist*.
 
 | ID | Assertion | Source |
 |---|---|---|
@@ -292,8 +303,8 @@ registered and unchanged. No Fabric candidate is blocklisted.
 | SRC-03 | `azure-deployment-preflight` stays registered. `azure-validate` and `azure-enterprise-infra-planner` stay unregistered and unblocked | `roster-catalog.md`, Deferred official candidates |
 | SRC-04 | A confirmed registered pack whose Adds roles are already present applies metadata and provenance only when the pack is not already listed. Already-active packs, unregistered sealed packs, empty cells, unknown packs, and role-only no-ops still fail | `Get-SquadRosterExpansionPlan.ps1`; `Expand-SquadRoster.ps1` |
 | SRC-05 | Supported official Power Platform and M365 jobs select the local Primary. Broad legacy cues select the named community Alternate only when that cue matches and the agent is installed and dispatchable | `squad-roster.instructions.md`, Pack cues; `New-SquadDispatchPlan.ps1` |
-| SRC-06 | `foundry` Adds includes `data-scientist`. Foundry-specific skills are squad-selected only while `foundry` is active. Removal does not hide a host-installed skill | `profiles-and-packs.md`; `squad-data-scientist.agent.md` |
-| SRC-07 | `fabric` reuses `data-scientist` and admits only the eight gated skills. Selection requires an active `fabric` pack. Current Power BI and `fabric-lakehouse` rows do not change, and no Fabric candidate is blocklisted | `fabric-blueprint.md`; PRF-25 |
+| SRC-06 | `foundry` Adds includes `data-scientist`, offers all thirteen pinned official directory skills through shared resource preflight only when `foundry` is proposed, gates `foundry-iq` and `agentops-governance` behind explicit preview approval, blocklists colliding/hook-bound `Azure/agentops` and `microsoft/eval-guide` candidates, and selects Foundry skills only while `foundry` is active without hiding host-installed skills on removal | `foundry-blueprint.md`; `foundry-platform-options.md`; `PackRegistry.Tests.ps1`; `CoordinatorRuntime.Tests.ps1` |
+| SRC-07 | `fabric` reuses `data-scientist` with zero new roles, offers all fifteen pinned `microsoft/skills-for-fabric` directory skills through shared resource preflight only when `fabric` is proposed, discloses skill-manifest `.github/mcp.json` MCP entries and shared `common/` support roots before install, and blocklists the six superseded community Power BI/`fabric-lakehouse` rows plus the five upstream Fabric agents and four gate-failing skills while keeping unpacked `data-scientist` HVE Core skills unchanged | `fabric-blueprint.md`; `roster-catalog.md`, External Cast Blocklist; PRF-25 |
 | SRC-08 | Every registered PP skill is in shared resource preflight only when `power-platform` is proposed. All six existing official installs use verified pinned directories, not `SKILL.md` paths. The two preview resources install one complete pinned bundle, not incomplete skill files | `power-platform-official-resources.md`; `roster-catalog.md`, Registered Pack Skills; `PackRegistry.Tests.ps1`; `CoordinatorRuntime.Tests.ps1` |
 | SRC-09 | Copilot Studio knowledge YAML and skill import use the existing PP owners only for explicitly approved preview work in an existing agentic-loop workspace. Declining a resource, pack absence/removal, missing support files, or missing approval stops its use. Standard schemas, extra bundle agents, evaluation and PAC cloud workflows are not silently admitted | PP charters and `power-platform-official-resources.md`; `PackRegistry.Tests.ps1`; `ExpandSquadRoster.Tests.ps1` |
 | SRC-10 | PP uses the same approval, selected-subset, receipt, reload and host-availability lifecycle as other resource packs. Every resource needs an explicit disposition; preview may be declined without preventing PP activation. No-pack proposals contain no PP resources. Installation does not grant prerequisite, startup-hook, authentication or tenant authority | `profiles-and-packs.md`, Pack Resource Preflight; `power-platform-official-resources.md`, Installation and readiness; `CoordinatorRuntime.Tests.ps1` |
@@ -306,6 +317,8 @@ registered and unchanged. No Fabric candidate is blocklisted.
 | SRC-17 | `aks` reuses `azure-architect`, `developer`, `modernizer`, `azure-diagnose`, and `cost-manager` with zero new roles, offers all seven registered `microsoft/azure-skills` AKS entries through shared resource preflight only when `aks` is proposed (ordering `azure-kubernetes-app-deploy` and `azure-kubernetes-automatic-readiness` ahead of `azure-kubernetes`), blocklists archived `Azure/AKS-Skills` (`aks`) and multi-role `platform-sre-kubernetes`, and leaves `aks-network-capture`, `airunway-aks-setup`, `azure-search-nav`, whole-plugin forms, and existing rows unchanged | `aks-platform-options.md`; `roster-catalog.md`, Registered Pack Skills and External Cast Blocklist; `PackRegistry.Tests.ps1`; `CoordinatorRuntime.Tests.ps1` |
 | SRC-18 | `azure-functions` reuses `developer`, `deployer`, `tester`, `azure-diagnose`, and `modernizer` with zero new roles, offers all ten registered `Azure/azure-functions-skills` entries through shared resource preflight only when `azure-functions` is proposed, and gates `azure-functions-update` and `azure-functions-hosted-skills` behind explicit preview approval, non-`declined` dispositions, and verified packaged support files. `azure-functions-deploy` adds Functions verification context inside `Squad Deployer`'s OIDC dry-run and Impactful-Action Gate without chaining into unregistered `azure-prepare`/`azure-validate`/`azure-deploy`, `azure-functions-setup`, or `telemetry.mjs`, and leaves `azure-deployment-preflight` unchanged | `azure-functions-platform-options.md`; AKS/Functions charters; `PackRegistry.Tests.ps1`; `ExpandSquadRoster.Tests.ps1` |
 | SRC-19 | `aks` and `azure-functions` use the same approval, selected-subset, receipt, reload, host-availability, and Watch Mode lifecycle as other resource packs. Every resource needs an explicit disposition; Functions preview skills may be declined without preventing `azure-functions` activation. Installation does not grant `az`, `kubectl`, `func`, `azd`, telemetry-hook, MCP, Connector Namespace, or live-mutation authority | `profiles-and-packs.md`, Pack Resource Preflight; `aks-platform-options.md`; `azure-functions-platform-options.md`; `CoordinatorRuntime.Tests.ps1`; `WatchMode.Tests.ps1` |
+| SRC-20 | `foundry` wires official evaluation, observability, safety, and governance skills (`eval-faq`, `agentops-config`, `agentops-eval`, `agentops-report` on `prompt-engineer`; `agentops-agent` on `observability`; preview `agentops-governance` on `rai`; `agt-policy-authoring` on `security`) alongside pinned `microsoft-foundry`, `use-ai-gateway`, `azure-aigateway`, `caira`, `appinsights-instrumentation`, and preview `foundry-iq` without `/SKILL.md` paths, while keeping `agent-governance`, `owasp-agentic`, and local/read-only charter boundaries intact | `foundry-blueprint.md`; `foundry-platform-options.md`; Foundry charters; `PackRegistry.Tests.ps1` |
+| SRC-21 | `foundry` and `fabric` use the same approval, selected-subset, receipt, reload, host-availability, and Watch Mode lifecycle as all other resource packs. Every resource needs an explicit disposition; Foundry preview skills (`foundry-iq` and `agentops-governance`) and Fabric MCP-declaring skills may be declined without preventing pack activation. Installation does not grant CLI, Python/npm package, MCP startup, RBAC, tenant-consent, or live cloud write authority | `profiles-and-packs.md`, Pack Resource Preflight; `foundry-platform-options.md`; `fabric-blueprint.md`; `CoordinatorRuntime.Tests.ps1`; `ExpandSquadRoster.Tests.ps1`; `WatchMode.Tests.ps1` |
 
 Tier 1 has one opt-in `pack-lifecycle` scenario. It is excluded from the default live matrix and
 requires `-Pack <registered-pack>`, so adding packs does not multiply paid requests. Provision it
@@ -640,7 +653,7 @@ Init with each profile and assert the seeded roster holds exactly the documented
 | PRF-22 | Every seeded role has a non-empty `Deliverable Root`, and no two roles at different tiers share a root in a way that makes the Artifact Gate ambiguous |
 | PRF-23 | Every seeded role's `Agent Name (Primary)` resolves to a delivered agent — the runtime counterpart of PKG-02 |
 | PRF-24 | Removing a pack removes only roles no other roster source owns; keeps profile, other-pack, and custom roles; appends a removal decision while earlier `decisions.md` content stays a byte-identical prefix; and stops that pack's guidance handoff (`profiles-and-packs.md`; `scenarios/pack-lifecycle.json`) |
-| PRF-25 | `fabric` reuses `data-scientist` and adds no role. `full +fabric` adds zero roles; a profile that lacks `data-scientist` adds that role only. Admitted Fabric skills are squad-selected only while `fabric` is active. Removal stops that selection and does not hide a host-installed skill. Existing Power BI and `fabric-lakehouse` rows do not change, and no Fabric candidate moves to the blocklist |
+| PRF-25 | `fabric` reuses `data-scientist` and adds no role. `full +fabric` and `product +fabric` add zero roles; a profile that lacks `data-scientist` adds that role only. All fifteen official Power BI and Microsoft Fabric skills are squad-selected only while `fabric` is active and not `declined`. Removal stops that selection without hiding host-installed skills, and superseded community Power BI and `fabric-lakehouse` rows stay blocklisted |
 | PRF-26 | `dotnet` reuses `modernizer`, `tester`, `performance`, and `developer` and adds no role. `full +dotnet` adds zero roles; `default +dotnet` adds `modernizer` and `performance`; `azure +dotnet` and `modernization +dotnet` add `performance`; `operations +dotnet` adds `modernizer`. Admitted `.NET` skills are squad-selected only while `dotnet` is active, and removal stops that selection without hiding host-installed skills |
 | PRF-27 | `aks` reuses `azure-architect`, `developer`, `modernizer`, `azure-diagnose`, and `cost-manager` and adds no role. `full +aks` and `azure +aks` add zero roles; `default +aks` adds `azure-architect`, `modernizer`, `azure-diagnose`, and `cost-manager`; `operations +aks` adds `azure-architect`, `modernizer`, and `cost-manager`. Admitted AKS skills are squad-selected only while `aks` is active, and removal stops that selection without hiding host-installed skills |
 | PRF-28 | `azure-functions` reuses `developer`, `deployer`, `tester`, `azure-diagnose`, and `modernizer` and adds no role. `full +azure-functions` and `azure +azure-functions` add zero roles; `default +azure-functions` adds `deployer`, `azure-diagnose`, and `modernizer`; `operations +azure-functions` adds `modernizer`. Admitted Azure Functions skills are squad-selected only while `azure-functions` is active, and removal stops that selection without hiding host-installed skills |

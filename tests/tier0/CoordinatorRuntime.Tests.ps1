@@ -221,25 +221,37 @@ Describe 'Compact confirmed initialization (COORD-01..03)' {
     It 'reports Foundry and Fabric pack resources with filesystem and host availability' {
         $repo = New-FixtureRepo
         Write-FixtureText (Join-Path $repo '.agents/skills/microsoft-foundry/SKILL.md') "---`nname: microsoft-foundry`ndescription: Fixture.`n---`n"
+        Write-FixtureText (Join-Path $repo '.agents/skills/semantic-model-authoring/SKILL.md') "---`nname: semantic-model-authoring`ndescription: Fixture.`n---`n"
+        $without = Invoke-Local 'Get-SquadInitContext.ps1' $repo @('-RepoRoot', $repo)
+        $without.ExitCode | Should -Be 0 -Because $without.Output
+        @(($without.Output | ConvertFrom-Json).packResources) | Should -BeNullOrEmpty
+
         $foundry = Invoke-Local 'Get-SquadInitContext.ps1' $repo @('-RepoRoot', $repo, '-Pack', 'foundry')
         $foundry.ExitCode | Should -Be 0 -Because $foundry.Output
         $foundryContext = $foundry.Output | ConvertFrom-Json
-        @($foundryContext.packResources) | Should -HaveCount 6
+        @($foundryContext.packResources) | Should -HaveCount 13
         $foundryResource = @($foundryContext.packResources | Where-Object resource -eq 'microsoft-foundry')[0]
         $foundryResource.installedOnDisk | Should -BeTrue
         $foundryResource.hostVisible | Should -BeFalse
         $foundryResource.installed | Should -BeFalse
-        @($foundryContext.packResources | Where-Object resource -eq 'use-ai-gateway')[0].installOrEntry | Should -Match 'copilot plugin install ai-gateway@azure'
+        @($foundryContext.packResources | Where-Object resource -eq 'use-ai-gateway')[0].installOrEntry |
+            Should -Match 'apm install Azure/aigateway/skills/use-ai-gateway#8cba384de61ab9d438450a79f44fba0528c56d0a --target copilot'
+        @($foundryContext.packResources | Where-Object resource -eq 'agt-policy-authoring')[0].roles | Should -Be @('security')
+        @($foundryContext.packResources | Where-Object resource -eq 'agentops-governance')[0].roles | Should -Be @('rai')
 
         $fabric = Invoke-Local 'Get-SquadInitContext.ps1' $repo @(
             '-RepoRoot', $repo, '-Pack', 'fabric', '-AvailableSkill', 'sqldw-cli'
         )
         $fabric.ExitCode | Should -Be 0 -Because $fabric.Output
         $fabricContext = $fabric.Output | ConvertFrom-Json
-        @($fabricContext.packResources) | Should -HaveCount 8
+        @($fabricContext.packResources) | Should -HaveCount 15
         $fabricResource = @($fabricContext.packResources | Where-Object resource -eq 'sqldw-cli')[0]
         $fabricResource.hostVisible | Should -BeTrue
         $fabricResource.installed | Should -BeTrue
+        $fabricDisk = @($fabricContext.packResources | Where-Object resource -eq 'semantic-model-authoring')[0]
+        $fabricDisk.installedOnDisk | Should -BeTrue
+        $fabricDisk.hostVisible | Should -BeFalse
+        $fabricDisk.installed | Should -BeFalse
     }
 
     It 'lists PP resources only for its active proposal and distinguishes disk from host visibility (SRC-08)' {
@@ -666,7 +678,9 @@ Describe 'Compact confirmed initialization (COORD-01..03)' {
         $choices.resourceDecisions = Get-PackResourceDecisions -Repo $repo -Packs @('foundry') -Status 'installed'
         { New-SquadInitPayload -Choices $choices -RepoRoot $repo } | Should -Throw '*Invalid pack resource decision*'
         $choices.resourceDecisions = Get-PackResourceDecisions -Repo $repo -Packs @('foundry') -Status 'available'
-        $choices.availableSkills = @($choices.resourceDecisions.Keys)
+        $choices.resourceDecisions['foundry-iq'] = 'declined'
+        $choices.resourceDecisions['agentops-governance'] = 'declined'
+        $choices.availableSkills = @($choices.resourceDecisions.Keys | Where-Object { $choices.resourceDecisions[$_] -eq 'available' })
 
         $choicesPath = Join-Path $repo 'foundry-choices.json'
         $payloadPath = Join-Path $repo 'foundry-payload.json'
@@ -677,7 +691,9 @@ Describe 'Compact confirmed initialization (COORD-01..03)' {
         $prepared.ExitCode | Should -Be 0 -Because $prepared.Output
         $payload = Get-Content -LiteralPath $payloadPath -Raw | ConvertFrom-Json -AsHashtable
         @($payload.packs) | Should -Be @('foundry')
-        $payload.packResources.Count | Should -Be 6
+        $payload.packResources.Count | Should -Be 13
+        $payload.packResources['foundry-iq'] | Should -BeExactly 'declined'
+        $payload.packResources['agentops-governance'] | Should -BeExactly 'declined'
 
         $initialized = Invoke-Local 'Initialize-Squad.ps1' $repo @(
             '-RepoRoot', $repo, '-PayloadPath', $payloadPath, '-Direct'
@@ -706,9 +722,12 @@ Describe 'Compact confirmed initialization (COORD-01..03)' {
         $foundryLine = @($foundryResult.Output -split '\r?\n' | Where-Object { $_ -match '^\{"schemaVersion"' })[-1]
         $foundryReceipt = $foundryLine | ConvertFrom-Json
         $foundryReceipt.status | Should -BeExactly 'PLANNED'
-        @($foundryReceipt.resources) | Should -HaveCount 6
-        @($foundryReceipt.resources.commands) -join "`n" | Should -Match 'apm install microsoft/azure-skills/skills/microsoft-foundry --target copilot'
-        @($foundryReceipt.resources.commands) -join "`n" | Should -Match 'copilot plugin install ai-gateway@azure'
+        @($foundryReceipt.resources) | Should -HaveCount 13
+        $foundryCommands = (@($foundryReceipt.resources | ForEach-Object commands)) -join "`n"
+        $foundryCommands | Should -Not -Match '/SKILL\.md'
+        $foundryCommands | Should -Match 'apm install microsoft/azure-skills/skills/microsoft-foundry#968f7bfaa01672e782dae2c6bab4fb9505ae047a --target copilot'
+        $foundryCommands | Should -Match 'apm install Azure/aigateway/skills/use-ai-gateway#8cba384de61ab9d438450a79f44fba0528c56d0a --target copilot'
+        $foundryCommands | Should -Match 'apm install microsoft/agent-governance-toolkit/docs/skills/agt-policy-authoring#678070abf15417acdb4a5dd826667a5d83f54d67 --target copilot'
         Test-Path -LiteralPath $receiptPath | Should -BeFalse
 
         $hostResult = Invoke-Local 'Install-SquadPackResources.ps1' $repo @(
@@ -727,8 +746,11 @@ Describe 'Compact confirmed initialization (COORD-01..03)' {
         $fabricLine = @($fabricResult.Output -split '\r?\n' | Where-Object { $_ -match '^\{"schemaVersion"' })[-1]
         $fabricReceipt = $fabricLine | ConvertFrom-Json
         $fabricReceipt.status | Should -BeExactly 'PLANNED'
-        @($fabricReceipt.resources) | Should -HaveCount 8
-        @($fabricReceipt.resources.commands) -join "`n" | Should -Match 'apm install microsoft/skills-for-fabric/skills/sqldw-cli --target copilot'
+        @($fabricReceipt.resources) | Should -HaveCount 15
+        $fabricCommands = (@($fabricReceipt.resources | ForEach-Object commands)) -join "`n"
+        $fabricCommands | Should -Not -Match '/SKILL\.md'
+        $fabricCommands | Should -Match 'apm install microsoft/skills-for-fabric/skills/semantic-model-authoring#e31422e7d1045ef3a0906df9ff5991f2338af010 --target copilot'
+        $fabricCommands | Should -Match 'apm install microsoft/skills-for-fabric/skills/sqldw-cli#e31422e7d1045ef3a0906df9ff5991f2338af010 --target copilot'
         Get-FixtureHash $repo | Should -BeExactly $before
     }
 

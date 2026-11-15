@@ -149,7 +149,12 @@ Describe 'Registered pack consistency' -Tag 'Unit' {
                 Where-Object { $_ } |
                 Sort-Object -Unique
         )
-        $foundrySkills = @('appinsights-instrumentation', 'azure-aigateway', 'caira', 'foundry-iq', 'microsoft-foundry', 'use-ai-gateway')
+        $foundrySkills = @(
+            'agentops-agent', 'agentops-config', 'agentops-eval', 'agentops-governance',
+            'agentops-report', 'agt-policy-authoring', 'appinsights-instrumentation',
+            'azure-aigateway', 'caira', 'eval-faq', 'foundry-iq', 'microsoft-foundry',
+            'use-ai-gateway'
+        )
         $blueprintSkills -join ',' | Should -BeExactly ($foundrySkills -join ',')
 
         $registeredSkills = @(
@@ -179,13 +184,19 @@ Describe 'Registered pack consistency' -Tag 'Unit' {
             if (-not $mapped.ContainsKey($pack)) { $mapped[$pack] = @() }
             $mapped[$pack] += $cells[2].Trim().Trim('`')
         }
-        $expectedFoundry = @('appinsights-instrumentation', 'azure-aigateway', 'caira', 'foundry-iq', 'microsoft-foundry', 'use-ai-gateway')
+        $expectedFoundry = @(
+            'agentops-agent', 'agentops-config', 'agentops-eval', 'agentops-governance',
+            'agentops-report', 'agt-policy-authoring', 'appinsights-instrumentation',
+            'azure-aigateway', 'caira', 'eval-faq', 'foundry-iq', 'microsoft-foundry',
+            'use-ai-gateway'
+        )
         $expectedFabric = @(
             Get-MarkdownTableRows -Body $script:FabricBlueprintBody -HeaderCell 'Skill' |
                 ForEach-Object { $_[1].Trim().Trim('`') } |
                 Where-Object { $_ } |
                 Sort-Object -Unique
         )
+        $expectedFabric | Should -HaveCount 15
         @($mapped.foundry | Sort-Object) -join ',' | Should -BeExactly (@($expectedFoundry | Sort-Object) -join ',')
         @($mapped.fabric | Sort-Object) -join ',' | Should -BeExactly (@($expectedFabric | Sort-Object) -join ',')
         $profileSkillRows = @(Get-MarkdownTableRows -Body $script:ProfilesBody -HeaderCell 'Resource pack')
@@ -228,8 +239,8 @@ Describe 'Registered pack consistency' -Tag 'Unit' {
         $gateway = @($rows | Where-Object { $_[3].Trim() -eq '`use-ai-gateway`' })
         $gateway | Should -HaveCount 1
         $gateway[0][5].Trim() | Should -BeExactly '`Azure/aigateway` (`vendor-official`), `skills/use-ai-gateway/SKILL.md`'
-        $gateway[0][6].Trim() | Should -BeExactly '`copilot plugin marketplace add Azure/aigateway`, then `copilot plugin install ai-gateway@azure`'
-        $gateway[0][10].Trim() | Should -BeExactly '2026-11-04'
+        $gateway[0][6].Trim() | Should -BeExactly '`apm install Azure/aigateway/skills/use-ai-gateway#8cba384de61ab9d438450a79f44fba0528c56d0a --target copilot`'
+        $gateway[0][10].Trim() | Should -BeExactly '2026-11-15'
     }
 
     It 'defers Azure same-job replacement without moving the blocklist' {
@@ -591,7 +602,7 @@ Describe 'Power Platform and M365 official selection' -Tag 'Unit' {
 }
 
 Describe 'Foundry pack-aware selection' -Tag 'Unit' {
-    It 'adds data-scientist only when the profile lacks it and gates skill selection on the active pack' {
+    It 'adds missing roles, pins all thirteen official Foundry directory skills, and blocklists colliding candidates (SRC-06, SRC-20)' {
         function Get-RoleSet {
             param([string]$Body, [string]$Header, [string]$Name)
             $rows = @(Get-MarkdownTableRows -Body $Body -HeaderCell $Header)
@@ -603,54 +614,104 @@ Describe 'Foundry pack-aware selection' -Tag 'Unit' {
         $rosterAdds = Get-RoleSet -Body $script:RosterBody -Header 'Pack' -Name 'foundry'
         $mirrorAdds = Get-RoleSet -Body $script:ProfilesBody -Header 'Pack' -Name 'foundry'
         ($mirrorAdds -join ',') | Should -BeExactly ($rosterAdds -join ',')
-        $rosterAdds | Should -Contain 'data-scientist'
+        foreach ($role in @('data-scientist', 'observability', 'prompt-engineer', 'rai', 'security')) {
+            $rosterAdds | Should -Contain $role
+        }
 
         $full = Get-RoleSet -Body $script:RosterBody -Header 'Profile' -Name 'full'
         $azure = Get-RoleSet -Body $script:RosterBody -Header 'Profile' -Name 'azure'
         $fullAdded = @($rosterAdds | Where-Object { $_ -notin $full })
         $azureAdded = @($rosterAdds | Where-Object { $_ -notin $azure })
         $fullAdded | Should -BeNullOrEmpty
-        $azureAdded | Should -Contain 'data-scientist'
+        (@($azureAdded | Sort-Object) -join ',') | Should -BeExactly 'data-scientist,observability,prompt-engineer,rai'
 
-        function Test-FoundrySelected {
-            param([string]$PacksLine)
-            return $PacksLine -match '(?m)^Packs:.*\bfoundry\b'
+        $registered = Get-MarkdownSectionBody -Body $script:RosterCatalogBody -Heading 'Registered External Cast'
+        $rows = @(Get-MarkdownTableRows -Body $registered -HeaderCell 'Role')
+        $packSkillRows = @(Get-MarkdownTableRows `
+                -Body (Get-MarkdownSectionBody -Body $script:RosterCatalogBody -Heading 'Registered Pack Skills') `
+                -HeaderCell 'Pack' |
+                Where-Object { $_[1].Trim() -eq 'foundry' } |
+                ForEach-Object { $_[2].Trim().Trim('`') })
+        $packSkillRows | Should -HaveCount 13
+        $foundryRows = @($rows | Where-Object { $_[3].Trim().Trim('`') -in $packSkillRows })
+        $foundryRows | Should -HaveCount 14 -Because 'microsoft-foundry has developer and deployer rows'
+        foreach ($row in $foundryRows) {
+            $row[2].Trim() | Should -BeExactly 'opt-in'
+            $row[4].Trim() | Should -BeExactly 'skill'
+            $row[5].Trim() | Should -Match '\(`vendor-official`\)'
+            $row[6].Trim() | Should -Match '^`apm install [^#]+#[a-f0-9]{40} --target copilot`$'
+            $row[6].Trim() | Should -Not -Match '/SKILL\.md'
+            $row[7].Trim() | Should -BeExactly 'MIT'
+            $row[8].Trim() | Should -Match 'Reach only while `foundry` is active'
+            $row[8].Trim() | Should -Match 'Do not auto-install'
+            $row[10].Trim() | Should -BeExactly '2026-11-15'
         }
-        Test-FoundrySelected '' | Should -BeFalse
-        Test-FoundrySelected "Packs: aws`n" | Should -BeFalse
-        Test-FoundrySelected "Packs: foundry`n" | Should -BeTrue
-        Test-FoundrySelected (("Packs: foundry`n" -replace '(?m)^Packs: foundry\r?\n', '')) | Should -BeFalse
-        Test-FoundrySelected "Packs: foundry`n" | Should -BeTrue
+        foreach ($preview in @('foundry-iq', 'agentops-governance')) {
+            $pRow = @($foundryRows | Where-Object { $_[3].Trim().Trim('`') -eq $preview })
+            $pRow | Should -HaveCount 1
+            $pRow[0][8] | Should -Match 'Preview'
+            $pRow[0][8] | Should -Match 'explicit preview approval'
+        }
+        $msFoundry = @($foundryRows | Where-Object { $_[3].Trim() -eq '`microsoft-foundry`' })
+        $msFoundry | Should -HaveCount 2
+        foreach ($row in $msFoundry) {
+            $row[8].Trim() | Should -Match 'Azure MCP server only'
+            $row[8].Trim() | Should -Not -Match 'Foundry MCP servers'
+            $row[8].Trim() | Should -Match 'mcpServers\.azure'
+        }
 
-        $scientist = Get-Content -LiteralPath (Join-Path $SourceRoot 'squad-src/.github/agents/squad/squad-data-scientist.agent.md') -Raw
-        $observability = Get-Content -LiteralPath (Join-Path $SourceRoot 'squad-src/.github/agents/squad/squad-observability-planner.agent.md') -Raw
-        $scientist | Should -Match 'foundry-iq'
-        $scientist | Should -Match 'Packs:'
-        $scientist | Should -Match 'do not select'
-        $observability | Should -Match 'appinsights-instrumentation'
-        $observability | Should -Match 'do not select'
+        $blocklist = Get-MarkdownSectionBody -Body $script:RosterCatalogBody -Heading 'External Cast Blocklist'
+        $blocklistResources = @(Get-MarkdownTableRows -Body $blocklist -HeaderCell 'Resource' | ForEach-Object { $_[1] }) -join ' '
+        foreach ($blocked in @(
+                'agent-governance', 'agent-owasp-compliance', 'agent-governance-reviewer',
+                'agentops-dataset', 'agentops-workflow', 'eval-guide', 'eval-suite-planner',
+                'eval-generator', 'eval-result-interpreter', 'eval-triage-and-improvement')) {
+            $blocklistResources | Should -Match ([regex]::Escape($blocked))
+            $packSkillRows | Should -Not -Contain $blocked
+        }
+    }
+
+    It 'guards Foundry preview selection, packaged support files, and local charter boundaries in charters and docs (SRC-20, SRC-21)' {
         $options = Get-Content -LiteralPath (Join-Path $SourceRoot 'squad-src/.github/skills/squad/references/foundry-platform-options.md') -Raw
+        $options | Should -Match 'Host visibility is not selection'
+        $options | Should -Match 'declined resource stays unavailable'
+        $options | Should -Match 'Preview is not the default'
         $options | Should -Match 'does not uninstall or hide'
         $options | Should -Match 'separate Foundry MCP server'
         $options | Should -Match 'mcpServers\.azure'
-        $registered = Get-MarkdownSectionBody -Body $script:RosterCatalogBody -Heading 'Registered External Cast'
-        $foundryRows = @(Get-MarkdownTableRows -Body $registered -HeaderCell 'Role' | Where-Object { $_[3].Trim() -eq '`microsoft-foundry`' })
-        $foundryRows | Should -HaveCount 2
-        foreach ($row in $foundryRows) {
-            $row[6].Trim() | Should -Match 'Azure MCP server only'
-            $row[6].Trim() | Should -Not -Match 'Foundry MCP servers'
-            $row[6].Trim() | Should -Match 'mcpServers\.azure'
-            $row[8].Trim() | Should -Match 'plugin MCP server;'
-            $row[8].Trim() | Should -Not -Match 'plugin MCP servers'
-        }
+        $options | Should -Match 'not registered squad capabilities'
+        $options | Should -Match 'https://peter-n91\.github\.io/hve-squad/usage\.html#foundry-setup'
         $script:FoundryBlueprintBody | Should -Match 'Host visibility is not selection'
-        $script:ProfilesBody | Should -Match 'foundry-iq'
+        $script:ProfilesBody | Should -Match '(?s)For `foundry`, read \[foundry-platform-options\.md\].*?before asking to install resources'
         $script:ProfilesBody | Should -Match 'only when this pack is active'
+
+        foreach ($name in @(
+                'squad-azure-architect', 'squad-data-scientist', 'squad-deployer',
+                'squad-implementor', 'squad-observability-planner', 'squad-prompt-engineer')) {
+            $charter = Get-Content -LiteralPath (Join-Path $SourceRoot "squad-src/.github/agents/squad/$name.agent.md") -Raw
+            $charter | Should -Match 'foundry-platform-options\.md'
+            $charter | Should -Match 'only while this pack is active'
+            $charter | Should -Match 'decision is not `declined`'
+            $charter | Should -Match 'missing support files is not ready'
+            $charter | Should -Match 'Do not write squad state'
+        }
+        foreach ($name in @('squad-data-scientist', 'squad-prompt-engineer')) {
+            $charter = Get-Content -LiteralPath (Join-Path $SourceRoot "squad-src/.github/agents/squad/$name.agent.md") -Raw
+            $charter | Should -Match 'user explicitly approved the preview'
+        }
+        foreach ($docs in @($script:EnglishDocs, $script:FrenchDocs)) {
+            $docs | Should -Match 'id="foundry-setup"'
+            $docs | Should -Match 'microsoft-foundry#968f7bfaa01672e782dae2c6bab4fb9505ae047a --target copilot'
+            $docs | Should -Match 'use-ai-gateway#8cba384de61ab9d438450a79f44fba0528c56d0a --target copilot'
+            $docs | Should -Match 'foundry-iq#f03ec5392f7a0f3aca12af47477e92f1edf7b44c --target copilot'
+            $docs | Should -Match 'agentops-governance#0f2173d03a63c73b9cf4a4d9978136cc5dec2909 --target copilot'
+            $docs | Should -Match 'agt-policy-authoring#678070abf15417acdb4a5dd826667a5d83f54d67 --target copilot'
+        }
     }
 }
 
-Describe 'Fabric supplement pack' -Tag 'Unit' {
-    It 'reuses data-scientist, gates admitted skills, and leaves current Fabric rows unchanged' {
+Describe 'Fabric and Power BI official pack' -Tag 'Unit' {
+    It 'reuses data-scientist, pins all fifteen official Fabric and Power BI directory skills, and blocklists superseded community and upstream entries (SRC-07)' {
         function Get-RoleSet {
             param([string]$Body, [string]$Header, [string]$Name)
             $rows = @(Get-MarkdownTableRows -Body $Body -HeaderCell $Header)
@@ -672,37 +733,85 @@ Describe 'Fabric supplement pack' -Tag 'Unit' {
         $registered = Get-MarkdownSectionBody -Body $script:RosterCatalogBody -Heading 'Registered External Cast'
         $rows = @(Get-MarkdownTableRows -Body $registered -HeaderCell 'Role')
         $admitted = @(
-            'sqldw-cli', 'sqldb-cli', 'eventhouse-cli', 'eventstream-cli',
-            'spark-cli', 'dataflows-cli', 'databricks-migration', 'pipeline-migration'
+            'semantic-model-authoring', 'powerbi-report-cli', 'e2e-medallion-architecture',
+            'sqldw-cli', 'sqldb-cli', 'eventhouse-cli', 'eventstream-cli', 'activator-cli',
+            'spark-cli', 'dataflows-cli', 'onelake-catalog-cli', 'databricks-migration',
+            'synapse-migration', 'hdinsight-migration', 'pipeline-migration'
         )
         foreach ($name in $admitted) {
             $row = @($rows | Where-Object { $_[3].Trim() -eq ('`' + $name + '`') })
             $row | Should -HaveCount 1
+            $row[0][1].Trim() | Should -BeExactly 'data-scientist'
+            $row[0][2].Trim() | Should -BeExactly 'opt-in'
+            $row[0][4].Trim() | Should -BeExactly 'skill'
             $row[0][5].Trim() | Should -BeExactly ('`microsoft/skills-for-fabric` (`vendor-official`), `skills/{0}/SKILL.md`' -f $name)
-            $row[0][6].Trim() | Should -BeExactly ('`apm install microsoft/skills-for-fabric/skills/{0} --target copilot`' -f $name)
-            $row[0][10].Trim() | Should -BeExactly '2026-11-04'
+            $row[0][6].Trim() | Should -BeExactly ('`apm install microsoft/skills-for-fabric/skills/{0}#e31422e7d1045ef3a0906df9ff5991f2338af010 --target copilot`' -f $name)
+            $row[0][6].Trim() | Should -Not -Match '/SKILL\.md'
+            $row[0][7].Trim() | Should -BeExactly 'MIT'
+            $row[0][8].Trim() | Should -Match 'Reach only while `fabric` is active'
+            $row[0][8].Trim() | Should -Match 'Do not auto-install'
+            $row[0][10].Trim() | Should -BeExactly '2026-11-15'
         }
-        $lakehouse = @($rows | Where-Object { $_[3].Trim() -eq '`fabric-lakehouse`' })
-        $lakehouse | Should -HaveCount 1
-        $lakehouse[0][6].Trim() | Should -BeExactly '`apm install github/awesome-copilot/skills/fabric-lakehouse`'
-        $resources = @($rows | ForEach-Object { $_[3].Trim().Trim('`') })
-        foreach ($excluded in @(
-                'semantic-model-authoring', 'powerbi-report-cli', 'e2e-medallion-architecture',
-                'onelake-catalog-govern-cli', 'activator-cli', 'synapse-migration', 'hdinsight-migration')) {
-            $resources | Should -Not -Contain $excluded
+        foreach ($mcpSkill in @('semantic-model-authoring', 'powerbi-report-cli', 'sqldw-cli', 'synapse-migration')) {
+            $mRow = @($rows | Where-Object { $_[3].Trim() -eq ('`' + $mcpSkill + '`') })[0]
+            $mRow[8] | Should -Match '\.github/mcp\.json'
+            $mRow[8] | Should -Match 'disclose before install'
         }
-        $blocklist = Get-MarkdownSectionBody -Body $script:RosterCatalogBody -Heading 'External Cast Blocklist'
-        $blocklist | Should -Not -Match 'sqldw-cli|semantic-model-authoring|fabric-lakehouse'
 
-        $scientist = Get-Content -LiteralPath (Join-Path $SourceRoot 'squad-src/.github/agents/squad/squad-data-scientist.agent.md') -Raw
-        $scientist | Should -Match 'sqldw-cli'
-        $scientist | Should -Match 'do not select the Fabric supplement skills'
+        $resources = @($rows | ForEach-Object { $_[3].Trim().Trim('`') })
+        $supersededAndBlocked = @(
+            'powerbi-modeling', 'power-bi-model-design-review', 'power-bi-dax-optimization',
+            'power-bi-performance-troubleshooting', 'power-bi-report-design-consultation',
+            'fabric-lakehouse', 'FabricAdmin', 'FabricAppDev', 'FabricDataEngineer',
+            'FabricIQ', 'FabricMigrationEngineer', 'fabriciq', 'ontology-cli',
+            'project-osmos', 'e2e-fabric-cost-estimation'
+        )
+        $blocklist = Get-MarkdownSectionBody -Body $script:RosterCatalogBody -Heading 'External Cast Blocklist'
+        $blocklistResources = @(Get-MarkdownTableRows -Body $blocklist -HeaderCell 'Resource' | ForEach-Object { $_[1] }) -join ' '
+        foreach ($blocked in $supersededAndBlocked) {
+            $resources | Should -Not -Contain $blocked
+            $blocklistResources | Should -Match ([regex]::Escape($blocked))
+        }
+        foreach ($deferred in @(
+                'deployment-pipelines-authoring-cli', 'git-integration-operations-cli',
+                'variable-library-cli', 'fabric-policies-cli', 'eventschemaset-cli',
+                'databasehub-cli', 'azmon-mirroredcatalogs-operations-cli', 'search-consumption-cli')) {
+            $resources | Should -Not -Contain $deferred
+            $blocklistResources | Should -Not -Match ('`' + [regex]::Escape($deferred) + '`')
+        }
+    }
+
+    It 'guards Fabric MCP disclosure, shared common support files, and write boundaries in charter and docs (SRC-07, SRC-21)' {
         $blueprint = Get-Content -LiteralPath (Join-Path $SourceRoot 'squad-src/.github/skills/squad/references/fabric-blueprint.md') -Raw
         $blueprint | Should -Match 'Host visibility is not selection'
-        $script:ProfilesBody | Should -Match 'Select the admitted Fabric skills only when this pack is active'
+        $blueprint | Should -Match 'declined resource stays unavailable'
+        $blueprint | Should -Match 'powerbi-modeling-mcp'
+        $blueprint | Should -Match 'fabric-sqlendpoint'
+        $blueprint | Should -Match '\.github/mcp\.json'
+        $blueprint | Should -Match 'common/COMMON-CLI\.md'
+        $blueprint | Should -Match 'https://peter-n91\.github\.io/hve-squad/usage\.html#fabric-setup'
+        $script:ProfilesBody | Should -Match '(?s)For `fabric`, read \[fabric-blueprint\.md\].*?before asking to install resources'
+        $script:ProfilesBody | Should -Match 'select the admitted Fabric skills only when this pack is active'
         $script:RoutingBody | Should -Match 'only while `fabric` is active'
-        $script:EnglishDocs | Should -Match '<td(?:\s+[^>]*)?><code>fabric</code></td>'
-        $script:FrenchDocs | Should -Match '<td(?:\s+[^>]*)?><code>fabric</code></td>'
+
+        $scientist = Get-Content -LiteralPath (Join-Path $SourceRoot 'squad-src/.github/agents/squad/squad-data-scientist.agent.md') -Raw
+        $scientist | Should -Match 'fabric-blueprint\.md'
+        $scientist | Should -Match 'semantic-model-authoring'
+        $scientist | Should -Match 'powerbi-report-cli'
+        $scientist | Should -Match 'e2e-medallion-architecture'
+        $scientist | Should -Match 'only while this pack is active'
+        $scientist | Should -Match 'decision is not `declined`'
+        $scientist | Should -Match 'missing support files is not ready'
+        $scientist | Should -Match 'Do not write squad state'
+
+        foreach ($docs in @($script:EnglishDocs, $script:FrenchDocs)) {
+            $docs | Should -Match '<td(?:\s+[^>]*)?><code>fabric</code></td>'
+            $docs | Should -Match 'id="fabric-setup"'
+            $docs | Should -Match 'semantic-model-authoring#e31422e7d1045ef3a0906df9ff5991f2338af010 --target copilot'
+            $docs | Should -Match 'powerbi-report-cli#e31422e7d1045ef3a0906df9ff5991f2338af010 --target copilot'
+            $docs | Should -Match 'e2e-medallion-architecture#e31422e7d1045ef3a0906df9ff5991f2338af010 --target copilot'
+            $docs | Should -Match 'skills-for-fabric-e31422e'
+        }
     }
 }
 

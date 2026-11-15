@@ -194,7 +194,11 @@ Describe 'Confirmed federation Init planning' {
         $missing.Output | Should -Match 'resourceDecisions'
 
         $member.resourceDecisions = [ordered]@{}
-        foreach ($resource in @('sqldw-cli', 'sqldb-cli', 'eventhouse-cli', 'eventstream-cli', 'spark-cli', 'dataflows-cli', 'databricks-migration', 'pipeline-migration')) {
+        foreach ($resource in @(
+                'semantic-model-authoring', 'powerbi-report-cli', 'e2e-medallion-architecture',
+                'sqldw-cli', 'sqldb-cli', 'eventhouse-cli', 'eventstream-cli', 'activator-cli',
+                'spark-cli', 'dataflows-cli', 'onelake-catalog-cli', 'databricks-migration',
+                'synapse-migration', 'hdinsight-migration', 'pipeline-migration')) {
             $member.resourceDecisions[$resource] = 'declined'
         }
         Write-Json $choicesPath $choices
@@ -203,7 +207,7 @@ Describe 'Confirmed federation Init planning' {
         )
         $prepared.ExitCode | Should -Be 0 -Because $prepared.Output
         $payload = Get-Content -LiteralPath $payloadPath -Raw | ConvertFrom-Json -AsHashtable
-        $payload.members[0].initPayload.packResources.Count | Should -Be 8
+        $payload.members[0].initPayload.packResources.Count | Should -Be 15
         @($payload.members[0].initPayload.packs) | Should -Be @('fabric')
     }
 
@@ -266,7 +270,11 @@ Describe 'Confirmed federation Init planning' {
         $missing.Output | Should -Match 'resourceDecisions'
 
         $member.resourceDecisions = [ordered]@{}
-        foreach ($resource in @('sqldw-cli', 'sqldb-cli', 'eventhouse-cli', 'eventstream-cli', 'spark-cli', 'dataflows-cli', 'databricks-migration', 'pipeline-migration')) {
+        foreach ($resource in @(
+                'semantic-model-authoring', 'powerbi-report-cli', 'e2e-medallion-architecture',
+                'sqldw-cli', 'sqldb-cli', 'eventhouse-cli', 'eventstream-cli', 'activator-cli',
+                'spark-cli', 'dataflows-cli', 'onelake-catalog-cli', 'databricks-migration',
+                'synapse-migration', 'hdinsight-migration', 'pipeline-migration')) {
             $member.resourceDecisions[$resource] = 'declined'
         }
         Write-Json $choicesPath $choices
@@ -276,7 +284,7 @@ Describe 'Confirmed federation Init planning' {
         $prepared.ExitCode | Should -Be 0 -Because $prepared.Output
         $payload = Get-Content -LiteralPath $payloadPath -Raw | ConvertFrom-Json -AsHashtable
         $payload.operation | Should -BeExactly 'expand'
-        $payload.members[0].initPayload.packResources.Count | Should -Be 8
+        $payload.members[0].initPayload.packResources.Count | Should -Be 15
         Get-TreeHash $root | Should -BeExactly $before
     }
 
