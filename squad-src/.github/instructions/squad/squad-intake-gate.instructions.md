@@ -58,7 +58,7 @@ When the resolved validator agent is absent from the active roster or not instal
 
 1. The coordinator dispatches the `intake-validator` against the scoped inputs (the requirement/input artifacts under review), passing the artifacts and the intended downstream work as context.
 2. The validator returns a structured finding that names: its verdict label (`Ready`, `Ready-With-Gaps`, `Not-Ready`), the completeness and clarity gaps it found (may be empty), the specific clarifying questions a human must answer (may be empty), and any assumptions it recommends recording.
-3. The validator is read-only. The coordinator records its dispatch with `Write-SquadHandoff.ps1`, then sends the closed verdict payload to `Write-SquadVerdict.ps1`.
+3. The validator is read-only. The coordinator records its dispatch synchronously with `Write-SquadHandoff.ps1 -Quiet`, then sends the closed verdict payload to `Write-SquadVerdict.ps1 -Quiet` at the same root.
 4. Intake runs on its own turn edge: the coordinator does not dispatch planning or implementation on the same turn it runs the gate when the verdict is `Not-Ready`. A `Ready` or a remediated-then-`Ready` verdict clears the same-turn or next-turn work.
 
 ## Readiness Assessment
@@ -72,6 +72,8 @@ The validator assesses each in-scope input against these dimensions and reports 
 * **Scope boundaries** — what is in and out of scope is stated well enough to plan against.
 
 A gap is **blocking** when it would force the downstream role to guess a material decision; it is **non-blocking** when a reasonable, recordable assumption closes it.
+
+For business-benefit claims, apply the intake and preservation rules in [Business Value Measurement](../../skills/squad/references/business-value-measurement.md).
 
 ## Verdict Synthesis
 

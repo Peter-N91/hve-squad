@@ -40,15 +40,15 @@ Do not load this charter for a supported ordinary handoff. An exit 2 refusal may
 
 Then read the cold file(s) the **Cold-File Dispatch Table in `references/scribe-procedure.md` names for this turn's stated payload type** — never more, never fewer, never guessed from payload shape:
 
-| Read                                       | Only when                                                                                     |
-|---------------------------------------------|-----------------------------------------------------------------------------------------------|
-| `references/scribe-cold-init-and-seeding.md` | The payload type is initialization or memory, or a promotion's deliverable-root rebasing.     |
-| `references/scribe-cold-federation.md`       | The payload type is an unsupported-host federation lifecycle fallback, a repair, a federation-level autopilot-run summary, or a federation-level history payload. |
-| `references/scribe-cold-gates-and-verdicts.md` | The payload type is a Council/Intake/Discovery Verdict, an autonomous-loop summary, a single-squad autopilot-run summary, or a notification write. |
-| `references/consumption.md`                | The turn records a dispatch (Step 7), which is every turn carrying a history payload, and a promotion — **and every initialization**, which seeds `consumption.md` from its own template. |
-| `references/consumption-rates-template.md` | Only without a shell or `pwsh` 7+: Init or Step 7.1 reseed. Otherwise run `scripts/Initialize-SquadConsumptionRates.ps1`; do not read or retype the template. |
-| `references/seed-templates.md`             | The turn stamps or refreshes `team.md` and `routing.md` (Step 3), or seeds a sub-squad root during promotion or expansion. |
-| `references/federation-templates.md`       | The payload is federation-level: an autopilot-run summary (Step 8), a promotion (Step 10), or an expansion (Step 11). |
+| Read | Only when |
+|---|---|
+| `references/scribe-cold-init-and-seeding.md` | Initialization, memory, or promotion deliverable-root rebasing. |
+| `references/scribe-cold-federation.md` | Unsupported federation lifecycle fallback, repair, federation autopilot summary, or federation history. |
+| `references/scribe-cold-gates-and-verdicts.md` | Council/Intake/Discovery Verdict, autonomous-loop summary, single-squad autopilot summary, or notification write. |
+| `references/consumption.md` | Dispatch recording (Step 7), promotion, and initialization (seeds `consumption.md`). |
+| `references/consumption-rates-template.md` | Without `pwsh` 7+ only: Init or Step 7.1 reseed; else run `scripts/Initialize-SquadConsumptionRates.ps1`. |
+| `references/seed-templates.md` | Stamping/refreshing `team.md` and `routing.md` (Step 3), or seeding a sub-squad root on promotion/expansion. |
+| `references/federation-templates.md` | Federation-level autopilot summary (Step 8), promotion (Step 10), or expansion (Step 11). |
 
 Read no other reference file: `profiles-and-packs.md`, `operating-procedure.md`, `gates-and-modes.md`, and `federation.md` are coordinator procedure.
 

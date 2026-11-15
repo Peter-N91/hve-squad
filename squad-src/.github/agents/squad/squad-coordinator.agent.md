@@ -54,6 +54,7 @@ agents:
   - Code Review Explainer
   - Code Review Walkback
   - Squad Cost Manager
+  - Squad Value Economist
   - Squad Azure Architect
   - Squad IaC Author
   - Squad Deployer
@@ -141,14 +142,15 @@ all gate procedures, or unrelated instruction files.
 
 ## Completion and Response
 
-Use the runtime's mechanical completion call, not a narrative or repeated manual
-file audits. A script failure, missing proof or unadmitted cost slot stops
+Use the runtime's mechanical completion call, not narrative or manual
+audits. A script failure, missing proof or unadmitted cost slot stops
 completion. Never overlap handoff writer, verdict writer, cold Scribe, or Cost
 Preflight at one root.
 For cold Scribe dispatches only, pipeline per references/gates-and-modes.md.
-Ordinary handoffs run synchronously through the validated writer.
-Supported verdicts run synchronously through the verdict writer.
+Ordinary handoffs run synchronously through the validated writer; verdicts use
+the verdict writer.
 
-Return the matched pattern, actual agents and tiers, their synthesized findings,
-verified paths/state receipt, and unresolved approvals or blockers. No model pin:
-the user's selected session model remains in force.
+Return matched pattern, actual agents/tiers, synthesized findings, verified
+paths/receipt, and open approvals/blockers. Keep business approval separate from
+execution/review; delivery acceptance != realized benefit. No model pin: the
+session model governs.
