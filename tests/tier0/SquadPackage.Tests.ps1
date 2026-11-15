@@ -291,9 +291,10 @@ Describe 'Requirements document quality source contracts (RQ-01..15)' -Tag 'Requ
 
     It 'RQ-11 captures each returned review only after the preceding verified handoff' {
         $guide = Get-Content -LiteralPath $script:RequirementsGuide -Raw
-        $guide | Should -Match 'finish capture/verify/write/verify for one reviewer before capturing the next'
+        $guide | Should -Match 'drain the existing barrier order strictly one reviewer at a time'
+        $guide | Should -Match 'omit `-SelectionCue` when the agent is the Primary'
         $guide | Should -Match 'Never touch or backdate a refused capture'
-        $guide | Should -Match 'never pre-capture a wave then attempt sequential handoffs'
+        $guide | Should -Match 'never pre-capture both reviewers. files before running the first handoff'
     }
 
     It 'RQ-12 keeps one canonical verdict and literal contract fidelity without softening failures' {
@@ -336,7 +337,7 @@ Describe 'Requirements document quality source contracts (RQ-01..15)' -Tag 'Requ
         $guide | Should -Match 'both verified draft handoffs'
         $guide | Should -Match 'frozen until both returns'
         $guide | Should -Match 'unsupported or unverified.+serial'
-        $guide | Should -Match 'finish capture/verify/write/verify for one reviewer before capturing the next'
+        $guide | Should -Match 'drain the existing barrier order strictly one reviewer at a time'
     }
 
     It 'RQ-15 reconciles correction and copy identity and finishes required review reads' {

@@ -1,10 +1,10 @@
 {
   "schema": "benchmark-score-v1",
   "scenario": "task-cli-cold-start",
-  "measuredAt": "2026-11-14T16:21:29Z",
+  "measuredAt": "2026-11-14T21:45:31Z",
   "source": {
-    "commit": "3d9bd0315c9435a44ef824897ea55cd450f6e7e5",
-    "squadSourceHash": "cf31f281d9591955cb384b8d3308e83750071f31e116e77aa2c87a7df97910f7",
+    "commit": "9a0a716ce7889de6ddb68faec4071e083a971a3e",
+    "squadSourceHash": "afb878de7ce7324ea31f65a351213121b5b45e8c825daacff0f3bbfc88e1d435",
     "uncommittedChanges": false
   },
   "environment": {
@@ -23,7 +23,7 @@
     "graderHash": "5ea4adc4add775e313f5370061e56a371954b953562e1d976cfafbfec62b5720",
     "verifierHash": "f7ad13aa5526bae59660a73aa42e913fc5a702cf599ddbee4bb9325528c0510d",
     "converterHash": "4eef28e7fff0dbad286a7fbfe74da7e7e624bc2603031dfbe13f1875d086a177",
-    "installHash": "51d5e0d10ee4678adf2ea47235072efcc5e7b87b45f932afe64d6d5a4dfb0be2",
+    "installHash": "1dc658ca6d48c4d8c34382faa5a1e1d67ae3b81d19c47634504d10a1be8574d9",
     "model": "4ae60805f94e4d2e6d4726588a7d7e44572ab35a1d3b4bd5e44b74e0ce9f852b",
     "cli": "be553eb30c2799d3306ec949d88209f0a980d155d3a6266da1047c5dcad2d3a4",
     "powershell": "475c2ccaebf82353b2e7c16de13e8d3b93d08e605365f36430e6a4f2239ca58b",
@@ -40,55 +40,55 @@
     "failed": 0
   },
   "summary": {
-    "quality": 85.0,
+    "quality": 81.0,
     "dimensions": {
-      "businessClarity": 17.0,
-      "scopeFidelity": 17.0,
-      "acceptanceCriteria": 17.0,
-      "traceability": 18.0,
+      "businessClarity": 16.0,
+      "scopeFidelity": 16.0,
+      "acceptanceCriteria": 16.0,
+      "traceability": 17.0,
       "risksAndDecisions": 16.0
     },
     "functional": 1,
     "workflow": 0,
     "criticalHighFindings": 0.0,
-    "averageSeconds": 2661.1549999999997,
-    "averageCredits": 723.4526089999999,
+    "averageSeconds": 2845.97,
+    "averageCredits": 732.1125125,
     "activity": {
       "scribeDispatches": 0.0,
       "scribeModelRequests": 0.0,
       "scribeSeconds": 0.0,
       "scribeCredits": 0.0,
-      "coordinatorModelRequests": 58.0,
-      "authorModelRequests": 38.0
+      "coordinatorModelRequests": 60.0,
+      "authorModelRequests": 44.0
     },
     "allRequested": {
       "secondsCovered": 1,
-      "totalSeconds": 2661.1549999999997,
-      "averageSeconds": 2661.1549999999997,
+      "totalSeconds": 2845.97,
+      "averageSeconds": 2845.97,
       "creditsCovered": 1,
-      "totalCredits": 723.4526089999999,
-      "averageCredits": 723.4526089999999
+      "totalCredits": 732.1125125,
+      "averageCredits": 732.1125125
     }
   },
   "trials": [
     {
       "run": 1,
       "scored": true,
-      "quality": 85.0,
+      "quality": 81.0,
       "dimensions": {
-        "businessClarity": 17.0,
-        "scopeFidelity": 17.0,
-        "acceptanceCriteria": 17.0,
-        "traceability": 18.0,
+        "businessClarity": 16.0,
+        "scopeFidelity": 16.0,
+        "acceptanceCriteria": 16.0,
+        "traceability": 17.0,
         "risksAndDecisions": 16.0
       },
       "functional": true,
       "workflow": false,
       "criticalHighFindings": 0.0,
-      "seconds": 2661.1549999999997,
-      "credits": 723.4526089999999,
+      "seconds": 2845.97,
+      "credits": 732.1125125,
       "failedChecks": [
-        "requirements/reviewOutcome"
+        "requirements/bookkeepingEvidence"
       ],
       "note": "",
       "activity": {
@@ -96,18 +96,18 @@
         "scribeModelRequests": 0.0,
         "scribeSeconds": 0.0,
         "scribeCredits": 0.0,
-        "coordinatorModelRequests": 58.0,
-        "authorModelRequests": 38.0
+        "coordinatorModelRequests": 60.0,
+        "authorModelRequests": 44.0
       },
       "sourceReviews": {
         "requirements": {
-          "outcome": "failed",
-          "reviewPath": ".copilot-tracking/reviews/2026-11-14/exercise-task-cli-closing-review.md",
+          "outcome": "passed",
+          "reviewPath": ".copilot-tracking/reviews/task-cli-requirements-closing-review.md",
           "criticalHighFindings": null
         },
         "build": {
           "outcome": "passed",
-          "reviewPath": ".copilot-tracking/reviews/2026-11-14/exercise-task-cli-impl-review.md",
+          "reviewPath": ".copilot-tracking/reviews/task-cli-impl-closing-review.md",
           "criticalHighFindings": null
         }
       }

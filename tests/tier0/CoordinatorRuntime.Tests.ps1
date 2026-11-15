@@ -813,7 +813,7 @@ Describe 'Universal compact metadata and deterministic scheduling (COORD-04..06)
         $runtime | Should -Match 'Check each native process exit immediately'
         $runtime | Should -Match 'successful outer shell is not a successful writer'
         $requirements | Should -Match 'Before dispatch, put the actual `requirements-author` activation, document phase'
-        $requirements | Should -Match 'Run each handoff as its own checked process'
+        $requirements | Should -Match 'Run each handoff as its own standalone checked `powershell` process'
         $requirements | Should -Match 'every required reviewer.s verified history entry'
     }
 
