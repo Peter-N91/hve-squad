@@ -1,3 +1,7 @@
+<!--
+Copyright (c) Microsoft Corporation.
+Licensed under the MIT license.
+-->
 # Tier 2 golden baselines
 
 One `<scenario>.baseline.json` per Tier 1 scenario, captured from a release known to be

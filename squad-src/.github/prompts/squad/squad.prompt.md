@@ -1,8 +1,12 @@
 ---
 description: "Hands a request to the Squad Coordinator, which routes it to a cast of HVE Core agents and persists squad state"
 agent: Squad Coordinator
-argument-hint: "request=... [profile=default|full|security|design|accessibility|architecture|azure|modernization|compliance|operations|product] [pack=power-platform|m365-copilot|aws|foundry] [discovery=quick|standard|deep|skip] [tier=...] [owner=...] [execution=original|connector:<binding-id>|both] [mode=autonomous|autopilot] [cost-ceiling=<positive USD|unset>] [routing=off|ranked|economy|manual]"
+argument-hint: "request=... [profile=default|full|security|design|accessibility|architecture|azure|modernization|compliance|operations|product] [pack=power-platform|m365-copilot|aws|foundry|fabric|dotnet|aks|azure-functions] [discovery=quick|standard|deep|skip] [tier=...] [owner=...] [execution=original|connector:<binding-id>|both] [mode=autonomous|autopilot] [cost-ceiling=<positive USD|unset>] [routing=off|ranked|economy|manual] [depth=quick|standard]"
 ---
+<!--
+Copyright (c) Microsoft Corporation.
+Licensed under the MIT license.
+-->
 
 # Squad
 
@@ -10,14 +14,15 @@ argument-hint: "request=... [profile=default|full|security|design|accessibility|
 
 * ${input:request}: (Required) The work for the squad this turn, from the user prompt or conversation.
 * ${input:profile}: (Optional) The squad profile to seed when the project has no squad yet (`default`, `full`, `security`, `design`, `accessibility`, `architecture`, `azure`, `modernization`, `compliance`, `operations`, or `product`). Selects which cast the coordinator stamps out during Init Mode.
-* ${input:pack}: (Optional) One or more comma-separated packs added on top of the profile (`power-platform`, `m365-copilot`, `aws`, `foundry`). A pack carries specialist roles, scoped guidance, or both and never replaces the profile.
+* ${input:pack}: (Optional) One or more comma-separated packs added on top of the profile (`power-platform`, `m365-copilot`, `aws`, `foundry`, `fabric`, `dotnet`, `aks`, `azure-functions`). A pack carries specialist roles, scoped guidance, or both and never replaces the profile.
 * ${input:discovery}: (Optional) The depth of the opt-in discovery gate for this turn (`quick`, `standard`, `deep`, or `skip`). Runs a brainstorming session that interviews you and produces a brief when the work has no requirement or input artifact to build on, per `.github/instructions/squad/squad-discovery-gate.instructions.md`. When omitted, the coordinator offers it once per topic in a `product` or `full` squad and stays silent in every other profile. Ignored on an unattended run.
 * ${input:tier}: (Optional) A model-tier hint (`fast` or `default`) that overrides the coordinator's cost-first defaults for this turn.
 * ${input:owner}: (Optional) A `Member Name` from `team.md` that picks a specific named member when two rows share the same `Role` (for example, `owner=Beta` when both `developer` rows exist as `Beta` and `Gamma`).
 * ${input:execution}: (Optional) `original`, `connector:<binding-id>`, or `both` (post-classification per `connector-role-modes.md`).
 * ${input:mode}: (Optional) The autonomy mode for this turn. `autonomous` engages the bounded `auto-validated` validator loop from `.github/instructions/squad/squad-autonomous.instructions.md`. `autopilot` runs the full research→plan→implement→review pipeline from `.github/instructions/squad/squad-autopilot.instructions.md`, stopping for the human only at impactful actions and final-outcome validation. When omitted, the coordinator uses the standard interactive `auto` and `confirm` tiers from the routing table, approving each step.
 * ${input:cost-ceiling}: (Optional) A finite positive USD model-spend ceiling or the literal `unset`. A positive value sets or replaces the ceiling for this run. Omission inherits an active ceiling only when this request continues the same run. `cost-ceiling=unset` explicitly removes it; a new run with no value starts without a ceiling.
-* ${input:routing}: (Optional) `off`, `ranked`, `economy`, or `manual`, persisted in `team.md`. Ranked is capability-first; Economy is cost-first after the existing allowlist, evidence minimum, and consent (`references/economy-mode.md`). Manual preserves explicit choices with capability-first suggestions. See `references/model-routing.md` for Model cells, minimum floors, fallbacks, and Scribe/session exceptions. Off removes the column and keeps today's behavior byte-for-byte.
+* ${input:routing}: (Optional) `off`, `ranked`, `economy`, or `manual`, persisted in `team.md`. Ranked is capability-first; Economy is cost-first for every role within its floor, after consent (`references/economy-mode.md`). Manual preserves explicit choices with capability-first suggestions. See `references/model-routing.md` for Model cells, minimum floors, fallbacks, and Scribe/session exceptions. Off removes the column and keeps today's behavior byte-for-byte.
+* ${input:depth}: (Optional) `quick` or `standard`. Forward only an explicit value as `requestedDepth` with `depthSource: input`; omission is `standard`, never infer `quick`. It changes work, not models, is per-turn, and is ignored unattended (`references/quick-depth.md`).
 
 ## Requirements
 

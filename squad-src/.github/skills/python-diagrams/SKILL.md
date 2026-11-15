@@ -7,6 +7,10 @@ metadata:
   spec_version: "1.0"
   last_updated: "2026-06-19"
 ---
+<!--
+Copyright (c) Microsoft Corporation.
+Licensed under the MIT license.
+-->
 
 # Python Diagrams
 

@@ -1,5 +1,6 @@
 #Requires -Modules Pester
-# Copyright (c) 2026 Microsoft Corporation. All rights reserved.
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT license.
 # SPDX-License-Identifier: MIT
 
 # P04-T01 (routing-performance plan, Amendment 3 §5, Unit U5): integrity assertions for

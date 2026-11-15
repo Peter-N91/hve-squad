@@ -3,6 +3,10 @@ name: squad-scribe-cold-charter
 description: "Full legacy Scribe charter for unsupported verdict fallback, memory, notifications, repairs, summaries, and unsupported operations."
 license: MIT
 ---
+<!--
+Copyright (c) Microsoft Corporation.
+Licensed under the MIT license.
+-->
 
 # Squad Scribe Cold Charter
 
@@ -36,15 +40,15 @@ Do not load this charter for a supported ordinary handoff. An exit 2 refusal may
 
 Then read the cold file(s) the **Cold-File Dispatch Table in `references/scribe-procedure.md` names for this turn's stated payload type** — never more, never fewer, never guessed from payload shape:
 
-| Read                                       | Only when                                                                                     |
-|---------------------------------------------|-----------------------------------------------------------------------------------------------|
-| `references/scribe-cold-init-and-seeding.md` | The payload type is initialization or memory, or a promotion's deliverable-root rebasing.     |
-| `references/scribe-cold-federation.md`       | The payload type is an unsupported-host federation lifecycle fallback, a repair, a federation-level autopilot-run summary, or a federation-level history payload. |
-| `references/scribe-cold-gates-and-verdicts.md` | The payload type is a Council/Intake/Discovery Verdict, an autonomous-loop summary, a single-squad autopilot-run summary, or a notification write. |
-| `references/consumption.md`                | The turn records a dispatch (Step 7), which is every turn carrying a history payload, and a promotion — **and every initialization**, which seeds `consumption.md` from its own template. |
-| `references/consumption-rates-template.md` | Only without a shell or `pwsh` 7+: Init or Step 7.1 reseed. Otherwise run `scripts/Initialize-SquadConsumptionRates.ps1`; do not read or retype the template. |
-| `references/seed-templates.md`             | The turn stamps or refreshes `team.md` and `routing.md` (Step 3), or seeds a sub-squad root during promotion or expansion. |
-| `references/federation-templates.md`       | The payload is federation-level: an autopilot-run summary (Step 8), a promotion (Step 10), or an expansion (Step 11). |
+| Read | Only when |
+|---|---|
+| `references/scribe-cold-init-and-seeding.md` | Initialization, memory, or promotion deliverable-root rebasing. |
+| `references/scribe-cold-federation.md` | Unsupported federation lifecycle fallback, repair, federation autopilot summary, or federation history. |
+| `references/scribe-cold-gates-and-verdicts.md` | Council/Intake/Discovery Verdict, autonomous-loop summary, single-squad autopilot summary, or notification write. |
+| `references/consumption.md` | Dispatch recording (Step 7), promotion, and initialization (seeds `consumption.md`). |
+| `references/consumption-rates-template.md` | Without `pwsh` 7+ only: Init or Step 7.1 reseed; else run `scripts/Initialize-SquadConsumptionRates.ps1`. |
+| `references/seed-templates.md` | Stamping/refreshing `team.md` and `routing.md` (Step 3), or seeding a sub-squad root on promotion/expansion. |
+| `references/federation-templates.md` | Federation-level autopilot summary (Step 8), promotion (Step 10), or expansion (Step 11). |
 
 Read no other reference file: `profiles-and-packs.md`, `operating-procedure.md`, `gates-and-modes.md`, and `federation.md` are coordinator procedure.
 
@@ -76,7 +80,7 @@ Apply the steps whose payload is present, following the matching subsection of *
 4. **Write repository memory** to `/memories/repo/squad-<agent>.md` through the memory tool. Never write outside consumer-local memory, and never edit a shipped or tenant learnings playbook.
 5. **Write the Council Verdict** to `decisions.md`. Append-only. The label is exactly `Go`, `Go-With-Conditions`, or `Stop`.
 6. **Write the autonomous-loop summary** to `history/autonomous-loop-<id>.md`. Append-only by topic-id; append a new dated section rather than overwriting a prior run.
-7. **Write consumption** — append the per-dispatch estimator block, then let the trusted helper rewrite `consumption.md`, optional `consumption-sessions.json`, and `state.json` totals. Resolve the attribution ladder and never invent a model name. History blocks contain fallback tokens only; the ledger prices their `priced_as` rows and folds every block, including Scribe orchestration. Complete native records replace estimates with cumulative `exact-native` totals; any gap leaves the journal unchanged and the all-history fallback visible. Neither basis is a billed invoice. With a shell and `pwsh` 7+, run installed `scripts/Measure-SquadLedger.ps1 -Write -SessionLog auto`; never hand-author helper output. Apart from helper output, write the files themselves with the file edit or create tool, never through a shell string. See *Consumption Accounting* Step 7 and the Write-Completeness Self-Check in `references/scribe-procedure.md`.
+7. **Write consumption** — append the per-dispatch estimator block, then let the trusted helper rewrite `consumption.md`, optional `consumption-sessions.json`, and `state.json` totals. Resolve the attribution ladder and never invent a model name. History blocks contain fallback tokens only; the ledger prices their `priced_as` rows and folds every block, including Scribe orchestration. Complete native records replace estimates with cumulative `exact-native` totals; a history gap is a `NOTE:` and never an estimate, while untrustworthy native usage leaves the journal unchanged and the all-history fallback visible. Neither basis is a billed invoice. With a shell and `pwsh` 7+, run installed `scripts/Measure-SquadLedger.ps1 -Write -SessionLog auto`; never hand-author helper output. Apart from helper output, write the files themselves with the file edit or create tool, never through a shell string. See *Consumption Accounting* Step 7 and the Write-Completeness Self-Check in `references/scribe-procedure.md`.
 8. **Write the federation autopilot-run summary** to `history/autopilot-run-<id>.md` at the federation root only. Never inside a sub-squad.
 9. **Write the Intake Readiness Verdict** to `decisions.md`. Append-only. The label is exactly `Ready`, `Ready-With-Gaps`, or `Not-Ready`.
 10. **Perform single-squad-to-federation promotion** — the only write that relocates existing state. Refuse on collision or when already a federation; move by copy → verify → delete-source; rebase the relocated roster's deliverable roots; seed the federation meta layer; carry the consumption ledger across; record the promotion.

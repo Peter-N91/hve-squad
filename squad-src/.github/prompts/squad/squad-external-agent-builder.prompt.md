@@ -3,6 +3,10 @@ description: "Starts the Squad External Agent Builder to create a standalone age
 agent: Squad External Agent Builder
 argument-hint: "[request=...] [action=create|adapt] [kind=agent|orchestrator] [destination=<path>]"
 ---
+<!--
+Copyright (c) Microsoft Corporation.
+Licensed under the MIT license.
+-->
 
 # Squad External Agent Builder
 

@@ -2,6 +2,10 @@
 title: Squad Connector compatibility checklist
 description: Standalone, copyable restatement of connector-contract.md's Compatibility Checklist for Consumers section.
 ---
+<!--
+Copyright (c) Microsoft Corporation.
+Licensed under the MIT license.
+-->
 
 # Squad Connector Compatibility Checklist
 

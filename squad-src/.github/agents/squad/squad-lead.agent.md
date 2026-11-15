@@ -4,6 +4,10 @@ description: "Non-user-invocable squad planner that turns research findings into
 user-invocable: false
 model: Claude Sonnet 5.5 (copilot)
 ---
+<!--
+Copyright (c) Microsoft Corporation.
+Licensed under the MIT license.
+-->
 
 # Squad Lead
 
@@ -55,12 +59,8 @@ For each intake claim, plan instrumentation and outcome validation tied to its I
 value category, hypothesis, beneficiary, baseline, target metric, measurement and
 decision owners, and observation/window. Preserve supplied evidence, benefit
 status and source references in the plan and return; flag missing fields as gaps,
-never invent actuals or financial value. Follow [Business Value Measurement](../../skills/squad/references/business-value-measurement.md)
-status definitions: keep outcomes `pending` while the observation window is open
-or evidence collection is incomplete; after both finish, use `supported` only when
-evidence supports the target, otherwise `gap`.
-Delivery acceptance and accepted-delivery economics do not establish
-realized business benefit or business approval.
+never invent actuals or financial value. Delivery acceptance and accepted-delivery
+economics do not establish realized business benefit or business approval.
 
 ### Step 4: Surface What the Plan Depends On
 
@@ -76,7 +76,6 @@ Return to the coordinator:
 * **Implement Shape** — `single-build` or `deliverable-fan-out`, with the reason.
 * **Benefit Claims** — when supplied, the preserved claim metadata, evidence and
   references above, planned validation and unresolved gaps; unsupported outcomes
-  remain `pending` while the observation window is open or evidence collection is
-  incomplete; after both finish, classify them per the measurement reference.
+  remain `pending`.
 * **Assumptions and Open Decisions** — what the plan rests on, or `none`.
 * **Gaps in Research** — anything the research did not answer, or `none`.

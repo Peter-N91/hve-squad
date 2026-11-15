@@ -1,5 +1,6 @@
 #Requires -Modules Pester
-# Copyright (c) 2026 Microsoft Corporation. All rights reserved.
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT license.
 # SPDX-License-Identifier: MIT
 
 # AI cost: none; measures shipped prompt bytes without making model requests.
@@ -8,7 +9,8 @@
 # Full legacy Scribe procedure is now cold, not a required default-mode read. The aggregate
 # ceiling remains fixed while documented per-file overrides permit concentrated
 # growth within it. Pull requests inherit existing base debt but may not increase
-# it. Sizes are LF-normalized UTF-8 bytes, so checkout line endings do not matter.
+# it. Sizes are LF-normalized UTF-8 contract bytes, excluding only the exact
+# mandatory legal header so pre-notice baselines retain their original meaning.
 
 [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSReviewUnusedParameter', 'SourceRoot',
     Justification = 'Read inside Pester BeforeDiscovery and BeforeAll blocks, which PSScriptAnalyzer treats as scopes unrelated to the param block.')]
@@ -23,14 +25,14 @@ BeforeDiscovery {
 }
 
 BeforeAll {
+    Import-Module (Join-Path $PSScriptRoot 'SquadPackage.psm1') -Force
     $script:Root = (Resolve-Path -LiteralPath $SourceRoot).Path
     $script:Budget = Get-Content -LiteralPath (Join-Path $PSScriptRoot 'baselines/hot-file-v0.18.1.json') -Raw | ConvertFrom-Json
     $script:Tier0Workflow = Get-Content -LiteralPath (Join-Path $script:Root '.github/workflows/tier0-conformance.yml') -Raw
 
     function Get-NormalizedByteCount {
         param([Parameter(Mandatory)][string]$Path)
-        $text = [System.IO.File]::ReadAllText($Path) -replace "`r`n", "`n"
-        return [System.Text.Encoding]::UTF8.GetByteCount($text)
+        return Get-SquadContractByteCount -Text ([System.IO.File]::ReadAllText($Path))
     }
 
     function Get-EveryModeAllowance {
@@ -85,8 +87,7 @@ BeforeAll {
             if ($process.ExitCode -ne 0) {
                 throw "Cannot read $Path at base $Ref`: $errorText"
             }
-            $text = $text -replace "`r`n", "`n"
-            return [System.Text.Encoding]::UTF8.GetByteCount($text)
+            return Get-SquadContractByteCount -Text $text
         }
         finally {
             $process.Dispose()

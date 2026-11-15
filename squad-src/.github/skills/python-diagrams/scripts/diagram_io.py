@@ -1,3 +1,5 @@
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT license.
 """Shared output helpers for the python-diagrams skill.
 
 Every diagram generator imports from this module instead of configuring

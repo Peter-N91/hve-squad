@@ -2,12 +2,16 @@
 description: "Opt-in autopilot mode: a full research→plan→implement→review pipeline that runs end-to-end with human gates only on impactful actions and final-outcome validation"
 applyTo: '**/.copilot-tracking/squad/**/history/autopilot-run-*.md'
 ---
+<!--
+Copyright (c) Microsoft Corporation.
+Licensed under the MIT license.
+-->
 
 # Squad Autopilot Conventions
 
 These conventions define `mode=autopilot`: a full delivery pipeline the Squad Coordinator runs end-to-end on the user's behalf. Autopilot sequences the squad's normal roles — research, then planning, then implementation, then review — without pausing for a human at every stage. It pauses **only** at the two places that matter: any impactful or irreversible action, and the final outcome.
 
-Autopilot exists so the squad earns its keep. If a human had to approve every intermediate step, there would be no reason to run a squad over the individual HVE Core agents. Autopilot delegates the *flow* to the coordinator while keeping the *consequential decisions* with the human.
+Autopilot exists so the squad earns its keep: if a human approved every intermediate step, there would be little reason to run a squad over individual HVE Core agents. Autopilot delegates the *flow* to the coordinator while keeping *consequential decisions* with the human.
 
 ## Relationship to the Other Modes
 
@@ -57,18 +61,18 @@ The coordinator advances from prior findings and persists each stage through the
 
 ## Deliverable Fan-Out (Multi-Artifact Runs)
 
-Much of the squad's work delivers its value through several distinct, specialist-owned artifacts rather than a single code or infrastructure build. A `product` run spans requirements, a roadmap and backlog, an experiment, written documentation, and a stakeholder deck; an `azure` run spans a target architecture, an IaC scaffold, an as-built record, and a migration sequence; a `security` run spans a security model, a supply-chain posture, an RAI assessment, and a privacy DPIA. Each is owned by a different **artifact-owning role** — a roster row whose `Deliverable Root` names a real path; defined in `.github/instructions/squad/squad-roster.instructions.md`. The fixed single-`developer` Implement stage cannot produce these, so autopilot fans the Implement stage out across the owning specialists.
+Much of the squad's work delivers value through distinct, specialist-owned artifacts rather than one build. A `product` run spans requirements, roadmap/backlog, an experiment, documentation, and a deck; an `azure` run spans target architecture, IaC, as-built docs, and a migration sequence; a `security` run spans a security model, supply-chain posture, RAI assessment, and privacy DPIA. Each belongs to a different **artifact-owning role** — a roster row whose `Deliverable Root` names a real path; defined in `.github/instructions/squad/squad-roster.instructions.md`. The single-`developer` Implement stage cannot produce these, so autopilot fans Implement out across the owning specialists.
 
 **When fan-out engages.** The coordinator selects fan-out when the Plan stage's deliverable list names **two or more artifact-owning roles that are present on the team**, counting every such role except `researcher`, `lead`, and `tester`, which own the Research, Plan, and Review stages instead. The test is read off `team.md`, not off the profile name, so a consumer who edited a `Deliverable Root` or hired an extra specialist is judged on the roster they actually have. A plan naming one candidate stays the unchanged single-`developer` shape, which is the ordinary case for `default`. Fan-out never changes the Research, Plan, council, Review, or Final-outcome stages — only the Implement stage's internal shape.
 
-**Eligibility used to be a fixed list of seven `product` role names**, which classified every other profile as a single build no matter what its roster owned. A live `azure` run produced five specialist artifacts under that classification, improvised a fan-out the pipeline does not define, and left no `history/<agent>.md` for any of them — because the per-dispatch recording rule below belongs to a path that run was never on.
+**Eligibility used to be a fixed list of seven `product` role names**, classifying every other profile as a single build regardless of roster. A live `azure` run produced five specialist artifacts under that classification, improvised an undefined fan-out, and left no `history/<agent>.md` — because the per-dispatch recording rule below belongs to a path that run never entered.
 
 **How fan-out runs.** The Implement stage becomes an ordered sub-pipeline driven by the plan's deliverable list:
 
 1. For each deliverable, in dependency order, the coordinator resolves the owning role to a concrete agent through the roster's *Resolving a Role to an Agent* rules and dispatches it via `runSubagent`/`task`, passing the prior deliverables as context.
-2. Deliverables that do not depend on each other are dispatched in the same parallel batch; dependent deliverables run sequentially. A typical `product` order is: requirements (`analyst`) → then the roadmap and backlog (`product-owner`) and the experiment (`experimenter`) in parallel → then documentation (`technical-writer`) → then the deck (`presenter`). Design research (`designer`) runs alongside requirements when the request needs it. A typical `azure` order is: target architecture (`azure-architect`) → IaC scaffold (`iac-author`) → then the migration sequence (`modernizer`) and the as-built record (`asbuilt-author`).
+2. Deliverables that do not depend on each other are dispatched in the same parallel batch; dependent deliverables run sequentially. A typical `product` order is: requirements (`analyst`) → then the roadmap and backlog (`product-owner`) and the experiment (`experimenter`) in parallel → then documentation (`technical-writer`). Design research (`designer`) runs alongside requirements when the request needs it. A typical `azure` order is: target architecture (`azure-architect`) → IaC scaffold (`iac-author`) → then the migration sequence (`modernizer`) and the as-built record (`asbuilt-author`).
 3. Each specialist dispatch is a first-class recorded stage: the ordinary writer appends its `history/<agent>.md` entry and consumption block; only unsupported exit 2 uses cold Scribe. The proof-of-dispatch rule from `.github/instructions/squad/squad-state.instructions.md` applies per deliverable — a deliverable with no history entry did not run, and the run is not complete until every planned deliverable has one or the coordinator has escalated.
-4. The deck deliverable is built by the `powerpoint` skill pipeline and nothing else. A `presenter` dispatch that returns a deck produced by a hand-written script did not satisfy the deliverable; see `.github/instructions/squad/pptx-brand-template.instructions.md`.
+4. No deck-building skill ships: the `powerpoint` skill was removed upstream at hve-core f425e94 and the `presenter` role was removed from the roster (historical note). A deck produced by a hand-written script does not satisfy a deck deliverable; see `.github/instructions/squad/pptx-brand-template.instructions.md`.
 5. The Human Gates are unchanged. An owning specialist that reaches an impactful action fires the Impactful-Action Gate; a `Risk: High` or `Stop` finding fires the Risk Gate. Document and design artifacts that only write under `.copilot-tracking/` and `docs/` are not impactful and flow automatically. A `product-owner` deliverable is one of those artifacts: it plans a backlog and stops at a finalized handoff. Writing that backlog into a live Azure DevOps or Jira project is a separate, gated step owned by the opt-in `backlog-executor` role, which most rosters do not carry — see the *Tracker-Write Gate* in `.github/instructions/squad/squad-routing.instructions.md`.
 
 **Dispatch discipline still holds.** Fan-out changes which agents the Implement stage dispatches, not the rule that the coordinator dispatches them. The coordinator never authors a deliverable itself; when an owning agent is not installed it stops and escalates per *Dispatch Discipline* rather than substituting its own output.
@@ -156,9 +160,9 @@ A Cost Preflight round is never issued in the same parallel block as a Scribe ha
 
 When the pipeline reaches Final-outcome validation:
 
-1. The coordinator compiles a concise outcome: what the squad built, the review result, any conditions left open, and the impactful actions awaiting approval (if any). For any council-gated work it includes the Council Verdict's **Decision Ref** (per `.github/instructions/squad/squad-council.instructions.md`) so the human can open the exact verdict section rather than scanning `decisions.md`.
-2. The coordinator fires a `final-outcome` notification to the registered approval channel through `.github/instructions/squad/squad-notifications.instructions.md`. When the channel is `github-issue`, the human can validate the outcome from a phone. When no channel is configured, or no transport is available, the notification degrades to an in-chat summary and is still logged.
-3. The coordinator waits for human validation. The human may approve (releasing the gated impactful actions one by one), request changes (re-entering the pipeline at the appropriate stage), or stop.
+1. The coordinator compiles a concise outcome: what the squad built, the review result, any conditions left open, and the impactful actions awaiting approval (if any). For council-gated work it includes the Council Verdict's **Decision Ref** (per `.github/instructions/squad/squad-council.instructions.md`) so the human can open that exact section rather than scanning `decisions.md`. When business-benefit claims exist, follow [Business Value Measurement](../../skills/squad/references/business-value-measurement.md): report deliverable acceptance separately from outcome status and approvals.
+2. The coordinator fires a `final-outcome` notification to the registered approval channel through `.github/instructions/squad/squad-notifications.instructions.md`. When the channel is `github-issue`, the human can validate it from a phone. With no channel or transport, the notification degrades to an in-chat summary and is still logged.
+3. The coordinator waits for human validation. The human may approve (releasing gated impactful actions one by one), request changes (re-entering at the appropriate stage), or stop.
 
 ## History Entries
 

@@ -2,6 +2,10 @@
 description: "Squad federation layout: opt-in sub-squads under one repo, the parameterized squad root, the federation registry and meta-routing schemas, detection precedence, two-level single-writer state, and the unattended Watch Mode bootstrap"
 applyTo: '**/.copilot-tracking/squad/federation.md'
 ---
+<!--
+Copyright (c) Microsoft Corporation.
+Licensed under the MIT license.
+-->
 
 # Squad Federation Conventions
 
@@ -20,9 +24,9 @@ Two consequences matter before anyone builds a federation to solve a capability 
 * **A federation does not reach a technology vertical any faster than a plain squad does.** A sub-squad is seeded from a profile, so a vertical arrives on it by applying the pack, exactly as on any other roster. Building a sub-squad named after a vertical still requires the pack, and adds a duplicated methodology spine, a second state tree, and a second consumption ledger for no additional reach.
 * **Splitting one piece of work across two sub-squads splits its record.** Each sub-squad keeps its own `decisions.md`, `history/`, and deliverable roots rebased under `members/<name>/`, so two halves of one decision are taken in two councils that never met. A pack keeps those roles in one turn, one council, one plan, and one review.
 
-Federate when the sub-squads own genuinely separate outcomes — a business team's discovery work beside an architecture team's infrastructure build, or Watch Mode giving each triggering event its own sub-squad and its own pull request. Do not federate to obtain a role.
+Federate when sub-squads own separate outcomes — discovery work beside an infrastructure build, or Watch Mode giving each triggering event its own sub-squad and pull request. Do not federate to obtain a role.
 
-Registered packs are `power-platform`, `m365-copilot`, `aws`, and `foundry`; Foundry is normally `profile=azure pack=foundry`.
+Registered packs are `power-platform`, `m365-copilot`, `aws`, `foundry`, `fabric`, `dotnet`, `aks`, and `azure-functions`; Foundry is normally `profile=azure pack=foundry`.
 
 ## Squad Root (`squadRoot`)
 
@@ -164,6 +168,7 @@ the preserve-on-replace cold procedure.
 
 * **Event-derived name.** The new sub-squad's name comes from the event's structural identity (`issue-<N>`, `pr-<N>`, `sweep-<YYYY-MM-DD>`, `push-<branch-slug>-<sha7>`, `dispatch-<runId>`), never from payload prose. The naming table and normalization rules live in `.github/instructions/squad/squad-watch-mode.instructions.md`.
 * **Reuse before create.** When the derived name already exists as a watch-owned sub-squad whose recorded trigger provenance matches this event, the run reuses it and no expansion occurs. A watch-owned name with different provenance is disambiguated by appending the workflow run id once.
+* **No unattended pack installs.** Retain a skills-based pack only when every registered skill is host-visible; otherwise drop it, or stop and escalate when the event requires it.
 * **Never into a human-owned sub-squad.** When the derived name matches a sub-squad that is not watch-owned, the run escalates and stops. A `members/<name>/` directory with **no registry row** is resolved by evidence rather than refused outright: when its `state.json` `trigger.ref` and `trigger.eventId` match the current event it is this run's own prior attempt, so the row is re-registered and the run resumes; otherwise it is treated as human-owned and the run escalates and stops. See *Reuse, Collisions, and Concurrency* in `.github/instructions/squad/squad-watch-mode.instructions.md`. The no-overwrite guard remains absolute in the unattended path: nothing that cannot prove it belongs to this event is ever written into.
 
 ## Cross-Sub-Squad Handoff

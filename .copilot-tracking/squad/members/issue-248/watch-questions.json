@@ -1,0 +1,32 @@
+{
+  "rows": [
+    {
+      "ID": "ASM-1",
+      "Source": "Peter-N91/hve-squad#248",
+      "Question": "Does docs/, README.md, or CONTRIBUTING.md reference the removed PowerPoint Builder/Subagent agents or the powerpoint/presenter capability, and if so do those references need updating rather than being historical-only?",
+      "Impact": "A stale doc that names a removed agent, skill, or role leaves a reader following instructions that no longer work.",
+      "Status": "Resolved - Implement swept docs/usage.html, docs/fr/usage.html, docs/demo-3.html, docs/fr/demo-3.html, docs/concepts.html, and docs/fr/concepts.html; Review confirmed only historical removal notes remain in reviews/cast-adaptation-review-confirm.md."
+    },
+    {
+      "ID": "ASM-2",
+      "Source": "Peter-N91/hve-squad#248",
+      "Question": "Does the upstream hve-core f425e94 cast delta include removals beyond PowerPoint Builder/Subagent/powerpoint named in the issue body (for example pptx.instructions.md), requiring additional squad-src edits in the same change?",
+      "Impact": "An unaddressed additional removal would leave Get-HveCoreCastDelta.ps1 reporting BREAKING for the moved pin.",
+      "Status": "Resolved - Get-HveCoreCastDelta.ps1 reports no surface change for the current pin per reviews/cast-adaptation-review-final.md; the earlier run confirmed only the three named removals."
+    },
+    {
+      "ID": "ASM-3",
+      "Source": "Peter-N91/hve-squad#248",
+      "Question": "Is dropping the presenter role (rather than replacing it with a new thin charter) an acceptable scope decision for a minor-bump change fragment?",
+      "Impact": "Choosing drop-only versus a replacement charter changes the deliverable set and the release-note wording; a wrong call would require re-authoring the fragment.",
+      "Status": "Resolved - plans/cast-adaptation-plan.md scoped this as drop-only since no installed hve-core agent backs a presenter role; changes/cast-adaptation-change.md reflects that decision, and Review's final pass approved it."
+    },
+    {
+      "ID": "ASM-4",
+      "Source": "Peter-N91/hve-squad#248",
+      "Question": "Do the tier0 test baselines (prefill-baseline.json) or the behavior contract (PRF-10) need regeneration after the coordinator agents: frontmatter and presenter-role removals?",
+      "Impact": "A stale baseline assertion that presenter must exist would fail CI even though the removal is intentional and reviewed.",
+      "Status": "Resolved - Implement updated tests/squad-behavior-contract.md and Performance.Tests.ps1; Review re-ran Performance, AgentDiscovery, and Manifest suites: 135 passed, 0 failed. Full tier0/CI deferred to pull-request CI."
+    }
+  ]
+}

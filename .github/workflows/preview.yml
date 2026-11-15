@@ -1,3 +1,5 @@
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT license.
 name: Rolling Preview
 
 # Every merge to main refreshes a single pre-release instead of cutting a new one.

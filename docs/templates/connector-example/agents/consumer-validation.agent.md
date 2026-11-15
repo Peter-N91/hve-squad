@@ -4,6 +4,10 @@ description: "Validate an external implementation against the supplied plan and 
 user-invocable: true
 agents: []
 ---
+<!--
+Copyright (c) Microsoft Corporation.
+Licensed under the MIT license.
+-->
 
 # Consumer Validation Agent
 

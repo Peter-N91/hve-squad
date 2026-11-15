@@ -1,3 +1,5 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT license.
 (() => {
   const key = "hve-docs-theme";
   let preference = "system";

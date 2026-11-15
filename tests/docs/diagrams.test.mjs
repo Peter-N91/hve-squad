@@ -1,3 +1,5 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT license.
 import assert from "node:assert/strict";
 import test from "node:test";
 import { diagramSource, readSource } from "../../scripts/docs-content.mjs";

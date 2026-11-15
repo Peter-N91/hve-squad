@@ -4,6 +4,10 @@ description: Consumer onboarding for connector folders, replacing work roles, re
 ms.topic: how-to
 ms.date: 2026-10-15
 ---
+<!--
+Copyright (c) Microsoft Corporation.
+Licensed under the MIT license.
+-->
 
 ## Example: your researcher and implementation coordinator
 
@@ -20,7 +24,7 @@ HVE's Coordinator, Federation Coordinator, Scribe, and council stay internal
 and unchanged. Your implementation coordinator is an external workflow behind
 the developer role, not a replacement for HVE's Coordinator.
 
-Use a Squad package that supports contract 1.1. You also need your existing agent
+Use an HVE Squad package that supports contract 1.1. You also need your existing agent
 host/adapter: it reads file-drop requests, runs the configured endpoint with its
 own skills, and returns a result. Copying a manifest or an agent file does not
 start that process.

@@ -1,5 +1,6 @@
 #!/usr/bin/env pwsh
-# Copyright (c) 2026 Microsoft Corporation. All rights reserved.
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT license.
 # SPDX-License-Identifier: MIT
 #Requires -Version 7.4
 
@@ -9,7 +10,10 @@
 .DESCRIPTION
     AI cost: none. Resolves confirmed catalog roles and packs, validates their installed
     Primaries, appends only missing roster rows and newly eligible canonical routing rows,
-    and writes an exact hash-bound plan outside squad state.
+    and writes an exact hash-bound plan outside squad state. A confirmed registered pack
+    whose roles are already present seals a metadata-only plan only when that pack is
+    absent from Packs:: Packs: and one decision, with no invented role row. A pack
+    already listed in Packs: is rejected. Empty expansions stay invalid.
 
     The plan contains the final team.md, routing.md, and append-only decisions.md bytes.
     It seals state, accounting, rates, notifications, history, and (for a federation
@@ -177,6 +181,39 @@ function Add-TableRow {
     }
 }
 
+function Set-ActivePacks {
+    param(
+        [Parameter(Mandatory)]$Document,
+        [Parameter(Mandatory)][string[]]$Packs
+    )
+    $existingIndex = -1
+    $current = [Collections.Generic.List[string]]::new()
+    for ($index = 0; $index -lt $Document.lines.Count; $index++) {
+        if ($Document.lines[$index] -match '^Packs:\s*(?<packs>.*)$') {
+            $existingIndex = $index
+            foreach ($name in ($Matches.packs -split ',\s*')) {
+                $name = $name.Trim()
+                if ($name) { $null = $current.Add($name) }
+            }
+            break
+        }
+    }
+    foreach ($pack in $Packs) {
+        if ($pack -notin $current) { $null = $current.Add($pack) }
+    }
+    $line = 'Packs: ' + ($current -join ', ')
+    if ($existingIndex -ge 0) {
+        $Document.lines[$existingIndex] = $line
+        return
+    }
+    $heading = -1
+    for ($index = 0; $index -lt $Document.lines.Count; $index++) {
+        if ($Document.lines[$index] -match '^# ') { $heading = $index; break }
+    }
+    if ($heading -lt 0) { throw 'team.md is missing its H1.' }
+    $Document.lines.Insert($heading + 1, $line)
+}
+
 function Add-DecisionEntry {
     param(
         [Parameter(Mandatory)][byte[]]$Before,
@@ -277,7 +314,7 @@ function Assert-Baseline {
 try {
     $RepoRoot = (Resolve-Path -LiteralPath $RepoRoot).ProviderPath
     $choices = Get-Content -LiteralPath $ChoicesPath -Raw | ConvertFrom-Json -AsHashtable
-    Assert-FieldSet $choices @('confirmed', 'runId') @('packs', 'roles', 'names', 'models', 'rationale')
+    Assert-FieldSet $choices @('confirmed', 'runId') @('packs', 'roles', 'names', 'models', 'rationale', 'resourceDecisions', 'availableSkills')
     if ($choices.confirmed -isnot [bool] -or -not $choices.confirmed) {
         throw 'Roster expansion requires explicit user confirmation.'
     }
@@ -339,13 +376,25 @@ try {
     $requestedRoles = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
     if ($choices.Contains('packs')) {
         foreach ($packName in $choices.packs) {
+            if ([string]::IsNullOrWhiteSpace([string]$packName)) { throw 'Empty pack cell.' }
             Assert-Line $packName
             $pack = @($data.packs | Where-Object { $_.Pack -ceq $packName })
             if ($pack.Count -ne 1 -or $packName -in $requestedPacks) { throw "Unknown or duplicate pack: $packName" }
             $null = $requestedPacks.Add($packName)
-            foreach ($role in @($pack[0]['Adds (roles)'] -split ',\s*')) { $null = $requestedRoles.Add($role) }
+            $packRoles = @($pack[0]['Adds (roles)'] -split ',\s*' | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+            if (-not $packRoles.Count) { throw "Pack '$packName' has an empty role cell." }
+            foreach ($role in $packRoles) { $null = $requestedRoles.Add($role) }
         }
     }
+    $availableSkills = @(
+        if ($choices.Contains('availableSkills')) {
+            if ($choices.availableSkills -isnot [array]) { throw 'availableSkills must be an array.' }
+            $choices.availableSkills
+        }
+    )
+    $resourceDecisions = Assert-SquadPackResourceDecisions -InitData $data -Pack $requestedPacks.ToArray() -RepoRoot $RepoRoot `
+        -Decisions $(if ($choices.Contains('resourceDecisions')) { $choices.resourceDecisions } else { $null }) `
+        -AvailableSkill $availableSkills
     if ($choices.Contains('roles')) {
         foreach ($role in $choices.roles) {
             Assert-Line $role
@@ -360,7 +409,21 @@ try {
     if ($unknown.Count) { throw "Unknown catalog role(s): $($unknown -join ', ')" }
     $alreadyPresent = @($catalogOrder | Where-Object { $requestedRoles.Contains($_) -and $existingRoles.Contains($_) })
     $addRoles = @($catalogOrder | Where-Object { $requestedRoles.Contains($_) -and -not $existingRoles.Contains($_) })
-    if (-not $addRoles.Count) { throw 'Every confirmed role is already present; nothing to expand.' }
+    $activePacks = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+    foreach ($line in $team.lines) {
+        if ($line -match '^Packs:\s*(?<packs>.*)$') {
+            foreach ($name in ($Matches.packs -split ',\s*')) {
+                $name = $name.Trim()
+                if ($name) { $null = $activePacks.Add($name) }
+            }
+            break
+        }
+    }
+    foreach ($packName in $requestedPacks) {
+        if ($activePacks.Contains($packName)) { throw "Pack '$packName' is already active." }
+    }
+    $metadataOnly = $requestedPacks.Count -gt 0 -and -not $addRoles.Count
+    if (-not $addRoles.Count -and -not $metadataOnly) { throw 'Every confirmed role is already present; nothing to expand.' }
 
     foreach ($key in $names.Keys) {
         if ($key -notin $addRoles) { throw "names contains a role that is not being added: $key" }
@@ -414,7 +477,8 @@ try {
         }
         $null = $teamLines.Add('| ' + (($teamTable.header | ForEach-Object { [string]$row[$_] }) -join ' | ') + ' |')
     }
-    Add-TableRow -Document $team -Table $teamTable -Rows $teamLines.ToArray()
+    if ($teamLines.Count) { Add-TableRow -Document $team -Table $teamTable -Rows $teamLines.ToArray() }
+    if ($requestedPacks.Count) { Set-ActivePacks -Document $team -Packs $requestedPacks.ToArray() }
     $finalTeam = ConvertTo-DocumentByteArray $team
 
     $finalRoles = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
@@ -468,10 +532,11 @@ try {
         "* Run: $($choices.runId)"
         "* Turn retained: $($state.turn)"
         "* Added packs: $(if ($requestedPacks.Count) { $requestedPacks -join ', ' } else { '(none)' })"
-        "* Added roles: $($addRoles -join ', ')"
+        "* Added roles: $(if ($addRoles.Count) { $addRoles -join ', ' } else { '(none)' })"
         "* Already present: $(if ($alreadyPresent.Count) { $alreadyPresent -join ', ' } else { '(none)' })"
         "* Previous provenance: $provenance"
         "* Provenance: $nextProvenance"
+        "* Pack resources: $(if ($resourceDecisions.Count) { @($resourceDecisions.Keys | ForEach-Object { "$_=$($resourceDecisions[$_])" }) -join '; ' } else { '(none)' })"
         "* Rationale: $rationale"
         '* Accounting: no model or Scribe dispatch; consumption.md, consumption-sessions.json when present, state.json, rates, notifications, and history are preserved byte-for-byte.'
     ) -join "`n"
@@ -523,6 +588,7 @@ try {
         addedRoles = $plan.addedRoles
         alreadyPresentRoles = $plan.alreadyPresentRoles
         routingRowsAdded = $plan.routingRowsAdded
+        packResources = $resourceDecisions
         accountingPreserved = $true
         confirmationRequired = $true
         stateWritten = $false

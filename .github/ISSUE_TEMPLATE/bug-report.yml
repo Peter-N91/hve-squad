@@ -1,3 +1,5 @@
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT license.
 name: Bug report
 description: Report something in hve-squad that does not behave as documented.
 title: "[bug] "
@@ -8,8 +10,8 @@ body:
       value: |
         Thanks for reporting. Two things first:
 
-        - **Security vulnerabilities do not belong here.** Report them privately through
-          [security advisories](https://github.com/Peter-N91/hve-squad/security/advisories/new).
+        - **Security vulnerabilities do not belong here.** Follow
+          [Microsoft's security reporting guidance](https://aka.ms/SECURITY.md).
           See [SECURITY.md](https://github.com/Peter-N91/hve-squad/blob/main/SECURITY.md).
         - **Want the squad to do work for you?** Use the *Squad task* template instead.
 

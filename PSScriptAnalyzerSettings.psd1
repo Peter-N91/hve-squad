@@ -1,3 +1,5 @@
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT license.
 # PSScriptAnalyzer configuration.
 #
 # VS Code and the PowerShell extension pick this file up automatically, and

@@ -1,4 +1,8 @@
 <!DOCTYPE html>
+<!--
+Copyright (c) Microsoft Corporation.
+Licensed under the MIT license.
+-->
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
@@ -241,7 +245,7 @@ flowchart LR
       <p>Options go before or after your request. The examples put them first, on their own line, because that is easiest to read.</p>
 
       <h3 id="message-reference">Message reference</h3>
-      <p>These are all the inputs the shipped Squad prompts accept. Anything not listed here is ordinary text for the team.</p>
+      <p>These are all the inputs the shipped HVE Squad prompts accept. Anything not listed here is ordinary text for the team.</p>
       <div class="table-wrap">
         <table>
           <thead>
@@ -257,6 +261,7 @@ flowchart LR
             <tr><td><code>pack=</code></td><td>One or more pack names</td><td>First run, or adding to a team</td><td>Optional technology specialists. See <a href="usage.html#packs">Packs</a>.</td></tr>
             <tr><td><code>mode=</code></td><td><code>autonomous</code> or <code>autopilot</code></td><td>Work requests</td><td>How much runs before the team asks you. Omit it for interactive.</td></tr>
             <tr><td><code>routing=</code></td><td><code>off</code>, <code>ranked</code>, <code>economy</code>, <code>manual</code></td><td>Both coordinators</td><td>Which AI model each role uses. See <a href="usage.html#model-selection-per-role">Model selection per role</a>.</td></tr>
+            <tr><td><code>depth=</code></td><td><code>quick</code> or <code>standard</code></td><td>Work requests</td><td>How much squad work runs this turn, independently of model routing. Omit it for the full standard pipeline.</td></tr>
             <tr><td><code>cost-ceiling=</code></td><td>A positive number of USD, or <code>unset</code></td><td>Work requests</td><td>An estimated model-spend limit checked before work starts. See <a href="usage.html#cost-admission-control">Cost admission control</a>.</td></tr>
             <tr><td><code>discovery=</code></td><td><code>quick</code>, <code>standard</code>, <code>deep</code>, <code>skip</code></td><td>Work requests</td><td>Runs, or skips, the discovery interview. See <a href="usage.html#discovery-gate-when-there-is-nothing-written-down-yet">Discovery gate</a>.</td></tr>
             <tr><td><code>tier=</code>, <code>owner=</code>, <code>execution=</code></td><td>See Usage</td><td>Work requests</td><td>Advanced: a per-turn model tier, a named member when two rows share a role, and connector execution.</td></tr>
@@ -286,7 +291,7 @@ flowchart LR
           </thead>
           <tbody>
             <tr><td>General engineering, or a first try</td><td><code>default</code></td><td>The smallest team: researcher, lead, developer, tester and scribe. The recommended starting point.</td></tr>
-            <tr><td>Business requirements, roadmap, backlog, stakeholder documents</td><td><code>product</code></td><td>The core team plus analyst, product owner, designer, presenter, technical writer, experimenter, data scientist and an intake validator.</td></tr>
+            <tr><td>Business requirements, roadmap, backlog, stakeholder documents</td><td><code>product</code></td><td>The core team plus analyst, product owner, designer, technical writer, experimenter, data scientist and an intake validator.</td></tr>
             <tr><td>Azure architecture, infrastructure as code, cost, deployment</td><td><code>azure</code></td><td>The core team plus Azure architect, IaC author, deployer, cost manager, security and as-built roles.</td></tr>
             <tr><td>Upgrading or migrating an existing application</td><td><code>modernization</code></td><td>The core team plus a modernizer, architects, IaC author and cost manager.</td></tr>
             <tr><td>Security, privacy, supply chain, responsible AI</td><td><code>security</code></td><td>The core team plus security, supply-chain, RAI and privacy roles.</td></tr>
@@ -420,8 +425,8 @@ flowchart LR
             <tr><td>technical-writer</td><td><code>docs/</code></td></tr>
             <tr><td>architect, azure-architect and the other architect roles</td><td><code>docs/architecture/</code></td></tr>
             <tr><td>risk-manager</td><td><code>docs/risks/</code></td></tr>
+            <tr><td>value-economist</td><td><code>.copilot-tracking/finops/</code></td></tr>
             <tr><td>data-scientist</td><td><code>outputs/</code></td></tr>
-            <tr><td>presenter</td><td><code>.copilot-tracking/ppt/&lt;date&gt;/&lt;deck-slug&gt;/</code></td></tr>
             <tr><td>security, rai, privacy, accessibility, supply-chain, performance, observability</td><td>A matching folder under <code>.copilot-tracking/</code>, such as <code>security-plans/</code> or <code>rai-plans/</code></td></tr>
             <tr><td>scribe</td><td>The squad folder itself: it writes state, not deliverables.</td></tr>
           </tbody>

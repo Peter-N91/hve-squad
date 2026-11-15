@@ -4,13 +4,17 @@ description: "Practical guidance for defining benefit claims, baselines, attribu
 license: MIT
 metadata:
   authors: "Peter-N91/hve-squad"
-  spec_version: "1.0"
-  last_updated: "2026-10-15"
+  spec_version: "1.1"
+  last_updated: "2026-11-15"
 ---
+<!--
+Copyright (c) Microsoft Corporation.
+Licensed under the MIT license.
+-->
 
 # Business Value Measurement
 
-Use this reference to turn a benefit hypothesis into a measurable, attributable claim. It applies to technology and AI initiatives. The measures below are categories, not automatic dollar conversions: report the observed outcome in its own unit unless a finance-approved method supports monetization.
+Use this reference to turn a benefit hypothesis into a measurable, attributable claim across technology and AI initiatives. The nine categories below capture outcomes in their native operational or financial units first. To interpret supplied outcome evidence and derive a stated monetary representation, net value, and ROI, dispatch `value-economist` (`Squad Value Economist`) using [value-valuation.md](value-valuation.md) and `scripts/Measure-SquadBenefitValue.ps1`.
 
 ## Required claim definition
 
@@ -22,18 +26,17 @@ For each claim, record:
 - **Measurement method:** instrumentation, comparison or counterfactual, assumptions, exclusions, and the date/cadence for checking the outcome.
 - **Evidence and ownership:** supplied source data/report references, measurement and evidence owners, evidence period and limitations, and business decision owner/status/reference.
 
-Choose one primary value category per claim. Split a hypothesis that spans categories into separately measurable claims, and link them where they share a causal chain. Use a stable unit and scope over time; if demand, cohort, service mix, allocation, or the definition changes, disclose it and reset or qualify the comparison. A metric should be both meaningful to the beneficiary and actionable by the teams expected to influence it.
+Choose one primary value category per claim. Split a hypothesis that spans categories into separately measurable claims, and link them (`overlapGroup` or causal chain) where they share an underlying pool so downstream valuation never counts the same benefit twice. Use a stable unit and scope over time; if demand, cohort, service mix, allocation, or the definition changes, disclose it and reset or qualify the comparison. A metric should be both meaningful to the beneficiary and actionable by the teams expected to influence it.
 
 ## Gate and pipeline integration
 
 Apply these rules only when inputs or work contain business-benefit claims; do not add a universal measurement read or a Scribe dispatch to ordinary work.
 
 - **Preserve supplied facts.** Carry every claim's stable ID, category, hypothesis, beneficiary/scope, baseline/target and sources, measurement method and attribution assumptions, observation window/cadence, measurement/evidence owners, evidence references/period/limitations, benefit status, and business decision owner/status/reference through downstream artifacts. Missing source facts remain **unknown** and missing business approval remains **unapproved**. Never invent owners, baselines, targets, evidence, results, decision references, financial actuals, ROI, or approval; distinguish supplied observations from estimates and planned evidence collection.
-- **Evidence status.** Use `pending` while the observation window is open or required evidence collection is incomplete. Once both are complete, use `supported` when evidence supports the target, or `gap` when the target was missed or required evidence is missing or inconsistent. Unknown claim inputs and unapproved business decisions remain separately labeled; neither is silently converted into a pending outcome.
 - **Ordinary handoff transport.** Preserve this metadata in supported `decision.rationale`, within the closed ordinary decision schema `{title,rationale,adrNoted}`. Retain source traceability in the input artifacts named by `inputsReviewed[]`. Do not add unsupported verdict JSON keys or sections; readiness gaps, questions, and assumptions use existing verdict fields. Keep direct synchronous `Write-SquadHandoff.ps1 -Quiet` and subsequent `Write-SquadVerdict.ps1 -Quiet` writes; only unsupported exit 2 uses the existing cold fallback. Other failures never clear a gate. Benefit estimates, approval, or status do not replace or reduce actual supplied consumption or dispatch attribution.
 - **Intake.** Assess the required claim definition within the existing completeness, clarity, testability, consistency, and scope-boundary dimensions. Record omissions against the relevant dimension and ask the responsible human. A missing fact or approval required for the proposed downstream work is blocking, not an assumption the coordinator can approve. Future outcome evidence can remain pending until its observation window, but does not prove realized value.
 - **Plan and fan-out.** Preserve the full claim definition in the plan, map claim IDs to deliverables and follow-up measurement, and pass relevant IDs, evidence references, measurement responsibilities, and approval status to each owning specialist. Plan completion does not establish approval or realized benefit.
-- **Review and final outcome.** For each claim ID, report deliverable acceptance separately from the baseline/target comparison and observed or estimated outcome. State evidence status as **supported**, **gap**, or **pending** using the definitions above, retaining supplied evidence references, measurement period/method, owners, limitations, and follow-up window or unresolved measurement work. Keep validation pending while its window is open or collection is incomplete; once both finish, classify the evidence as supported or gap. Include the business decision owner/status/reference independently. An accepted deliverable or accepted-delivery economics is not a realized business outcome or booked financial value; monetization requires an approved valuation method and supporting evidence.
+- **Review and final outcome.** For each claim ID, report deliverable acceptance separately from the baseline/target comparison and observed or estimated outcome. State evidence status as **supported**, **gap**, or **pending**, retaining supplied evidence references, measurement period/method, owners, limitations, and follow-up window or unresolved measurement work. Keep validation pending until its window and evidence support it. Include the business decision owner/status/reference independently. An accepted deliverable or accepted-delivery economics is not a realized business outcome or booked financial value; monetization requires an explicit valuation method, supporting evidence, and deterministic calculation through `value-economist` ([value-valuation.md](value-valuation.md)).
 - **Non-waiver.** Business approval is separate from deliverable acceptance and execution/review/release permission. An intake verdict, Council Waiver, cost approval, or delivery acceptance neither supplies missing business approval nor waives execution or release gates. Missing approval or pending measurement is not a waiver either: obtain any approval required for the proposed action from its authorized owner, and preserve all Human Gates, including final-outcome validation before release.
 
 ## Value categories and candidate measures
@@ -56,7 +59,7 @@ Apply these rules only when inputs or work contain business-benefit claims; do n
 2. **Measure the path, not just the endpoint.** Keep traceable links from cost and usage records through the service/workload and product or process to the people, department, customer, and outcome metric. Record direct attribution separately from shared-cost allocation, and state allocation drivers and uncertainty.
 3. **Pair unit cost with business performance.** Cost per request, case, assist, feature, or customer is useful only with its demand, quality, adoption, and outcome context. Normalize for material changes in volume or mix. A falling unit cost is not automatically better if quality or the intended outcome worsens.
 4. **Validate the metric with its users.** Select metrics with both the business owner and the operational team. A statistically strong aggregate metric may not give delivery teams a lever; a technically convenient metric may not explain business value. Keep metric definitions stable, review them on a stated cadence, and retire or revise them when they stop guiding decisions.
-5. **Separate outcomes from booked value.** A measured time saving, capacity increase, avoided-cost estimate, risk exposure change, or engagement gain remains in its native unit unless a documented valuation method is approved. Label estimates and observed outcomes; identify Finance-approved and source-reconciled booked value separately. Do not derive financial actuals from a hypothesis or operational metric.
+5. **Separate outcomes from booked value.** A measured time saving, capacity increase, avoided-cost estimate, risk exposure change, or engagement gain remains in its native unit unless a documented valuation method is applied. `value-economist` converts evidenced outcomes into stated monetary buckets (`finance-approved`, `stated-indicative`, `modeled-counterfactual`, or `unmonetized-native-only`) without inventing actuals or Finance sign-off.
 6. **Report evidence status.** For each claim, state whether evidence supports the target, shows a gap, or is still pending. Include the evidence link, measurement period, method, caveats, and the business decision or follow-up.
 
 ## Illustrative measurement patterns
@@ -68,7 +71,7 @@ Apply these rules only when inputs or work contain business-benefit claims; do n
 
 ## Reference material
 
-This guide draws on the FinOps Foundation Unit Economics capability and practitioner research in the local FinOps library, particularly its synthesis of Duolingo, Canva, Reddit, SAP, Amadeus, and other implementation cases. Those cases reinforce scope-specific metrics, business-owned definitions, telemetry-backed attribution, and the need to challenge shifting denominators and shared-cost assumptions.
+This guide draws on the FinOps Foundation Unit Economics capability and practitioner research across enterprise FinOps implementations (including Duolingo, Canva, Reddit, SAP, and Amadeus), reinforcing scope-specific metrics, business-owned definitions, telemetry-backed attribution, and challenging shifting denominators and shared-cost assumptions.
 
 - [FinOps Foundation: Unit Economics](https://www.finops.org/framework/capabilities/unit-economics/)
 - [Microsoft Learn: Quantify business value](https://learn.microsoft.com/en-us/cloud-computing/finops/framework/quantify/quantify-business-value)

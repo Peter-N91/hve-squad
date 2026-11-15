@@ -1,3 +1,5 @@
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT license.
 name: Squad task
 description: Hand a task to the squad (Watch Mode). Auto-labeled squad/auto so the workflow picks it up.
 title: "[squad] "

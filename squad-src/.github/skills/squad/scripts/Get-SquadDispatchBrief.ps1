@@ -1,5 +1,6 @@
 #!/usr/bin/env pwsh
-# Copyright (c) 2026 Microsoft Corporation. All rights reserved.
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT license.
 # SPDX-License-Identifier: MIT
 #Requires -Version 7.0
 
@@ -24,11 +25,16 @@
         review-class role, sized by the dispatch-size estimator floors in
         `references/consumption-rates-template.md`;
       - hand-off: the command line the coordinator runs synchronously for an ordinary write;
-      - procedure: the verbatim Bounded Lane, Plan-Driven Parallelism, and Scripted Writes
-        sections of `references/economy-mode.md`, so a bounded request needs no whole reference.
+      - procedure: the verbatim Scripted Writes section of `references/economy-mode.md`, and
+        under `-RequestedDepth quick` the deterministic stage policy plus the verbatim Depth
+        Plan, Bounded Lane, Plan-Driven Parallelism, and Escape Hatch sections of
+        `references/quick-depth.md`, so a bounded request needs no whole reference.
 
-    Metadata is available in every routing mode. Only economy enables its existing
-    Bounded Lane. -AsJson emits compact machine-readable data without procedure text
+    Metadata is available in every routing mode. Depth is independent of routing: quick
+    enables the Bounded Lane under off, ranked, manual, and economy alike, and never
+    changes a model. A quick request on an unattended (Watch Mode) run is ignored unless
+    -DepthSource workflow marks it as trusted workflow configuration.
+    -AsJson emits compact machine-readable data without procedure text
     or suggested consumption blocks. Federation roots return registry/meta-routing;
     absent state returns an Init pointer. The script writes nothing.
 .PARAMETER SquadRoot
@@ -40,6 +46,18 @@
 .PARAMETER RequestedModelRouting
     The trusted user's routing input for this turn. Overrides the recorded mode in
     this read-only brief; it does not persist the change or authorize dispatch.
+.PARAMETER RequestedDepth
+    The trusted user's `depth=quick|standard` input for this turn. Per turn only: it is
+    never persisted, it does not authorize dispatch, and it never changes a model.
+.PARAMETER DepthSource
+    `input` (default) is the user's own turn input. `workflow` marks a depth that came from
+    the committed Watch workflow configuration or a collaborator's manual dispatch, the one
+    trusted channel an unattended run has; event text never qualifies.
+.PARAMETER RequestedMode
+    The trusted user's `mode=` input for this turn. Read-only: it persists nothing. For
+    `autopilot` the brief names the procedures to load and the per-stage hand-off rule, so a
+    run on an already initialized squad (whose recorded mode is still `interactive`) honors
+    autopilot exactly as a run that initialized in the same turn does.
 .PARAMETER AvailableModels
     The exact host-advertised model IDs, used only by the human-readable routing
     report. JSON mode defers scoring to New-SquadDispatchPlan.ps1.
@@ -71,6 +89,15 @@ param(
 
     [ValidateSet('off', 'ranked', 'economy', 'manual')]
     [string]$RequestedModelRouting,
+
+    [ValidateSet('quick', 'standard')]
+    [string]$RequestedDepth,
+
+    [ValidateSet('input', 'workflow')]
+    [string]$DepthSource = 'input',
+    
+    [ValidateSet('interactive', 'autonomous', 'autopilot')]
+    [string]$RequestedMode,
 
     [string[]]$AvailableModels = @(),
 
@@ -127,7 +154,11 @@ if ($AsJson -and (Test-Path -LiteralPath (Join-Path $SquadRoot 'federation.md') 
     $savedSnapshot = if ($SnapshotPath) {
         Write-SquadTransportJson -Path $SnapshotPath -SquadRoot $SquadRoot -Value (Get-SquadFederationSnapshot -SquadRoot $SquadRoot -RepoRoot $RepoRoot)
     } else { '' }
-    [ordered]@{ status = 'ok'; kind = 'federation'; squadRoot = $SquadRoot; state = $federationState; registry = $registry; routing = $metaTables[0].Rows; requestedModelRouting = $RequestedModelRouting; snapshotPath = $savedSnapshot; reference = 'references/federation-runtime.md'; observedExecution = 'host-unreported' } | ConvertTo-Json -Depth 12 -Compress
+    $federationBrief = [ordered]@{ status = 'ok'; kind = 'federation'; squadRoot = $SquadRoot; state = $federationState; registry = $registry; routing = $metaTables[0].Rows; requestedModelRouting = $RequestedModelRouting; snapshotPath = $savedSnapshot; reference = 'references/federation-runtime.md'; observedExecution = 'host-unreported' }
+    $federationBrief['requestedDepth'] = $(if ($RequestedDepth) { $RequestedDepth } else { 'standard' })
+    $federationBrief['depthSource'] = $(if ($RequestedDepth) { 'input' } else { 'default' })
+    $federationBrief['depth'] = $(if ($RequestedDepth -ceq 'quick' -and $federationState['trigger'] -isnot [Collections.IDictionary]) { 'quick' } else { 'standard' })
+    $federationBrief | ConvertTo-Json -Depth 12 -Compress
     exit 0
 }
 
@@ -286,7 +317,8 @@ $state = $stateText | ConvertFrom-Json -AsHashtable
 $turn = [int]$state['turn']
 # ConvertFrom-Json turns ISO strings into local DateTime values; print the stored text.
 $updated = if ($stateText -match '"updated"\s*:\s*"([^"]*)"') { $Matches[1] } else { '' }
-$federated = (Test-Path -LiteralPath (Join-Path $SquadRoot 'federation.md')) -or ($SquadRoot -match '[\\/]members[\\/][^\\/]+[\\/]?$')
+$federationParent = Test-Path -LiteralPath (Join-Path $SquadRoot 'federation.md')
+$federated = $federationParent -or ($SquadRoot -match '[\\/]members[\\/][^\\/]+[\\/]?$')
 $preflight = if ($state['currentRun'] -is [hashtable]) { $state['currentRun']['costPreflight'] } else { $null }
 $ceiling = $null -ne $preflight -and ($null -ne $preflight['ceilingUsd'] -or ($preflight['decision'] -and $preflight['decision'] -ne 'not-requested'))
 
@@ -302,24 +334,42 @@ $routing = if ($RequestedModelRouting) { $RequestedModelRouting } else { $record
 $capText = $env:COPILOT_SUBAGENT_MAX_CONCURRENT
 $cap = if ($capText -match '^\d+$' -and [int]$capText -gt 0) { [int]$capText } else { 4 }
 
-$covered = $routing -eq 'economy' -and $routing -eq $recordedRouting -and -not $federated -and -not $ceiling
+# quick-depth.md: depth is per turn and independent of routing; a Watch Mode run (state.json trigger) ignores it unless it is trusted workflow configuration.
+$unattended = $state['trigger'] -is [System.Collections.IDictionary]
+$workflowDepth = $DepthSource -ceq 'workflow'
+$depth = if ($RequestedDepth -ceq 'quick' -and (-not $unattended -or $workflowDepth)) { 'quick' } else { 'standard' }
+$depthSourceUsed = if ($RequestedDepth) { $(if ($unattended -and $workflowDepth) { 'workflow' } else { 'input' }) } else { 'default' }
+$covered = $depth -eq 'quick' -and -not $federationParent -and -not $ceiling
+$autopilotRule = 'Before the first dispatch run Get-SquadProcedure.ps1 -Name autopilot,progress. After EACH role returns and its artifact exists, run one Write-SquadHandoff.ps1 -Mode autopilot with only that role''s record, verify it, then dispatch the next role; never merge stages into one hand-off.'
 $out.Add("state: schema $($state['schemaVersion']), turn $turn (next hand-off turn: $($turn + 1)), mode $($state['mode']), updated $updated")
 $out.Add("federation: $(if ($federated) { 'yes' } else { 'no' }) | cost ceiling: $(if ($ceiling) { 'active' } else { 'none' }) | ledger: $ledger | model routing: $routing | concurrency cap: $cap")
+$autopilotRequested = $RequestedMode -ceq 'autopilot'
+if ($RequestedMode) { $out.Add($(if ($autopilotRequested) { "mode: autopilot requested (recorded $($state['mode'])). $autopilotRule" } else { "mode: $RequestedMode requested (recorded $($state['mode']))" })) }
 if ($RequestedModelRouting) { $out.Add("routing intent: requested $RequestedModelRouting; recorded $recordedRouting. Prepare the selected role units before dispatch; this brief is not a dispatch plan.") }
+$out.Add($(if ($depth -eq 'quick') { "depth: quick (trusted input this turn only, never persisted; pass requestedDepth=quick with depthSource=$depthSourceUsed)" }
+        elseif ($RequestedDepth -ceq 'quick') { 'depth: standard (depth=quick ignored on an unattended run; recorded as seen and ignored)' }
+        elseif ($RequestedDepth) { 'depth: standard (explicit input)' }
+        else { 'depth: standard (default; no depth input, and quick must not be inferred)' }))
 # economy-mode.md Consent (the same check Resolve-SquadModelRoute.ps1 and Write-SquadHandoff.ps1 make) and Route Markers.
 $decisionsPath = Join-Path $SquadRoot 'decisions.md'
 $decisionsText = if (Test-Path -LiteralPath $decisionsPath -PathType Leaf) { [string](Get-Content -LiteralPath $decisionsPath -Raw -Encoding utf8) } else { '' }
 $consent = if ($decisionsText -match '(?m)^## Economy Mode Accepted\b') { 'recorded' } else { 'missing' }
+$economyScope = Get-SquadEconomyConsentScope -DecisionsText $decisionsText
 if ($routing -eq 'economy') { $out.Add("consent: $consent") }
+if ($routing -eq 'economy' -and $consent -eq 'recorded') {
+    $out.Add($(if ($economyScope -eq 'all-roles') { 'scope: all-roles (every routed role takes the cheapest known-price pick within its floor; qualification or floor-only is disclosed)' }
+            else { 'scope: legacy (dispatch is blocked until the all-roles trade is accepted; no role is kept on Ranked as a compatibility fallback)' }))
+}
 if ($routing -eq 'economy' -and $consent -eq 'missing') {
     $out.Add('WARN economy consent not recorded: before any dispatch, state the trade once (economy-mode.md Consent) and hand the Scribe the ## Economy Mode Accepted decision with the roster refresh.')
 }
 if ($routing -eq 'economy') { $out.Add('route markers: every history record needs routingIdentity whose routeRationale starts with Route: economy, or Route: bounded on the Bounded Lane (economy-mode.md Route Markers).') }
+if ($depth -eq 'quick') { $out.Add('depth markers: pass each dispatch plan modelRationale unchanged; it leads with Route: bounded on the Bounded Lane and Depth: quick on quick work roles (quick-depth.md Route Markers).') }
 if ($covered) {
-    $out.Add('coverage: for a request that meets every Bounded Lane criterion below, this brief replaces reading 00-index.md, operating-procedure.md, gates-and-modes.md, economy-mode.md, agent files, and the rate table. Any other request: read the reference files whole.')
+    $out.Add('coverage: for a request that meets every Bounded Lane criterion below, this brief replaces reading 00-index.md, operating-procedure.md, gates-and-modes.md, quick-depth.md, agent files, and the rate table. Any other request: read the reference files whole.')
 }
 else {
-    $out.Add('coverage: NONE for the economy bounded lane (other mode, federation or active ceiling). Use metadata and read only the applicable gate/mode procedures.')
+    $out.Add('coverage: NONE for the bounded lane (depth is not quick, federation or active ceiling). Use metadata and read only the applicable gate/mode procedures.')
 }
 
 # Read the full frontmatter block; long allowlists can put metadata beyond line 40.
@@ -335,12 +385,24 @@ foreach ($agent in $agentIndex.Values) {
 $isModelRow = { param($r) $r.Count -ge 7 -and $r[0] -ne 'Model (as routed)' -and $r[2] -notmatch '^\d' -and $r[3] -match '^\d' }
 $rates = @(Get-TableRows (Join-Path $SquadRoot 'consumption-rates.md') | Where-Object { & $isModelRow $_ }) +
 @(Get-TableRows (Join-Path $refs 'consumption-rates-template.md') | Where-Object { & $isModelRow $_ })
+function ConvertTo-BriefModelKey {
+    param([string]$Model)
+    if (-not $Model) { return '' }
+    $key = ($Model.ToLowerInvariant().Trim().Trim('`') -replace '\s*\((?:copilot|github|anthropic|openai)\)\s*$', '' -replace '[\s_]+', '-')
+    if ($key -in @('fusion', 'copilot-fusion', 'fusion-standard', 'copilot-fusion-standard', 'hydrafusion-standard', 'hydrafusion-efficiency')) { return 'fusion-standard' }
+    if ($key -in @('hydrafusion', 'fusion-high', 'copilot-fusion-high', 'hydrafusion-high', 'hydrafusion-balance')) { return 'hydrafusion' }
+    if ($key -in @('hydrafusion-max', 'fusion-max', 'copilot-fusion-max')) { return 'hydrafusion-max' }
+    $key
+}
 function Find-Rate {
     param([string]$Model)
     if (-not $Model) { return $null }
-    $key = $Model.ToLowerInvariant().Trim()
-    if ($key -in @('hydrafusion', 'hydrafusion-balance', 'hydrafusion-efficiency')) { $key = 'hydrafusion-max' }
-    foreach ($row in $rates) { if ($row[0].ToLowerInvariant() -eq $key -or $row[1].ToLowerInvariant() -eq $key) { return $row } }
+    $key = ConvertTo-BriefModelKey $Model
+    foreach ($row in $rates) {
+        $nameKey = ConvertTo-BriefModelKey $row[0]
+        $idKey = ConvertTo-BriefModelKey $row[1]
+        if ($nameKey -eq $key -or ($idKey -and $idKey -eq $key)) { return $row }
+    }
     $null
 }
 
@@ -370,8 +432,9 @@ function New-Consumption {
     param([string]$Model, [string]$Source, [string]$Class)
     $floor = if ($estimator.ContainsKey($Class)) { $estimator[$Class] } else { $estimator['implementation'] }
     $t, $base, $growth, $perTurn = $floor
-    $isHydra = ($Model -match '(?i)^hydrafusion')
-    $tokenFactor = if ($isHydra) { 0.35 } else { 1.0 }
+    $modelKey = ConvertTo-BriefModelKey $Model
+    $isHydra = ($modelKey -in @('fusion-standard', 'hydrafusion', 'hydrafusion-max'))
+    $tokenFactor = if ($modelKey -eq 'hydrafusion-max') { 0.35 } elseif ($modelKey -eq 'hydrafusion') { 0.55 } else { 1.0 }
     $gross = $t * ($base + $growth * ($t - 1) / 2) * $tokenFactor
     $rate = Find-Rate $Model
     [ordered]@{
@@ -476,7 +539,7 @@ elseif ($AsJson) {
     [pscustomobject]@{ scoringPolicy = 'deferred-to-dispatch-plan'; snapshotIdentity = 'not-evaluated'; evaluationDate = $AsOf.ToString('yyyy-MM-dd'); availability = 'deferred'; roles = @(); warnings = @() }
 }
 else {
-    & (Join-Path $PSScriptRoot 'Resolve-SquadModelRoute.ps1') -SquadRoot $SquadRoot -Mode $routing -AvailableModels $AvailableModels -SessionModel $SessionModel -Role $Roles -AsOf $AsOf | ConvertFrom-Json
+    & (Join-Path $PSScriptRoot 'Resolve-SquadModelRoute.ps1') -SquadRoot $SquadRoot -Mode $routing -AvailableModels $AvailableModels -SessionModel $SessionModel -Role $Roles -AsOf $AsOf -Unattended:$unattended | ConvertFrom-Json
 }
 if ($AsJson) {
     $ledgerCheck = [ordered]@{ status = 'not-run'; failureClass = ''; output = '' }
@@ -528,7 +591,7 @@ if ($AsJson) {
     }
     $profileMatch = [regex]::Matches($decisionsText, '(?m)^\* (?:Provenance|Profile):[ \t]*(?<value>[^\r\n]+)')
     $provenance = if ($profileMatch.Count) { $profileMatch[-1].Groups['value'].Value.Trim() } else { '' }
-    [ordered]@{
+    $squadBrief = [ordered]@{
         status = 'ok'
         kind = $(if ($federated) { 'member' } else { 'squad' })
         squadRoot = $SquadRoot
@@ -552,11 +615,25 @@ if ($AsJson) {
         provenance = $provenance
         gates = 'not-evaluated'
         economyConsent = $(if ($routing -eq 'economy') { $consent } else { 'not-applicable' })
+        economyScope = $(if ($routing -eq 'economy') { $economyScope } else { 'not-applicable' })
         boundedLaneEligible = $covered -and $state['mode'] -eq 'interactive'
         concurrencyCap = $cap
         pendingConnectorTasks = @(Get-SquadPendingConnectors -RepoRoot $RepoRoot -SquadRoot $SquadRoot)
         reference = 'references/coordinator-runtime.md'
-    } | ConvertTo-Json -Depth 12 -Compress
+    }
+    $squadBrief['requestedDepth'] = $(if ($RequestedDepth) { $RequestedDepth } else { 'standard' })
+    $squadBrief['depthSource'] = $depthSourceUsed
+    $squadBrief['depth'] = $depth
+    if ($RequestedMode) {
+        $squadBrief['requestedMode'] = $RequestedMode
+        if ($autopilotRequested) {
+            $squadBrief['requiredProcedures'] = 'autopilot,progress'
+            $squadBrief['handoffPolicy'] = 'per-stage'
+            $squadBrief['handoffMode'] = 'autopilot'
+            $squadBrief['modeRule'] = $autopilotRule
+        }
+    }
+    $squadBrief | ConvertTo-Json -Depth 12 -Compress
     exit 0
 }
 $out.Add('')
@@ -622,13 +699,25 @@ $out.Add("``pwsh -NoProfile -File '$(Join-Path $PSScriptRoot 'Write-SquadHandoff
 $out.Add('Validate the returned status, turn, and history counts; preserve stderr warnings and distinguish `ledger-only` from `PASS`. Use the Squad Scribe for cold operations.')
 
 $out.Add('')
-if ($routing -eq 'economy') {
-    $out.Add('## Procedure (verbatim, economy-mode.md)')
+if ($depth -eq 'quick' -and -not $federationParent) {
+    $out.Add('## Depth plan policy (the dispatch plan returns each stage with its criterion and evidence; any doubt means standard depth)')
     $out.Add('')
-    $out.Add((Get-Section 'economy-mode.md' '## Bounded Lane'))
+    $policy = @(Get-SquadDepthStagePolicy)
+    foreach ($action in @('skip', 'shrink', 'run')) {
+        $stages = @($policy | Where-Object quick -eq $action | ForEach-Object stage)
+        if ($stages.Count) { $out.Add("- ${action}$(if ($action -eq 'run') { ' (gates, never skipped or shortened)' }): $($stages -join ', ')") }
+    }
     $out.Add('')
-    $out.Add((Get-Section 'economy-mode.md' '## Plan-Driven Parallelism'))
+    $out.Add('## Procedure (verbatim, quick-depth.md)')
     $out.Add('')
+    $quickSections = @('## Depth Plan')
+    if ($state['mode'] -eq 'interactive') { $quickSections += @('## Bounded Lane', '## Plan-Driven Parallelism') }
+    if ($state['mode'] -eq 'autopilot') { $quickSections += '## Intake Waiver' }
+    $quickSections += '## Escape Hatch'
+    foreach ($heading in $quickSections) {
+        $out.Add((Get-Section 'quick-depth.md' $heading))
+        $out.Add('')
+    }
 }
 $out.Add((Get-Section 'economy-mode.md' '## Scripted Writes'))
 

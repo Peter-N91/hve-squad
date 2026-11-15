@@ -1,0 +1,2306 @@
+{
+  "schemaVersion": 1,
+  "scope": "Exact dependency identities embedded in the unchanged Mermaid browser runtime. Mermaid itself retains its separate upstream MIT license.",
+  "legalReview": "Supplier rights and alternative license expressions are retained, not relicensed. Human review of applicable license and source-availability obligations is pending; this inventory is not legal clearance.",
+  "hashDomains": {
+    "runtime": "SHA-256 of raw bundle and source-map bytes; no text normalization.",
+    "notice": "SHA-256 of UTF-8 managed notice, package-section content and legal-text content after CRLF-to-LF replacement only. No trimming or other normalization.",
+    "source": "Raw source/member SHA-256 remains separate from the normalized retained text. Raw text SHA-256 hashes the supplied UTF-8 excerpt before newline normalization.",
+    "inventory": "No inventory self-hash and no notice-to-inventory hash cycle. Published inventory must match the source inventory structurally."
+  },
+  "runtime": {
+    "name": "mermaid",
+    "version": "12.2.0",
+    "canonicalPublicURL": "https://registry.npmjs.org/mermaid/-/mermaid-12.2.0.tgz",
+    "bundle": {
+      "file": "mermaid.min.js",
+      "sha256": "a8a6a6f805b074a8261a2825c86f99c8054acb3b35f50bb7e24a4f9f2c3c3b9f",
+      "publishedPath": "assets/vendor/mermaid.min.js"
+    },
+    "sourceMap": {
+      "file": "mermaid.min.js.map",
+      "sha256": "a5b0405411969d4fd8e2301ad6da2f6918ca1a619a6c820eb77b4dfc423376db",
+      "sourceCount": 1242,
+      "deployed": false
+    }
+  },
+  "identityCount": 66,
+  "notice": {
+    "file": "mermaid-THIRD-PARTY-NOTICES.txt",
+    "sha256": "d7c212c52421aa7c4c1835f33605f3eabd188e7f12f356114fc3c3592fe20e98"
+  },
+  "packages": [
+    {
+      "identity": "@braintree/sanitize-url@7.1.2",
+      "name": "@braintree/sanitize-url",
+      "version": "7.1.2",
+      "sourceMapPnPmFolder": "@braintree+sanitize-url@7.1.2",
+      "licenseExpression": "MIT",
+      "sourceCommit": null,
+      "canonicalPublicURLs": [
+        "https://registry.npmjs.org/%40braintree%2Fsanitize-url/7.1.2",
+        "https://registry.npmjs.org/@braintree%2Fsanitize-url/-/sanitize-url-7.1.2.tgz"
+      ],
+      "sourceEvidence": {
+        "kind": "exactlocal-lock-match",
+        "rawSHA256": "bf8403a53853179dea3f07e59ea4b2a0abcd26b77317898b7ce524538411ac9e",
+        "hashSubject": "installed package.json",
+        "verificationMethod": "Exact installed package.json version matched the package-lock record; no retained package archive is attested by this evidence."
+      },
+      "archiveIntegrity": null,
+      "noticeSectionSHA256": "1dc9778180da174496b3f27d43a4cede39aab2085bb8a8327a2e00ae79c657af",
+      "texts": [
+        {
+          "sectionId": "@braintree/sanitize-url@7.1.2:1",
+          "kind": "license",
+          "member": "LICENSE",
+          "sourceSection": "entire file",
+          "canonicalPublicURL": "https://registry.npmjs.org/@braintree%2Fsanitize-url/-/sanitize-url-7.1.2.tgz#LICENSE",
+          "rawMemberSHA256": "0984740e0c3d725c8044dec7edcefe1dbce180ef5a7bc710c251e19607000158",
+          "rawTextSHA256": "0984740e0c3d725c8044dec7edcefe1dbce180ef5a7bc710c251e19607000158",
+          "retainedRawTextBytes": 1066,
+          "sha256": "0984740e0c3d725c8044dec7edcefe1dbce180ef5a7bc710c251e19607000158"
+        }
+      ]
+    },
+    {
+      "identity": "@chevrotain/cst-dts-gen@13.2.0",
+      "name": "@chevrotain/cst-dts-gen",
+      "version": "13.2.0",
+      "sourceMapPnPmFolder": "@chevrotain+cst-dts-gen@13.2.0",
+      "licenseExpression": "Apache-2.0",
+      "sourceCommit": null,
+      "canonicalPublicURLs": [
+        "https://registry.npmjs.org/%40chevrotain%2Fcst-dts-gen/13.2.0",
+        "https://registry.npmjs.org/@chevrotain%2Fcst-dts-gen/-/cst-dts-gen-13.2.0.tgz"
+      ],
+      "sourceEvidence": {
+        "kind": "exactlocal-lock-match",
+        "rawSHA256": "56344f77eae9569c4e9d2cf44d34e9e475435ad09e985198714e46f5609e4e08",
+        "hashSubject": "installed package.json",
+        "verificationMethod": "Exact installed package.json version matched the package-lock record; no retained package archive is attested by this evidence."
+      },
+      "archiveIntegrity": null,
+      "noticeSectionSHA256": "576e4c83fceb66db671d9b0c9cb100fef2e20e1a18457e24c106cdc9abc8d622",
+      "texts": [
+        {
+          "sectionId": "@chevrotain/cst-dts-gen@13.2.0:1",
+          "kind": "license",
+          "member": "LICENSE.txt",
+          "sourceSection": "entire file",
+          "canonicalPublicURL": "https://registry.npmjs.org/@chevrotain%2Fcst-dts-gen/-/cst-dts-gen-13.2.0.tgz#LICENSE.txt",
+          "rawMemberSHA256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+          "rawTextSHA256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+          "retainedRawTextBytes": 11358,
+          "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+        }
+      ]
+    },
+    {
+      "identity": "@chevrotain/gast@13.2.0",
+      "name": "@chevrotain/gast",
+      "version": "13.2.0",
+      "sourceMapPnPmFolder": "@chevrotain+gast@13.2.0",
+      "licenseExpression": "Apache-2.0",
+      "sourceCommit": null,
+      "canonicalPublicURLs": [
+        "https://registry.npmjs.org/%40chevrotain%2Fgast/13.2.0",
+        "https://registry.npmjs.org/@chevrotain%2Fgast/-/gast-13.2.0.tgz"
+      ],
+      "sourceEvidence": {
+        "kind": "exactlocal-lock-match",
+        "rawSHA256": "3d1af38916463b8e491c35b6d9a961e87e1919604dd8651acc7524c98dd0a9f5",
+        "hashSubject": "installed package.json",
+        "verificationMethod": "Exact installed package.json version matched the package-lock record; no retained package archive is attested by this evidence."
+      },
+      "archiveIntegrity": null,
+      "noticeSectionSHA256": "5c687c3336bfdf56448f267d706cadf8db5dbaa5ed77f0df5f5d2788d7913904",
+      "texts": [
+        {
+          "sectionId": "@chevrotain/gast@13.2.0:1",
+          "kind": "license",
+          "member": "LICENSE.txt",
+          "sourceSection": "entire file",
+          "canonicalPublicURL": "https://registry.npmjs.org/@chevrotain%2Fgast/-/gast-13.2.0.tgz#LICENSE.txt",
+          "rawMemberSHA256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+          "rawTextSHA256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+          "retainedRawTextBytes": 11358,
+          "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+        }
+      ]
+    },
+    {
+      "identity": "@chevrotain/regexp-to-ast@13.2.0",
+      "name": "@chevrotain/regexp-to-ast",
+      "version": "13.2.0",
+      "sourceMapPnPmFolder": "@chevrotain+regexp-to-ast@13.2.0",
+      "licenseExpression": "Apache-2.0",
+      "sourceCommit": null,
+      "canonicalPublicURLs": [
+        "https://registry.npmjs.org/%40chevrotain%2Fregexp-to-ast/13.2.0",
+        "https://registry.npmjs.org/@chevrotain%2Fregexp-to-ast/-/regexp-to-ast-13.2.0.tgz"
+      ],
+      "sourceEvidence": {
+        "kind": "exactlocal-lock-match",
+        "rawSHA256": "db8d6929b0dd4cd2b3c9f0697453e207dce4b608d89317c24b17acb8d9a73e20",
+        "hashSubject": "installed package.json",
+        "verificationMethod": "Exact installed package.json version matched the package-lock record; no retained package archive is attested by this evidence."
+      },
+      "archiveIntegrity": null,
+      "noticeSectionSHA256": "a5eb22b8b2dc3f23475aa4db562b5107d0c673f30daefe1a2e485f62fbfae858",
+      "texts": [
+        {
+          "sectionId": "@chevrotain/regexp-to-ast@13.2.0:1",
+          "kind": "license",
+          "member": "LICENSE.txt",
+          "sourceSection": "entire file",
+          "canonicalPublicURL": "https://registry.npmjs.org/@chevrotain%2Fregexp-to-ast/-/regexp-to-ast-13.2.0.tgz#LICENSE.txt",
+          "rawMemberSHA256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+          "rawTextSHA256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+          "retainedRawTextBytes": 11358,
+          "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+        }
+      ]
+    },
+    {
+      "identity": "@chevrotain/utils@13.2.0",
+      "name": "@chevrotain/utils",
+      "version": "13.2.0",
+      "sourceMapPnPmFolder": "@chevrotain+utils@13.2.0",
+      "licenseExpression": "Apache-2.0",
+      "sourceCommit": null,
+      "canonicalPublicURLs": [
+        "https://registry.npmjs.org/%40chevrotain%2Futils/13.2.0",
+        "https://registry.npmjs.org/@chevrotain%2Futils/-/utils-13.2.0.tgz"
+      ],
+      "sourceEvidence": {
+        "kind": "exactlocal-lock-match",
+        "rawSHA256": "614b666757a83880fecdc318cb2566268123138f01102f2bcebda12a3c9dcf40",
+        "hashSubject": "installed package.json",
+        "verificationMethod": "Exact installed package.json version matched the package-lock record; no retained package archive is attested by this evidence."
+      },
+      "archiveIntegrity": null,
+      "noticeSectionSHA256": "f225b2d2587be0fcfc7593b504ff7b4d0a9bc869f1ce7eb5f0627659c0863f94",
+      "texts": [
+        {
+          "sectionId": "@chevrotain/utils@13.2.0:1",
+          "kind": "license",
+          "member": "LICENSE.txt",
+          "sourceSection": "entire file",
+          "canonicalPublicURL": "https://registry.npmjs.org/@chevrotain%2Futils/-/utils-13.2.0.tgz#LICENSE.txt",
+          "rawMemberSHA256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+          "rawTextSHA256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+          "retainedRawTextBytes": 11358,
+          "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+        }
+      ]
+    },
+    {
+      "identity": "@iconify/utils@3.0.2",
+      "name": "@iconify/utils",
+      "version": "3.0.2",
+      "sourceMapPnPmFolder": "@iconify+utils@3.0.2",
+      "licenseExpression": "MIT",
+      "sourceCommit": null,
+      "canonicalPublicURLs": [
+        "https://registry.npmjs.org/%40iconify%2Futils/3.0.2",
+        "https://registry.npmjs.org/@iconify%2Futils/-/utils-3.0.2.tgz"
+      ],
+      "sourceEvidence": {
+        "kind": "proxy-returned-sha1",
+        "rawSHA256": "7f1b0f8bd152444d962bbcb258f57583bea55bb05e437eedf4cc950b9b56f969",
+        "hashSubject": "retained npm package archive",
+        "verificationMethod": "Retained archive SHA-1 matched the dist.shasum returned through the retrieval proxy. This is not independent public-registry verification. SHA-512 SRI is locally calculated; public-registry SRI was not supplied."
+      },
+      "archiveIntegrity": {
+        "sha1": "9599607f20690cd3e7a5d2d459af0eb81a89dc2b",
+        "locallyCalculatedSHA512SRI": "sha512-EfJS0rLfVuRuJRn4psJHtK2A9TqVnkxPpHY6lYHiB9+8eSuudsxbwMiavocG45ujOo6FJ+CIRlRnlOGinzkaGQ==",
+        "publicRegistryIntegrity": null,
+        "sha1Verification": "Matched proxy-returned dist.shasum; not independently public-registry verified."
+      },
+      "noticeSectionSHA256": "d3fc99b9fd02bbd27c7315665d29bb535f15b64279b6274676260ca36135c085",
+      "texts": [
+        {
+          "sectionId": "@iconify/utils@3.0.2:1",
+          "kind": "license",
+          "member": "package/license.txt",
+          "sourceSection": "entire file",
+          "canonicalPublicURL": "https://registry.npmjs.org/@iconify%2Futils/-/utils-3.0.2.tgz#package/license.txt",
+          "rawMemberSHA256": "a86793ac023162ce98b91899601c15f6712f44943163c4f92a0a4bf89152b3bf",
+          "rawTextSHA256": "a86793ac023162ce98b91899601c15f6712f44943163c4f92a0a4bf89152b3bf",
+          "retainedRawTextBytes": 1083,
+          "sha256": "a86793ac023162ce98b91899601c15f6712f44943163c4f92a0a4bf89152b3bf"
+        }
+      ]
+    },
+    {
+      "identity": "@upsetjs/venn.js@2.0.0",
+      "name": "@upsetjs/venn.js",
+      "version": "2.0.0",
+      "sourceMapPnPmFolder": "@upsetjs+venn.js@2.0.0",
+      "licenseExpression": "MIT",
+      "sourceCommit": null,
+      "canonicalPublicURLs": [
+        "https://registry.npmjs.org/%40upsetjs%2Fvenn.js/2.0.0",
+        "https://registry.npmjs.org/@upsetjs%2Fvenn.js/-/venn.js-2.0.0.tgz"
+      ],
+      "sourceEvidence": {
+        "kind": "exactlocal-lock-match",
+        "rawSHA256": "85b7f745cd064a9647133512750a867c556140bc23f8eb962a191810ac53f892",
+        "hashSubject": "installed package.json",
+        "verificationMethod": "Exact installed package.json version matched the package-lock record; no retained package archive is attested by this evidence."
+      },
+      "archiveIntegrity": null,
+      "noticeSectionSHA256": "95d19e8b8de16ae85692b59ec5a36b8220bf26387c49667740195595d2e70d8a",
+      "texts": [
+        {
+          "sectionId": "@upsetjs/venn.js@2.0.0:1",
+          "kind": "license",
+          "member": "LICENSE",
+          "sourceSection": "entire file",
+          "canonicalPublicURL": "https://registry.npmjs.org/@upsetjs%2Fvenn.js/-/venn.js-2.0.0.tgz#LICENSE",
+          "rawMemberSHA256": "6a3508febf2cfccfee96597394543a6154a4bb0b1f91f28404be42c09e9fcb54",
+          "rawTextSHA256": "6a3508febf2cfccfee96597394543a6154a4bb0b1f91f28404be42c09e9fcb54",
+          "retainedRawTextBytes": 1106,
+          "sha256": "6a3508febf2cfccfee96597394543a6154a4bb0b1f91f28404be42c09e9fcb54"
+        }
+      ]
+    },
+    {
+      "identity": "chevrotain@13.2.0",
+      "name": "chevrotain",
+      "version": "13.2.0",
+      "sourceMapPnPmFolder": "chevrotain@13.2.0",
+      "licenseExpression": "Apache-2.0",
+      "sourceCommit": null,
+      "canonicalPublicURLs": [
+        "https://registry.npmjs.org/chevrotain/13.2.0",
+        "https://registry.npmjs.org/chevrotain/-/chevrotain-13.2.0.tgz"
+      ],
+      "sourceEvidence": {
+        "kind": "exactlocal-lock-match",
+        "rawSHA256": "3abdb65c84821d89750232a7c632fec546a91e00a1fe759bf83dd2e31d5d96eb",
+        "hashSubject": "installed package.json",
+        "verificationMethod": "Exact installed package.json version matched the package-lock record; no retained package archive is attested by this evidence."
+      },
+      "archiveIntegrity": null,
+      "noticeSectionSHA256": "c9cc0660db61c13c450614372c038dd053416b4cb8791b6fc120fe43d353a677",
+      "texts": [
+        {
+          "sectionId": "chevrotain@13.2.0:1",
+          "kind": "license",
+          "member": "LICENSE.txt",
+          "sourceSection": "entire file",
+          "canonicalPublicURL": "https://registry.npmjs.org/chevrotain/-/chevrotain-13.2.0.tgz#LICENSE.txt",
+          "rawMemberSHA256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+          "rawTextSHA256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+          "retainedRawTextBytes": 11358,
+          "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+        }
+      ]
+    },
+    {
+      "identity": "cose-base@1.0.3",
+      "name": "cose-base",
+      "version": "1.0.3",
+      "sourceMapPnPmFolder": "cose-base@1.0.3",
+      "licenseExpression": "MIT",
+      "sourceCommit": null,
+      "canonicalPublicURLs": [
+        "https://registry.npmjs.org/cose-base/1.0.3",
+        "https://registry.npmjs.org/cose-base/-/cose-base-1.0.3.tgz"
+      ],
+      "sourceEvidence": {
+        "kind": "exactlocal-lock-match",
+        "rawSHA256": "6ad123316489a605fb81e73d46c903111bb4bce147a22ac01c8ccb0ad761ce24",
+        "hashSubject": "installed package.json",
+        "verificationMethod": "Exact installed package.json version matched the package-lock record; no retained package archive is attested by this evidence."
+      },
+      "archiveIntegrity": null,
+      "noticeSectionSHA256": "803fd3e91c9e74cd344b83379e14d4c4ed63286ae5d835cea3a8ddc8c36a892a",
+      "texts": [
+        {
+          "sectionId": "cose-base@1.0.3:1",
+          "kind": "license",
+          "member": "LICENSE",
+          "sourceSection": "entire file",
+          "canonicalPublicURL": "https://registry.npmjs.org/cose-base/-/cose-base-1.0.3.tgz#LICENSE",
+          "rawMemberSHA256": "5fb3cf4a14c3c5af6e473a192df8bca10c77754e3a0c6492c79fb92a76a5478a",
+          "rawTextSHA256": "5fb3cf4a14c3c5af6e473a192df8bca10c77754e3a0c6492c79fb92a76a5478a",
+          "retainedRawTextBytes": 1081,
+          "sha256": "5fb3cf4a14c3c5af6e473a192df8bca10c77754e3a0c6492c79fb92a76a5478a"
+        }
+      ]
+    },
+    {
+      "identity": "cose-base@2.2.0",
+      "name": "cose-base",
+      "version": "2.2.0",
+      "sourceMapPnPmFolder": "cose-base@2.2.0",
+      "licenseExpression": "MIT",
+      "sourceCommit": null,
+      "canonicalPublicURLs": [
+        "https://registry.npmjs.org/cose-base/2.2.0",
+        "https://registry.npmjs.org/cose-base/-/cose-base-2.2.0.tgz"
+      ],
+      "sourceEvidence": {
+        "kind": "exactlocal-lock-match",
+        "rawSHA256": "6c83ae210757f78ecdd147d0e4cd6caab1a69ceb2f0c331d69962f1254c8410f",
+        "hashSubject": "installed package.json",
+        "verificationMethod": "Exact installed package.json version matched the package-lock record; no retained package archive is attested by this evidence."
+      },
+      "archiveIntegrity": null,
+      "noticeSectionSHA256": "5bb7a0a16941330996c0ddd30ad3be55fbe6fa7bdc3425029d30370301f88c57",
+      "texts": [
+        {
+          "sectionId": "cose-base@2.2.0:1",
+          "kind": "license",
+          "member": "LICENSE",
+          "sourceSection": "entire file",
+          "canonicalPublicURL": "https://registry.npmjs.org/cose-base/-/cose-base-2.2.0.tgz#LICENSE",
+          "rawMemberSHA256": "5fb3cf4a14c3c5af6e473a192df8bca10c77754e3a0c6492c79fb92a76a5478a",
+          "rawTextSHA256": "5fb3cf4a14c3c5af6e473a192df8bca10c77754e3a0c6492c79fb92a76a5478a",
+          "retainedRawTextBytes": 1081,
+          "sha256": "5fb3cf4a14c3c5af6e473a192df8bca10c77754e3a0c6492c79fb92a76a5478a"
+        }
+      ]
+    },
+    {
+      "identity": "cytoscape@3.34.0",
+      "name": "cytoscape",
+      "version": "3.34.0",
+      "sourceMapPnPmFolder": "cytoscape@3.34.0",
+      "licenseExpression": "MIT",
+      "sourceCommit": null,
+      "canonicalPublicURLs": [
+        "https://registry.npmjs.org/cytoscape/3.34.0",
+        "https://registry.npmjs.org/cytoscape/-/cytoscape-3.34.0.tgz"
+      ],
+      "sourceEvidence": {
+        "kind": "proxy-returned-sha1",
+        "rawSHA256": "4155f863f4408d18bb637afb5808dff7840ca7361437067faf45bbe8c970e768",
+        "hashSubject": "retained npm package archive",
+        "verificationMethod": "Retained archive SHA-1 matched the dist.shasum returned through the retrieval proxy. This is not independent public-registry verification. SHA-512 SRI is locally calculated; public-registry SRI was not supplied."
+      },
+      "archiveIntegrity": {
+        "sha1": "5fbe2eb1cf76b070a8ecd5647c35f65aa097c9c6",
+        "locallyCalculatedSHA512SRI": "sha512-62rNSrioXw93uliKFBwjukeQyeWwH2PqDrTac31r2P6464u3AUvTk0xS4LVvT251g7IgkFunrI48ZEZGjywSOg==",
+        "publicRegistryIntegrity": null,
+        "sha1Verification": "Matched proxy-returned dist.shasum; not independently public-registry verified."
+      },
+      "noticeSectionSHA256": "9b4caa25f8fefd636860c37dbcffb4868e9361d1e36d0b0930e4b88e3daba96f",
+      "texts": [
+        {
+          "sectionId": "cytoscape@3.34.0:1",
+          "kind": "license",
+          "member": "package/LICENSE",
+          "sourceSection": "entire file",
+          "canonicalPublicURL": "https://registry.npmjs.org/cytoscape/-/cytoscape-3.34.0.tgz#package/LICENSE",
+          "rawMemberSHA256": "eb319c6e6f233607f71e8e2f450391751883cfc0eeb3ca7ef574c13d1d9c2203",
+          "rawTextSHA256": "eb319c6e6f233607f71e8e2f450391751883cfc0eeb3ca7ef574c13d1d9c2203",
+          "retainedRawTextBytes": 1082,
+          "sha256": "eb319c6e6f233607f71e8e2f450391751883cfc0eeb3ca7ef574c13d1d9c2203"
+        },
+        {
+          "sectionId": "cytoscape@3.34.0:2",
+          "kind": "license",
+          "member": "package/license-update.mjs",
+          "sourceSection": "entire file",
+          "canonicalPublicURL": "https://registry.npmjs.org/cytoscape/-/cytoscape-3.34.0.tgz#package/license-update.mjs",
+          "rawMemberSHA256": "4a5a644717fc90d678e8fbbc537a08452d0566726710eef47b196abd6363e635",
+          "rawTextSHA256": "4a5a644717fc90d678e8fbbc537a08452d0566726710eef47b196abd6363e635",
+          "retainedRawTextBytes": 1416,
+          "sha256": "4a5a644717fc90d678e8fbbc537a08452d0566726710eef47b196abd6363e635"
+        }
+      ]
+    },
+    {
+      "identity": "cytoscape-cose-bilkent@4.1.0",
+      "name": "cytoscape-cose-bilkent",
+      "version": "4.1.0",
+      "sourceMapPnPmFolder": "cytoscape-cose-bilkent@4.1.0_cytoscape@3.34.0",
+      "licenseExpression": "MIT",
+      "sourceCommit": null,
+      "canonicalPublicURLs": [
+        "https://registry.npmjs.org/cytoscape-cose-bilkent/4.1.0",
+        "https://registry.npmjs.org/cytoscape-cose-bilkent/-/cytoscape-cose-bilkent-4.1.0.tgz"
+      ],
+      "sourceEvidence": {
+        "kind": "exactlocal-lock-match",
+        "rawSHA256": "4c35d10eb2a9aae4a113d3b452bb0de10ccf00a1d13ca31cf03b90fe2b6cb6b1",
+        "hashSubject": "installed package.json",
+        "verificationMethod": "Exact installed package.json version matched the package-lock record; no retained package archive is attested by this evidence."
+      },
+      "archiveIntegrity": null,
+      "noticeSectionSHA256": "9584ca6be17817b5e403c405ac7bbd6c4bf6a40bd0f624ba1da78d5be2a51a2f",
+      "texts": [
+        {
+          "sectionId": "cytoscape-cose-bilkent@4.1.0:1",
+          "kind": "license",
+          "member": "LICENSE",
+          "sourceSection": "entire file",
+          "canonicalPublicURL": "https://registry.npmjs.org/cytoscape-cose-bilkent/-/cytoscape-cose-bilkent-4.1.0.tgz#LICENSE",
+          "rawMemberSHA256": "440fc58a56a12814e417d2b341da89b050da052dc75bdb235607d37ec5fe74ef",
+          "rawTextSHA256": "440fc58a56a12814e417d2b341da89b050da052dc75bdb235607d37ec5fe74ef",
+          "retainedRawTextBytes": 1084,
+          "sha256": "440fc58a56a12814e417d2b341da89b050da052dc75bdb235607d37ec5fe74ef"
+        }
+      ]
+    },
+    {
+      "identity": "cytoscape-fcose@2.2.0",
+      "name": "cytoscape-fcose",
+      "version": "2.2.0",
+      "sourceMapPnPmFolder": "cytoscape-fcose@2.2.0_cytoscape@3.34.0",
+      "licenseExpression": "MIT",
+      "sourceCommit": null,
+      "canonicalPublicURLs": [
+        "https://registry.npmjs.org/cytoscape-fcose/2.2.0",
+        "https://registry.npmjs.org/cytoscape-fcose/-/cytoscape-fcose-2.2.0.tgz"
+      ],
+      "sourceEvidence": {
+        "kind": "exactlocal-lock-match",
+        "rawSHA256": "0c2803ff9ff6f99335b41d993d44a64fc419bfec19c042e2a1e3d2cc5ee1fc31",
+        "hashSubject": "installed package.json",
+        "verificationMethod": "Exact installed package.json version matched the package-lock record; no retained package archive is attested by this evidence."
+      },
+      "archiveIntegrity": null,
+      "noticeSectionSHA256": "3916eb255aaf04ebba78e94de48da0a159b1a38db6fd0f3ceb709846c048a0b9",
+      "texts": [
+        {
+          "sectionId": "cytoscape-fcose@2.2.0:1",
+          "kind": "license",
+          "member": "LICENSE",
+          "sourceSection": "entire file",
+          "canonicalPublicURL": "https://registry.npmjs.org/cytoscape-fcose/-/cytoscape-fcose-2.2.0.tgz#LICENSE",
+          "rawMemberSHA256": "2837634f403949215760fcdd2fa1ed0c64875d02099ecc8318c704b852f1421d",
+          "rawTextSHA256": "2837634f403949215760fcdd2fa1ed0c64875d02099ecc8318c704b852f1421d",
+          "retainedRawTextBytes": 1079,
+          "sha256": "2837634f403949215760fcdd2fa1ed0c64875d02099ecc8318c704b852f1421d"
+        }
+      ]
+    },
+    {
+      "identity": "d3@7.9.0",
+      "name": "d3",
+      "version": "7.9.0",
+      "sourceMapPnPmFolder": "d3@7.9.0",
+      "licenseExpression": "ISC",
+      "sourceCommit": null,
+      "canonicalPublicURLs": [
+        "https://registry.npmjs.org/d3/7.9.0",
+        "https://registry.npmjs.org/d3/-/d3-7.9.0.tgz"
+      ],
+      "sourceEvidence": {
+        "kind": "exactlocal-lock-match",
+        "rawSHA256": "7b8169c299e9b62e31dd518dfff1f5cc456856f0fd6a1afcfcd5f260317beb88",
+        "hashSubject": "installed package.json",
+        "verificationMethod": "Exact installed package.json version matched the package-lock record; no retained package archive is attested by this evidence."
+      },
+      "archiveIntegrity": null,
+      "noticeSectionSHA256": "b4dab872802c064a6b8daeb4ab467490d1abf1e9b9384c9fb6a0e9a69ecafe66",
+      "texts": [
+        {
+          "sectionId": "d3@7.9.0:1",
+          "kind": "license",
+          "member": "LICENSE",
+          "sourceSection": "entire file",
+          "canonicalPublicURL": "https://registry.npmjs.org/d3/-/d3-7.9.0.tgz#LICENSE",
+          "rawMemberSHA256": "3e6849627f74ff73c257a3ae1efb574015d94fc1035c05ec3c15805165efcbc4",
+          "rawTextSHA256": "3e6849627f74ff73c257a3ae1efb574015d94fc1035c05ec3c15805165efcbc4",
+          "retainedRawTextBytes": 731,
+          "sha256": "3e6849627f74ff73c257a3ae1efb574015d94fc1035c05ec3c15805165efcbc4"
+        }
+      ]
+    },
+    {
+      "identity": "d3-array@2.12.1",
+      "name": "d3-array",
+      "version": "2.12.1",
+      "sourceMapPnPmFolder": "d3-array@2.12.1",
+      "licenseExpression": "BSD-3-Clause",
+      "sourceCommit": null,
+      "canonicalPublicURLs": [
+        "https://registry.npmjs.org/d3-array/2.12.1",
+        "https://registry.npmjs.org/d3-array/-/d3-array-2.12.1.tgz"
+      ],
+      "sourceEvidence": {
+        "kind": "exactlocal-lock-match",
+        "rawSHA256": "0a5cb18279a6b414607e0120d604adc9055a923a42e20d44a190ef97d5ee24b7",
+        "hashSubject": "installed package.json",
+        "verificationMethod": "Exact installed package.json version matched the package-lock record; no retained package archive is attested by this evidence."
+      },
+      "archiveIntegrity": null,
+      "noticeSectionSHA256": "bc5fbfbb526c0fefdc457defc3fa657431ba572f11096bffb1a6523d03a6b916",
+      "texts": [
+        {
+          "sectionId": "d3-array@2.12.1:1",
+          "kind": "license",
+          "member": "LICENSE",
+          "sourceSection": "entire file",
+          "canonicalPublicURL": "https://registry.npmjs.org/d3-array/-/d3-array-2.12.1.tgz#LICENSE",
+          "rawMemberSHA256": "0747bebeb06b10954913149be9b9a8bdf6fad3e6fdcbd9f9524e7a94c13d2cea",
+          "rawTextSHA256": "0747bebeb06b10954913149be9b9a8bdf6fad3e6fdcbd9f9524e7a94c13d2cea",
+          "retainedRawTextBytes": 1475,
+          "sha256": "0747bebeb06b10954913149be9b9a8bdf6fad3e6fdcbd9f9524e7a94c13d2cea"
+        }
+      ]
+    },
+    {
+      "identity": "d3-array@3.2.4",
+      "name": "d3-array",
+      "version": "3.2.4",
+      "sourceMapPnPmFolder": "d3-array@3.2.4",
+      "licenseExpression": "ISC",
+      "sourceCommit": null,
+      "canonicalPublicURLs": [
+        "https://registry.npmjs.org/d3-array/3.2.4",
+        "https://registry.npmjs.org/d3-array/-/d3-array-3.2.4.tgz"
+      ],
+      "sourceEvidence": {
+        "kind": "exactlocal-lock-match",
+        "rawSHA256": "f9e9dc28e2a9bfe32a0a80dda5c9f8bb49758ee112f4418e2b5662787f1bf500",
+        "hashSubject": "installed package.json",
+        "verificationMethod": "Exact installed package.json version matched the package-lock record; no retained package archive is attested by this evidence."
+      },
+      "archiveIntegrity": null,
+      "noticeSectionSHA256": "6aa8728b7ffdadc227aac236faa276681257e68e29830c90d2bf3a7886f64b9c",
+      "texts": [
+        {
+          "sectionId": "d3-array@3.2.4:1",
+          "kind": "license",
+          "member": "LICENSE",
+          "sourceSection": "entire file",
+          "canonicalPublicURL": "https://registry.npmjs.org/d3-array/-/d3-array-3.2.4.tgz#LICENSE",
+          "rawMemberSHA256": "3e6849627f74ff73c257a3ae1efb574015d94fc1035c05ec3c15805165efcbc4",
+          "rawTextSHA256": "3e6849627f74ff73c257a3ae1efb574015d94fc1035c05ec3c15805165efcbc4",
+          "retainedRawTextBytes": 731,
+          "sha256": "3e6849627f74ff73c257a3ae1efb574015d94fc1035c05ec3c15805165efcbc4"
+        }
+      ]
+    },
+    {
+      "identity": "d3-axis@3.0.0",
+      "name": "d3-axis",
+      "version": "3.0.0",
+      "sourceMapPnPmFolder": "d3-axis@3.0.0",
+      "licenseExpression": "ISC",
+      "sourceCommit": null,
+      "canonicalPublicURLs": [
+        "https://registry.npmjs.org/d3-axis/3.0.0",
+        "https://registry.npmjs.org/d3-axis/-/d3-axis-3.0.0.tgz"
+      ],
+      "sourceEvidence": {
+        "kind": "exactlocal-lock-match",
+        "rawSHA256": "0589f34ffb722e637370fdd1b15add37e495908cffed3400f7c7a6f4c3f61b4a",
+        "hashSubject": "installed package.json",
+        "verificationMethod": "Exact installed package.json version matched the package-lock record; no retained package archive is attested by this evidence."
+      },
+      "archiveIntegrity": null,
+      "noticeSectionSHA256": "1991931c5c91daad2b2c75b0e72c0bb7be6c89f26b9fec41298698b8c9e4e494",
+      "texts": [
+        {
+          "sectionId": "d3-axis@3.0.0:1",
+          "kind": "license",
+          "member": "LICENSE",
+          "sourceSection": "entire file",
+          "canonicalPublicURL": "https://registry.npmjs.org/d3-axis/-/d3-axis-3.0.0.tgz#LICENSE",
+          "rawMemberSHA256": "e008c5e25a6be382593089c29bfabbc553c6378eee02895aec46ce396cc404ee",
+          "rawTextSHA256": "e008c5e25a6be382593089c29bfabbc553c6378eee02895aec46ce396cc404ee",
+          "retainedRawTextBytes": 731,
+          "sha256": "e008c5e25a6be382593089c29bfabbc553c6378eee02895aec46ce396cc404ee"
+        }
+      ]
+    },
+    {
+      "identity": "d3-brush@3.0.0",
+      "name": "d3-brush",
+      "version": "3.0.0",
+      "sourceMapPnPmFolder": "d3-brush@3.0.0",
+      "licenseExpression": "ISC",
+      "sourceCommit": null,
+      "canonicalPublicURLs": [
+        "https://registry.npmjs.org/d3-brush/3.0.0",
+        "https://registry.npmjs.org/d3-brush/-/d3-brush-3.0.0.tgz"
+      ],
+      "sourceEvidence": {
+        "kind": "exactlocal-lock-match",
+        "rawSHA256": "9f48acbb467528d508b56d698f8c2a5ae10596b2f13b673ae55332f84d2ed1ff",
+        "hashSubject": "installed package.json",
+        "verificationMethod": "Exact installed package.json version matched the package-lock record; no retained package archive is attested by this evidence."
+      },
+      "archiveIntegrity": null,
+      "noticeSectionSHA256": "06d292c15080bdfdb36e5c36d912b0c1cd4d8202b204c54593c062a378068c66",
+      "texts": [
+        {
+          "sectionId": "d3-brush@3.0.0:1",
+          "kind": "license",
+          "member": "LICENSE",
+          "sourceSection": "entire file",
+          "canonicalPublicURL": "https://registry.npmjs.org/d3-brush/-/d3-brush-3.0.0.tgz#LICENSE",
+          "rawMemberSHA256": "e008c5e25a6be382593089c29bfabbc553c6378eee02895aec46ce396cc404ee",
+          "rawTextSHA256": "e008c5e25a6be382593089c29bfabbc553c6378eee02895aec46ce396cc404ee",
+          "retainedRawTextBytes": 731,
+          "sha256": "e008c5e25a6be382593089c29bfabbc553c6378eee02895aec46ce396cc404ee"
+        }
+      ]
+    },
+    {
+      "identity": "d3-chord@3.0.1",
+      "name": "d3-chord",
+      "version": "3.0.1",
+      "sourceMapPnPmFolder": "d3-chord@3.0.1",
+      "licenseExpression": "ISC",
+      "sourceCommit": null,
+      "canonicalPublicURLs": [
+        "https://registry.npmjs.org/d3-chord/3.0.1",
+        "https://registry.npmjs.org/d3-chord/-/d3-chord-3.0.1.tgz"
+      ],
+      "sourceEvidence": {
+        "kind": "exactlocal-lock-match",
+        "rawSHA256": "391e64d2ddb978f71e3c6ef70a6b7c07aec76a3ef01a8b0cae0756ba095a2bf4",
+        "hashSubject": "installed package.json",
+        "verificationMethod": "Exact installed package.json version matched the package-lock record; no retained package archive is attested by this evidence."
+      },
+      "archiveIntegrity": null,
+      "noticeSectionSHA256": "896a325eba96ca610e5c7f622089c489fa8e6d9a70be2dd9ed68626432610d55",
+      "texts": [
+        {
+          "sectionId": "d3-chord@3.0.1:1",
+          "kind": "license",
+          "member": "LICENSE",
+          "sourceSection": "entire file",
+          "canonicalPublicURL": "https://registry.npmjs.org/d3-chord/-/d3-chord-3.0.1.tgz#LICENSE",
+          "rawMemberSHA256": "e008c5e25a6be382593089c29bfabbc553c6378eee02895aec46ce396cc404ee",
+          "rawTextSHA256": "e008c5e25a6be382593089c29bfabbc553c6378eee02895aec46ce396cc404ee",
+          "retainedRawTextBytes": 731,
+          "sha256": "e008c5e25a6be382593089c29bfabbc553c6378eee02895aec46ce396cc404ee"
+        }
+      ]
+    },
+    {
+      "identity": "d3-color@3.1.0",
+      "name": "d3-color",
+      "version": "3.1.0",
+      "sourceMapPnPmFolder": "d3-color@3.1.0",
+      "licenseExpression": "ISC",
+      "sourceCommit": null,
+      "canonicalPublicURLs": [
+        "https://registry.npmjs.org/d3-color/3.1.0",
+        "https://registry.npmjs.org/d3-color/-/d3-color-3.1.0.tgz"
+      ],
+      "sourceEvidence": {
+        "kind": "exactlocal-lock-match",
+        "rawSHA256": "3de1c3c467f09ffc0372c8b765f8981535c22e1d9f944d17a35ee37df1033516",
+        "hashSubject": "installed package.json",
+        "verificationMethod": "Exact installed package.json version matched the package-lock record; no retained package archive is attested by this evidence."
+      },
+      "archiveIntegrity": null,
+      "noticeSectionSHA256": "e7914139dcec291560fbe848fb58d9990684637a691099bf811078a8bac88a53",
+      "texts": [
+        {
+          "sectionId": "d3-color@3.1.0:1",
+          "kind": "license",
+          "member": "LICENSE",
+          "sourceSection": "entire file",
+          "canonicalPublicURL": "https://registry.npmjs.org/d3-color/-/d3-color-3.1.0.tgz#LICENSE",
+          "rawMemberSHA256": "faa682e3e430941f958d26180458f5934a62f58dac4d70ccdd15608c15d0f884",
+          "rawTextSHA256": "faa682e3e430941f958d26180458f5934a62f58dac4d70ccdd15608c15d0f884",
+          "retainedRawTextBytes": 731,
+          "sha256": "faa682e3e430941f958d26180458f5934a62f58dac4d70ccdd15608c15d0f884"
+        }
+      ]
+    },
+    {
+      "identity": "d3-contour@4.0.2",
+      "name": "d3-contour",
+      "version": "4.0.2",
+      "sourceMapPnPmFolder": "d3-contour@4.0.2",
+      "licenseExpression": "ISC",
+      "sourceCommit": null,
+      "canonicalPublicURLs": [
+        "https://registry.npmjs.org/d3-contour/4.0.2",
+        "https://registry.npmjs.org/d3-contour/-/d3-contour-4.0.2.tgz"
+      ],
+      "sourceEvidence": {
+        "kind": "exactlocal-lock-match",
+        "rawSHA256": "083a62853a155014fef0b29b6b5593615a401f7623879416ec451c14e7ab437b",
+        "hashSubject": "installed package.json",
+        "verificationMethod": "Exact installed package.json version matched the package-lock record; no retained package archive is attested by this evidence."
+      },
+      "archiveIntegrity": null,
+      "noticeSectionSHA256": "c11b93e405a754e9c94e2c5f9fe94ffe2dde2b2a9b2e972485ce331622312b8f",
+      "texts": [
+        {
+          "sectionId": "d3-contour@4.0.2:1",
+          "kind": "license",
+          "member": "LICENSE",
+          "sourceSection": "entire file",
+          "canonicalPublicURL": "https://registry.npmjs.org/d3-contour/-/d3-contour-4.0.2.tgz#LICENSE",
+          "rawMemberSHA256": "e51cba0e4fa1d8c078e15319868f2b90188f413f9ce9dac1043b62db32901e93",
+          "rawTextSHA256": "e51cba0e4fa1d8c078e15319868f2b90188f413f9ce9dac1043b62db32901e93",
+          "retainedRawTextBytes": 731,
+          "sha256": "e51cba0e4fa1d8c078e15319868f2b90188f413f9ce9dac1043b62db32901e93"
+        }
+      ]
+    },
+    {
+      "identity": "d3-delaunay@6.0.4",
+      "name": "d3-delaunay",
+      "version": "6.0.4",
+      "sourceMapPnPmFolder": "d3-delaunay@6.0.4",
+      "licenseExpression": "ISC",
+      "sourceCommit": null,
+      "canonicalPublicURLs": [
+        "https://registry.npmjs.org/d3-delaunay/6.0.4",
+        "https://registry.npmjs.org/d3-delaunay/-/d3-delaunay-6.0.4.tgz"
+      ],
+      "sourceEvidence": {
+        "kind": "exactlocal-lock-match",
+        "rawSHA256": "09f79afc33a93b385e501649f7658b22a4c02087f920806ca69eec16ef7db094",
+        "hashSubject": "installed package.json",
+        "verificationMethod": "Exact installed package.json version matched the package-lock record; no retained package archive is attested by this evidence."
+      },
+      "archiveIntegrity": null,
+      "noticeSectionSHA256": "cd78cd6c9fa3196a79a150418f8790af6349ef9e448453a2d9a0b5347fa35432",
+      "texts": [
+        {
+          "sectionId": "d3-delaunay@6.0.4:1",
+          "kind": "license",
+          "member": "LICENSE",
+          "sourceSection": "entire file",
+          "canonicalPublicURL": "https://registry.npmjs.org/d3-delaunay/-/d3-delaunay-6.0.4.tgz#LICENSE",
+          "rawMemberSHA256": "582c3022bd01942336095f92b58a90b1be624dc547d987555c6c956512dd24c1",
+          "rawTextSHA256": "582c3022bd01942336095f92b58a90b1be624dc547d987555c6c956512dd24c1",
+          "retainedRawTextBytes": 757,
+          "sha256": "582c3022bd01942336095f92b58a90b1be624dc547d987555c6c956512dd24c1"
+        }
+      ]
+    },
+    {
+      "identity": "d3-dispatch@3.0.1",
+      "name": "d3-dispatch",
+      "version": "3.0.1",
+      "sourceMapPnPmFolder": "d3-dispatch@3.0.1",
+      "licenseExpression": "ISC",
+      "sourceCommit": null,
+      "canonicalPublicURLs": [
+        "https://registry.npmjs.org/d3-dispatch/3.0.1",
+        "https://registry.npmjs.org/d3-dispatch/-/d3-dispatch-3.0.1.tgz"
+      ],
+      "sourceEvidence": {
+        "kind": "exactlocal-lock-match",
+        "rawSHA256": "6d9bb49819ec45e2187304df1b25e731c246d646cd2eb5aa2fe06e6c9cc7ad84",
+        "hashSubject": "installed package.json",
+        "verificationMethod": "Exact installed package.json version matched the package-lock record; no retained package archive is attested by this evidence."
+      },
+      "archiveIntegrity": null,
+      "noticeSectionSHA256": "c414e2fbf54f9c2b28df4f486b6290c6f8da2808f76536fbfec5366e5051f0b9",
+      "texts": [
+        {
+          "sectionId": "d3-dispatch@3.0.1:1",
+          "kind": "license",
+          "member": "LICENSE",
+          "sourceSection": "entire file",
+          "canonicalPublicURL": "https://registry.npmjs.org/d3-dispatch/-/d3-dispatch-3.0.1.tgz#LICENSE",
+          "rawMemberSHA256": "e008c5e25a6be382593089c29bfabbc553c6378eee02895aec46ce396cc404ee",
+          "rawTextSHA256": "e008c5e25a6be382593089c29bfabbc553c6378eee02895aec46ce396cc404ee",
+          "retainedRawTextBytes": 731,
+          "sha256": "e008c5e25a6be382593089c29bfabbc553c6378eee02895aec46ce396cc404ee"
+        }
+      ]
+    },
+    {
+      "identity": "d3-drag@3.0.0",
+      "name": "d3-drag",
+      "version": "3.0.0",
+      "sourceMapPnPmFolder": "d3-drag@3.0.0",
+      "licenseExpression": "ISC",
+      "sourceCommit": null,
+      "canonicalPublicURLs": [
+        "https://registry.npmjs.org/d3-drag/3.0.0",
+        "https://registry.npmjs.org/d3-drag/-/d3-drag-3.0.0.tgz"
+      ],
+      "sourceEvidence": {
+        "kind": "exactlocal-lock-match",
+        "rawSHA256": "daecac22c0dfda72109fdd75e3817a15082a6f58d9bdc1380d77e06f7f44c218",
+        "hashSubject": "installed package.json",
+        "verificationMethod": "Exact installed package.json version matched the package-lock record; no retained package archive is attested by this evidence."
+      },
+      "archiveIntegrity": null,
+      "noticeSectionSHA256": "f290b036a4dbb84a33b3c975882972ea0460c9dc18f6d56d77029f21ac5b6770",
+      "texts": [
+        {
+          "sectionId": "d3-drag@3.0.0:1",
+          "kind": "license",
+          "member": "LICENSE",
+          "sourceSection": "entire file",
+          "canonicalPublicURL": "https://registry.npmjs.org/d3-drag/-/d3-drag-3.0.0.tgz#LICENSE",
+          "rawMemberSHA256": "e008c5e25a6be382593089c29bfabbc553c6378eee02895aec46ce396cc404ee",
+          "rawTextSHA256": "e008c5e25a6be382593089c29bfabbc553c6378eee02895aec46ce396cc404ee",
+          "retainedRawTextBytes": 731,
+          "sha256": "e008c5e25a6be382593089c29bfabbc553c6378eee02895aec46ce396cc404ee"
+        }
+      ]
+    },
+    {
+      "identity": "d3-dsv@3.0.1",
+      "name": "d3-dsv",
+      "version": "3.0.1",
+      "sourceMapPnPmFolder": "d3-dsv@3.0.1",
+      "licenseExpression": "ISC",
+      "sourceCommit": null,
+      "canonicalPublicURLs": [
+        "https://registry.npmjs.org/d3-dsv/3.0.1",
+        "https://registry.npmjs.org/d3-dsv/-/d3-dsv-3.0.1.tgz"
+      ],
+      "sourceEvidence": {
+        "kind": "exactlocal-lock-match",
+        "rawSHA256": "c68575e440326257ed202503f45acb60e4cc495aaabbff20fb378fe30b196285",
+        "hashSubject": "installed package.json",
+        "verificationMethod": "Exact installed package.json version matched the package-lock record; no retained package archive is attested by this evidence."
+      },
+      "archiveIntegrity": null,
+      "noticeSectionSHA256": "893290c9f506358f778fa5dd4aedb38d473c8c9fc12e0a3a2d241a66c3d962ae",
+      "texts": [
+        {
+          "sectionId": "d3-dsv@3.0.1:1",
+          "kind": "license",
+          "member": "LICENSE",
+          "sourceSection": "entire file",
+          "canonicalPublicURL": "https://registry.npmjs.org/d3-dsv/-/d3-dsv-3.0.1.tgz#LICENSE",
+          "rawMemberSHA256": "7842a82012622e5a37bfe4f6c1b67cd3bae6350716b5bf87f36cea0bdc1319dc",
+          "rawTextSHA256": "7842a82012622e5a37bfe4f6c1b67cd3bae6350716b5bf87f36cea0bdc1319dc",
+          "retainedRawTextBytes": 731,
+          "sha256": "7842a82012622e5a37bfe4f6c1b67cd3bae6350716b5bf87f36cea0bdc1319dc"
+        }
+      ]
+    },
+    {
+      "identity": "d3-ease@3.0.1",
+      "name": "d3-ease",
+      "version": "3.0.1",
+      "sourceMapPnPmFolder": "d3-ease@3.0.1",
+      "licenseExpression": "BSD-3-Clause",
+      "sourceCommit": null,
+      "canonicalPublicURLs": [
+        "https://registry.npmjs.org/d3-ease/3.0.1",
+        "https://registry.npmjs.org/d3-ease/-/d3-ease-3.0.1.tgz"
+      ],
+      "sourceEvidence": {
+        "kind": "exactlocal-lock-match",
+        "rawSHA256": "393518c7886852c8cdeae42a54065c3ba54eddb701dd2da98c6d048f92cbc91c",
+        "hashSubject": "installed package.json",
+        "verificationMethod": "Exact installed package.json version matched the package-lock record; no retained package archive is attested by this evidence."
+      },
+      "archiveIntegrity": null,
+      "noticeSectionSHA256": "fff8cdd2c69051aef3b72a0161c95decb3fbef62554eb739a73f88a842b1bc27",
+      "texts": [
+        {
+          "sectionId": "d3-ease@3.0.1:1",
+          "kind": "license",
+          "member": "LICENSE",
+          "sourceSection": "entire file",
+          "canonicalPublicURL": "https://registry.npmjs.org/d3-ease/-/d3-ease-3.0.1.tgz#LICENSE",
+          "rawMemberSHA256": "b989d9085148d21ff64a75e14462aefa06b2589a55553b07b1460c70081c7d08",
+          "rawTextSHA256": "b989d9085148d21ff64a75e14462aefa06b2589a55553b07b1460c70081c7d08",
+          "retainedRawTextBytes": 1504,
+          "sha256": "b989d9085148d21ff64a75e14462aefa06b2589a55553b07b1460c70081c7d08"
+        }
+      ]
+    },
+    {
+      "identity": "d3-fetch@3.0.1",
+      "name": "d3-fetch",
+      "version": "3.0.1",
+      "sourceMapPnPmFolder": "d3-fetch@3.0.1",
+      "licenseExpression": "ISC",
+      "sourceCommit": null,
+      "canonicalPublicURLs": [
+        "https://registry.npmjs.org/d3-fetch/3.0.1",
+        "https://registry.npmjs.org/d3-fetch/-/d3-fetch-3.0.1.tgz"
+      ],
+      "sourceEvidence": {
+        "kind": "exactlocal-lock-match",
+        "rawSHA256": "a7724256da7509e817d69ccaf5d4fe434a209f56930c4e9165c350ee07ec0cb9",
+        "hashSubject": "installed package.json",
+        "verificationMethod": "Exact installed package.json version matched the package-lock record; no retained package archive is attested by this evidence."
+      },
+      "archiveIntegrity": null,
+      "noticeSectionSHA256": "1b3fdd1e1b82f6b15255b4cfc5a7dc6364a8cc97d606540ea0596435ee87841e",
+      "texts": [
+        {
+          "sectionId": "d3-fetch@3.0.1:1",
+          "kind": "license",
+          "member": "LICENSE",
+          "sourceSection": "entire file",
+          "canonicalPublicURL": "https://registry.npmjs.org/d3-fetch/-/d3-fetch-3.0.1.tgz#LICENSE",
+          "rawMemberSHA256": "ffdc17dc9040006bddeb891c95bfbb492e86d6bc64a4a4233666febab1be35e0",
+          "rawTextSHA256": "ffdc17dc9040006bddeb891c95bfbb492e86d6bc64a4a4233666febab1be35e0",
+          "retainedRawTextBytes": 731,
+          "sha256": "ffdc17dc9040006bddeb891c95bfbb492e86d6bc64a4a4233666febab1be35e0"
+        }
+      ]
+    },
+    {
+      "identity": "d3-force@3.0.0",
+      "name": "d3-force",
+      "version": "3.0.0",
+      "sourceMapPnPmFolder": "d3-force@3.0.0",
+      "licenseExpression": "ISC",
+      "sourceCommit": null,
+      "canonicalPublicURLs": [
+        "https://registry.npmjs.org/d3-force/3.0.0",
+        "https://registry.npmjs.org/d3-force/-/d3-force-3.0.0.tgz"
+      ],
+      "sourceEvidence": {
+        "kind": "exactlocal-lock-match",
+        "rawSHA256": "ca4e64d4d988c7e9e6cbb9c095a1f6ec76b7d246e175fa76b3af76341d45924b",
+        "hashSubject": "installed package.json",
+        "verificationMethod": "Exact installed package.json version matched the package-lock record; no retained package archive is attested by this evidence."
+      },
+      "archiveIntegrity": null,
+      "noticeSectionSHA256": "94a2bace9227a9f1ca7319ea09310a034656404e3da75e50741343ddc1077ff2",
+      "texts": [
+        {
+          "sectionId": "d3-force@3.0.0:1",
+          "kind": "license",
+          "member": "LICENSE",
+          "sourceSection": "entire file",
+          "canonicalPublicURL": "https://registry.npmjs.org/d3-force/-/d3-force-3.0.0.tgz#LICENSE",
+          "rawMemberSHA256": "e008c5e25a6be382593089c29bfabbc553c6378eee02895aec46ce396cc404ee",
+          "rawTextSHA256": "e008c5e25a6be382593089c29bfabbc553c6378eee02895aec46ce396cc404ee",
+          "retainedRawTextBytes": 731,
+          "sha256": "e008c5e25a6be382593089c29bfabbc553c6378eee02895aec46ce396cc404ee"
+        }
+      ]
+    },
+    {
+      "identity": "d3-format@3.1.0",
+      "name": "d3-format",
+      "version": "3.1.0",
+      "sourceMapPnPmFolder": "d3-format@3.1.0",
+      "licenseExpression": "ISC",
+      "sourceCommit": null,
+      "canonicalPublicURLs": [
+        "https://registry.npmjs.org/d3-format/3.1.0",
+        "https://registry.npmjs.org/d3-format/-/d3-format-3.1.0.tgz"
+      ],
+      "sourceEvidence": {
+        "kind": "proxy-returned-sha1",
+        "rawSHA256": "5439103fc9b6f033e02bf68fbeb13ecd2c33442f77ea772a4b2b1bc4f4cee5ba",
+        "hashSubject": "retained npm package archive",
+        "verificationMethod": "Retained archive SHA-1 matched the dist.shasum returned through the retrieval proxy. This is not independent public-registry verification. SHA-512 SRI is locally calculated; public-registry SRI was not supplied."
+      },
+      "archiveIntegrity": {
+        "sha1": "9260e23a28ea5cb109e93b21a06e24e2ebd55641",
+        "locallyCalculatedSHA512SRI": "sha512-YyUI6AEuY/Wpt8KWLgZHsIU86atmikuoOmCfommt0LYHiQSPjvX2AcFc38PX0CBpr2RCyZhjex+NS/LPOv6YqA==",
+        "publicRegistryIntegrity": null,
+        "sha1Verification": "Matched proxy-returned dist.shasum; not independently public-registry verified."
+      },
+      "noticeSectionSHA256": "c995cf2fbcccf7fd9d1dabca1d4f385092872cf630f3f18ae4d527d9c3416610",
+      "texts": [
+        {
+          "sectionId": "d3-format@3.1.0:1",
+          "kind": "license",
+          "member": "package/LICENSE",
+          "sourceSection": "entire file",
+          "canonicalPublicURL": "https://registry.npmjs.org/d3-format/-/d3-format-3.1.0.tgz#package/LICENSE",
+          "rawMemberSHA256": "e008c5e25a6be382593089c29bfabbc553c6378eee02895aec46ce396cc404ee",
+          "rawTextSHA256": "e008c5e25a6be382593089c29bfabbc553c6378eee02895aec46ce396cc404ee",
+          "retainedRawTextBytes": 731,
+          "sha256": "e008c5e25a6be382593089c29bfabbc553c6378eee02895aec46ce396cc404ee"
+        }
+      ]
+    },
+    {
+      "identity": "d3-geo@3.1.1",
+      "name": "d3-geo",
+      "version": "3.1.1",
+      "sourceMapPnPmFolder": "d3-geo@3.1.1",
+      "licenseExpression": "ISC",
+      "sourceCommit": null,
+      "canonicalPublicURLs": [
+        "https://registry.npmjs.org/d3-geo/3.1.1",
+        "https://registry.npmjs.org/d3-geo/-/d3-geo-3.1.1.tgz"
+      ],
+      "sourceEvidence": {
+        "kind": "exactlocal-lock-match",
+        "rawSHA256": "7a1f5988dd414fb49fdf6e7ab11854cc3071b507378833a93ec90440ea7c7491",
+        "hashSubject": "installed package.json",
+        "verificationMethod": "Exact installed package.json version matched the package-lock record; no retained package archive is attested by this evidence."
+      },
+      "archiveIntegrity": null,
+      "noticeSectionSHA256": "aa05ebc73810dc9bb4f0b483b7bd295603ff508d511b886fa90f1239a1152b8f",
+      "texts": [
+        {
+          "sectionId": "d3-geo@3.1.1:1",
+          "kind": "license",
+          "member": "LICENSE",
+          "sourceSection": "entire file",
+          "canonicalPublicURL": "https://registry.npmjs.org/d3-geo/-/d3-geo-3.1.1.tgz#LICENSE",
+          "rawMemberSHA256": "3e3edc1224eec9c39cd26491a21304a62883c1e5b6a65c5283ccc7a6cc94baee",
+          "rawTextSHA256": "3e3edc1224eec9c39cd26491a21304a62883c1e5b6a65c5283ccc7a6cc94baee",
+          "retainedRawTextBytes": 1857,
+          "sha256": "3e3edc1224eec9c39cd26491a21304a62883c1e5b6a65c5283ccc7a6cc94baee"
+        }
+      ]
+    },
+    {
+      "identity": "d3-hierarchy@3.1.2",
+      "name": "d3-hierarchy",
+      "version": "3.1.2",
+      "sourceMapPnPmFolder": "d3-hierarchy@3.1.2",
+      "licenseExpression": "ISC",
+      "sourceCommit": null,
+      "canonicalPublicURLs": [
+        "https://registry.npmjs.org/d3-hierarchy/3.1.2",
+        "https://registry.npmjs.org/d3-hierarchy/-/d3-hierarchy-3.1.2.tgz"
+      ],
+      "sourceEvidence": {
+        "kind": "exactlocal-lock-match",
+        "rawSHA256": "5b3864284fb2b406f453a0eddd475f4fcd15c9a5302ff76cdce5d95442d93168",
+        "hashSubject": "installed package.json",
+        "verificationMethod": "Exact installed package.json version matched the package-lock record; no retained package archive is attested by this evidence."
+      },
+      "archiveIntegrity": null,
+      "noticeSectionSHA256": "64a7799fb9598d960c4a7e4bed8488c3cf56a81dea512ccdf0e9d963f4998268",
+      "texts": [
+        {
+          "sectionId": "d3-hierarchy@3.1.2:1",
+          "kind": "license",
+          "member": "LICENSE",
+          "sourceSection": "entire file",
+          "canonicalPublicURL": "https://registry.npmjs.org/d3-hierarchy/-/d3-hierarchy-3.1.2.tgz#LICENSE",
+          "rawMemberSHA256": "e008c5e25a6be382593089c29bfabbc553c6378eee02895aec46ce396cc404ee",
+          "rawTextSHA256": "e008c5e25a6be382593089c29bfabbc553c6378eee02895aec46ce396cc404ee",
+          "retainedRawTextBytes": 731,
+          "sha256": "e008c5e25a6be382593089c29bfabbc553c6378eee02895aec46ce396cc404ee"
+        }
+      ]
+    },
+    {
+      "identity": "d3-interpolate@3.0.1",
+      "name": "d3-interpolate",
+      "version": "3.0.1",
+      "sourceMapPnPmFolder": "d3-interpolate@3.0.1",
+      "licenseExpression": "ISC",
+      "sourceCommit": null,
+      "canonicalPublicURLs": [
+        "https://registry.npmjs.org/d3-interpolate/3.0.1",
+        "https://registry.npmjs.org/d3-interpolate/-/d3-interpolate-3.0.1.tgz"
+      ],
+      "sourceEvidence": {
+        "kind": "exactlocal-lock-match",
+        "rawSHA256": "3e2ce33f9d7072b6bfedbae949c1df546e187994e44b6f4b3795abeb63914613",
+        "hashSubject": "installed package.json",
+        "verificationMethod": "Exact installed package.json version matched the package-lock record; no retained package archive is attested by this evidence."
+      },
+      "archiveIntegrity": null,
+      "noticeSectionSHA256": "79f2e3be337a76411e5a02b3464b1d1c7cffa9c3e7661a265f0027eb3ba2f9de",
+      "texts": [
+        {
+          "sectionId": "d3-interpolate@3.0.1:1",
+          "kind": "license",
+          "member": "LICENSE",
+          "sourceSection": "entire file",
+          "canonicalPublicURL": "https://registry.npmjs.org/d3-interpolate/-/d3-interpolate-3.0.1.tgz#LICENSE",
+          "rawMemberSHA256": "e008c5e25a6be382593089c29bfabbc553c6378eee02895aec46ce396cc404ee",
+          "rawTextSHA256": "e008c5e25a6be382593089c29bfabbc553c6378eee02895aec46ce396cc404ee",
+          "retainedRawTextBytes": 731,
+          "sha256": "e008c5e25a6be382593089c29bfabbc553c6378eee02895aec46ce396cc404ee"
+        }
+      ]
+    },
+    {
+      "identity": "d3-path@1.0.9",
+      "name": "d3-path",
+      "version": "1.0.9",
+      "sourceMapPnPmFolder": "d3-path@1.0.9",
+      "licenseExpression": "BSD-3-Clause",
+      "sourceCommit": null,
+      "canonicalPublicURLs": [
+        "https://registry.npmjs.org/d3-path/1.0.9",
+        "https://registry.npmjs.org/d3-path/-/d3-path-1.0.9.tgz"
+      ],
+      "sourceEvidence": {
+        "kind": "exactlocal-lock-match",
+        "rawSHA256": "706ea3f593b24b6e212afac23ce215bad68ed2962eec5b4f6ede66699dc8892d",
+        "hashSubject": "installed package.json",
+        "verificationMethod": "Exact installed package.json version matched the package-lock record; no retained package archive is attested by this evidence."
+      },
+      "archiveIntegrity": null,
+      "noticeSectionSHA256": "bf1f97255b7da264e68787c3faac92f38091996a9e146a07b183b7a260379a52",
+      "texts": [
+        {
+          "sectionId": "d3-path@1.0.9:1",
+          "kind": "license",
+          "member": "LICENSE",
+          "sourceSection": "entire file",
+          "canonicalPublicURL": "https://registry.npmjs.org/d3-path/-/d3-path-1.0.9.tgz#LICENSE",
+          "rawMemberSHA256": "b8265327ab678f554800e71188b1cc6b1ff57522e292d2b1c0be66f27cf328b6",
+          "rawTextSHA256": "b8265327ab678f554800e71188b1cc6b1ff57522e292d2b1c0be66f27cf328b6",
+          "retainedRawTextBytes": 1475,
+          "sha256": "b8265327ab678f554800e71188b1cc6b1ff57522e292d2b1c0be66f27cf328b6"
+        }
+      ]
+    },
+    {
+      "identity": "d3-path@3.1.0",
+      "name": "d3-path",
+      "version": "3.1.0",
+      "sourceMapPnPmFolder": "d3-path@3.1.0",
+      "licenseExpression": "ISC",
+      "sourceCommit": null,
+      "canonicalPublicURLs": [
+        "https://registry.npmjs.org/d3-path/3.1.0",
+        "https://registry.npmjs.org/d3-path/-/d3-path-3.1.0.tgz"
+      ],
+      "sourceEvidence": {
+        "kind": "exactlocal-lock-match",
+        "rawSHA256": "1aae497436309c84e7db7e5a2a11b1cc78bbba98f26088e4e71079cd725bdc89",
+        "hashSubject": "installed package.json",
+        "verificationMethod": "Exact installed package.json version matched the package-lock record; no retained package archive is attested by this evidence."
+      },
+      "archiveIntegrity": null,
+      "noticeSectionSHA256": "9ac202347f4afc8d4bef21d46e9d579adc442432af7ec56c623d8d17890d3eac",
+      "texts": [
+        {
+          "sectionId": "d3-path@3.1.0:1",
+          "kind": "license",
+          "member": "LICENSE",
+          "sourceSection": "entire file",
+          "canonicalPublicURL": "https://registry.npmjs.org/d3-path/-/d3-path-3.1.0.tgz#LICENSE",
+          "rawMemberSHA256": "a09b0d6d76e768fca2085fad05743ee81ddd11946bcda160a3cf5e1081a479aa",
+          "rawTextSHA256": "a09b0d6d76e768fca2085fad05743ee81ddd11946bcda160a3cf5e1081a479aa",
+          "retainedRawTextBytes": 731,
+          "sha256": "a09b0d6d76e768fca2085fad05743ee81ddd11946bcda160a3cf5e1081a479aa"
+        }
+      ]
+    },
+    {
+      "identity": "d3-polygon@3.0.1",
+      "name": "d3-polygon",
+      "version": "3.0.1",
+      "sourceMapPnPmFolder": "d3-polygon@3.0.1",
+      "licenseExpression": "ISC",
+      "sourceCommit": null,
+      "canonicalPublicURLs": [
+        "https://registry.npmjs.org/d3-polygon/3.0.1",
+        "https://registry.npmjs.org/d3-polygon/-/d3-polygon-3.0.1.tgz"
+      ],
+      "sourceEvidence": {
+        "kind": "exactlocal-lock-match",
+        "rawSHA256": "278d338397a74243df7f4f54faac606c0180e93971202e6f1d90f88abf9d5f62",
+        "hashSubject": "installed package.json",
+        "verificationMethod": "Exact installed package.json version matched the package-lock record; no retained package archive is attested by this evidence."
+      },
+      "archiveIntegrity": null,
+      "noticeSectionSHA256": "afa2ba45df7b3fbdb09c45e57b0b91f196891d9581c820224a36e69f804b20d2",
+      "texts": [
+        {
+          "sectionId": "d3-polygon@3.0.1:1",
+          "kind": "license",
+          "member": "LICENSE",
+          "sourceSection": "entire file",
+          "canonicalPublicURL": "https://registry.npmjs.org/d3-polygon/-/d3-polygon-3.0.1.tgz#LICENSE",
+          "rawMemberSHA256": "e008c5e25a6be382593089c29bfabbc553c6378eee02895aec46ce396cc404ee",
+          "rawTextSHA256": "e008c5e25a6be382593089c29bfabbc553c6378eee02895aec46ce396cc404ee",
+          "retainedRawTextBytes": 731,
+          "sha256": "e008c5e25a6be382593089c29bfabbc553c6378eee02895aec46ce396cc404ee"
+        }
+      ]
+    },
+    {
+      "identity": "d3-quadtree@3.0.1",
+      "name": "d3-quadtree",
+      "version": "3.0.1",
+      "sourceMapPnPmFolder": "d3-quadtree@3.0.1",
+      "licenseExpression": "ISC",
+      "sourceCommit": null,
+      "canonicalPublicURLs": [
+        "https://registry.npmjs.org/d3-quadtree/3.0.1",
+        "https://registry.npmjs.org/d3-quadtree/-/d3-quadtree-3.0.1.tgz"
+      ],
+      "sourceEvidence": {
+        "kind": "exactlocal-lock-match",
+        "rawSHA256": "33a6359ba16b818144a5a99f598f791564995b4dc7a059eb4a22796c49861091",
+        "hashSubject": "installed package.json",
+        "verificationMethod": "Exact installed package.json version matched the package-lock record; no retained package archive is attested by this evidence."
+      },
+      "archiveIntegrity": null,
+      "noticeSectionSHA256": "12a48d1ec390588069894fd99b0328356a3c5a0806aa7ecea5eeb37108ce2391",
+      "texts": [
+        {
+          "sectionId": "d3-quadtree@3.0.1:1",
+          "kind": "license",
+          "member": "LICENSE",
+          "sourceSection": "entire file",
+          "canonicalPublicURL": "https://registry.npmjs.org/d3-quadtree/-/d3-quadtree-3.0.1.tgz#LICENSE",
+          "rawMemberSHA256": "e008c5e25a6be382593089c29bfabbc553c6378eee02895aec46ce396cc404ee",
+          "rawTextSHA256": "e008c5e25a6be382593089c29bfabbc553c6378eee02895aec46ce396cc404ee",
+          "retainedRawTextBytes": 731,
+          "sha256": "e008c5e25a6be382593089c29bfabbc553c6378eee02895aec46ce396cc404ee"
+        }
+      ]
+    },
+    {
+      "identity": "d3-random@3.0.1",
+      "name": "d3-random",
+      "version": "3.0.1",
+      "sourceMapPnPmFolder": "d3-random@3.0.1",
+      "licenseExpression": "ISC",
+      "sourceCommit": null,
+      "canonicalPublicURLs": [
+        "https://registry.npmjs.org/d3-random/3.0.1",
+        "https://registry.npmjs.org/d3-random/-/d3-random-3.0.1.tgz"
+      ],
+      "sourceEvidence": {
+        "kind": "exactlocal-lock-match",
+        "rawSHA256": "20d46ca899a23c9c72a392f54715cab78dc01b3f6775a820a728eabeb9d0928f",
+        "hashSubject": "installed package.json",
+        "verificationMethod": "Exact installed package.json version matched the package-lock record; no retained package archive is attested by this evidence."
+      },
+      "archiveIntegrity": null,
+      "noticeSectionSHA256": "374b141a05448c89606a6a9bdc64566a67eec25e992fbd10f1e3e1025117db31",
+      "texts": [
+        {
+          "sectionId": "d3-random@3.0.1:1",
+          "kind": "license",
+          "member": "LICENSE",
+          "sourceSection": "entire file",
+          "canonicalPublicURL": "https://registry.npmjs.org/d3-random/-/d3-random-3.0.1.tgz#LICENSE",
+          "rawMemberSHA256": "e008c5e25a6be382593089c29bfabbc553c6378eee02895aec46ce396cc404ee",
+          "rawTextSHA256": "e008c5e25a6be382593089c29bfabbc553c6378eee02895aec46ce396cc404ee",
+          "retainedRawTextBytes": 731,
+          "sha256": "e008c5e25a6be382593089c29bfabbc553c6378eee02895aec46ce396cc404ee"
+        }
+      ]
+    },
+    {
+      "identity": "d3-sankey@0.12.3",
+      "name": "d3-sankey",
+      "version": "0.12.3",
+      "sourceMapPnPmFolder": "d3-sankey@0.12.3",
+      "licenseExpression": "BSD-3-Clause",
+      "sourceCommit": null,
+      "canonicalPublicURLs": [
+        "https://registry.npmjs.org/d3-sankey/0.12.3",
+        "https://registry.npmjs.org/d3-sankey/-/d3-sankey-0.12.3.tgz"
+      ],
+      "sourceEvidence": {
+        "kind": "exactlocal-lock-match",
+        "rawSHA256": "aa6b0219ffc5d7c957d3a47b063cea5e40dd1cb6427d04308e15634dcf2b22a2",
+        "hashSubject": "installed package.json",
+        "verificationMethod": "Exact installed package.json version matched the package-lock record; no retained package archive is attested by this evidence."
+      },
+      "archiveIntegrity": null,
+      "noticeSectionSHA256": "ea7bcff42ac03dfa53b2924a10043f656a0f879e3ae083ed02058adc09f5428e",
+      "texts": [
+        {
+          "sectionId": "d3-sankey@0.12.3:1",
+          "kind": "license",
+          "member": "LICENSE",
+          "sourceSection": "entire file",
+          "canonicalPublicURL": "https://registry.npmjs.org/d3-sankey/-/d3-sankey-0.12.3.tgz#LICENSE",
+          "rawMemberSHA256": "2bf785e778d67a4f5266cffcd4f2cc5bb98cde73791666e7efeb8002ba32dfa5",
+          "rawTextSHA256": "2bf785e778d67a4f5266cffcd4f2cc5bb98cde73791666e7efeb8002ba32dfa5",
+          "retainedRawTextBytes": 1471,
+          "sha256": "2bf785e778d67a4f5266cffcd4f2cc5bb98cde73791666e7efeb8002ba32dfa5"
+        }
+      ]
+    },
+    {
+      "identity": "d3-scale@4.0.2",
+      "name": "d3-scale",
+      "version": "4.0.2",
+      "sourceMapPnPmFolder": "d3-scale@4.0.2",
+      "licenseExpression": "ISC",
+      "sourceCommit": null,
+      "canonicalPublicURLs": [
+        "https://registry.npmjs.org/d3-scale/4.0.2",
+        "https://registry.npmjs.org/d3-scale/-/d3-scale-4.0.2.tgz"
+      ],
+      "sourceEvidence": {
+        "kind": "exactlocal-lock-match",
+        "rawSHA256": "75f7dfe869b2e6d1cbecd380f939f218ca046a26313c4e623aa52d6352a9b51b",
+        "hashSubject": "installed package.json",
+        "verificationMethod": "Exact installed package.json version matched the package-lock record; no retained package archive is attested by this evidence."
+      },
+      "archiveIntegrity": null,
+      "noticeSectionSHA256": "20b5825d31681d4e9b6570dc279800b7ba6d0895bd3cd2a749350080f82a23e6",
+      "texts": [
+        {
+          "sectionId": "d3-scale@4.0.2:1",
+          "kind": "license",
+          "member": "LICENSE",
+          "sourceSection": "entire file",
+          "canonicalPublicURL": "https://registry.npmjs.org/d3-scale/-/d3-scale-4.0.2.tgz#LICENSE",
+          "rawMemberSHA256": "e008c5e25a6be382593089c29bfabbc553c6378eee02895aec46ce396cc404ee",
+          "rawTextSHA256": "e008c5e25a6be382593089c29bfabbc553c6378eee02895aec46ce396cc404ee",
+          "retainedRawTextBytes": 731,
+          "sha256": "e008c5e25a6be382593089c29bfabbc553c6378eee02895aec46ce396cc404ee"
+        }
+      ]
+    },
+    {
+      "identity": "d3-scale-chromatic@3.1.0",
+      "name": "d3-scale-chromatic",
+      "version": "3.1.0",
+      "sourceMapPnPmFolder": "d3-scale-chromatic@3.1.0",
+      "licenseExpression": "ISC",
+      "sourceCommit": null,
+      "canonicalPublicURLs": [
+        "https://registry.npmjs.org/d3-scale-chromatic/3.1.0",
+        "https://registry.npmjs.org/d3-scale-chromatic/-/d3-scale-chromatic-3.1.0.tgz"
+      ],
+      "sourceEvidence": {
+        "kind": "exactlocal-lock-match",
+        "rawSHA256": "9d60cf2445659495a3698fa2d8d643a6eb7febcf3ebcede83c3feb260cfa6f82",
+        "hashSubject": "installed package.json",
+        "verificationMethod": "Exact installed package.json version matched the package-lock record; no retained package archive is attested by this evidence."
+      },
+      "archiveIntegrity": null,
+      "noticeSectionSHA256": "d7dd3f25f2d64c7ec5181919bd2309a0d036a221d9928688d95ebf203a9e7e0c",
+      "texts": [
+        {
+          "sectionId": "d3-scale-chromatic@3.1.0:1",
+          "kind": "license",
+          "member": "LICENSE",
+          "sourceSection": "entire file",
+          "canonicalPublicURL": "https://registry.npmjs.org/d3-scale-chromatic/-/d3-scale-chromatic-3.1.0.tgz#LICENSE",
+          "rawMemberSHA256": "0986d93944902cca9af86824b6a641b4b7c2d10602fc510c433a8bcd443919fe",
+          "rawTextSHA256": "0986d93944902cca9af86824b6a641b4b7c2d10602fc510c433a8bcd443919fe",
+          "retainedRawTextBytes": 1423,
+          "sha256": "0986d93944902cca9af86824b6a641b4b7c2d10602fc510c433a8bcd443919fe"
+        }
+      ]
+    },
+    {
+      "identity": "d3-selection@3.0.0",
+      "name": "d3-selection",
+      "version": "3.0.0",
+      "sourceMapPnPmFolder": "d3-selection@3.0.0",
+      "licenseExpression": "ISC",
+      "sourceCommit": null,
+      "canonicalPublicURLs": [
+        "https://registry.npmjs.org/d3-selection/3.0.0",
+        "https://registry.npmjs.org/d3-selection/-/d3-selection-3.0.0.tgz"
+      ],
+      "sourceEvidence": {
+        "kind": "exactlocal-lock-match",
+        "rawSHA256": "adbb86f6d93c60a3789af9be6f6cdc40127ce15f63187a1e94c46fe26b0776ec",
+        "hashSubject": "installed package.json",
+        "verificationMethod": "Exact installed package.json version matched the package-lock record; no retained package archive is attested by this evidence."
+      },
+      "archiveIntegrity": null,
+      "noticeSectionSHA256": "eeb38fe341ffea8b34336b399fa34231e8fe40b6d509183fc593bd2cde56c08e",
+      "texts": [
+        {
+          "sectionId": "d3-selection@3.0.0:1",
+          "kind": "license",
+          "member": "LICENSE",
+          "sourceSection": "entire file",
+          "canonicalPublicURL": "https://registry.npmjs.org/d3-selection/-/d3-selection-3.0.0.tgz#LICENSE",
+          "rawMemberSHA256": "e008c5e25a6be382593089c29bfabbc553c6378eee02895aec46ce396cc404ee",
+          "rawTextSHA256": "e008c5e25a6be382593089c29bfabbc553c6378eee02895aec46ce396cc404ee",
+          "retainedRawTextBytes": 731,
+          "sha256": "e008c5e25a6be382593089c29bfabbc553c6378eee02895aec46ce396cc404ee"
+        }
+      ]
+    },
+    {
+      "identity": "d3-shape@1.3.7",
+      "name": "d3-shape",
+      "version": "1.3.7",
+      "sourceMapPnPmFolder": "d3-shape@1.3.7",
+      "licenseExpression": "BSD-3-Clause",
+      "sourceCommit": null,
+      "canonicalPublicURLs": [
+        "https://registry.npmjs.org/d3-shape/1.3.7",
+        "https://registry.npmjs.org/d3-shape/-/d3-shape-1.3.7.tgz"
+      ],
+      "sourceEvidence": {
+        "kind": "exactlocal-lock-match",
+        "rawSHA256": "3b576e17e95aa1a499f6ef44b75d29e08b2f3f040c2dfa84408dd40c22ac9a5b",
+        "hashSubject": "installed package.json",
+        "verificationMethod": "Exact installed package.json version matched the package-lock record; no retained package archive is attested by this evidence."
+      },
+      "archiveIntegrity": null,
+      "noticeSectionSHA256": "0d38165e35d640cb4694fe759faf93eacdaa1d152498d49796325780a9fa7148",
+      "texts": [
+        {
+          "sectionId": "d3-shape@1.3.7:1",
+          "kind": "license",
+          "member": "LICENSE",
+          "sourceSection": "entire file",
+          "canonicalPublicURL": "https://registry.npmjs.org/d3-shape/-/d3-shape-1.3.7.tgz#LICENSE",
+          "rawMemberSHA256": "7eea8533ea92bd8c32a901e89ecb0305890905bb12711449565ddff96891146d",
+          "rawTextSHA256": "7eea8533ea92bd8c32a901e89ecb0305890905bb12711449565ddff96891146d",
+          "retainedRawTextBytes": 1475,
+          "sha256": "7eea8533ea92bd8c32a901e89ecb0305890905bb12711449565ddff96891146d"
+        }
+      ]
+    },
+    {
+      "identity": "d3-shape@3.2.0",
+      "name": "d3-shape",
+      "version": "3.2.0",
+      "sourceMapPnPmFolder": "d3-shape@3.2.0",
+      "licenseExpression": "ISC",
+      "sourceCommit": null,
+      "canonicalPublicURLs": [
+        "https://registry.npmjs.org/d3-shape/3.2.0",
+        "https://registry.npmjs.org/d3-shape/-/d3-shape-3.2.0.tgz"
+      ],
+      "sourceEvidence": {
+        "kind": "exactlocal-lock-match",
+        "rawSHA256": "c3d084a64bc3c85c407db4282be588a42484c4dc2639bb0a21424fe29ff38335",
+        "hashSubject": "installed package.json",
+        "verificationMethod": "Exact installed package.json version matched the package-lock record; no retained package archive is attested by this evidence."
+      },
+      "archiveIntegrity": null,
+      "noticeSectionSHA256": "3c0d02b35ca0864bda0c189b2f881b527a01fe18d437051536cbac2d224c7a9c",
+      "texts": [
+        {
+          "sectionId": "d3-shape@3.2.0:1",
+          "kind": "license",
+          "member": "LICENSE",
+          "sourceSection": "entire file",
+          "canonicalPublicURL": "https://registry.npmjs.org/d3-shape/-/d3-shape-3.2.0.tgz#LICENSE",
+          "rawMemberSHA256": "faa682e3e430941f958d26180458f5934a62f58dac4d70ccdd15608c15d0f884",
+          "rawTextSHA256": "faa682e3e430941f958d26180458f5934a62f58dac4d70ccdd15608c15d0f884",
+          "retainedRawTextBytes": 731,
+          "sha256": "faa682e3e430941f958d26180458f5934a62f58dac4d70ccdd15608c15d0f884"
+        }
+      ]
+    },
+    {
+      "identity": "d3-time@3.1.0",
+      "name": "d3-time",
+      "version": "3.1.0",
+      "sourceMapPnPmFolder": "d3-time@3.1.0",
+      "licenseExpression": "ISC",
+      "sourceCommit": null,
+      "canonicalPublicURLs": [
+        "https://registry.npmjs.org/d3-time/3.1.0",
+        "https://registry.npmjs.org/d3-time/-/d3-time-3.1.0.tgz"
+      ],
+      "sourceEvidence": {
+        "kind": "exactlocal-lock-match",
+        "rawSHA256": "f145cd8f545cc98527d75c3717be9159616680fe5ba312c350828b44857e1ee6",
+        "hashSubject": "installed package.json",
+        "verificationMethod": "Exact installed package.json version matched the package-lock record; no retained package archive is attested by this evidence."
+      },
+      "archiveIntegrity": null,
+      "noticeSectionSHA256": "e0fdf9a9b46e3cf62cd0386b60acd293b305c4bc8565beef3755599e8cd65886",
+      "texts": [
+        {
+          "sectionId": "d3-time@3.1.0:1",
+          "kind": "license",
+          "member": "LICENSE",
+          "sourceSection": "entire file",
+          "canonicalPublicURL": "https://registry.npmjs.org/d3-time/-/d3-time-3.1.0.tgz#LICENSE",
+          "rawMemberSHA256": "faa682e3e430941f958d26180458f5934a62f58dac4d70ccdd15608c15d0f884",
+          "rawTextSHA256": "faa682e3e430941f958d26180458f5934a62f58dac4d70ccdd15608c15d0f884",
+          "retainedRawTextBytes": 731,
+          "sha256": "faa682e3e430941f958d26180458f5934a62f58dac4d70ccdd15608c15d0f884"
+        }
+      ]
+    },
+    {
+      "identity": "d3-time-format@4.1.0",
+      "name": "d3-time-format",
+      "version": "4.1.0",
+      "sourceMapPnPmFolder": "d3-time-format@4.1.0",
+      "licenseExpression": "ISC",
+      "sourceCommit": null,
+      "canonicalPublicURLs": [
+        "https://registry.npmjs.org/d3-time-format/4.1.0",
+        "https://registry.npmjs.org/d3-time-format/-/d3-time-format-4.1.0.tgz"
+      ],
+      "sourceEvidence": {
+        "kind": "exactlocal-lock-match",
+        "rawSHA256": "98ffed8c2cf40a4d279b4346b73c09e38cbce40a96fa11caa69a174dea7cbf55",
+        "hashSubject": "installed package.json",
+        "verificationMethod": "Exact installed package.json version matched the package-lock record; no retained package archive is attested by this evidence."
+      },
+      "archiveIntegrity": null,
+      "noticeSectionSHA256": "a47660d272b8596ff6ea59a1ac0fe7e27b92cbb8b3841d273a0292f2bea8a22c",
+      "texts": [
+        {
+          "sectionId": "d3-time-format@4.1.0:1",
+          "kind": "license",
+          "member": "LICENSE",
+          "sourceSection": "entire file",
+          "canonicalPublicURL": "https://registry.npmjs.org/d3-time-format/-/d3-time-format-4.1.0.tgz#LICENSE",
+          "rawMemberSHA256": "e008c5e25a6be382593089c29bfabbc553c6378eee02895aec46ce396cc404ee",
+          "rawTextSHA256": "e008c5e25a6be382593089c29bfabbc553c6378eee02895aec46ce396cc404ee",
+          "retainedRawTextBytes": 731,
+          "sha256": "e008c5e25a6be382593089c29bfabbc553c6378eee02895aec46ce396cc404ee"
+        }
+      ]
+    },
+    {
+      "identity": "d3-timer@3.0.1",
+      "name": "d3-timer",
+      "version": "3.0.1",
+      "sourceMapPnPmFolder": "d3-timer@3.0.1",
+      "licenseExpression": "ISC",
+      "sourceCommit": null,
+      "canonicalPublicURLs": [
+        "https://registry.npmjs.org/d3-timer/3.0.1",
+        "https://registry.npmjs.org/d3-timer/-/d3-timer-3.0.1.tgz"
+      ],
+      "sourceEvidence": {
+        "kind": "exactlocal-lock-match",
+        "rawSHA256": "d2b6cb2200728b60982aa30c4caf787f0bda2c066ef9176282ab54ba656403cb",
+        "hashSubject": "installed package.json",
+        "verificationMethod": "Exact installed package.json version matched the package-lock record; no retained package archive is attested by this evidence."
+      },
+      "archiveIntegrity": null,
+      "noticeSectionSHA256": "b7df2426063ad0256329d4c4e1447e51b3c3d1c65cc1952213dbc35044995191",
+      "texts": [
+        {
+          "sectionId": "d3-timer@3.0.1:1",
+          "kind": "license",
+          "member": "LICENSE",
+          "sourceSection": "entire file",
+          "canonicalPublicURL": "https://registry.npmjs.org/d3-timer/-/d3-timer-3.0.1.tgz#LICENSE",
+          "rawMemberSHA256": "e008c5e25a6be382593089c29bfabbc553c6378eee02895aec46ce396cc404ee",
+          "rawTextSHA256": "e008c5e25a6be382593089c29bfabbc553c6378eee02895aec46ce396cc404ee",
+          "retainedRawTextBytes": 731,
+          "sha256": "e008c5e25a6be382593089c29bfabbc553c6378eee02895aec46ce396cc404ee"
+        }
+      ]
+    },
+    {
+      "identity": "d3-transition@3.0.1",
+      "name": "d3-transition",
+      "version": "3.0.1",
+      "sourceMapPnPmFolder": "d3-transition@3.0.1_d3-selection@3.0.0",
+      "licenseExpression": "ISC",
+      "sourceCommit": null,
+      "canonicalPublicURLs": [
+        "https://registry.npmjs.org/d3-transition/3.0.1",
+        "https://registry.npmjs.org/d3-transition/-/d3-transition-3.0.1.tgz"
+      ],
+      "sourceEvidence": {
+        "kind": "exactlocal-lock-match",
+        "rawSHA256": "6ee7ce4fb0e59ee6be93d5a5fb33db804add32dbb3afb6c753659b99084fde84",
+        "hashSubject": "installed package.json",
+        "verificationMethod": "Exact installed package.json version matched the package-lock record; no retained package archive is attested by this evidence."
+      },
+      "archiveIntegrity": null,
+      "noticeSectionSHA256": "059d13e54e4321885033d25ac754d945ef4a8af14894443103796062fa7ab4e7",
+      "texts": [
+        {
+          "sectionId": "d3-transition@3.0.1:1",
+          "kind": "license",
+          "member": "LICENSE",
+          "sourceSection": "entire file",
+          "canonicalPublicURL": "https://registry.npmjs.org/d3-transition/-/d3-transition-3.0.1.tgz#LICENSE",
+          "rawMemberSHA256": "e008c5e25a6be382593089c29bfabbc553c6378eee02895aec46ce396cc404ee",
+          "rawTextSHA256": "e008c5e25a6be382593089c29bfabbc553c6378eee02895aec46ce396cc404ee",
+          "retainedRawTextBytes": 731,
+          "sha256": "e008c5e25a6be382593089c29bfabbc553c6378eee02895aec46ce396cc404ee"
+        }
+      ]
+    },
+    {
+      "identity": "d3-zoom@3.0.0",
+      "name": "d3-zoom",
+      "version": "3.0.0",
+      "sourceMapPnPmFolder": "d3-zoom@3.0.0",
+      "licenseExpression": "ISC",
+      "sourceCommit": null,
+      "canonicalPublicURLs": [
+        "https://registry.npmjs.org/d3-zoom/3.0.0",
+        "https://registry.npmjs.org/d3-zoom/-/d3-zoom-3.0.0.tgz"
+      ],
+      "sourceEvidence": {
+        "kind": "exactlocal-lock-match",
+        "rawSHA256": "0adc45c5f4e5830e8c639c3953761e73e9493f1cb5f3dea6abc2249adb8ff2a9",
+        "hashSubject": "installed package.json",
+        "verificationMethod": "Exact installed package.json version matched the package-lock record; no retained package archive is attested by this evidence."
+      },
+      "archiveIntegrity": null,
+      "noticeSectionSHA256": "047c84f92a07779012cc16c42a337368e5c8145f1f8528f39b470d6751a53dc1",
+      "texts": [
+        {
+          "sectionId": "d3-zoom@3.0.0:1",
+          "kind": "license",
+          "member": "LICENSE",
+          "sourceSection": "entire file",
+          "canonicalPublicURL": "https://registry.npmjs.org/d3-zoom/-/d3-zoom-3.0.0.tgz#LICENSE",
+          "rawMemberSHA256": "e008c5e25a6be382593089c29bfabbc553c6378eee02895aec46ce396cc404ee",
+          "rawTextSHA256": "e008c5e25a6be382593089c29bfabbc553c6378eee02895aec46ce396cc404ee",
+          "retainedRawTextBytes": 731,
+          "sha256": "e008c5e25a6be382593089c29bfabbc553c6378eee02895aec46ce396cc404ee"
+        }
+      ]
+    },
+    {
+      "identity": "dagre-d3-es@7.0.14",
+      "name": "dagre-d3-es",
+      "version": "7.0.14",
+      "sourceMapPnPmFolder": "dagre-d3-es@7.0.14",
+      "licenseExpression": "MIT",
+      "sourceCommit": null,
+      "canonicalPublicURLs": [
+        "https://registry.npmjs.org/dagre-d3-es/7.0.14",
+        "https://registry.npmjs.org/dagre-d3-es/-/dagre-d3-es-7.0.14.tgz"
+      ],
+      "sourceEvidence": {
+        "kind": "exactlocal-lock-match",
+        "rawSHA256": "24643bcd30aef3932d4776eae974005354e34eb1036c24e6090b8a38b05fcc8e",
+        "hashSubject": "installed package.json",
+        "verificationMethod": "Exact installed package.json version matched the package-lock record; no retained package archive is attested by this evidence."
+      },
+      "archiveIntegrity": null,
+      "noticeSectionSHA256": "11777a986281509a964005017aeca9551a6e3d275800c571bb3216c0952244d3",
+      "texts": [
+        {
+          "sectionId": "dagre-d3-es@7.0.14:1",
+          "kind": "license",
+          "member": "LICENSE.md",
+          "sourceSection": "entire file",
+          "canonicalPublicURL": "https://registry.npmjs.org/dagre-d3-es/-/dagre-d3-es-7.0.14.tgz#LICENSE.md",
+          "rawMemberSHA256": "d01eb84ccce437dbf5fd40853bceea0f287930920acea066597a4a25ead63858",
+          "rawTextSHA256": "d01eb84ccce437dbf5fd40853bceea0f287930920acea066597a4a25ead63858",
+          "retainedRawTextBytes": 1328,
+          "sha256": "d01eb84ccce437dbf5fd40853bceea0f287930920acea066597a4a25ead63858"
+        }
+      ]
+    },
+    {
+      "identity": "dayjs@1.11.21",
+      "name": "dayjs",
+      "version": "1.11.21",
+      "sourceMapPnPmFolder": "dayjs@1.11.21",
+      "licenseExpression": "MIT",
+      "sourceCommit": null,
+      "canonicalPublicURLs": [
+        "https://registry.npmjs.org/dayjs/1.11.21",
+        "https://registry.npmjs.org/dayjs/-/dayjs-1.11.21.tgz"
+      ],
+      "sourceEvidence": {
+        "kind": "proxy-returned-sha1",
+        "rawSHA256": "290ec8bf81878ae4927581d9be74125f07722ea8bbea2ff77a2226dce12df876",
+        "hashSubject": "retained npm package archive",
+        "verificationMethod": "Retained archive SHA-1 matched the dist.shasum returned through the retrieval proxy. This is not independent public-registry verification. SHA-512 SRI is locally calculated; public-registry SRI was not supplied."
+      },
+      "archiveIntegrity": {
+        "sha1": "57f87562e62de76f3c704bd2b8d522fc33068eb2",
+        "locallyCalculatedSHA512SRI": "sha512-98IT+HOahAisibz/yjKbzuOBwYcjJ7BCLPzARyHiyEBmRz4fatF+KPJszEHXsGYjUG234aH/cOjW1wwTbKUZlA==",
+        "publicRegistryIntegrity": null,
+        "sha1Verification": "Matched proxy-returned dist.shasum; not independently public-registry verified."
+      },
+      "noticeSectionSHA256": "432bc06dc4fe4feed0bb97fb18b4806546f55d77b3341383349a13f4cd15b67e",
+      "texts": [
+        {
+          "sectionId": "dayjs@1.11.21:1",
+          "kind": "license",
+          "member": "package/LICENSE",
+          "sourceSection": "entire file",
+          "canonicalPublicURL": "https://registry.npmjs.org/dayjs/-/dayjs-1.11.21.tgz#package/LICENSE",
+          "rawMemberSHA256": "5faab7526d055651be3aab769d58897be6bd91f3d39d137f25f12dba1b31d5dc",
+          "rawTextSHA256": "5faab7526d055651be3aab769d58897be6bd91f3d39d137f25f12dba1b31d5dc",
+          "retainedRawTextBytes": 1072,
+          "sha256": "5faab7526d055651be3aab769d58897be6bd91f3d39d137f25f12dba1b31d5dc"
+        }
+      ]
+    },
+    {
+      "identity": "dompurify@3.4.12",
+      "name": "dompurify",
+      "version": "3.4.12",
+      "sourceMapPnPmFolder": "dompurify@3.4.12",
+      "licenseExpression": "(MPL-2.0 OR Apache-2.0)",
+      "sourceCommit": null,
+      "canonicalPublicURLs": [
+        "https://registry.npmjs.org/dompurify/3.4.12",
+        "https://registry.npmjs.org/dompurify/-/dompurify-3.4.12.tgz"
+      ],
+      "sourceEvidence": {
+        "kind": "proxy-returned-sha1",
+        "rawSHA256": "4fd255d4cd435ffc74d59b7ffa8b4a92f8e4a7fc84faf1d0f9d298cd7d741616",
+        "hashSubject": "retained npm package archive",
+        "verificationMethod": "Retained archive SHA-1 matched the dist.shasum returned through the retrieval proxy. This is not independent public-registry verification. SHA-512 SRI is locally calculated; public-registry SRI was not supplied."
+      },
+      "archiveIntegrity": {
+        "sha1": "6fa2265e9bbdce882c4ace4107626051b448ffa8",
+        "locallyCalculatedSHA512SRI": "sha512-zQvGet8Z2sWbQhCmfFz/T5QWH2oBmjnqK3qvOjaqaNLrLEF912WamU+ohnTp0TCep/MFVHpdJuCZEdFOdTnEFg==",
+        "publicRegistryIntegrity": null,
+        "sha1Verification": "Matched proxy-returned dist.shasum; not independently public-registry verified."
+      },
+      "noticeSectionSHA256": "fc613e9e50aab5da879fc3478c3ab5458ab76c312bbd22ef559a66d8cbe76ce7",
+      "texts": [
+        {
+          "sectionId": "dompurify@3.4.12:1",
+          "kind": "license",
+          "member": "package/LICENSE",
+          "sourceSection": "entire file",
+          "canonicalPublicURL": "https://registry.npmjs.org/dompurify/-/dompurify-3.4.12.tgz#package/LICENSE",
+          "rawMemberSHA256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+          "rawTextSHA256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+          "retainedRawTextBytes": 11358,
+          "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+        },
+        {
+          "sectionId": "dompurify@3.4.12:2",
+          "kind": "license",
+          "member": "package/LICENSE-MPL",
+          "sourceSection": "entire file",
+          "canonicalPublicURL": "https://registry.npmjs.org/dompurify/-/dompurify-3.4.12.tgz#package/LICENSE-MPL",
+          "rawMemberSHA256": "fab3dd6bdab226f1c08630b1dd917e11fcb4ec5e1e020e2c16f83a0a13863e85",
+          "rawTextSHA256": "fab3dd6bdab226f1c08630b1dd917e11fcb4ec5e1e020e2c16f83a0a13863e85",
+          "retainedRawTextBytes": 16726,
+          "sha256": "fab3dd6bdab226f1c08630b1dd917e11fcb4ec5e1e020e2c16f83a0a13863e85"
+        }
+      ]
+    },
+    {
+      "identity": "elkjs@0.9.3",
+      "name": "elkjs",
+      "version": "0.9.3",
+      "sourceMapPnPmFolder": "elkjs@0.9.3",
+      "licenseExpression": "EPL-2.0",
+      "sourceCommit": null,
+      "canonicalPublicURLs": [
+        "https://registry.npmjs.org/elkjs/0.9.3",
+        "https://registry.npmjs.org/elkjs/-/elkjs-0.9.3.tgz"
+      ],
+      "sourceEvidence": {
+        "kind": "exactlocal-lock-match",
+        "rawSHA256": "fb9bb80b980c72022fb4540b38aa0545242b4eb67b82250aeae2f0beb67eea25",
+        "hashSubject": "installed package.json",
+        "verificationMethod": "Exact installed package.json version matched the package-lock record; no retained package archive is attested by this evidence."
+      },
+      "archiveIntegrity": null,
+      "noticeSectionSHA256": "ac4bccb0fc7ba06c55972a560b3e80fc6824bb198fe2c63d0e85de674b04f896",
+      "texts": [
+        {
+          "sectionId": "elkjs@0.9.3:1",
+          "kind": "license",
+          "member": "LICENSE.md",
+          "sourceSection": "entire file",
+          "canonicalPublicURL": "https://registry.npmjs.org/elkjs/-/elkjs-0.9.3.tgz#LICENSE.md",
+          "rawMemberSHA256": "89591d4578fb1ebd91501312a3d25f021bd865a2e436641c1cf7b1bc7e3c1617",
+          "rawTextSHA256": "89591d4578fb1ebd91501312a3d25f021bd865a2e436641c1cf7b1bc7e3c1617",
+          "retainedRawTextBytes": 14480,
+          "sha256": "89591d4578fb1ebd91501312a3d25f021bd865a2e436641c1cf7b1bc7e3c1617"
+        }
+      ]
+    },
+    {
+      "identity": "es-toolkit@1.45.1",
+      "name": "es-toolkit",
+      "version": "1.45.1",
+      "sourceMapPnPmFolder": "es-toolkit@1.45.1",
+      "licenseExpression": "MIT",
+      "sourceCommit": null,
+      "canonicalPublicURLs": [
+        "https://registry.npmjs.org/es-toolkit/1.45.1",
+        "https://registry.npmjs.org/es-toolkit/-/es-toolkit-1.45.1.tgz"
+      ],
+      "sourceEvidence": {
+        "kind": "proxy-returned-sha1",
+        "rawSHA256": "0ab10ae18c0853f0c989ee187cecd9d5b2dd561bdf2b3c9f314bbc981aab427f",
+        "hashSubject": "retained npm package archive",
+        "verificationMethod": "Retained archive SHA-1 matched the dist.shasum returned through the retrieval proxy. This is not independent public-registry verification. SHA-512 SRI is locally calculated; public-registry SRI was not supplied."
+      },
+      "archiveIntegrity": {
+        "sha1": "21b28b2bd43178fd4c9c937c445d5bcaccce907b",
+        "locallyCalculatedSHA512SRI": "sha512-/jhoOj/Fx+A+IIyDNOvO3TItGmlMKhtX8ISAHKE90c4b/k1tqaqEZ+uUqfpU8DMnW5cgNJv606zS55jGvza0Xw==",
+        "publicRegistryIntegrity": null,
+        "sha1Verification": "Matched proxy-returned dist.shasum; not independently public-registry verified."
+      },
+      "noticeSectionSHA256": "c550d0931b74546367009a5490bac6f066e23203f944b7254cedd409632c966f",
+      "texts": [
+        {
+          "sectionId": "es-toolkit@1.45.1:1",
+          "kind": "license",
+          "member": "package/LICENSE",
+          "sourceSection": "entire file",
+          "canonicalPublicURL": "https://registry.npmjs.org/es-toolkit/-/es-toolkit-1.45.1.tgz#package/LICENSE",
+          "rawMemberSHA256": "ed68888a2a28f32a05e88f24d4d4ee75075a1bda2b6372a1f2e00fa0576a5524",
+          "rawTextSHA256": "ed68888a2a28f32a05e88f24d4d4ee75075a1bda2b6372a1f2e00fa0576a5524",
+          "retainedRawTextBytes": 1424,
+          "sha256": "ed68888a2a28f32a05e88f24d4d4ee75075a1bda2b6372a1f2e00fa0576a5524"
+        }
+      ]
+    },
+    {
+      "identity": "fastdom@1.0.12",
+      "name": "fastdom",
+      "version": "1.0.12",
+      "sourceMapPnPmFolder": "fastdom@1.0.12_patch_hash=10bad52c2ff6c742f43492850f2a5a74e9d70a33f42a442cdbda4e174356aa87",
+      "licenseExpression": "MIT",
+      "sourceCommit": null,
+      "canonicalPublicURLs": [
+        "https://registry.npmjs.org/fastdom/1.0.12",
+        "https://registry.npmjs.org/fastdom/-/fastdom-1.0.12.tgz",
+        "https://unpkg.com/fastdom@1.0.12/README.md"
+      ],
+      "sourceEvidence": {
+        "kind": "proxy-returned-sha1",
+        "rawSHA256": "cc5669ab6f7741bb061c8a7244addc8e3af1f84ec7d2445744b59d0169a87d11",
+        "hashSubject": "retained npm package archive",
+        "verificationMethod": "Retained archive SHA-1 matched the dist.shasum returned through the retrieval proxy. This is not independent public-registry verification. SHA-512 SRI is locally calculated; public-registry SRI was not supplied."
+      },
+      "archiveIntegrity": {
+        "sha1": "ae43d55af017252ae499b2e186511ab97412de39",
+        "locallyCalculatedSHA512SRI": "sha512-LB+xjSTEbjHE1cWsxu+tN2Xqr1kpi+V9aADI7sVM5ZMaXyYGPHULQMzpJMYqOTULK/73pUkWVzzObFRBkPr+hg==",
+        "publicRegistryIntegrity": null,
+        "sha1Verification": "Matched proxy-returned dist.shasum; not independently public-registry verified."
+      },
+      "noticeSectionSHA256": "c65c7f63e969c8e414aadd37989a27bd06d3841e6c484eaf11f6259879714bfc",
+      "texts": [
+        {
+          "sectionId": "fastdom@1.0.12:1",
+          "kind": "license",
+          "member": "package/README.md",
+          "sourceSection": "README.md: ## License through EOF",
+          "canonicalPublicURL": "https://registry.npmjs.org/fastdom/-/fastdom-1.0.12.tgz#package/README.md",
+          "rawMemberSHA256": "df2ae14f12f31864acef768195afe4584b08a257f25925f49884619279f02f37",
+          "rawTextSHA256": "df2ae14f12f31864acef768195afe4584b08a257f25925f49884619279f02f37",
+          "retainedRawTextBytes": 1106,
+          "sha256": "df2ae14f12f31864acef768195afe4584b08a257f25925f49884619279f02f37"
+        },
+        {
+          "sectionId": "fastdom@1.0.12:2",
+          "kind": "attribution",
+          "member": "package/fastdom.js",
+          "sourceSection": "leading source header",
+          "canonicalPublicURL": "https://registry.npmjs.org/fastdom/-/fastdom-1.0.12.tgz#package/fastdom.js",
+          "rawMemberSHA256": "fd7b4e62eea656aaa14e344efee2a832592489ef9db78e103452f4ce05a124df",
+          "rawTextSHA256": "fd7b4e62eea656aaa14e344efee2a832592489ef9db78e103452f4ce05a124df",
+          "retainedRawTextBytes": 216,
+          "sha256": "fd7b4e62eea656aaa14e344efee2a832592489ef9db78e103452f4ce05a124df"
+        }
+      ]
+    },
+    {
+      "identity": "internmap@2.0.3",
+      "name": "internmap",
+      "version": "2.0.3",
+      "sourceMapPnPmFolder": "internmap@2.0.3",
+      "licenseExpression": "ISC",
+      "sourceCommit": null,
+      "canonicalPublicURLs": [
+        "https://registry.npmjs.org/internmap/2.0.3",
+        "https://registry.npmjs.org/internmap/-/internmap-2.0.3.tgz"
+      ],
+      "sourceEvidence": {
+        "kind": "exactlocal-lock-match",
+        "rawSHA256": "b94bd846fb96743a86d527a3d0a3ad1bd5b1ffd3cd1109e6b115ebaef59dd195",
+        "hashSubject": "installed package.json",
+        "verificationMethod": "Exact installed package.json version matched the package-lock record; no retained package archive is attested by this evidence."
+      },
+      "archiveIntegrity": null,
+      "noticeSectionSHA256": "8e61ee3c41a8d5ced30d59779ba78add4295dcf906a2150132668374494d506f",
+      "texts": [
+        {
+          "sectionId": "internmap@2.0.3:1",
+          "kind": "license",
+          "member": "LICENSE",
+          "sourceSection": "entire file",
+          "canonicalPublicURL": "https://registry.npmjs.org/internmap/-/internmap-2.0.3.tgz#LICENSE",
+          "rawMemberSHA256": "9ea8903938dab5f12c4572d60725069bec2d1b0dc3bcc210b09bae946a5ebb1f",
+          "rawTextSHA256": "9ea8903938dab5f12c4572d60725069bec2d1b0dc3bcc210b09bae946a5ebb1f",
+          "retainedRawTextBytes": 726,
+          "sha256": "9ea8903938dab5f12c4572d60725069bec2d1b0dc3bcc210b09bae946a5ebb1f"
+        }
+      ]
+    },
+    {
+      "identity": "js-yaml@4.3.0",
+      "name": "js-yaml",
+      "version": "4.3.0",
+      "sourceMapPnPmFolder": "js-yaml@4.3.0",
+      "licenseExpression": "MIT",
+      "sourceCommit": null,
+      "canonicalPublicURLs": [
+        "https://registry.npmjs.org/js-yaml/4.3.0",
+        "https://registry.npmjs.org/js-yaml/-/js-yaml-4.3.0.tgz"
+      ],
+      "sourceEvidence": {
+        "kind": "proxy-returned-sha1",
+        "rawSHA256": "8594ee34496dd2e41ec934fd202843dc993be9ab2d7d5d47579146962fbdfae6",
+        "hashSubject": "retained npm package archive",
+        "verificationMethod": "Retained archive SHA-1 matched the dist.shasum returned through the retrieval proxy. This is not independent public-registry verification. SHA-512 SRI is locally calculated; public-registry SRI was not supplied."
+      },
+      "archiveIntegrity": {
+        "sha1": "d1900572a7f7cf0b5f540c83673e60bad3436592",
+        "locallyCalculatedSHA512SRI": "sha512-1td788aAnnZ5qs7V2QIRl1owjtYpbKt749Y3xauqQgwIIGF/xXWz1wMTEBx5O3LK3lXLVuqXPdPxj2BoFHaW9Q==",
+        "publicRegistryIntegrity": null,
+        "sha1Verification": "Matched proxy-returned dist.shasum; not independently public-registry verified."
+      },
+      "noticeSectionSHA256": "238e28330ac1be117d96778bb475c8c881231023b5d588c7773a4371b183a881",
+      "texts": [
+        {
+          "sectionId": "js-yaml@4.3.0:1",
+          "kind": "license",
+          "member": "package/LICENSE",
+          "sourceSection": "entire file",
+          "canonicalPublicURL": "https://registry.npmjs.org/js-yaml/-/js-yaml-4.3.0.tgz#package/LICENSE",
+          "rawMemberSHA256": "a07bc24468b9654ce76a547d47a2db282d07733b715db4c73a98bd63961f9550",
+          "rawTextSHA256": "a07bc24468b9654ce76a547d47a2db282d07733b715db4c73a98bd63961f9550",
+          "retainedRawTextBytes": 1084,
+          "sha256": "a07bc24468b9654ce76a547d47a2db282d07733b715db4c73a98bd63961f9550"
+        }
+      ]
+    },
+    {
+      "identity": "katex@0.18.11",
+      "name": "katex",
+      "version": "0.18.11",
+      "sourceMapPnPmFolder": "katex@0.18.11",
+      "licenseExpression": "MIT",
+      "sourceCommit": "d5bed9f38a8d747b9c4a12e18897a514707e1c26",
+      "canonicalPublicURLs": [
+        "https://github.com/KaTeX/KaTeX/tree/v0.18.11",
+        "https://raw.githubusercontent.com/KaTeX/KaTeX/v0.18.11/LICENSE"
+      ],
+      "sourceEvidence": {
+        "kind": "tagged-upstream-file",
+        "rawSHA256": "766ccc1f306c885aa45542a9846bbd0a505b27a0374f146778171c2254ce18e3",
+        "hashSubject": "exact upstream tagged LICENSE file",
+        "verificationMethod": "Exact upstream release-tag license file, with verified Git commit and raw-file SHA-256."
+      },
+      "archiveIntegrity": null,
+      "noticeSectionSHA256": "2a636d77ef9699d7eb1fd5c11030ebef4465ef1bb4784a5b9a78a5e5ad6d3f86",
+      "texts": [
+        {
+          "sectionId": "katex@0.18.11:1",
+          "kind": "license",
+          "member": "LICENSE",
+          "sourceSection": "entire file",
+          "canonicalPublicURL": "https://raw.githubusercontent.com/KaTeX/KaTeX/v0.18.11/LICENSE",
+          "rawMemberSHA256": "766ccc1f306c885aa45542a9846bbd0a505b27a0374f146778171c2254ce18e3",
+          "rawTextSHA256": "766ccc1f306c885aa45542a9846bbd0a505b27a0374f146778171c2254ce18e3",
+          "retainedRawTextBytes": 1107,
+          "sha256": "766ccc1f306c885aa45542a9846bbd0a505b27a0374f146778171c2254ce18e3"
+        }
+      ]
+    },
+    {
+      "identity": "khroma@2.1.0",
+      "name": "khroma",
+      "version": "2.1.0",
+      "sourceMapPnPmFolder": "khroma@2.1.0",
+      "licenseExpression": "MIT",
+      "sourceCommit": null,
+      "canonicalPublicURLs": [
+        "https://registry.npmjs.org/khroma/2.1.0",
+        "https://registry.npmjs.org/khroma/-/khroma-2.1.0.tgz"
+      ],
+      "sourceEvidence": {
+        "kind": "exactlocal-lock-match",
+        "rawSHA256": "0d2145738d3cab828da4c5724b45e0dd2577c0ce84503c956d76897e93fa7de2",
+        "hashSubject": "installed package.json",
+        "verificationMethod": "Exact installed package.json version matched the package-lock record; no retained package archive is attested by this evidence."
+      },
+      "archiveIntegrity": null,
+      "noticeSectionSHA256": "fb73372fa3d88f4a8429b8c597a1cfe4909724ff27c044d543ef75c9c0c8c491",
+      "texts": [
+        {
+          "sectionId": "khroma@2.1.0:1",
+          "kind": "license",
+          "member": "license",
+          "sourceSection": "entire file",
+          "canonicalPublicURL": "https://registry.npmjs.org/khroma/-/khroma-2.1.0.tgz#license",
+          "rawMemberSHA256": "66b333b0f66759a0b710459e03f7029abe17f4358114a128d2c972e642961b49",
+          "rawTextSHA256": "66b333b0f66759a0b710459e03f7029abe17f4358114a128d2c972e642961b49",
+          "retainedRawTextBytes": 1105,
+          "sha256": "66b333b0f66759a0b710459e03f7029abe17f4358114a128d2c972e642961b49"
+        }
+      ]
+    },
+    {
+      "identity": "layout-base@1.0.2",
+      "name": "layout-base",
+      "version": "1.0.2",
+      "sourceMapPnPmFolder": "layout-base@1.0.2",
+      "licenseExpression": "MIT",
+      "sourceCommit": null,
+      "canonicalPublicURLs": [
+        "https://registry.npmjs.org/layout-base/1.0.2",
+        "https://registry.npmjs.org/layout-base/-/layout-base-1.0.2.tgz"
+      ],
+      "sourceEvidence": {
+        "kind": "exactlocal-lock-match",
+        "rawSHA256": "d327a9a670ab7eb53814afd7bc89f467b62ae25e93ece34c3c5a2f5830761935",
+        "hashSubject": "installed package.json",
+        "verificationMethod": "Exact installed package.json version matched the package-lock record; no retained package archive is attested by this evidence."
+      },
+      "archiveIntegrity": null,
+      "noticeSectionSHA256": "a0485d50ae383bf557803ad7923382f836377b0c4975fdf92d53f74c1d99b295",
+      "texts": [
+        {
+          "sectionId": "layout-base@1.0.2:1",
+          "kind": "license",
+          "member": "LICENSE",
+          "sourceSection": "entire file",
+          "canonicalPublicURL": "https://registry.npmjs.org/layout-base/-/layout-base-1.0.2.tgz#LICENSE",
+          "rawMemberSHA256": "eabb762d8a95109a39c9be3247325529a5239a7aca327d909c3ccdc41f3a06bf",
+          "rawTextSHA256": "eabb762d8a95109a39c9be3247325529a5239a7aca327d909c3ccdc41f3a06bf",
+          "retainedRawTextBytes": 1069,
+          "sha256": "eabb762d8a95109a39c9be3247325529a5239a7aca327d909c3ccdc41f3a06bf"
+        }
+      ]
+    },
+    {
+      "identity": "layout-base@2.0.1",
+      "name": "layout-base",
+      "version": "2.0.1",
+      "sourceMapPnPmFolder": "layout-base@2.0.1",
+      "licenseExpression": "MIT",
+      "sourceCommit": null,
+      "canonicalPublicURLs": [
+        "https://registry.npmjs.org/layout-base/2.0.1",
+        "https://registry.npmjs.org/layout-base/-/layout-base-2.0.1.tgz"
+      ],
+      "sourceEvidence": {
+        "kind": "exactlocal-lock-match",
+        "rawSHA256": "99d1ba119dbd99ca770d7ce03ebc57e6f1721b944ae02d2a1d65cf2843d33ed2",
+        "hashSubject": "installed package.json",
+        "verificationMethod": "Exact installed package.json version matched the package-lock record; no retained package archive is attested by this evidence."
+      },
+      "archiveIntegrity": null,
+      "noticeSectionSHA256": "ca2c4744abbf5c9f7542cc3b5a9192b36b14dbbdd7e2925d8c682bbb2797ed0a",
+      "texts": [
+        {
+          "sectionId": "layout-base@2.0.1:1",
+          "kind": "license",
+          "member": "LICENSE",
+          "sourceSection": "entire file",
+          "canonicalPublicURL": "https://registry.npmjs.org/layout-base/-/layout-base-2.0.1.tgz#LICENSE",
+          "rawMemberSHA256": "eabb762d8a95109a39c9be3247325529a5239a7aca327d909c3ccdc41f3a06bf",
+          "rawTextSHA256": "eabb762d8a95109a39c9be3247325529a5239a7aca327d909c3ccdc41f3a06bf",
+          "retainedRawTextBytes": 1069,
+          "sha256": "eabb762d8a95109a39c9be3247325529a5239a7aca327d909c3ccdc41f3a06bf"
+        }
+      ]
+    },
+    {
+      "identity": "lodash-es@4.18.1",
+      "name": "lodash-es",
+      "version": "4.18.1",
+      "sourceMapPnPmFolder": "lodash-es@4.18.1",
+      "licenseExpression": "MIT",
+      "sourceCommit": null,
+      "canonicalPublicURLs": [
+        "https://registry.npmjs.org/lodash-es/4.18.1",
+        "https://registry.npmjs.org/lodash-es/-/lodash-es-4.18.1.tgz"
+      ],
+      "sourceEvidence": {
+        "kind": "exactlocal-lock-match",
+        "rawSHA256": "83d054ea84cf0efe4db931cf24c4ca9dde533a0e49779d26176be9d43061c903",
+        "hashSubject": "installed package.json",
+        "verificationMethod": "Exact installed package.json version matched the package-lock record; no retained package archive is attested by this evidence."
+      },
+      "archiveIntegrity": null,
+      "noticeSectionSHA256": "f94ee1e19dba946528320772e93efe8b5ccd5931a254821cda3f41cacaae0670",
+      "texts": [
+        {
+          "sectionId": "lodash-es@4.18.1:1",
+          "kind": "license",
+          "member": "LICENSE",
+          "sourceSection": "entire file",
+          "canonicalPublicURL": "https://registry.npmjs.org/lodash-es/-/lodash-es-4.18.1.tgz#LICENSE",
+          "rawMemberSHA256": "f71e8ed126b46346494aad5486874cd8f0aafe95092ed67d2e3cb6110f939abc",
+          "rawTextSHA256": "f71e8ed126b46346494aad5486874cd8f0aafe95092ed67d2e3cb6110f939abc",
+          "retainedRawTextBytes": 1952,
+          "sha256": "f71e8ed126b46346494aad5486874cd8f0aafe95092ed67d2e3cb6110f939abc"
+        }
+      ]
+    },
+    {
+      "identity": "marked@16.3.0",
+      "name": "marked",
+      "version": "16.3.0",
+      "sourceMapPnPmFolder": "marked@16.3.0",
+      "licenseExpression": "MIT",
+      "sourceCommit": null,
+      "canonicalPublicURLs": [
+        "https://registry.npmjs.org/marked/16.3.0",
+        "https://registry.npmjs.org/marked/-/marked-16.3.0.tgz"
+      ],
+      "sourceEvidence": {
+        "kind": "proxy-returned-sha1",
+        "rawSHA256": "c333c47cd3802a1d631dfdd8c6cfc411a88599a872c04ce8cd2291381a7767a0",
+        "hashSubject": "retained npm package archive",
+        "verificationMethod": "Retained archive SHA-1 matched the dist.shasum returned through the retrieval proxy. This is not independent public-registry verification. SHA-512 SRI is locally calculated; public-registry SRI was not supplied."
+      },
+      "archiveIntegrity": {
+        "sha1": "2f513891f867d6edc4772b4a026db9cc331eb94f",
+        "locallyCalculatedSHA512SRI": "sha512-K3UxuKu6l6bmA5FUwYho8CfJBlsUWAooKtdGgMcERSpF7gcBUrCGsLH7wDaaNOzwq18JzSUDyoEb/YsrqMac3w==",
+        "publicRegistryIntegrity": null,
+        "sha1Verification": "Matched proxy-returned dist.shasum; not independently public-registry verified."
+      },
+      "noticeSectionSHA256": "f8719cff91345eb34e174039ef133a4e2d45405e3f070db384ce6fe4af79f199",
+      "texts": [
+        {
+          "sectionId": "marked@16.3.0:1",
+          "kind": "license",
+          "member": "package/LICENSE.md",
+          "sourceSection": "entire file",
+          "canonicalPublicURL": "https://registry.npmjs.org/marked/-/marked-16.3.0.tgz#package/LICENSE.md",
+          "rawMemberSHA256": "8e3a3f82f59a60958f56ca08f445647c32a4733dc7ca6c2c46f6eb898471ab9c",
+          "rawTextSHA256": "8e3a3f82f59a60958f56ca08f445647c32a4733dc7ca6c2c46f6eb898471ab9c",
+          "retainedRawTextBytes": 2942,
+          "sha256": "8e3a3f82f59a60958f56ca08f445647c32a4733dc7ca6c2c46f6eb898471ab9c"
+        }
+      ]
+    },
+    {
+      "identity": "roughjs@4.6.6",
+      "name": "roughjs",
+      "version": "4.6.6",
+      "sourceMapPnPmFolder": "roughjs@4.6.6_patch_hash=3543d47108cb41b68ec6a671c0e1f9d0cfe2ce524fea5b0992511ae84c3c6b64",
+      "licenseExpression": "MIT",
+      "sourceCommit": null,
+      "canonicalPublicURLs": [
+        "https://registry.npmjs.org/roughjs/4.6.6",
+        "https://registry.npmjs.org/roughjs/-/roughjs-4.6.6.tgz"
+      ],
+      "sourceEvidence": {
+        "kind": "exactlocal-lock-match",
+        "rawSHA256": "5e7a5b1b095c0f529236f758a579f9e21736745f7cca5ea413f680584d73915a",
+        "hashSubject": "installed package.json",
+        "verificationMethod": "Exact installed package.json version matched the package-lock record; no retained package archive is attested by this evidence."
+      },
+      "archiveIntegrity": null,
+      "noticeSectionSHA256": "e697e0e54637cc0fe7dedda9f659f38aa64e9e93275cf8a386d84b21f9dacf72",
+      "texts": [
+        {
+          "sectionId": "roughjs@4.6.6:1",
+          "kind": "license",
+          "member": "LICENSE",
+          "sourceSection": "entire file",
+          "canonicalPublicURL": "https://registry.npmjs.org/roughjs/-/roughjs-4.6.6.tgz#LICENSE",
+          "rawMemberSHA256": "dca9a392272606ac748ac0976a2a1133f14eef841c27beaa51a844d53c56a09d",
+          "rawTextSHA256": "dca9a392272606ac748ac0976a2a1133f14eef841c27beaa51a844d53c56a09d",
+          "retainedRawTextBytes": 1068,
+          "sha256": "dca9a392272606ac748ac0976a2a1133f14eef841c27beaa51a844d53c56a09d"
+        }
+      ]
+    },
+    {
+      "identity": "stylis@4.3.6",
+      "name": "stylis",
+      "version": "4.3.6",
+      "sourceMapPnPmFolder": "stylis@4.3.6",
+      "licenseExpression": "MIT",
+      "sourceCommit": null,
+      "canonicalPublicURLs": [
+        "https://registry.npmjs.org/stylis/4.3.6",
+        "https://registry.npmjs.org/stylis/-/stylis-4.3.6.tgz"
+      ],
+      "sourceEvidence": {
+        "kind": "proxy-returned-sha1",
+        "rawSHA256": "57bd37727276e7e30d2f15472a43c5d5b8ae6cd9cebd36dbb84880c500de568e",
+        "hashSubject": "retained npm package archive",
+        "verificationMethod": "Retained archive SHA-1 matched the dist.shasum returned through the retrieval proxy. This is not independent public-registry verification. SHA-512 SRI is locally calculated; public-registry SRI was not supplied."
+      },
+      "archiveIntegrity": {
+        "sha1": "7c7b97191cb4f195f03ecab7d52f7902ed378320",
+        "locallyCalculatedSHA512SRI": "sha512-yQ3rwFWRfwNUY7H5vpU0wfdkNSnvnJinhF9830Swlaxl03zsOjCfmX0ugac+3LtK0lYSgwL/KXc8oYL3mG4YFQ==",
+        "publicRegistryIntegrity": null,
+        "sha1Verification": "Matched proxy-returned dist.shasum; not independently public-registry verified."
+      },
+      "noticeSectionSHA256": "6dd10d58e1e3b78323ee2cf8ab3e43fed0a8755851219a7fafab1fb43953525d",
+      "texts": [
+        {
+          "sectionId": "stylis@4.3.6:1",
+          "kind": "license",
+          "member": "package/LICENSE",
+          "sourceSection": "entire file",
+          "canonicalPublicURL": "https://registry.npmjs.org/stylis/-/stylis-4.3.6.tgz#package/LICENSE",
+          "rawMemberSHA256": "88c579c6ee44b41137a21321190d177982e5b17d4fa1b83a4a2e3ea325a8fc9a",
+          "rawTextSHA256": "88c579c6ee44b41137a21321190d177982e5b17d4fa1b83a4a2e3ea325a8fc9a",
+          "retainedRawTextBytes": 1078,
+          "sha256": "88c579c6ee44b41137a21321190d177982e5b17d4fa1b83a4a2e3ea325a8fc9a"
+        }
+      ]
+    },
+    {
+      "identity": "ts-dedent@2.2.0",
+      "name": "ts-dedent",
+      "version": "2.2.0",
+      "sourceMapPnPmFolder": "ts-dedent@2.2.0",
+      "licenseExpression": "MIT",
+      "sourceCommit": null,
+      "canonicalPublicURLs": [
+        "https://registry.npmjs.org/ts-dedent/2.2.0",
+        "https://registry.npmjs.org/ts-dedent/-/ts-dedent-2.2.0.tgz"
+      ],
+      "sourceEvidence": {
+        "kind": "proxy-returned-sha1",
+        "rawSHA256": "f04cddc15ce3aad91287aebdcb0d6b6997b85222769c35c910038f59bfd2234d",
+        "hashSubject": "retained npm package archive",
+        "verificationMethod": "Retained archive SHA-1 matched the dist.shasum returned through the retrieval proxy. This is not independent public-registry verification. SHA-512 SRI is locally calculated; public-registry SRI was not supplied."
+      },
+      "archiveIntegrity": {
+        "sha1": "39e4bd297cd036292ae2394eb3412be63f563bb5",
+        "locallyCalculatedSHA512SRI": "sha512-q5W7tVM71e2xjHZTlgfTDoPF/SmqKG5hddq9SzR49CH2hayqRKJtQ4mtRlSxKaJlR/+9rEM+mnBHf7I2/BQcpQ==",
+        "publicRegistryIntegrity": null,
+        "sha1Verification": "Matched proxy-returned dist.shasum; not independently public-registry verified."
+      },
+      "noticeSectionSHA256": "d10c51a25a77688a03b9e76f55b13b943ad0a0bf5d814342b1b3bf67a5c9eff8",
+      "texts": [
+        {
+          "sectionId": "ts-dedent@2.2.0:1",
+          "kind": "license",
+          "member": "package/LICENSE",
+          "sourceSection": "entire file",
+          "canonicalPublicURL": "https://registry.npmjs.org/ts-dedent/-/ts-dedent-2.2.0.tgz#package/LICENSE",
+          "rawMemberSHA256": "eff13095d9d762c3bd9dda74370c81e2130c28f2691bc455603abf973bac25b9",
+          "rawTextSHA256": "eff13095d9d762c3bd9dda74370c81e2130c28f2691bc455603abf973bac25b9",
+          "retainedRawTextBytes": 1073,
+          "sha256": "eff13095d9d762c3bd9dda74370c81e2130c28f2691bc455603abf973bac25b9"
+        }
+      ]
+    },
+    {
+      "identity": "uuid@14.0.0",
+      "name": "uuid",
+      "version": "14.0.0",
+      "sourceMapPnPmFolder": "uuid@14.0.0",
+      "licenseExpression": "MIT",
+      "sourceCommit": null,
+      "canonicalPublicURLs": [
+        "https://registry.npmjs.org/uuid/14.0.0",
+        "https://registry.npmjs.org/uuid/-/uuid-14.0.0.tgz"
+      ],
+      "sourceEvidence": {
+        "kind": "proxy-returned-sha1",
+        "rawSHA256": "ca468c168ec7f2021f6a98041e943443b29e67e0e0ff5b4c1caca17c6efa9870",
+        "hashSubject": "retained npm package archive",
+        "verificationMethod": "Retained archive SHA-1 matched the dist.shasum returned through the retrieval proxy. This is not independent public-registry verification. SHA-512 SRI is locally calculated; public-registry SRI was not supplied."
+      },
+      "archiveIntegrity": {
+        "sha1": "0af883220163d264ffe0c084f6b8a89b9666966d",
+        "locallyCalculatedSHA512SRI": "sha512-Qo+uWgilfSmAhXCMav1uYFynlQO7fMFiMVZsQqZRMIXp0O7rR7qjkj+cPvBHLgBqi960QCoo/PH2/6ZtVqKvrg==",
+        "publicRegistryIntegrity": null,
+        "sha1Verification": "Matched proxy-returned dist.shasum; not independently public-registry verified."
+      },
+      "noticeSectionSHA256": "fbe1c202ab499c9ae1855a24354f5f06066d5b2053d81f5aa4617197babebf20",
+      "texts": [
+        {
+          "sectionId": "uuid@14.0.0:1",
+          "kind": "license",
+          "member": "package/LICENSE.md",
+          "sourceSection": "entire file",
+          "canonicalPublicURL": "https://registry.npmjs.org/uuid/-/uuid-14.0.0.tgz#package/LICENSE.md",
+          "rawMemberSHA256": "beaa6b04fb82e41dd2ad679e19e27953afb5999b1abbb455b6564e78ebfeb332",
+          "rawTextSHA256": "beaa6b04fb82e41dd2ad679e19e27953afb5999b1abbb455b6564e78ebfeb332",
+          "retainedRawTextBytes": 1109,
+          "sha256": "beaa6b04fb82e41dd2ad679e19e27953afb5999b1abbb455b6564e78ebfeb332"
+        }
+      ]
+    }
+  ]
+}

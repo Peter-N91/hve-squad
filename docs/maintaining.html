@@ -1,4 +1,8 @@
 <!DOCTYPE html>
+<!--
+Copyright (c) Microsoft Corporation.
+Licensed under the MIT license.
+-->
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
@@ -77,7 +81,7 @@
       <p>Eleventy builds the published site from the English sources in <code>docs/</code> and French sources in <code>docs/fr/</code>, using matching filenames and shared anchor IDs. Generated pages and search indexes go into <code>_site/</code>; opening an original source page does not show the generated release notices or versioned installation commands.</p>
       <p>Update both languages in the same change. Preserve command names and parameters, and label links to English-only external guides, historical reports and videos. The published shell, translations and appearance live in <code>site/pages.njk</code>, <code>site/locales.json</code> and <code>site/assets/site.css</code>. Host tabs belong to individual command examples and share the selected environment across examples and pages; language switching keeps the current page.</p>
       <p>Pre-release badges are explicit, not inferred from Git history. For newly documented package behavior, put <code>data-release-change="fragment-name"</code> on the smallest affected feature label, paragraph, list item, heading, table cell or whole <code>pre</code> block in both languages. Mark a heading only when the whole section or page is new; otherwise mark the exact option or explanation so stable content does not look unreleased. Never put the marker inside a link or copyable code block, and do not mark documentation-only corrections. Those pull requests use <code>skip-changelog</code>. The stable version comes from GitHub's latest published release, not <code>apm.yml</code>. Preview notices and installation commands appear only when a published, non-draft pre-release exists, using the newest published pre-release's actual tag. Feature badges also require a matching pending fragment and disappear when it is consumed.</p>
-      <p>Author runnable Squad examples in <code>pre &gt; code</code> blocks using the canonical slash-command syntax. The shared renderer uses that source to create prefix-free VS Code, CLI, and App requests with the matching agent, preserving arguments and multiline text. Keep shell commands and GitHub comment triggers separate; mark explicit host-comparison references with <code>data-host-reference</code>. Without JavaScript, the original canonical examples remain readable.</p>
+      <p>Author runnable HVE Squad examples in <code>pre &gt; code</code> blocks using the canonical slash-command syntax. The shared renderer uses that source to create prefix-free VS Code, CLI, and App requests with the matching agent, preserving arguments and multiline text. Keep shell commands and GitHub comment triggers separate; mark explicit host-comparison references with <code>data-host-reference</code>. Without JavaScript, the original canonical examples remain readable.</p>
       <pre><code>npm ci
 npm run docs:test
 npm run docs:build
@@ -123,7 +127,7 @@ apm run install-sync</code></pre>
         <li><code>apm run sync-deps</code></li>
         <li><code>apm lock</code></li>
         <li><code>apm pack</code> (optional)</li>
-        <li><code>apm run release-prep</code> — or run the <strong>Release Prep</strong> workflow, which does the same thing and pushes.</li>
+        <li><code>apm run release-prep</code> — or run the <strong>Release Prep</strong> workflow, which opens a reviewed release pull request and triggers the tag/release once merged.</li>
       </ol>
 
       <h2>How dependency generation works</h2>
@@ -148,8 +152,8 @@ flowchart TD
     A["Cron 06:00 UTC<br/>sync-hve-core.yml"] --> B["Get-HveCoreCastDelta.ps1<br/>pinned SHA vs hve-core main"]
     B --> C{"Does squad-src still reference<br/>a removed or un-dispatched agent?"}
 
-    C -- "no (mechanical)" --> D["Bump pin + assemble release<br/>from .changes fragments + push"]
-    D --> E["release.yml<br/>tag + GitHub Release"]
+    C -- "no (mechanical)" --> D["Bump pin + change fragment<br/>propose sync PR"]
+    D --> E["Merge PR -> preview.yml<br/>rolling pre-release"]
 
     C -- "yes (breaking)" --> F["Open issue labeled squad/auto<br/>body = full adaptation brief"]
     F --> G["squad-watch.yml<br/>fires on the label"]
@@ -170,10 +174,11 @@ flowchart TD
 
       <h3>Path 1 &mdash; mechanical (no cast change)</h3>
       <p>
-        <code>sync-hve-core.yml</code> moves the pinned SHA and records the move as a change fragment,
-        exactly as a contributor would &mdash; so the pin move queues alongside whatever contributors
-        merged that day and ships with the next release someone cuts, instead of cutting a release of
-        its own every morning. It pushes and stops there. One addition to the older behavior: it runs
+        <code>sync-hve-core.yml</code> moves the pinned SHA, validates Tier 0 conformance, records the
+        move as a change fragment, and opens or updates a pull request on
+        <code>chore/sync-hve-core</code> &mdash; so the pin move is reviewed like any contribution,
+        queues alongside whatever merged that day, and ships with the next release someone cuts rather
+        than cutting a release of its own every morning. One addition to the older behavior: it runs
         the cast-delta script as a <strong>guard</strong> first. A SHA move cannot repoint a roster row,
         and shipping it anyway releases a squad whose roles resolve to nothing &mdash; which is exactly
         what happened in <code>0.10.11</code>.
@@ -188,10 +193,12 @@ flowchart TD
         comments rather than opening a duplicate.
       </p>
       <p>
-        <code>squad-watch.yml</code> fires on that label, runs the squad headlessly in sub-squad
+        <code>squad-watch.yml</code> fires on that label, runs the full Research, Plan, Council when applicable, Implement, and Review pipeline headlessly in sub-squad
         <code>issue-&lt;N&gt;</code>, and opens a <strong>draft</strong> PR that closes the issue.
-        Labeling that PR <code>squad/review</code> fires the same workflow again in sub-squad
-        <code>pr-&lt;N&gt;</code>, routed to the tester role, which posts its findings as PR comments.
+        A Conversation-tab <code>/squad</code> comment, or the <code>squad/review</code> label, joins
+        <code>issue-&lt;N&gt;</code> only when the pull request is same-repo, open, on
+        <code>squad/issue-&lt;N&gt;</code>, authored by <code>github-actions[bot]</code>, and the actor is authorized. Otherwise it stays in
+        <code>pr-&lt;N&gt;</code>. Review events are not subscribed.
       </p>
       <p>
         The adaptation PR carries a <code>.changes/unreleased/</code> fragment with
@@ -220,7 +227,7 @@ flowchart TD
       <ul>
         <li><strong>Stage transitions</strong> &mdash; proceed on artifact evidence, as in any autopilot run.</li>
         <li><strong>Final-outcome validation</strong> &mdash; satisfied by the draft PR. The run compiles its outcome into the PR body instead of pausing.</li>
-        <li><strong>Risk Gate</strong> &mdash; recorded, not blocking. Findings land in <code>decisions.md</code> and are reproduced in the PR body under <em>Blocking findings</em>; the PR stays a draft.</li>
+        <li><strong>Risk Gate</strong> &mdash; recorded, not blocking. Findings land in <code>decisions.md</code>. The pull-request body and the source-thread comment render the validated, encoded <em>Open Questions</em> rows of the current run. That slice starts at the single <code>## Watch Profile Selection</code> heading whose run id equals the trusted resolver run id. Earlier runs are not current requirements. A later or duplicate selection heading fails closed and does not truncate the run. A heading inside a completed fence or DATA frame is quoted text, not a boundary. Every council verdict in the slice counts, with ids unique per verdict and finding: <code>COUNCIL-&lt;verdict-ordinal&gt;-&lt;ROLE&gt;-RISK</code> and <code>COUNCIL-&lt;verdict-ordinal&gt;-&lt;ROLE&gt;-COND-&lt;n&gt;</code>. A missing derivable id fails closed and posts only a generic failure. Cells neutralize bare domains and emails without changing <code>OQ-WATCH-###</code>, <code>decisions.md#anchor</code>, or <code>owner/repo#N</code>. The pull request stays a draft. A no-material numeric-thread comment renders the staging artifact only after member, run id, thread, stable ref, and trusted base match the resolver. A mismatch posts the generic failure and opens no pull request. Documented limitation: that comment evidence is produced in the same read-only job as the model. The resolver binding makes it self-consistent, but it is not independently attested; a job split would be needed. The pull-request body, review comment, and issue-less summary receive the same bindings.</li>
         <li>
           <strong>Impactful-Action Gate</strong> &mdash; <strong>never proceeds</strong>. No merge, no
           deploy, no force-push, no migration, no secret rotation, no write into a live issue tracker,
@@ -230,6 +237,94 @@ flowchart TD
         </li>
       </ul>
 
+      <h3>Watch delivery rules</h3>
+      <p>
+        Every Watch run selects exactly one canonical profile, and any packs, from the demand. It records
+        that selection and does not ask or notify when selection succeeds. Publication requires the
+        roster to equal that pinned catalog profile. A selected pack is not published until a trusted
+        installed-pack inventory exists (a documented fail-closed limitation, not an unchecked roster).
+        An incomplete profile or an extra role fails closed. Every roster carries the
+        <code>researcher</code>, <code>lead</code>, <code>developer</code>, <code>tester</code>, and
+        <code>scribe</code> spine. Packs add roles and never replace that spine. The roster is never
+        built by copying a sibling sub-squad. A council that does not apply stays visible as
+        <code>Dispatch Record: n/a</code>.
+      </p>
+      <p>
+        One complete delivery runs at a time per repository. Concurrency is <code>queue: max</code>:
+        at most 100 pending runs are retained, and retained runs start FIFO by queue-entry time. That
+        is a throughput trade-off. Authorization is unchanged. Issue, issue-comment, and
+        <code>workflow_dispatch</code> actors need repository permission <code>write</code>,
+        <code>maintain</code>, or <code>admin</code>. A registered approver without that permission
+        cannot start a run. The labeled same-repository pull-request path keeps its label gate. The
+        template schedule and push rules are unchanged.
+      </p>
+      <p>
+        Resolver outputs are <code>member</code>, <code>stableRef</code>, <code>sourceThread</code>,
+        <code>sourceThreadNumber</code>, <code>publicationBranch</code>, <code>existingPr</code>,
+        <code>sourceSha</code>, and <code>trustedBaseSha</code>. <code>trustedBaseSha</code> is
+        independent of <code>sourceSha</code>. The run prompt is built after pull-request-to-issue
+        mapping and resume recovery. For issue 42 and pull request 99, a mapped comment runs in
+        <code>issue-42</code> with stable thread ref <code>owner/repo#42</code>, where state stays.
+        Comments and review target thread 99, and publication uses <code>squad/issue-42</code> and
+        pull request 99 only. The Source allowlist uses that resolved thread,
+        <code>owner/repo#99</code>, not <code>owner/repo#42</code>. Publication checks out the pinned
+        <code>sourceSha</code> and fast-forwards only. Apply downloads the patch when the publication
+        branch already exists and the run has changes, including a tracking-only update, and rejects a
+        patch whose current-run <code>decisions.md</code> lacks a required question. Apply revalidation
+        keeps the resolver <code>stableRef</code> and <code>trustedBaseSha</code>, so a material draft
+        body renders the required questions rather than the generic failure. Existing
+        branch movement fails closed. An expected branch that disappeared after resolution is not
+        recreated. The workflow never force-pushes. <code>Closes #N</code> is written only for a
+        numeric issue reference.
+      </p>
+      <p>
+        Conversation <code>issue_comment</code> is the only supported pull-request comment channel.
+        Mapping fails closed when <code>.github/workflows/squad-watch.yml</code> is absent at
+        <code>trustedBaseSha</code>. Review and review-comment subscriptions are absent. A fork comment is rejected and falls back
+        to <code>pr-&lt;N&gt;</code> without widening authorization. A PAT or GitHub App publisher is
+        not <code>github-actions[bot]</code>, so mapping fails closed and the identity falls back to
+        <code>pr-&lt;N&gt;</code>. A duplicate completion suppresses only model interpretation.
+        Recovery recomputes profile and coverage, ignores a committed <code>questionsValid</code> flag,
+        and fails closed when committed <code>decisions.md</code> or <code>team.md</code> is missing, or
+        when the publication JSON disagrees with those files or the resolver binding (member, run, thread,
+        stable ref, and trusted base). Reconciliation is a fast-forward push, one draft pull request if none exists, and the
+        marker-delimited Open Questions block. A free-form
+        <code>workflow_dispatch</code> with no numeric thread writes the run summary instead of a
+        comment when that run has no material publication. A dispatch audit patch stages only
+        <code>.copilot-tracking/squad/watch-audit/&lt;member&gt;/watch-publication.json</code> and
+        <code>AUDIT.md</code>. The ignored member tree is not force-added. An interrupted same-event resume reuses
+        the persisted <code>receivedAt</code> and <code>runId</code>. A lost ephemeral checkpoint is a
+        fresh run. A new run with no material change and no existing deliverable creates no branch,
+        placeholder, or pull request. Tracking-only state may be committed only when a mapped branch
+        or pull request already exists. Questions are encoded before they reach GitHub. Invalid
+        coverage publishes only a generic failure string, not partial attacker-controlled cells. Review comments posted by a Watch review run are
+        validated and encoded by the same trusted renderer before they are posted: bare domains, emails, mentions, links,
+        closing keywords, and HTML are neutralized, and length is capped. Historical
+        <code>A-B-A</code> replay remains unsupported. No main merge, schema change, or new autonomy
+        ships.
+      </p>
+      <p>
+        <code>squad-watch.workflow.yml</code> mirrors the live <code>squad-watch.yml</code> split-job
+        boundary: read-only <code>interpret</code> with <code>persist-credentials: false</code>, runtime
+        zero-write verification of <code>COPILOT_GITHUB_TOKEN</code> before <code>--allow-all-tools</code>,
+        and separate write jobs. The repository checkout precedes the nested <code>.squad-trusted</code>
+        checkout, so a later root checkout does not delete the pinned helpers. Helpers resolve across
+        <code>.agents/skills/squad</code>, <code>.github/skills/squad</code>, and
+        <code>squad-src/.github/skills/squad</code> (or <code>SQUAD_WATCH_SKILL_ROOT</code>) and are
+        imported only after <code>git show &lt;trustedBaseSha&gt;</code> verifies the verifier and the
+        helper files, including that <code>.squad-trusted</code> HEAD matches that SHA.
+        Impactful-Action Gates and injection safety are unchanged. The template does not claim the
+        live issue-to-PR mapping. When that mapping does not apply, the live workflow fails closed to
+        <code>pr-&lt;N&gt;</code>.
+      </p>
+      <p>
+        In this repository's live <code>squad-watch.yml</code>, <code>interpret</code> additionally runs
+        Copilot inside <code>github/gh-aw-firewall</code> (<code>awf</code>) so
+        <code>COPILOT_GITHUB_TOKEN</code> stays in the isolated <code>api-proxy</code> sidecar outside the
+        agent container and Squid enforces outbound domain allowlisting, while both workflows scrub and
+        symlink-filter failure diagnostics before artifact upload.
+      </p>
+
       <p>Run the delta check yourself at any time:</p>
       <pre><code>./scripts/Get-HveCoreCastDelta.ps1
 ./scripts/Get-HveCoreCastDelta.ps1 -ToRef main -MarkdownPath delta.md</code></pre>
@@ -237,10 +332,16 @@ flowchart TD
       <h3>Configuration required</h3>
       <ul>
         <li>
-          <strong>Secrets.</strong> <code>COPILOT_GITHUB_TOKEN</code> &mdash; a fine-grained PAT with the
-          <em>Copilot Requests</em> permission (the built-in Actions token cannot authenticate Copilot).
-          <code>SYNC_DEPS_TOKEN</code> &mdash; used to read <code>microsoft/hve-core</code> and push the
-          release commit.
+          <strong>Environments, credentials, and variables.</strong> Bind headless Copilot jobs to the
+          <code>copilot-headless</code> environment with secret <code>COPILOT_GITHUB_TOKEN</code> &mdash;
+          a dedicated fine-grained PAT carrying only the <em>Copilot Requests</em> permission (zero
+          repository write; the built-in Actions token cannot authenticate Copilot) &mdash; and set
+          repository variable <code>SQUAD_WATCH_ENABLED</code> to <code>true</code> once ready for
+          event-driven Watch triggers. Bind sync and release jobs to the
+          <code>automation-governance</code> environment with GitHub App variable
+          <code>AUTOMATION_APP_CLIENT_ID</code> and secret <code>AUTOMATION_APP_PRIVATE_KEY</code> via
+          <code>actions/create-github-app-token</code> (or transitional fine-grained PAT secret
+          <code>SYNC_DEPS_TOKEN</code> before organization transfer).
         </li>
         <li>
           <strong>Labels.</strong> Create <code>squad/auto</code> and <code>squad/review</code>. These are
@@ -252,15 +353,14 @@ flowchart TD
           <code>gh pr create</code> returns 403 and the run finishes with a branch but no PR.
         </li>
         <li>
-          <strong>Branch ruleset on <code>main</code>:</strong> requires a pull request, with the
-          repository-admin role as the only bypass actor. This is the third enforcement layer under
-          the Impactful-Action Gate, and the one most often left half-configured &mdash; a rule that
-          only forbids force pushes and deletions does <em>not</em> stop a direct push to
-          <code>main</code>, it limits the damage of one. The admin bypass is what separates the two
-          automations: <code>sync-hve-core.yml</code> pushes with a maintainer PAT and passes
-          straight through, while Watch Mode pushes as <code>github-actions[bot]</code>, which holds
-          no repository role and cannot reach <code>main</code> at all. Required approvals are set to
-          zero on purpose, so a solo maintainer is not locked out of merging their own pull request.
+          <strong>Branch ruleset on <code>main</code>:</strong> requires a pull request with no
+          personal-PAT bypass required for automation. This is the third enforcement layer under the
+          Impactful-Action Gate, and the one most often left half-configured &mdash; a rule that only
+          forbids force pushes and deletions does <em>not</em> stop a direct push to <code>main</code>,
+          it limits the damage of one. Because <code>sync-hve-core.yml</code>,
+          <code>release-prep.yml</code>, <code>sync-model-benchmarks.yml</code>, and Watch Mode
+          (<code>github-actions[bot]</code>) all open pull requests rather than pushing directly to
+          <code>main</code>, every change reaches <code>main</code> through pull-request checks.
         </li>
         <li>
           <strong>Model pin (already set).</strong> <code>squad-watch.yml</code> passes
@@ -287,7 +387,12 @@ flowchart TD
       <p>
         Run <strong>Squad Watch</strong> from the Actions tab with an <code>issue_number</code> input to
         exercise the whole path against an issue you wrote yourself, without waiting for an upstream
-        change. Do this once before relying on the cron.
+        change. Do this once before relying on the cron. The same form offers optional
+        <code>depth</code> (<code>quick</code> for a faster run), <code>routing</code>
+        (<code>off</code>, <code>ranked</code>, <code>economy</code>), <code>economy_consent</code> and
+        <code>profile</code> inputs; leaving them at <code>default</code> (<code>keep</code> for
+        <code>profile</code>) keeps the workflow's committed values. Watch does
+        not run the full Tier 0 suite &mdash; run it in CI or locally with the shard runner.
       </p>
 
       <h3>Reviewing an adaptation PR</h3>
@@ -350,11 +455,16 @@ flowchart TD
 # Valid state plus adversarial transition fixtures
 ./tests/tier1/Invoke-Tier1Tests.ps1 -SelfCheck -Output Normal
 
+# The same cases spread over worker processes, as CI runs them
+./tests/tier1/Invoke-Tier1Tests.ps1 -SelfCheck -Output Normal -Parallel 4
+
 # Whitespace and malformed patch output
 git diff --check</code></pre>
       <p>
         Tier 1 live runs invoke models and are a separate manual measurement lane. The self-check above
         is deterministic and proves each contract assertion can reject a deliberately corrupted tree.
+        <code>-Parallel</code> deals the self-check out to worker processes. The runner discovers every case
+        first and fails unless each one ran exactly once, so it changes scheduling, not coverage.
         A behavior change also needs a new file under <code>.changes/unreleased/</code>; editing an
         existing fragment does not satisfy the pull-request gate for a separate pull request.
       </p>
@@ -513,8 +623,9 @@ git diff --check</code></pre>
         <li>Editing <code>CHANGELOG.md</code> in a pull request fails the check.</li>
         <li>Changing the <code>version:</code> line in <code>apm.yml</code> fails the check.</li>
         <li>
-          Moving the <code>microsoft/hve-core</code> pin fails the check, unless the branch is a Watch
-          Mode adaptation branch (<code>squad/issue-*</code>). Editing <code>dependencies:</code> is
+          Moving the <code>microsoft/hve-core</code> pin fails the check, unless the pull request is a
+          same-repository Watch Mode adaptation branch (<code>squad/issue-*</code>) or mechanical sync
+          branch (<code>chore/sync-hve-core</code>). Editing <code>dependencies:</code> is
           otherwise fine &mdash; a contributor adding a skill has to, via <code>apm run sync-deps</code>,
           which stays on the current pin by default. The check is the backstop for an explicit
           <code>-Ref main</code> that skips the cast-delta guard; its message names the SHA to pass
@@ -578,11 +689,27 @@ pwsh -File scripts/Invoke-ReleasePrep.ps1 -Version 1.0.0        # exact number, 
         <strong>Releases are cut by hand.</strong> Merging a pull request that carries a fragment
         pushes it to <code>.changes/unreleased/</code> on <code>main</code> and releases nothing.
         Nothing releases on a timer either. When the pending batch is ready, you dispatch
-        <strong>Release Prep</strong>, which ships it as one version: it resolves the level, prepends
+        <strong>Release Prep</strong>, which assembles one version: it resolves the level, prepends
         the CHANGELOG section with the consumer-install block and the link reference, writes
         <code>version:</code> into <code>apm.yml</code>, deletes the fragments it consumed, commits
-        <code>chore(release): X.Y.Z</code>, dispatches <code>release.yml</code> to cut the tag and the
-        GitHub Release, and retires the pre-release.
+        <code>chore(release): X.Y.Z</code> on <code>chore/release-prep</code>, and opens a reviewed
+        pull request; merging that pull request automatically dispatches <code>release.yml</code> to
+        cut the tag and the GitHub Release and retires the pre-release.
+      </p>
+      <p>
+        <strong>Plugin publication is a second manual decision.</strong> Dispatch
+        <strong>Publish Plugin</strong> with channel <code>stable</code> after the release is verified;
+        leaving <code>ref</code> blank selects the highest stable tag and updates this repository's
+        <code>plugin</code> branch. Use channel <code>preview</code> to publish the rolling pre-release
+        into <code>plugin-preview</code>. The workflow checks out the HVE Core commit pinned by the
+        selected ref, bundles its declared components, removes MCP configuration, and refuses changed
+        content with an unchanged plugin version.
+      </p>
+      <p>
+        <strong>Plugin Conformance</strong> builds the real pinned payload on Windows, macOS, and
+        Linux and checks the VS Code, CLI, and App package contracts. Before stable publication,
+        also perform one current-client smoke test in each host: the workflow proves portable
+        packaging, not authenticated desktop UI behavior.
       </p>
       <p>
         That makes releasing a judgement about readiness rather than a date. A quick fix ships as soon

@@ -5,6 +5,10 @@ user-invocable: false
 agents:
   - Squad Researcher
 ---
+<!--
+Copyright (c) Microsoft Corporation.
+Licensed under the MIT license.
+-->
 
 # Squad IaC Author
 

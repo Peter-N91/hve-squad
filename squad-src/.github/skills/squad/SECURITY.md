@@ -3,10 +3,14 @@ title: Squad Skill Security Model
 description: STRIDE model for local squad routing, connector file exchanges, and state persistence.
 author: microsoft/hve-core
 ms.topic: reference
-ms.date: 2026-10-28
+ms.date: 2026-11-02
 keywords: [squad, connectors, security, STRIDE]
 estimated_reading_time: 6
 ---
+<!--
+Copyright (c) Microsoft Corporation.
+Licensed under the MIT license.
+-->
 <!-- markdownlint-disable-file -->
 # Squad Skill Security Model
 
@@ -21,8 +25,12 @@ The runtime comprises `Resolve-SquadConnectorDispatch.ps1`,
 `Get-SquadFederationInitPlan.ps1`, `Initialize-SquadFederation.ps1`,
 `Get-SquadRosterExpansionPlan.ps1`, `Expand-SquadRoster.ps1`,
 `Write-SquadHandoff.ps1`, `Write-SquadVerdict.ps1`, `Measure-SquadLedger.ps1`,
-the shared `SquadUsage.psm1`, `Set-SquadCostPreflight.ps1`, and
-`Initialize-SquadConsumptionRates.ps1`.
+the shared `SquadUsage.psm1`, `Set-SquadCostPreflight.ps1`,
+`Initialize-SquadConsumptionRates.ps1`, the allowlisted maintenance entrypoint
+`Invoke-SquadDoctor.ps1`, and the read-only governance report
+renderer `New-SquadGovernanceReport.ps1` with its `SquadGovernanceReport.*` modules,
+and the read-only FinOps monetary valuation engine `Measure-SquadBenefitValue.ps1`
+(`SquadBenefitValuation.psm1`), which refuses symbolic links and writes inside `.copilot-tracking/squad/`.
 The two buckets below cover configuration/dispatch and file exchange/persistence.
 Each enumerates all six STRIDE categories. Agent instructions are procedural
 controls, not a sandbox or a substitute for host filesystem permissions.
@@ -63,6 +71,13 @@ Different filesystem permissions or unattended policies change the risk.
 ### Components
 
 * The coordinator classifies work and retains governance and admission.
+* Doctor checks local runtime/state and explicitly supplied host agent inventory.
+  Its only repair calls the existing rate seeder with confirmed approval under
+  the shared handoff lock, preserving a content-hash backup and rechecking the
+  result. Paths reject repository escapes and links. Unknown faults remain
+  blockers; no commands are derived from issue text, and no installation,
+  history, roster, or gate repair is attempted. Host inventory is an
+  operator-supplied observation, not authenticated evidence of execution.
 * Connector/model resolvers and the dispatch brief read roster, manifests,
   packaged model metadata, and local availability information.
 * The dispatch planner resolves only selected role units. Its routing writer may
@@ -96,17 +111,34 @@ Different filesystem permissions or unattended policies change the risk.
   agents up through host parent identities. `Measure-SquadLedger.ps1` stores only
   closed-schema per-session aggregates, hashed accounting identities, and ordered
   history coverage in `consumption-sessions.json`; repeated writes replace one
-  native session and cross-session merges reject overlaps or history-prefix drift.
-  If the journal is absent, bootstrap reads only repository-matching local logs and
-  accepts them only when complete native event windows uniquely cover every metered
-  history timestamp; overlapping or missing coverage fails closed. Only the selected
-  active session receives a bounded open-tail allowance while its outer tool completion
-  is pending. A later session revalidates and refreshes the latest cached native session
-  from the completed log before appending. JSON timestamps remain strings during digest
+  native session, a cross-session merge counts a request that two logs repeat once,
+  and history-prefix drift is rejected.
+  Session discovery reads only repository-matching local logs (the session the host
+  names in `COPILOT_AGENT_SESSION_ID` is preferred when its folder is the repository or
+  a parent or child of it, an accepted session is looked up by id only as a plain
+  folder name under the session-state root whose folder relates to the repository, and
+  an earlier session is adopted for older history only when its own log shows the
+  entry more convincingly than the running one, which takes a shell call that runs a
+  history writer for this squad root, never a view, search, or ledger check, or
+  another root's hand-off); a log that
+  cannot be trusted is skipped and the last accepted snapshot is kept, never replaced
+  by a guess. Only the selected active session receives a bounded open-tail allowance
+  while its outer tool completion is pending, and an unparseable final log line is
+  ignored. A later write revalidates and refreshes the cached native sessions from
+  their logs before appending. JSON timestamps remain strings during digest
   validation, avoiding culture-dependent replay drift.
   The ledger, run totals, and journal publish as one rollback-capable transaction.
   These helpers never emit prompts, responses, tool arguments, or raw log lines;
   host logs and the journal are not connector identity evidence.
+* The governance report renderer reads squad state, the ledger, and the session
+  journal strictly read-only and treats every value as untrusted text: content is
+  HTML-escaped, and the output carries no script, remote reference, or live link.
+  It does not follow linked files or directories out of the squad root, caps the
+  size of each file it reads, and writes exactly one local file atomically,
+  refusing URLs, network shares, directories, and any path inside the squad state
+  tree, including one reached through a link. Output is a pure function of the
+  state and its as-of date. It never writes, repairs, or re-prices state; its
+  derived figures (including ROI) are display-only arithmetic over ledger values.
 * The promotion planner writes only a transport plan outside squad state. It hashes
   the complete plain-squad tree and every candidate directory. The promotion writer
   requires that exact plan hash plus an exhaustive relocate/keep partition, stages
@@ -229,7 +261,11 @@ records require complete status and stable host accounting identities. Cumulativ
 accounting additionally requires a unique native session id, non-overlapping hashed
 request identities, a closed cache schema, and cached history identities that remain
 an ordered prefix of current append-only history. Any mismatch keeps the journal
-unchanged and returns to the all-history estimator.
+unchanged and returns to the all-history estimator. The one exception is a journal
+that is not a JSON object (cut short, emptied by a crash, merge markers): nothing in
+it can be trusted or edited back, so a write rebuilds it from the native logs and
+keeps its bytes as `consumption-sessions.json.unreadable-<digest>` in the same
+rollback-capable transaction, while a printed ledger leaves it untouched.
 
 Native role attribution does not trust a package-qualified host label by itself.
 The raw `agentName`, `agentDisplayName`, and final namespace/path segment may resolve
@@ -321,6 +357,11 @@ routing, decisions, state, accounting, rates, notifications, history, and
 optional federation registry hashes. It refuses stale baselines and restores
 only files still matching its planned output, so it cannot silently overwrite a
 concurrent writer or reprice an exact ledger.
+Doctor uses the same root lock for its allowlisted rate-seeder call and checks
+repository containment and links for every target/backup. Content-hash backups
+retain the original bytes; malformed operator rows are not dropped. It cannot
+repair history or approvals. A filesystem writer outside the locking protocol
+can still race these checks; host permissions remain the security boundary.
 
 ### Repudiation
 
@@ -340,6 +381,9 @@ rejects incomplete records without rewriting history, ledger or state. Appending
 a correction note does not supersede an invalid record. Scribe append-only and
 native-model attribution rules are procedural controls, not host-enforced
 immutability or proof of which model executed.
+Doctor returns explicit repair receipts and backup paths without appending
+fictional worker history. Those receipts and local backups are operator-editable,
+not an immutable audit log.
 
 ### Information Disclosure
 
@@ -373,6 +417,7 @@ least-privilege worktrees and isolation outside the prompt layer.
 | Sensitive report/log disclosure | Deployment-dependent | High | Medium | Data minimization, content checks, and host ACLs required |
 | Stale or tampered federation promotion plan | Low | High | Low | Exact plan SHA-256, full-tree digests, explicit candidate partition, linked-path refusal, locked revalidation and staged publish |
 | Partial or conflicting federation initialization/expansion | Low | High | Low | Exact payload SHA-256, fresh/existing root snapshot, isolated parallel member staging, all-member receipt gate, root CAS lock, additive publish and owned-hash rollback |
+| Unapproved or conflicting Doctor repair | Low | Medium | Low | Explicit confirmation, fixed seeder allowlist, shared writer lock, content-hash backup and post-repair checks; out-of-protocol filesystem races remain possible |
 
 ## Enterprise Readiness Gaps
 

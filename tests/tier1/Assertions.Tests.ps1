@@ -1,5 +1,6 @@
 #Requires -Modules Pester
-# Copyright (c) 2026 Microsoft Corporation. All rights reserved.
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT license.
 # SPDX-License-Identifier: MIT
 
 # Mutation controls: each case breaks exactly one rule and requires the contract to

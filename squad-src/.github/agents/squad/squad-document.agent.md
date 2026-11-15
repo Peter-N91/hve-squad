@@ -5,6 +5,10 @@ user-invocable: true
 disable-model-invocation: false
 argument-hint: "request=... [format={md|html|pdf|docx}] [outputPath=<path>] [squad=<name>]"
 ---
+<!--
+Copyright (c) Microsoft Corporation.
+Licensed under the MIT license.
+-->
 
 # Squad Document
 

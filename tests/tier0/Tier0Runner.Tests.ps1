@@ -1,5 +1,6 @@
 #Requires -Modules Pester
-# Copyright (c) 2026 Microsoft Corporation. All rights reserved.
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT license.
 # SPDX-License-Identifier: MIT
 
 # AI cost: none; checks exact-once selection and runs only tiny local runner fixtures.
@@ -124,12 +125,13 @@ Describe 'CI-03 Exact-once Tier 0 selection' {
     It 'keeps repository and installed-package release selections disjoint and complete' {
         $all = Get-PlanKey @(Get-Tier0TestPlan -Mode Source)
         $repository = @(Get-Tier0TestPlan -Mode Source -Scope Repository)
-        $package = @(Get-Tier0TestPlan -Mode Installed -Scope Package)
+        $package = @(Get-Tier0TestPlan -Mode Source -Scope Package)
         $combined = Get-PlanKey @($repository + $package)
         @($combined | Select-Object -Unique).Count | Should -Be $combined.Count
         @(Compare-Object $all $combined).Count | Should -Be 0
         @($repository.Shard | Select-Object -Unique | Sort-Object) | Should -Be @('Contracts', 'Coordinator')
-        @(Get-Tier0TestPlan -Mode Installed).Count | Should -Be 20
+        $installed = Get-PlanKey @(Get-Tier0TestPlan -Mode Installed)
+        @(Compare-Object $installed (Get-PlanKey $package)).Count | Should -Be 0
     }
 
     It 'rejects repository-only selection without a source checkout' {

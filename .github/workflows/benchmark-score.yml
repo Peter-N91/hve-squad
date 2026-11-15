@@ -1,3 +1,5 @@
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT license.
 name: Benchmark Score
 
 # Shows how the benchmark score saved in a pull request (benchmarks/efficiency/score.json)

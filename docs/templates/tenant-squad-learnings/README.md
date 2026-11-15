@@ -2,6 +2,10 @@
 title: Tenant-internal squad learnings scaffold
 description: Copyable scaffold and runbook for hosting a private tenant-internal squad learnings playbook as a versioned APM dependency.
 ---
+<!--
+Copyright (c) Microsoft Corporation.
+Licensed under the MIT license.
+-->
 
 ## Overview
 

@@ -1,3 +1,5 @@
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT license.
 """Verify the python-diagrams toolchain is installed and rendering.
 
 Checks two things the skill depends on:

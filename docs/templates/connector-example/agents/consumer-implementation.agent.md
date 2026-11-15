@@ -4,6 +4,10 @@ description: "Implement an approved bounded change using consumer engineering sk
 user-invocable: true
 agents: []
 ---
+<!--
+Copyright (c) Microsoft Corporation.
+Licensed under the MIT license.
+-->
 
 # Consumer Implementation Agent
 

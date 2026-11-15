@@ -1,3 +1,7 @@
+<!--
+Copyright (c) Microsoft Corporation.
+Licensed under the MIT license.
+-->
 # Adapt `{{EXISTING_PATH}}` for HVE Squad
 
 The existing implementation remains consumer-owned and was not modified.

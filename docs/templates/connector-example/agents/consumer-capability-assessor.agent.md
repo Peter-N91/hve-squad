@@ -4,6 +4,10 @@ description: "Assess GCP architecture, .NET practices, or data quality as a cons
 user-invocable: true
 agents: []
 ---
+<!--
+Copyright (c) Microsoft Corporation.
+Licensed under the MIT license.
+-->
 
 # Consumer Capability Assessor
 

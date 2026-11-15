@@ -1,4 +1,8 @@
 <!DOCTYPE html>
+<!--
+Copyright (c) Microsoft Corporation.
+Licensed under the MIT license.
+-->
 <html lang="fr">
 <head>
   <meta charset="UTF-8" />
@@ -47,8 +51,9 @@
   <main class="content">
     <div class="container">
       <h2>Appeler le coordinateur</h2>
-      <p>Adressez vos demandes dans la conversation de l'agent Squad correspondant, et non dans le terminal de votre système. Dans Copilot Harness pour VS Code, choisissez l'agent dans le sélecteur d'agents ; la CLI et l'application utilisent aussi l'agent correspondant. Consultez <a href="getting-started.html">Bien démarrer</a> pour l'installation et votre première conversation.</p>
+      <p>Adressez vos demandes dans la conversation de l'agent HVE Squad correspondant, et non dans le terminal de votre système. Dans Copilot Harness pour VS Code, choisissez l'agent dans le sélecteur d'agents ; la CLI et l'application utilisent aussi l'agent correspondant. Consultez <a href="getting-started.html">Bien démarrer</a> pour l'installation et votre première conversation.</p>
       <p>Pas encore d'initialisation, ou vous hésitez sur la marche à suivre ? Sélectionnez l'agent de conseil <strong>Squad Coach</strong> dans VS Code, la CLI ou l'application. Il lit le code et la documentation actuels et fournit un parcours détaillé prêt à copier sans modifier l'état. Consultez <a href="getting-started.html#chat-with-the-squad-coach">le guide du Coach</a>.</p>
+      <p data-release-change="20261114-hve-squad-studio-canvas">Vous préférez un espace visuel sans syntaxe de commande ? Dans l'application GitHub Copilot, ouvrez <a href="getting-started.html#use-hve-squad-studio">HVE Squad Studio</a> (<code>hve-squad-studio</code>) depuis le panneau Canvas ou envoyez <code>Open HVE Squad Studio</code> dans la conversation pour choisir un objectif, déposer des documents et consulter vos livrables via des cartes guidées.</p>
       <pre><code>/squad request="add input validation to the login form"</code></pre>
 
       <div class="callout">
@@ -68,7 +73,7 @@
           propose un profil recommandé avant toute création.
         </li>
         <li>
-          <code>pack=power-platform</code>, <code>pack=m365-copilot</code>, <code>pack=aws</code> ou <code data-release-change="20261008-foundry-agentic-pack">pack=foundry</code>
+          <code>pack=power-platform</code>, <code>pack=m365-copilot</code>, <code>pack=aws</code>, <code data-release-change="20261008-foundry-agentic-pack">pack=foundry</code>, <code>pack=fabric</code>, <code>pack=dotnet</code>, <code>pack=aks</code> ou <code>pack=azure-functions</code>
           &mdash; ajoute au profil
           les rôles spécialisés, les consignes ciblées ou les deux pour un domaine technologique. Un pack ne remplace jamais le profil, et vous
           pouvez en appliquer plusieurs, séparés par des virgules. Voir <em>Packs</em> ci-dessous.
@@ -649,9 +654,9 @@ admission cost USD = projected cost USD × 3.0</code></pre>
         <code>/squad</code>, c'est un événement du dépôt qui lance l'exécution. Le modèle fourni transforme une
         <strong>nouvelle issue étiquetée <code>squad/auto</code></strong> en exécution sans interface
         <code>mode=autopilot</code> qui ouvre une <strong>pull request en brouillon</strong> fermant
-        l'issue. Il réutilise tout ce que vous avez déjà configuré &mdash; le pipeline autopilot,
-        le conseil et le canal d'approbation <code>github-issue</code> &mdash; de sorte qu'un point de contrôle suspend toujours le travail en attendant
-        votre approbation depuis un téléphone.
+        l'issue. Il réutilise le pipeline autopilot,
+        le conseil et le canal d'approbation <code>github-issue</code>. Les Impactful-Action Gates n'autorisent toujours pas
+        la poursuite sans présence humaine.
       </p>
       <div class="mermaid">
 flowchart TD
@@ -669,8 +674,8 @@ flowchart TD
       <p>
         Le titre et le corps de l'issue sont toujours traités comme des <strong>données, jamais comme des instructions</strong> :
         l'exécution les lit comme une description de la tâche, jamais comme des commandes modifiant la composition de l'équipe, le routage,
-        les contrôles ou les approbations. Elle n'ouvre qu'une PR en brouillon &mdash; elle ne fusionne jamais, ne force jamais de push et
-        ne déploie jamais ; ces actions restent soumises à une approbation humaine, renforcée par votre protection de branche.
+        les contrôles ou les approbations. La sécurité contre l'injection est inchangée. Elle n'ouvre qu'une PR en brouillon. Elle ne fusionne jamais, ne force jamais de push et
+        ne déploie jamais. Ces actions restent soumises à une approbation humaine, renforcée par votre protection de branche. La figure ci-dessus est le parcours d'une issue étiquetée.
       </p>
 
       <h3>Activer le mode Watch (une seule fois)</h3>
@@ -696,9 +701,9 @@ flowchart TD
           les PR plutôt que cette option.)
         </li>
         <li>
-          <strong>Installez le workflow de déclenchement.</strong> Copiez le workflow de référence
+          <strong>Installez le workflow de déclenchement.</strong> Copiez le workflow de référence à jobs séparés
           <code>.github/skills/squad/squad-watch.workflow.yml</code> vers
-          <code>.github/workflows/squad-watch.yml</code>, examinez-le, puis créez un commit.
+          <code>.github/workflows/squad-watch.yml</code>, vérifiez ses déclencheurs et le chemin de compétence pour votre dépôt, puis validez-le délibérément.
         </li>
         <li>
           <strong>Installez le dispositif de surveillance des approbations</strong> (si ce n'est pas déjà fait) pour que les approbations
@@ -706,11 +711,64 @@ flowchart TD
           <code>.github/workflows/squad-approval-watcher.yml</code>.
         </li>
         <li>
-          <strong>Étiquetez une issue <code>squad/auto</code></strong> pour lancer une exécution. Seul un collaborateur
-          du dépôt disposant d'un accès en écriture peut la déclencher ; une étiquette posée sans autorisation est ignorée et signalée
+          <strong>Étiquetez une issue <code>squad/auto</code></strong> pour lancer une exécution. Seul un acteur disposant
+          de la permission de dépôt write, maintain ou admin peut la déclencher. Un approbateur enregistré sans
+          cette permission ne peut pas lancer d'exécution. Une étiquette posée sans autorisation est ignorée et signalée
           dans l'issue.
         </li>
       </ol>
+
+      <h3>Paramètres d'exécution : depth, routing et accord Economy</h3>
+      <p>
+        Le workflow Watch propose quatre paramètres facultatifs. Ils proviennent du workflow lui-même, jamais
+        du texte d'une issue : une issue ne peut donc pas les modifier. Définissez la valeur par défaut validée dans le bloc
+        <code>env:</code> du workflow, ou remplacez-la pour une exécution manuelle via le formulaire
+        <strong>Run workflow</strong> de l'onglet Actions (<code>default</code> conserve la valeur validée).
+      </p>
+      <table>
+        <thead>
+          <tr><th>Paramètre</th><th>Valeurs</th><th>Par défaut</th><th>Effet</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>depth</code> (<code>SQUAD_DEPTH</code>)</td>
+            <td><code>standard</code>, <code>quick</code></td>
+            <td><code>standard</code></td>
+            <td><code>quick</code> réduit la recherche à un cycle et deux voies, planifie une seule approche et garde le diff minimal. Il ne modifie jamais un gate.</td>
+          </tr>
+          <tr>
+            <td><code>routing</code> (<code>SQUAD_ROUTING</code>)</td>
+            <td><code>off</code>, <code>ranked</code>, <code>economy</code></td>
+            <td><code>off</code></td>
+            <td>Mode de choix du modèle de chaque rôle. <code>off</code> conserve les modèles par défaut de l'hôte.</td>
+          </tr>
+          <tr>
+            <td><code>economy_consent</code> (<code>SQUAD_ECONOMY_CONSENT</code>)</td>
+            <td><code>true</code>, <code>false</code></td>
+            <td><code>false</code></td>
+            <td>Requis pour <code>routing=economy</code>. Sans lui, le workflow revient à <code>off</code> et l'indique dans le journal d'exécution.</td>
+          </tr>
+          <tr>
+            <td><code>profile</code> (<code>SQUAD_PROFILE</code>)</td>
+            <td><code>default</code>, <code>auto</code> ou tout profil du catalogue</td>
+            <td><code>default</code></td>
+            <td>L'exécution utilise exactement ce profil du catalogue, sans pack ni rôle ajouté. <code>auto</code> laisse la squad choisir un profil du catalogue. Sur l'entrée <code>profile</code>, <code>keep</code> utilise la valeur validée.</td>
+          </tr>
+        </tbody>
+      </table>
+      <p>
+        Définir <code>economy_consent</code> sur <code>true</code> revient à accepter le compromis Economy
+        pour cette exécution ou pour la valeur par défaut du dépôt. Le coordinateur le consigne comme
+        <code>## Economy Mode Accepted</code> avec <code>Scope: all-roles</code>. Economy ne change que le choix du
+        modèle ; il n'affaiblit jamais un gate ni une revue.
+      </p>
+      <p><strong>Garder les exécutions Watch rapides.</strong></p>
+      <ul>
+        <li>Utilisez <code>depth=quick</code> pour les issues petites et bien délimitées.</li>
+        <li>Watch n'exécute pas la suite Tier 0 complète de ce dépôt ; l'exécution utilise des tests ciblés sur les fichiers modifiés et ne répète pas ceux qui sont inchangés. La CI exécute la suite complète sur la pull request.</li>
+        <li>L'équipe doit être exactement un profil du catalogue, sans pack ni rôle ajouté (paramètre <code>profile</code>, <code>default</code> sauf changement). Toute autre équipe échoue au gate de publication après la fin de l'exécution : une longue exécution peut donc se terminer sans livraison.</li>
+      </ul>
+
       <h3>Créer et appliquer l'étiquette <code>squad/auto</code></h3>
       <p>
         Le déclencheur est une étiquette GitHub ordinaire portant exactement le nom <code>squad/auto</code>. Créez-la une fois,
@@ -722,8 +780,8 @@ flowchart TD
 gh issue edit 42 --add-label squad/auto</code></pre>
       <p>
         L'étiquetage est le signal : l'événement <code>issues: [labeled]</code> se déclenche, le workflow vérifie que
-        l'étiquette est <code>squad/auto</code> et que la personne qui l'a posée dispose d'un accès en écriture, puis l'exécution commence. Une seule exécution
-        reste active par issue (réappliquer l'étiquette ne lance pas une seconde exécution concurrente). L'étiquette de déclenchement
+        l'étiquette est <code>squad/auto</code> et que la personne qui l'a posée a la permission write, maintain ou admin, puis l'exécution commence. Une seule livraison
+        complète s'exécute à la fois pour le dépôt. Réappliquer l'étiquette ne lance pas une interprétation concurrente du même événement déjà terminé. L'étiquette de déclenchement
         <code>squad/auto</code> est distincte des étiquettes d'approbation <code>squad/*</code>
         (<code>squad/approved</code>, <code>squad/stop</code>, &hellip;) que le dispositif de surveillance lit à un
         point de contrôle.
@@ -731,7 +789,8 @@ gh issue edit 42 --add-label squad/auto</code></pre>
       <p>
         Le mode Watch est facultatif et limité au dépôt pour le moment : une issue sans étiquette ne déclenche rien, et les pull
         requests provenant de forks ne lancent jamais d'exécution privilégiée (le workflow n'utilise jamais
-        <code>pull_request_target</code>).
+        <code>pull_request_target</code>). Un commentaire de fork est rejeté et retombe sur
+        <code>pr-&lt;N&gt;</code> sans élargir l'autorisation.
       </p>
 
       <h3>Facultatif : un modèle de nouvelle issue pour <code>squad/auto</code></h3>
@@ -752,8 +811,11 @@ gh issue edit 42 --add-label squad/auto</code></pre>
         Le contrat (<code>.github/instructions/squad/squad-watch-mode.instructions.md</code>) définit
         comment tout événement du dépôt devient une exécution routée : le déclencheur fournit uniquement le contenu de l'événement sous forme
         de données, et la table de routage du coordinateur choisit le rôle. Le workflow de référence fourni les relie
-        <strong>tous dans un seul fichier</strong> &mdash; une étape unique <em>Préparer l'exécution</em> autorise
-        l'acteur, applique les protections relatives aux forks et construit le prompt routé pour l'événement survenu.
+        <strong>tous dans un seul fichier</strong>. Une étape unique <em>Préparer l'exécution</em> autorise
+        l'acteur et applique les protections relatives aux forks, puis construit le prompt routé. L'ossature
+        ne revendique pas le rattachement actif d'une issue vers une pull request. Lorsque ce rattachement
+        ne s'applique pas, le workflow actif échoue de façon fermée vers <code>pr-&lt;N&gt;</code>. Un commentaire de pull request rattaché
+        s'exécute dans <code>issue-&lt;N&gt;</code>, avec l'issue comme référence de fil stable.
       </p>
       <table>
         <thead>
@@ -775,13 +837,13 @@ gh issue edit 42 --add-label squad/auto</code></pre>
           <tr>
             <td>Pull request</td>
             <td>Appliquer une étiquette <code>squad/review</code> à une PR du même dépôt</td>
-            <td>Oriente vers le rôle <code>tester</code> &rarr; commentaires de revue sur la PR</td>
+            <td>Rejoint la sous-squad de l'issue lorsque le workflow actif la rattache ; sinon échoue de façon fermée vers pr-&lt;N&gt; et le rôle <code>tester</code> publie des commentaires de revue sur la PR</td>
             <td>Oui</td>
           </tr>
           <tr>
             <td>Commande en commentaire</td>
-            <td>Commenter <code>/squad &lt;request&gt;</code> sur une issue ou une PR</td>
-            <td>Oriente selon la commande &rarr; résultat propre au rôle</td>
+            <td>Commentaire de l'onglet Conversation <code>/squad &lt;request&gt;</code> sur une issue ou une PR. Les événements de revue ne sont pas abonnés</td>
+            <td>Oriente selon la commande &rarr; résultat propre au rôle. Un commentaire de pull request rejoint la sous-squad de l'issue seulement lorsque le workflow actif le rattache ; sinon il échoue de façon fermée vers pr-&lt;N&gt;</td>
             <td>Oui</td>
           </tr>
           <tr>
@@ -856,8 +918,8 @@ on:
       <p>
         Les noms sont déterministes : vous savez donc toujours où chercher :
       </p>
-      <pre><code>issue-123                   # an issue, or a /squad comment on it
-pr-456                      # a PR review, or a /squad comment on the PR
+      <pre><code>      issue-123                   # an issue, a comment on it, or a mapped pull-request comment
+      pr-456                      # an unmapped pull-request review or comment
 sweep-2026-07-27            # a scheduled maintenance sweep
 push-release-2-0-a1b2c3d    # a push to release/2.0 at commit a1b2c3d
 dispatch-9911223344         # a free-form manual dispatch (workflow run id)</code></pre>
@@ -874,6 +936,140 @@ dispatch-9911223344         # a free-form manual dispatch (workflow run id)</cod
       <p>
         Ces sous-squads sont <strong>conservées</strong> &mdash; elles constituent la piste d'audit, et rien ne les supprime
         automatiquement. En archiver ou en supprimer une est une action délibérée que vous devez demander.
+      </p>
+
+      <h3>Ce que fait chaque exécution Watch</h3>
+      <p>
+        Chaque exécution du mode Watch parcourt le pipeline complet : recherche, plan, conseil lorsqu'il s'applique,
+        implémentation et revue. Un conseil qui ne s'applique pas reste visible sous
+        <code>Dispatch Record: n/a</code> avec une raison courte. Ce n'est pas une délégation inventée.
+      </p>
+      <p>
+        Les champs de fin sont des statuts machine : une étape terminée utilise <code>Result: complete</code>
+        et son entrée d'historique utilise <code>Outcome: Completed.</code>. Les descriptions, constats et
+        limites vont dans Notes, afin qu'une phrase comme « running a skill » ne soit pas prise pour un
+        travail inachevé. Le workflow actif du dépôt vérifie le profil, les questions et le cycle de vie
+        avant de nettoyer le runtime. En cas d'échec, il autorise une seule correction des enregistrements
+        dans la même session d'agent, puis vérifie à nouveau. Le staging final répète les contrôles avec
+        un validateur protégé par empreinte. Un travail inachevé bloque toujours la publication ; cette
+        reprise ne relance pas le pipeline. Le workflow actif comme le modèle de référence livré
+        intègrent ce précontrôle et cette reprise unique.
+      </p>
+      <p>
+        L'exécution sélectionne exactement un profil canonique, et les packs éventuels, à partir de la demande. Elle consigne
+        cette sélection et ne pose pas de question ni n'envoie de notification lorsque la sélection réussit. La publication exige que le
+        roster égale ce profil du catalogue épinglé. Un pack sélectionné n'est pas publié tant qu'un inventaire de confiance des packs installés
+        n'existe pas (limitation documentée qui échoue de façon fermée, et non un roster non contrôlé). Un profil incomplet ou un rôle en trop
+        échoue de façon fermée. Les escalades d'autorisation, de risque,
+        d'action à impact, de conseil, de collision et de rôle manquant restent visibles. Chaque roster
+        porte la colonne vertébrale <code>researcher</code>, <code>lead</code>, <code>developer</code>,
+        <code>tester</code> et <code>scribe</code>. Les packs ajoutent des rôles. Ils ne remplacent jamais la
+        colonne vertébrale, et le roster n'est jamais construit en copiant une sous-squad sœur.
+      </p>
+      <p>
+        Le corps de la pull request et le commentaire du fil source affichent les lignes Open Questions
+        validées et encodées de l'exécution en cours, et la pull request est toujours un brouillon. Cette tranche commence au seul titre
+        <code>## Watch Profile Selection</code> dont l'identifiant d'exécution égale celui du résolveur de confiance. Les exécutions
+        antérieures ne sont pas des exigences courantes. Un titre de sélection ultérieur ou en double échoue de façon fermée et ne tronque
+        pas l'exécution. Un titre dans une fence terminée ou un cadre DATA est du texte cité, pas une frontière. Chaque verdict de conseil
+        de la tranche compte, avec des identifiants uniques par verdict et par constat :
+        <code>COUNCIL-&lt;verdict-ordinal&gt;-&lt;ROLE&gt;-RISK</code> et
+        <code>COUNCIL-&lt;verdict-ordinal&gt;-&lt;ROLE&gt;-COND-&lt;n&gt;</code>. Un identifiant dérivable manquant échoue de façon fermée
+        et ne publie qu'un échec générique. Les cellules neutralisent les noms de domaine nus et les
+        e-mails sans modifier <code>OQ-WATCH-###</code>, <code>decisions.md#anchor</code> ni <code>owner/repo#N</code>. Un commentaire sans
+        changement matériel sur un fil numérique n'affiche l'artefact de staging qu'après correspondance du membre, de l'identifiant
+        d'exécution, du fil, de la référence stable et de la base de confiance avec le résolveur. Une discordance publie l'échec générique
+        et n'ouvre pas de pull request. Limitation documentée : cette preuve de commentaire est produite dans le même job en lecture seule
+        que le modèle. Le rattachement au résolveur la rend cohérente, mais elle n'est pas attestée de façon indépendante ; une séparation
+        de jobs serait nécessaire. Le corps de la pull request, le commentaire de revue et le résumé sans issue reçoivent les mêmes
+        rattachements. Un verdict
+        <code>Stop</code> arrête toujours l'implémentation. Les Impactful-Action Gates et la sécurité contre l'injection
+        sont inchangés : le texte de la charge utile reste des données, et l'exécution ne fusionne jamais, ne force jamais de push, ne déploie jamais et
+        n'écrit jamais dans un outil de suivi actif. Ce changement n'ajoute ni fusion vers main, ni changement de schéma, ni abonnement aux événements de revue,
+        ni nouvelle autonomie. La relecture historique <code>A-B-A</code> reste non prise en charge.
+      </p>
+
+      <h3>Une seule livraison à la fois</h3>
+      <p>
+        Une seule livraison Watch complète s'exécute à la fois par dépôt. La concurrence du workflow est
+        <code>queue: max</code> : elle conserve au plus 100 exécutions en attente, et les exécutions conservées démarrent en FIFO selon
+        l'heure d'entrée dans la file. C'est un compromis de débit, pas un verrou par issue. L'autorisation est
+        inchangée. Un acteur d'issue, de commentaire d'issue ou de <code>workflow_dispatch</code> doit avoir la permission de dépôt
+        <code>write</code>, <code>maintain</code> ou <code>admin</code>. Un approbateur enregistré sans l'une de ces permissions ne peut pas lancer une exécution. Une pull
+        request étiquetée du même dépôt conserve son contrôle par étiquette. Les règles de planification et de push du modèle restent inchangées.
+      </p>
+
+      <h3>Commentaires de pull request et publication</h3>
+      <p>
+        L'onglet Conversation est le seul canal de commentaire de pull request pris en charge. Un commentaire
+        <code>/squad</code> y rejoint la sous-squad d'issue <code>issue-&lt;N&gt;</code> seulement
+        lorsque la pull request est dans le même dépôt, ouverte, sur la branche
+        <code>squad/issue-&lt;N&gt;</code>, créée par <code>github-actions[bot]</code>, et que l'acteur
+        est autorisé. Sinon le commentaire reste dans <code>pr-&lt;N&gt;</code>. Le rattachement échoue aussi de façon fermée lorsque
+        <code>.github/workflows/squad-watch.yml</code> est absent au <code>trustedBaseSha</code>. Les événements de revue et
+        de commentaire de revue ne sont pas abonnés. Un commentaire sur une pull request de fork est rejeté et retombe
+        sur <code>pr-&lt;N&gt;</code> sans élargir l'autorisation. Un éditeur PAT ou GitHub App
+        n'est pas <code>github-actions[bot]</code>, donc le rattachement échoue de façon fermée et l'identité retombe
+        sur <code>pr-&lt;N&gt;</code>.
+      </p>
+      <p>
+        L'issue 42 et la pull request 99 sont l'exemple rattaché : l'exécution est dans <code>issue-42</code>,
+        avec la référence de fil stable <code>owner/repo#42</code>, où l'état reste. Les commentaires et la revue
+        ciblent le fil 99, et la publication utilise <code>squad/issue-42</code> et la pull request 99 seulement.
+        La liste d'autorisation Source utilise ce fil résolu, <code>owner/repo#99</code>, et non <code>owner/repo#42</code>.
+        Les sorties du résolveur sont
+        <code>member</code>, <code>stableRef</code>, <code>sourceThread</code>,
+        <code>sourceThreadNumber</code>, <code>publicationBranch</code>, <code>existingPr</code>,
+        <code>sourceSha</code> et <code>trustedBaseSha</code>. <code>trustedBaseSha</code> est
+        indépendant de <code>sourceSha</code>. La publication extrait le
+        <code>sourceSha</code> épinglé et n'avance qu'en fast-forward. Apply télécharge le correctif lorsque la branche de publication
+        existe déjà et que l'exécution a des changements, y compris une mise à jour de suivi seule, et rejette un correctif dont le <code>decisions.md</code> de l'exécution en cours n'a pas une question requise. La revérification d'Apply conserve le <code>stableRef</code> et le <code>trustedBaseSha</code> du résolveur, afin qu'un corps de brouillon matériel affiche les questions requises plutôt que l'échec générique. Si cette branche a bougé, la publication échoue
+        de façon fermée. Une branche attendue qui a disparu après la résolution n'est pas recréée. Le workflow ne force jamais de push.
+        <code>Closes #N</code> n'est écrit que pour une référence d'issue numérique.
+      </p>
+      <p>
+        Une complétion en double ne supprime que l'interprétation du modèle. La reprise recalcule le profil et la couverture,
+        ignore un drapeau <code>questionsValid</code> commité, et échoue de façon fermée si <code>decisions.md</code> ou
+        <code>team.md</code> commité manque, ou si le JSON de publication ne correspond pas à ces fichiers ou à l'identité du
+        résolveur (membre, exécution, fil, référence stable et base de confiance). La réconciliation est un push en fast-forward, une pull request en brouillon
+        s'il n'en existe pas, et le bloc Open Questions délimité par marqueurs. Un <code>workflow_dispatch</code> libre sans fil
+        numérique écrit le résumé de l'exécution au lieu d'un commentaire lorsqu'il n'y a pas de publication matérielle.
+        Un correctif d'audit de dispatch n'ajoute que
+        <code>.copilot-tracking/squad/watch-audit/&lt;member&gt;/watch-publication.json</code> et <code>AUDIT.md</code>.
+        L'arborescence de membre ignorée n'est pas ajoutée de force. Une reprise interrompue du même événement réutilise les
+        <code>receivedAt</code> et <code>runId</code> persistés. Un point de contrôle éphémère perdu est une exécution neuve.
+        Une nouvelle exécution sans changement matériel et sans livrable existant ne crée ni branche, ni espace réservé,
+        ni pull request. L'état de suivi seul ne peut être commité que lorsqu'une branche ou une pull
+        request déjà rattachée existe. Les questions sont encodées avant d'atteindre GitHub. Une couverture invalide ne publie
+        qu'une chaîne d'échec générique, pas de cellules partielles contrôlées par un attaquant. Les commentaires de revue publiés
+        par une exécution de revue Watch sont validés et encodés par le même moteur de rendu de confiance avant d'être
+        publiés : les noms de domaine nus, les e-mails, les mentions, les liens, les mots-clés de clôture et le HTML sont neutralisés, et la longueur est plafonnée.
+      </p>
+
+      <h3>Le workflow de référence livré</h3>
+      <p>
+        <code>squad-watch.workflow.yml</code> livre le même modèle de privilèges à jobs séparés :
+        <code>interpret</code> en lecture seule avec <code>persist-credentials: false</code>, vérification à l'exécution
+        de l'absence de droits d'écriture sur <code>COPILOT_GITHUB_TOKEN</code> avant <code>--allow-all-tools</code>,
+        et jobs d'écriture distincts pour l'application du patch, les commentaires de revue et les escalades. Vérifiez
+        les déclencheurs, les protections de branche et l'expiration du jeton avant de valider une copie. Le checkout
+        du dépôt précède le checkout imbriqué <code>.squad-trusted</code>, afin qu'un checkout racine ultérieur ne
+        supprime pas les aides épinglées. Les aides se résolvent dans
+        <code>.agents/skills/squad</code> et <code>.github/skills/squad</code> (ou
+        <code>SQUAD_WATCH_SKILL_ROOT</code>) et ne sont importées qu'après que
+        <code>git show &lt;trustedBaseSha&gt;</code> a vérifié le vérificateur et les fichiers d'aide,
+        y compris la correspondance du HEAD de <code>.squad-trusted</code> avec ce SHA.
+        Le modèle ne revendique pas le rattachement actif d'une issue vers une pull request. Lorsque ce
+        rattachement ne s'applique pas, le workflow actif échoue de façon fermée vers <code>pr-&lt;N&gt;</code>.
+      </p>
+      <p>
+        Comme le modèle consommateur évite par défaut d'exiger des privilèges de conteneur,
+        <code>--allow-all-tools</code> partage l'environnement de processus du runner avec
+        <code>COPILOT_GITHUB_TOKEN</code> (portée limitée au quota Copilot, aucun droit d'écriture sur le dépôt) : définissez une expiration courte
+        du jeton, nettoyez les journaux de diagnostic téléversés (intégré), ou encapsulez l'étape dans
+        <code>github/gh-aw-firewall</code> (<code>awf</code>) comme le
+        <code>squad-watch.yml</code> actif de ce dépôt afin qu'un sidecar <code>api-proxy</code> isolé détienne le jeton hors
+        du conteneur de l'agent.
       </p>
 
       <h2>Retrouver les détails d'un point de contrôle</h2>
@@ -1112,19 +1308,33 @@ flowchart TD
       <ul>
         <li><code>output=&lt;path&gt;</code> &mdash; où enregistrer le fichier HTML. Par défaut : <code>docs/squad-governance-report-&lt;YYYY-MM-DD&gt;.html</code>.</li>
         <li><code>squad=&lt;name&gt;</code> &mdash; dans une fédération, limite le périmètre à une sous-squad précise. En cas d'omission, agrège toutes les sous-squads.</li>
-        <li><code>period={all|30d|7d}</code> &mdash; période à inclure (<code>all</code> par défaut).</li>
+        <li data-release-change="20261102-governance-report-consumption-roi"><code>period={all|30d|7d}</code> &mdash; période à inclure (<code>all</code> par défaut) : les 7 ou 30 jours calendaires se terminant à la date de référence. Les entrées datées sont filtrées ; le registre des coûts est cumulatif pour toute l'exécution, ses chiffres sont donc étiquetés comme tels plutôt que filtrés.</li>
       </ul>
       <h3>Sections du tableau de bord</h3>
       <p>Le rapport généré contient sept sections :</p>
       <ol>
         <li><strong>Contrôles de gouvernance</strong> &mdash; verdicts du conseil, contrôles des entrées, validations humaines et nombre de demandes d'intervention.</li>
         <li><strong>Verdicts du conseil</strong> &mdash; répartition des verdicts (feu vert / feu vert sous conditions / arrêt), avec les constats par rôle.</li>
-        <li><strong>Répartition des coûts</strong> &mdash; coût estimé par rôle et par niveau de modèle.</li>
+        <li data-release-change="20261102-governance-report-consumption-roi"><strong>Répartition des coûts</strong> &mdash; coût par rôle et par niveau de modèle avec sa base, registre de consommation complet, usage observé lorsque le registre l'enregistre, comparaison « sans HVE Squad », ROI de l'exécution et raisons, étayées par des preuves, pour lesquelles HVE Squad a été rentable.</li>
         <li><strong>Activité de lancement des rôles</strong> &mdash; nombre de lancements, modèles utilisés, taux de réussite et répartition des niveaux d'autonomie.</li>
         <li><strong>Risques et conformité</strong> &mdash; preuves issues des artefacts, vérification des tests, contrôle des actions à impact et demandes d'intervention ouvertes.</li>
         <li><strong>Chronologie des activités</strong> &mdash; vue chronologique des lancements et des décisions.</li>
-        <li><strong>Principaux résultats</strong> &mdash; déploiements, issues créées, tests exécutés, fichiers modifiés et capacités livrées.</li>
+        <li data-release-change="20261102-governance-report-consumption-roi"><strong>Principaux résultats</strong> &mdash; déploiements, issues créées, tests exécutés, fichiers modifiés, capacités livrées et preuves de ce que l'exécution a produit (revue indépendante, risques repérés tôt, validations humaines).</li>
       </ol>
+      <h3 data-release-change="20261102-governance-report-consumption-roi">Coûts, consommation et ROI</h3>
+      <p>
+        La commande exécute un script déterministe, <code>New-SquadGovernanceReport.ps1</code>, qui lit
+        l'état de la squad en lecture seule, écrit le fichier et affiche un reçu avec le chemin, un résumé
+        en une ligne, les sources et les éventuelles lacunes. Le même état et la même date <code>-AsOf</code>
+        produisent toujours un fichier identique à l'octet près.
+      </p>
+      <ul>
+        <li><strong>Le registre complet, tel qu'il est écrit.</strong> Chaque section et chaque tableau de <code>consumption.md</code> est affiché : attribution, usage et coût, dérivation, économie unitaire, comparaison des coûts et, lorsque le registre en contient, usage observé. Comme le registre est reproduit plutôt que décrit champ par champ, une section ou une colonne ajoutée plus tard apparaît sans modifier le rapport. Un chiffre que le rapport ne reconnaît pas affiche « non calculable » ; rien n'est deviné.</li>
+        <li><strong>Chaque chiffre indique sa base.</strong> <code>exact-native</code> (usage déclaré par l'hôte), <code>estimated</code> (estimé), <code>modeled</code> (contrefactuel ou prix mixte) et <code>host-billed</code> (total d'une session entière) ne sont jamais additionnés.</li>
+        <li><strong>ROI de l'exécution.</strong> Coût évité, réduction de coût, multiple de coût et ROI = (Sans HVE Squad &minus; HVE Squad) &divide; HVE Squad, à partir des chiffres « avec » et « sans » du registre lui-même. Le chiffre « sans » est un contrefactuel modélisé, et non une exécution parallèle observée ; une exécution plus coûteuse est affichée en négatif.</li>
+        <li><strong>Pourquoi HVE Squad.</strong> Deux panneaux de preuves, ce que l'exécution a dépensé et ce qu'elle a produit, marquent chaque affirmation comme démontrée, non démontrée ou indisponible d'après les propres enregistrements de l'exécution.</li>
+        <li><strong>Notes de lecture.</strong> Les modèles inconnus ou non résolus et leur prix de repli, les résumés périmés, les totaux incohérents, les bases mixtes et une session d'hôte partagée par deux sous-squads sont signalés sans réparer le registre.</li>
+      </ul>
       <p>
         Le résultat est un fichier <code>.html</code> unique, sans dépendances externes &mdash; tous les styles
         sont intégrés : il s'affiche donc correctement lorsqu'il est ouvert dans n'importe quel navigateur ou partagé en pièce jointe.
@@ -1156,11 +1366,11 @@ flowchart TD
           <tr><td><code>design</code></td><td>researcher, lead, developer, tester, designer, accessibility, scribe</td><td>UX/UI et conception produit</td></tr>
           <tr><td><code>accessibility</code></td><td>researcher, lead, developer, tester, accessibility, designer, scribe</td><td>Conformité en accessibilité comme objectif à part entière &mdash; évaluation et remédiation WCAG 2.2, Section 508 ou EN 301 549</td></tr>
           <tr><td><code>architecture</code></td><td>researcher, lead, developer, tester, architect, azure-architect, cost-manager, scribe</td><td>Conception et architecture système</td></tr>
-          <tr><td><code>azure</code></td><td>researcher, lead, developer, tester, azure-architect, iac-author, deployer, asbuilt-author, azure-diagnose, architect, cost-manager, security, modernizer, scribe</td><td>Réalisation Azure avec rédaction IaC, déploiement, documentation après déploiement, dépannage, suivi budgétaire et supervision de la sécurité</td></tr>
-          <tr><td><code>modernization</code></td><td>researcher, lead, developer, tester, modernizer, architect, azure-architect, iac-author, cost-manager, asbuilt-author, scribe</td><td>Évolution de l'existant &mdash; mise à niveau des frameworks et dépendances, changement de plateforme, migration SQL ou cloud</td></tr>
+          <tr><td><code>azure</code></td><td>researcher, lead, developer, tester, azure-architect, iac-author, deployer, asbuilt-author, azure-diagnose, architect, cost-manager, value-economist, security, modernizer, scribe</td><td>Réalisation Azure avec rédaction IaC, déploiement, documentation après déploiement, dépannage, suivi budgétaire, valorisation FinOps et supervision de la sécurité</td></tr>
+          <tr><td><code>modernization</code></td><td>researcher, lead, developer, tester, modernizer, architect, azure-architect, iac-author, cost-manager, value-economist, asbuilt-author, scribe</td><td>Évolution de l'existant &mdash; mise à niveau des frameworks et dépendances, changement de plateforme, migration SQL ou cloud</td></tr>
           <tr><td><code>compliance</code></td><td>researcher, lead, developer, tester, security, supply-chain, vuln-manager, privacy, rai, accessibility, risk-manager, scribe</td><td>Production de preuves de conformité &mdash; audit, attestation ou questionnaire de sécurité d'un client</td></tr>
           <tr><td><code>operations</code></td><td>researcher, lead, developer, tester, azure-diagnose, performance, observability, asbuilt-author, iac-author, deployer, scribe</td><td>Exploitation d'un système déployé &mdash; incidents, objectifs de fiabilité, conception de l'instrumentation et documentation de l'existant déployé</td></tr>
-          <tr><td><code>product</code></td><td>researcher, lead, developer, tester, analyst, designer, product-owner, presenter, technical-writer, experimenter, data-scientist, intake-validator, scribe</td><td>Découverte métier et livraison &mdash; exigences, design thinking, feuille de route et livrables pour les parties prenantes (souvent non techniques)</td></tr>
+          <tr><td><code>product</code></td><td>researcher, lead, developer, tester, analyst, designer, product-owner, technical-writer, experimenter, data-scientist, value-economist, intake-validator, scribe</td><td>Découverte métier et livraison &mdash; exigences, design thinking, feuille de route, valorisation des bénéfices et livrables pour les parties prenantes (souvent non techniques)</td></tr>
         </tbody>
       </table>
       <p>
@@ -1230,6 +1440,98 @@ flowchart TD
         aussi pourquoi <code>azure</code> et <code>modernization</code> restent des profils : ils définissent
         l'orientation dominante d'une équipe plutôt qu'un complément.
       </p>
+      <h3 data-release-change="20261104-official-source-packs">Les sources officielles restent facultatives</h3>
+      <p data-release-change="20261104-official-source-packs">
+        Lorsqu'un travail a plus d'une ressource externe, le catalogue préfère le dépôt du fournisseur,
+        puis une entrée marketplace officielle résolue vers ce dépôt, puis une ressource communautaire.
+        Ce choix reste dans le registre à dix colonnes. Une licence ambiguë n'est pas enregistrée.
+        Appliquer un pack n'installe jamais une compétence, un plugin, un CLI ou un serveur MCP.
+      </p>
+      <p data-release-change="20261104-official-source-packs">
+        Un pack enregistré dont les rôles sont déjà dans l'équipe met à jour <code>Packs:</code> et
+        ajoute une décision. Il n'invente pas de membre. <code>full +foundry</code>,
+        <code>full +fabric</code>, <code>full +dotnet</code>, <code>full +aks</code> et <code>full +azure-functions</code> sont ce cas. Un pack déjà listé dans <code>Packs:</code> est rejeté. Retirer un pack arrête la sélection de la squad et la
+        transmission des consignes. Cela ne désinstalle pas une compétence que l'hôte peut encore voir,
+        et ne la cache pas.
+      </p>
+      <p data-release-change="20261104-official-source-packs">
+        Les travaux pris en charge sur Power Pages, les applications pilotées par modèle, Dataverse et
+        la préparation, le manifeste Teams, OpenTelemetry et la planification de provisionnement du SDK Agents sélectionnent la charte locale. Des préversions approuvées séparément ajoutent
+        le YAML de connaissances et l'import de compétences Copilot Studio sur Power Platform, ainsi que
+        les suites d'évaluation M365 et les serveurs MCP de widgets Copilot Chat en local sur M365.
+        L'architecture Power Platform plus large, les autres travaux Copilot Studio, les connecteurs, les agents déclaratifs, TypeSpec et l'intégration MCP
+        sélectionnent encore l'alternative communautaire lorsque cet agent est installé. Power Automate,
+        cloud flow, canvas app, DLP policy et solution ALM sélectionnent <code>Power Platform Expert</code>.
+        Microsoft Graph, Graph SDK et Graph permission scope sélectionnent <code>MCP M365 Agent Expert</code>.
+        Sans indice
+        correspondant, la Primary reste retenue. Une alternative absente est escaladée, pas remplacée.
+        <code>foundry</code> inclut le <code>data-scientist</code> existant afin que Foundry IQ ait un
+        propriétaire dans <code>azure +foundry</code>. <code>azure-deployment-preflight</code> reste la
+        compétence de validation avant déploiement. <code>azure-validate</code> et
+        <code>azure-enterprise-infra-planner</code> ne sont ni enregistrés ni bloqués.
+      </p>
+      <p data-release-change="20261104-official-source-packs">
+        N'installez que la compétence utile. Le catalogue fait foi. Ces commandes granulaires couvrent
+        les compétences enregistrées avec ce changement ; les formes de plugin complet ont été rejetées
+        lorsqu'elles tirent des hooks, des agents supplémentaires ou un consentement de tenant.
+      </p>
+      <pre data-release-change="20261104-official-source-packs"><code>apm install microsoft/power-platform-skills/plugins/power-pages/skills/plan-alm#8021d27d517d81963da22e728125a26c9ecfbbe1 --target copilot
+apm install microsoft/power-platform-skills/plugins/model-apps/skills/app-builder#8021d27d517d81963da22e728125a26c9ecfbbe1 --target copilot
+apm install microsoft/power-platform-skills/plugins/mcp-apps/skills/generate-codeful-mcp-tool#8021d27d517d81963da22e728125a26c9ecfbbe1 --target copilot
+apm install microsoft/power-platform-skills/plugins/mcp-apps/skills/generate-mcp-app-ui#8021d27d517d81963da22e728125a26c9ecfbbe1 --target copilot
+apm install microsoft/Dataverse-skills/.github/plugins/dataverse/skills/dv-overview#27e6f6a3fef23075ede87d8e5f028cde29e0130e --target copilot
+apm install microsoft/Dataverse-skills/.github/plugins/dataverse/skills/dv-connect#27e6f6a3fef23075ede87d8e5f028cde29e0130e --target copilot
+apm install microsoft/Agents/agent-plugins/agents-for-net/skills/agents-sdk-to-prod#a5caf57ff062369c410aa5542039b50ce1a9c7e8 --target copilot
+apm install microsoft/Agents/agent-plugins/agents-sdk-common/skills/teams-app-manifest#a5caf57ff062369c410aa5542039b50ce1a9c7e8 --target copilot
+apm install microsoft/Agents/agent-plugins/agents-for-net/skills/agents-sdk-dotnet-otel#a5caf57ff062369c410aa5542039b50ce1a9c7e8 --target copilot
+apm install microsoft/Agents/agent-plugins/agents-for-js/skills/agents-sdk-typescript-otel#a5caf57ff062369c410aa5542039b50ce1a9c7e8 --target copilot
+apm install microsoft/Agents/agent-plugins/agents-for-python/skills/agents-sdk-python-otel#a5caf57ff062369c410aa5542039b50ce1a9c7e8 --target copilot
+apm install microsoft/Agents/agent-plugins/agents-sdk-common/skills/agents-sdk-provision#a5caf57ff062369c410aa5542039b50ce1a9c7e8 --target copilot
+apm install microsoft/skills/.github/plugins/foundry-iq-skills/skills/foundry-iq/SKILL.md --target copilot
+apm install microsoft/azure-skills/skills/appinsights-instrumentation/SKILL.md --target copilot
+copilot plugin marketplace add Azure/aigateway
+copilot plugin install ai-gateway@azure
+apm install microsoft/skills-for-fabric/skills/sqldw-cli --target copilot
+apm install microsoft/skills-for-fabric/skills/sqldb-cli --target copilot
+apm install microsoft/skills-for-fabric/skills/eventhouse-cli --target copilot
+apm install microsoft/skills-for-fabric/skills/eventstream-cli --target copilot
+apm install microsoft/skills-for-fabric/skills/spark-cli --target copilot
+apm install microsoft/skills-for-fabric/skills/dataflows-cli --target copilot
+apm install microsoft/skills-for-fabric/skills/databricks-migration --target copilot
+apm install microsoft/skills-for-fabric/skills/pipeline-migration --target copilot
+apm install dotnet/skills/plugins/dotnet-upgrade/skills/migrate-dotnet8-to-dotnet9#2877c712edc20643b72f64e2983b168e6661d607 --target copilot
+apm install dotnet/skills/plugins/dotnet-upgrade/skills/migrate-dotnet9-to-dotnet10#2877c712edc20643b72f64e2983b168e6661d607 --target copilot
+apm install dotnet/skills/plugins/dotnet-upgrade/skills/migrate-nullable-references#2877c712edc20643b72f64e2983b168e6661d607 --target copilot
+apm install dotnet/skills/plugins/dotnet-upgrade/skills/dotnet-aot-compat#2877c712edc20643b72f64e2983b168e6661d607 --target copilot
+apm install dotnet/skills/plugins/dotnet-msbuild/skills/msbuild-modernization#2877c712edc20643b72f64e2983b168e6661d607 --target copilot
+apm install dotnet/skills/plugins/dotnet-nuget/skills/convert-to-cpm#2877c712edc20643b72f64e2983b168e6661d607 --target copilot
+apm install dotnet/skills/plugins/dotnet-test-migration/skills/migrate-vstest-to-mtp#2877c712edc20643b72f64e2983b168e6661d607 --target copilot
+apm install dotnet/skills/plugins/dotnet-test/skills/test-value-evidence#2877c712edc20643b72f64e2983b168e6661d607 --target copilot
+apm install dotnet/skills/plugins/dotnet-test/skills/coverage-analysis#2877c712edc20643b72f64e2983b168e6661d607 --target copilot
+apm install dotnet/skills/plugins/dotnet/skills/dotnet-breaking-changes#2877c712edc20643b72f64e2983b168e6661d607 --target copilot
+apm install dotnet/skills/plugins/dotnet-diag/skills/analyzing-dotnet-performance#2877c712edc20643b72f64e2983b168e6661d607 --target copilot
+apm install dotnet/skills/plugins/dotnet-diag/skills/microbenchmarking#2877c712edc20643b72f64e2983b168e6661d607 --target copilot
+apm install dotnet/skills/plugins/dotnet-diag/skills/dotnet-trace-collect#2877c712edc20643b72f64e2983b168e6661d607 --target copilot
+apm install dotnet/skills/plugins/dotnet-aspnetcore/skills/dotnet-webapi#2877c712edc20643b72f64e2983b168e6661d607 --target copilot
+apm install dotnet/skills/plugins/dotnet-blazor/skills/author-component#2877c712edc20643b72f64e2983b168e6661d607 --target copilot
+apm install dotnet/skills/plugins/dotnet-data/skills/optimizing-ef-core-queries#2877c712edc20643b72f64e2983b168e6661d607 --target copilot
+apm install dotnet/skills/plugins/dotnet/skills/csharp-refactoring#2877c712edc20643b72f64e2983b168e6661d607 --target copilot
+apm install dotnet/skills/plugins/dotnet/skills/msbuild#2877c712edc20643b72f64e2983b168e6661d607 --target copilot
+apm install microsoft/azure-skills/skills/azure-kubernetes/azure-kubernetes-app-deploy#968f7bfaa01672e782dae2c6bab4fb9505ae047a --target copilot
+apm install microsoft/azure-skills/skills/azure-kubernetes/azure-kubernetes-automatic-readiness#968f7bfaa01672e782dae2c6bab4fb9505ae047a --target copilot
+apm install microsoft/azure-skills/skills/azure-kubernetes#968f7bfaa01672e782dae2c6bab4fb9505ae047a --target copilot
+apm install microsoft/azure-skills/.github/plugins/aks-skills/skills/aks-troubleshooting#968f7bfaa01672e782dae2c6bab4fb9505ae047a --target copilot
+apm install microsoft/azure-skills/.github/plugins/aks-skills/skills/aks-known-issues#968f7bfaa01672e782dae2c6bab4fb9505ae047a --target copilot
+apm install microsoft/azure-skills/.github/plugins/aks-skills/skills/aks-gpu-inference#968f7bfaa01672e782dae2c6bab4fb9505ae047a --target copilot
+apm install microsoft/azure-skills/.github/plugins/aks-skills/skills/aks-cost-optimization#968f7bfaa01672e782dae2c6bab4fb9505ae047a --target copilot
+apm install Azure/azure-functions-skills/.github/plugins/azure-functions-skills/skills/azure-functions-common#34e17220ff073b29a0be5bd541f32d287118165f --target copilot
+apm install Azure/azure-functions-skills/.github/plugins/azure-functions-skills/skills/azure-functions-create#34e17220ff073b29a0be5bd541f32d287118165f --target copilot
+apm install Azure/azure-functions-skills/.github/plugins/azure-functions-skills/skills/azure-functions-deploy#34e17220ff073b29a0be5bd541f32d287118165f --target copilot
+apm install Azure/azure-functions-skills/.github/plugins/azure-functions-skills/skills/azure-functions-doctor#34e17220ff073b29a0be5bd541f32d287118165f --target copilot
+apm install Azure/azure-functions-skills/.github/plugins/azure-functions-skills/skills/azure-functions-best-practices#34e17220ff073b29a0be5bd541f32d287118165f --target copilot
+apm install Azure/azure-functions-skills/.github/plugins/azure-functions-skills/skills/azure-functions-inventory#34e17220ff073b29a0be5bd541f32d287118165f --target copilot
+apm install Azure/azure-functions-skills/.github/plugins/azure-functions-skills/skills/azure-functions-health-status#34e17220ff073b29a0be5bd541f32d287118165f --target copilot
+apm install Azure/azure-functions-skills/.github/plugins/azure-functions-skills/skills/azure-functions-diagnostics#34e17220ff073b29a0be5bd541f32d287118165f --target copilot</code></pre>
       <table>
         <thead>
           <tr><th>Pack</th><th>Ajoute</th><th>À utiliser lorsque</th></tr>
@@ -1238,7 +1540,11 @@ flowchart TD
           <tr><td><code>power-platform</code></td><td>pp-architect, pp-connector</td><td>Le projet repose sur Power Platform &mdash; Power Apps, Power Automate, Dataverse, Power Pages ou Copilot Studio</td></tr>
           <tr><td><code>m365-copilot</code></td><td>m365-agent-architect, m365-agent-integrator</td><td>Le projet repose sur Microsoft 365 Copilot &mdash; agents déclaratifs, définitions d'agents TypeSpec, plugins API, agents s'appuyant sur MCP ou intégration Microsoft Graph</td></tr>
           <tr><td><code>aws</code></td><td>aws-architect, aws-diagnose</td><td>Le projet repose sur AWS &mdash; Lambda et serverless, ECS ou EKS, CDK, SAM, CloudFormation, Organizations et zones d'atterrissage, ou une charge de travail AWS en service à diagnostiquer</td></tr>
-          <tr><td data-release-change="20261008-foundry-agentic-pack"><code>foundry</code></td><td>architect, azure-architect, deployer, prompt-engineer, security, rai, observability, cost-manager</td><td>Planification, revue indépendante et déploiement contrôlé d'un projet Microsoft Foundry avec un blueprint en sept blocs, des preuves de source et une vérification SDK/API ; réutilise les rôles existants</td></tr>
+          <tr><td data-release-change="20261008-foundry-agentic-pack"><code>foundry</code></td><td>architect, azure-architect, deployer, prompt-engineer, security, rai, observability, cost-manager, data-scientist</td><td>Planification, revue indépendante et déploiement contrôlé d'un projet Microsoft Foundry avec un blueprint en sept blocs, des preuves de source et une vérification SDK/API ; réutilise les rôles existants, dont data-scientist pour Foundry IQ</td></tr>
+          <tr><td><code>fabric</code></td><td>data-scientist</td><td>Entrepôt Fabric, Eventhouse, Spark ou Dataflow au-delà de l'introduction Lakehouse. Activation explicite ; réutilise <code>data-scientist</code> et n'ajoute aucun rôle. Les commandes d'installation restent dans le catalogue. Rien n'est installé automatiquement.</td></tr>
+          <tr><td><code>dotnet</code></td><td>modernizer, tester, performance, developer</td><td>Le projet repose sur .NET &mdash; mises à niveau de SDK et de framework cible, gestion centralisée des paquets NuGet, migration du runner VSTest vers MTP, revue des tests .NET et des changements cassants, planification des performances sur les chemins critiques et BenchmarkDotNet, ou implémentation EF Core, ASP.NET Core Web API, Blazor, C# et MSBuild. Activation explicite ; réutilise <code>modernizer</code>, <code>tester</code>, <code>performance</code> et <code>developer</code> sans ajouter de rôle.</td></tr>
+          <tr><td><code>aks</code></td><td>azure-architect, developer, modernizer, azure-diagnose, cost-manager</td><td>Le projet s'exécute sur Azure Kubernetes Service (AKS) &mdash; conception de cluster Day-0, conteneurisation d'applications et manifestes conformes aux Deployment Safeguards, préparation à AKS Automatic, diagnostic Day-2 d'incidents de cluster ou GPU, ou optimisation des coûts AKS orientée Kubernetes. Activation explicite ; réutilise <code>azure-architect</code>, <code>developer</code>, <code>modernizer</code>, <code>azure-diagnose</code> et <code>cost-manager</code> sans ajouter de rôle.</td></tr>
+          <tr><td><code>azure-functions</code></td><td>developer, deployer, tester, azure-diagnose, modernizer</td><td>Le projet repose sur Azure Functions &mdash; création de projets v4 et de déclencheurs, vérification contrôlée de déploiement Functions, audit d'espace de travail local et de bonnes pratiques, inventaire/santé/diagnostic de Function App, migration vers le worker isolé ou Hosted Skills. Activation explicite ; réutilise <code>developer</code>, <code>deployer</code>, <code>tester</code>, <code>azure-diagnose</code> et <code>modernizer</code> sans ajouter de rôle.</td></tr>
         </tbody>
       </table>
       <p>
@@ -1248,6 +1554,148 @@ flowchart TD
         Tous deux conseillent et rédigent des fichiers ; aucun n'exécute <code>pac</code> sur votre tenant ni ne publie de
         connecteur : rien n'atteint donc un environnement actif sans votre intervention.
       </p>
+      <section data-release-change="20261111-power-platform-pack-parity">
+        <h3 id="power-platform-setup">Configurer Power Platform avec l'aide de HVE Squad</h3>
+        <p>
+          Vous n'avez pas à choisir vous-même les noms techniques des paquets. Ouvrez votre projet
+          dans l'hôte où HVE Squad est installé, puis envoyez cette demande. Un pack ajoute de
+          l'expertise ; ce n'est ni une licence Power Platform, ni un environnement connecté, ni une
+          autorisation de publier.
+        </p>
+        <pre><code>/squad request="Set up the Power Platform pack. Explain what will be installed, ask before installing, and leave the Copilot Studio preview out unless I approve it." pack=power-platform</code></pre>
+        <ol>
+          <li>
+            <strong>Choisissez le nécessaire.</strong> HVE Squad présente les ressources absentes et
+            explique les travaux qu'elles permettent. L'ensemble officiel existant comprend six
+            compétences pour la planification Power Pages, la création d'applications pilotées par
+            modèle, Dataverse et les outils/widgets MCP. Vous pouvez choisir les six, un sous-ensemble,
+            les compléments communautaires, ou continuer sans eux. Les deux compétences Copilot
+            Studio en préversion sont un choix séparé, pas une condition d'utilisation du pack.
+          </li>
+          <li>
+            <strong>Approuvez l'installation, pas l'accès au tenant.</strong> HVE Squad utilise
+            <code>Install-SquadPackResources.ps1</code> pour vos choix approuvés. Vous devez voir les
+            commandes réelles et un reçu, pas seulement un conseil d'installation. Un reçu
+            <code>PASS</code> confirme l'installation des fichiers ;
+            <code>PLANNED</code> signifie que rien n'a été installé. Si une commande échoue ou si vous
+            annulez, HVE Squad garde la ressource absente et explique le remède. Il n'installe pas de CLI,
+            ne configure pas MCP, ne vous connecte pas et n'accorde aucun consentement à votre place.
+          </li>
+          <li>
+            <strong>Conservez les fichiers de support.</strong> Certaines compétences existantes ont
+            besoin de fichiers partagés hors de leur dossier. HVE Squad les vérifie avant utilisation.
+            Avec votre accord séparé, il peut récupérer les sources exactes ci-dessous dans le
+            dossier ignoré des dépendances, sans activer leurs hooks, leur configuration MCP ou leurs
+            compétences supplémentaires. Si un dossier existe déjà, HVE Squad vérifie sa révision et son
+            contenu au lieu de l'écraser.
+          </li>
+          <li>
+            <strong>Rechargez et vérifiez.</strong> Rechargez ou redémarrez l'hôte après installation,
+            puis demandez une nouvelle vérification à HVE Squad. HVE Squad utilise la liste réelle de
+            compétences de l'hôte, pas le reçu seul, et enregistre chaque ressource comme
+            <code>available</code> ou <code>declined</code>. Des fichiers de support ou prérequis
+            absents bloquent toujours le travail concerné. Une compétence visible ne prouve pas la
+            connexion au tenant.
+          </li>
+          <li>
+            <strong>Commencez par les fichiers locaux.</strong> Les chartes PP conseillent et rédigent
+            des fichiers uniquement. Un flux amont qui exige la conversation principale vous est
+            renvoyé. Créer ou cloner un agent cloud, se connecter à un tenant, synchroniser, migrer,
+            importer une solution et publier sont des actions séparées, pas des conséquences de la
+            configuration.
+          </li>
+        </ol>
+        <h4>Solution manuelle : compétences existantes et fichiers de support</h4>
+        <p>
+          Si HVE Squad ne peut pas exécuter l'installateur, ouvrez un terminal à la racine de votre
+          projet. Vérifiez la présence de Git, APM et Node.js ; la préversion exige Node.js 18 ou
+          ultérieur. Si un outil manque, arrêtez-vous et suivez le
+          <a href="getting-started.html">guide de démarrage</a> et les
+          <a href="https://nodejs.org/en/download">instructions d'installation de Node.js</a>, ou
+          demandez à HVE Squad les étapes pour votre système. N'approuvez pas d'installations globales
+          sans rapport. Parmi les six commandes PP épinglées plus haut, exécutez seulement celles
+          que vous avez choisies. Elles ciblent des dossiers : ajouter <code>/SKILL.md</code> rend
+          ces commandes APM invalides.
+        </p>
+        <p>
+          Pour les fichiers partagés, exécutez les commandes suivantes seulement si les dossiers de
+          destination n'existent pas. Ce sont des sources, pas des plugins activés. La révision
+          affichée par chaque dernière commande doit correspondre à l'identifiant complet du commit
+          précédent. Indiquez à HVE Squad ces racines de support :
+          <code>plugins/power-pages/</code>, <code>plugins/model-apps/</code>,
+          <code>plugins/mcp-apps/</code> et <code>.github/plugins/dataverse/</code>
+          dans les sources correspondantes. Ne commitez pas ces dossiers.
+        </p>
+        <pre><code>git clone --config core.longpaths=true --filter=blob:none --no-checkout https://github.com/microsoft/power-platform-skills.git apm_modules/.squad-pack-support/power-platform-skills-8021d27
+git -C apm_modules/.squad-pack-support/power-platform-skills-8021d27 checkout --detach 8021d27d517d81963da22e728125a26c9ecfbbe1
+git -C apm_modules/.squad-pack-support/power-platform-skills-8021d27 rev-parse HEAD
+git clone --config core.longpaths=true --filter=blob:none --no-checkout https://github.com/microsoft/Dataverse-skills.git apm_modules/.squad-pack-support/dataverse-skills-27e6f6a
+git -C apm_modules/.squad-pack-support/dataverse-skills-27e6f6a checkout --detach 27e6f6a3fef23075ede87d8e5f028cde29e0130e
+git -C apm_modules/.squad-pack-support/dataverse-skills-27e6f6a rev-parse HEAD</code></pre>
+        <h4>Préversion Copilot Studio facultative : un plugin complet</h4>
+        <p>
+          Cette option expérimentale/en cours de développement provient du
+          <a href="https://github.com/microsoft/copilot-studio-plugin">dépôt du plugin Copilot Studio de Microsoft</a>,
+          avec un support via les GitHub Issues du projet uniquement, sans garantie de préparation
+          à la production. Elle permet d'ajouter des fichiers de
+          connaissances ou d'importer une compétence vérifiée dans un <em>agent à boucle agentique
+          existant, déjà cloné localement</em>. Ces chartes PP ne prennent pas en charge les rubriques
+          des agents Standard et ne migrent aucun agent. Si vous ignorez votre modèle d'agent,
+          laissez d'abord HVE Squad vérifier l'espace de travail local.
+        </p>
+        <p>
+          L'approbation installe l'ensemble épinglé : huit compétences, quatre agents, deux commandes
+          de prompt, des scripts/références partagés et un hook de démarrage. Seuls
+          <code>add-knowledge</code> et <code>add-skill</code> sont admis pour PP. Le hook peut exécuter
+          <code>npm install</code> pour <code>keytar</code> et
+          <code>@azure/msal-node-extensions</code> et écrire un index local de chemins. Cette
+          configuration au démarrage exige un accord séparé ; HVE Squad n'exécute pas le hook pour
+          terminer l'installation. Si l'hôte ne peut pas empêcher l'exécution d'un hook non approuvé,
+          refusez cette préversion sur cet hôte. Le pack PP ordinaire reste utilisable.
+        </p>
+        <p>
+          Après votre choix explicite de la préversion et la décision sur ce hook, HVE Squad peut
+          installer l'ensemble une seule fois via l'une des deux ressources en préversion. Pour
+          une installation manuelle, exécutez cette unique commande épinglée, puis rechargez l'hôte.
+          N'installez pas les deux fichiers de compétence isolés : il manquerait les schémas et
+          scripts partagés.
+        </p>
+        <pre><code>apm install microsoft/copilot-studio-plugin#4014ae689d1228d86cb3aaab938b1e66f8e2e10d --target copilot</code></pre>
+        <p>
+          La racine complète de support est <code>apm_modules/microsoft/copilot-studio-plugin/</code>.
+          HVE Squad y vérifie <code>reference/knowledge-schema.md</code>,
+          <code>reference/skill-schema.md</code> et <code>scripts/add-skill.js</code> ; la configuration
+          au démarrage n'est pas nécessaire pour les trouver. La création locale n'autorise ni une
+          pré-vérification SharePoint/OneDrive authentifiée, ni l'exécution d'une compétence importée,
+          ni la synchronisation cloud, ni la publication.
+        </p>
+        <h4>Compléments communautaires et alternatives pour les travaux plus larges</h4>
+        <p>
+          Les trois compétences communautaires sont aussi proposées dans la vérification PP. Les
+          deux agents communautaires restent des alternatives facultatives pour les travaux plus
+          larges ; HVE Squad propose leur remède d'installation exact si nécessaire, sans substituer
+          silencieusement une charte locale. Pour une installation manuelle, exécutez seulement les
+          lignes utiles ci-dessous, puis rechargez et demandez une vérification à HVE Squad. Les outils
+          de validation supplémentaires des connecteurs sont des prérequis, pas installés ici.
+        </p>
+        <pre><code>apm install github/awesome-copilot/skills/power-platform-architect#9db369d00f121542e1c99fd9b6cd6f707bade765 --target copilot
+apm install github/awesome-copilot/skills/power-platform-mcp-connector-suite#9db369d00f121542e1c99fd9b6cd6f707bade765 --target copilot
+apm install github/awesome-copilot/skills/mcp-copilot-studio-server-generator#9db369d00f121542e1c99fd9b6cd6f707bade765 --target copilot
+apm install github/awesome-copilot/agents/power-platform-expert.agent.md#9db369d00f121542e1c99fd9b6cd6f707bade765 --target copilot
+apm install github/awesome-copilot/agents/power-platform-mcp-integration-expert.agent.md#9db369d00f121542e1c99fd9b6cd6f707bade765 --target copilot</code></pre>
+        <h4>Si la configuration s'arrête</h4>
+        <table>
+          <thead><tr><th>Ce que vous voyez</th><th>Que faire</th></tr></thead>
+          <tbody>
+            <tr><td>Installateur ou prérequis introuvable</td><td>Gardez la ressource absente. Demandez à HVE Squad les étapes pour l'outil nommé ; n'approuvez pas une installation globale sans limite.</td></tr>
+            <tr><td>Installé sur disque, mais absent de la liste de l'hôte</td><td>Rechargez l'hôte, rouvrez le même projet et relancez la vérification PP. Ne déclarez pas la ressource disponible à partir du reçu seul.</td></tr>
+            <tr><td>Script/schéma partagé absent ou mauvaise révision</td><td>Demandez à HVE Squad de vérifier la racine de support et la révision épinglée ci-dessus. N'inventez pas de schéma et ne lancez pas un autre script de configuration.</td></tr>
+            <tr><td>Windows signale un chemin trop long</td><td>Utilisez l'option locale au dépôt des commandes de sources ci-dessus, ou un nouveau chemin de support plus court. N'écrasez pas un clone partiel et ne changez pas la configuration Git globale.</td></tr>
+            <tr><td>Espace de travail Standard ou demande de connexion/consentement</td><td>Arrêtez le travail en préversion. Conservez le modèle existant et utilisez l'alternative pour travaux plus larges ou une configuration approuvée séparément.</td></tr>
+            <tr><td>Installation annulée ou en échec</td><td>Conservez les fichiers terminés, signalez l'étape en échec et choisissez une nouvelle tentative approuvée ou refusez la ressource. Le reste du pack peut rester actif.</td></tr>
+          </tbody>
+        </table>
+      </section>
       <p>
         <code>m365-agent-architect</code> conçoit un agent déclaratif Microsoft 365 Copilot : ses
         capacités, la formulation de ses instructions et de ses amorces de conversation, et le choix de le
@@ -1256,6 +1704,396 @@ flowchart TD
         Graph &mdash; et planifie le déploiement dans le tenant. Comme pour Power Platform, tous deux s'arrêtent à la transmission :
         aucun ne provisionne d'agent ni ne le publie dans votre tenant.
       </p>
+      <section data-release-change="20261112-m365-pack-parity">
+        <h3 id="m365-copilot-setup">Configurer Microsoft 365 Copilot avec l'aide de HVE Squad</h3>
+        <p>
+          Vous n'avez pas à retenir les chemins des dépôts ni les options des paquets. Ouvrez votre
+          projet dans l'hôte où HVE Squad est installé, puis envoyez cette demande. Appliquer le pack
+          ajoute les rôles spécialistes et les consignes M365 ; ce n'est ni une licence Microsoft 365
+          Copilot, ni un consentement administrateur du tenant, ni une autorisation de provisionner
+          ou de publier un agent.
+        </p>
+        <pre><code>/squad request="Set up the Microsoft 365 Copilot pack. Explain what will be installed, ask before installing, and leave the Work IQ preview skills out unless I approve them." pack=m365-copilot</code></pre>
+        <ol>
+          <li>
+            <strong>Choisissez le nécessaire.</strong> HVE Squad liste les ressources M365 absentes et
+            explique les travaux que chacune active. L'ensemble officiel principal comprend six
+            compétences Microsoft 365 Agents SDK pour la préparation à la production .NET, les
+            manifestes d'application Teams, OpenTelemetry en .NET/TypeScript/Python et les plans de
+            provisionnement Azure Bot/Entra. Vous pouvez installer les six, choisir un sous-ensemble,
+            ajouter les six compléments communautaires pour les agents déclaratifs, TypeSpec, Graph
+            et MCP, ou continuer sans eux. Les deux compétences Work IQ Agents Toolkit en préversion
+            constituent un choix séparé, pas une condition d'utilisation du pack.
+          </li>
+          <li>
+            <strong>Approuvez l'installation, pas les actions sur le tenant.</strong> HVE Squad utilise
+            <code>Install-SquadPackResources.ps1</code> pour vos choix approuvés et affiche les
+            commandes exactes ainsi que le reçu. Un reçu <code>PASS</code> confirme l'installation
+            des compétences ; <code>PLANNED</code> signifie qu'aucun fichier n'a été écrit. En cas
+            d'échec ou d'annulation, HVE Squad garde la ressource absente et indique comment réessayer.
+            Il n'installe jamais de CLI ni d'extension VS Code, n'accepte aucun CLUF, ne vous
+            connecte pas et n'accorde aucun consentement de tenant.
+          </li>
+          <li>
+            <strong>Vérifiez les fichiers de support inclus.</strong> Chaque dossier M365 épinglé
+            embarque ses propres fichiers <code>references/</code> et <code>assets/</code> sans hook
+            ni serveur MCP. HVE Squad vérifie la présence de ces fichiers avant d'annoncer qu'un travail
+            est prêt, et demande un accord séparé si vous souhaitez une copie hors ligne de
+            l'exemple de référence.
+          </li>
+          <li>
+            <strong>Rechargez et vérifiez.</strong> Rechargez ou redémarrez l'hôte après
+            l'installation, puis demandez à HVE Squad de relancer le contrôle préalable M365. HVE Squad
+            inspecte la liste réelle des compétences de l'hôte plutôt que le seul reçu
+            d'installation, et consigne chaque ressource comme <code>available</code> ou
+            <code>declined</code>. Une compétence visible ne prouve pas l'accès au tenant.
+          </li>
+          <li>
+            <strong>Restez en local et en mode planification.</strong> Les chartes M365 rédigent en
+            local les manifestes, revues de préparation, jeux d'évaluation, composants de widgets et
+            plans de provisionnement. Aucune charte n'exécute <code>az</code>, n'ouvre de
+            <code>devtunnel</code>, ne provisionne de ressources Entra ou Bot Service, ne lance
+            d'évaluation en direct sur un tenant et ne publie au catalogue.
+          </li>
+        </ol>
+        <h4>Solution manuelle : compétences Agents SDK principales et copie de référence facultative</h4>
+        <p>
+          Si HVE Squad ne peut pas lancer l'installateur, ouvrez un terminal à la racine du projet et
+          vérifiez la présence de Git et d'APM ; les flux TypeScript et les CLI en préversion
+          nécessitent aussi Node.js lorsque vous les exécutez vous-même. Si un prérequis manque,
+          arrêtez-vous et suivez le <a href="getting-started.html">guide de démarrage</a> ainsi que
+          les <a href="https://nodejs.org/en/download">instructions d'installation de Node.js</a>, ou
+          demandez à HVE Squad les étapes adaptées à votre système. Exécutez uniquement celles des six
+          commandes Agents SDK épinglées plus haut qui correspondent à votre stack. Elles ciblent
+          des dossiers de compétences : ajouter <code>/SKILL.md</code> fait échouer la validation APM.
+        </p>
+        <p>
+          Chaque dossier installé contient déjà ses schémas et modèles requis. Si vous souhaitez en
+          plus une copie hors ligne du dépôt Microsoft Agents pour consulter
+          <code>samples/dotnet/production-reference/</code>, exécutez les commandes ci-dessous
+          uniquement lorsque le dossier cible n'existe pas encore. Ne commitez pas ce dossier et
+          vérifiez que l'identifiant de commit affiché correspond.
+        </p>
+        <pre><code>git clone --config core.longpaths=true --filter=blob:none --no-checkout https://github.com/microsoft/Agents.git apm_modules/.squad-pack-support/agents-a5caf57
+git -C apm_modules/.squad-pack-support/agents-a5caf57 checkout --detach a5caf57ff062369c410aa5542039b50ce1a9c7e8
+git -C apm_modules/.squad-pack-support/agents-a5caf57 rev-parse HEAD</code></pre>
+        <h4>Compétences Work IQ Agents Toolkit facultatives en préversion</h4>
+        <p>
+          Deux compétences en préversion issues du
+          <a href="https://github.com/microsoft/work-iq">dépôt Work IQ de Microsoft</a>
+          peuvent être approuvées séparément : <code>m365-agent-evaluator</code> pour rédiger des
+          jeux d'évaluation d'agents déclaratifs au schéma 1.2.0 et analyser des résultats locaux,
+          et <code>ui-widget-developer</code> pour rédiger en local des serveurs MCP Copilot Chat,
+          des widgets React + Fluent UI et les manifestes de plugin MCP associés.
+        </p>
+        <p>
+          HVE Squad installe uniquement ces deux dossiers autonomes épinglés, jamais le plugin complet.
+          L'exécution de la CLI en préversion publique <code>@microsoft/m365-copilot-eval</code>
+          (avec acceptation humaine du CLUF, consentement administrateur WorkIQ, agent déployé et
+          juge Azure OpenAI) reste une action manuelle distincte hors de HVE Squad. En amont,
+          <code>declarative-agent-developer</code>, <code>wiqd</code> et
+          <code>setup-sso-ui-widget</code> restent exclus afin qu'une CLI expérimentale ou un script
+          Entra en direct ne bloque jamais la rédaction locale d'agents déclaratifs.
+        </p>
+        <pre><code>apm install microsoft/work-iq/plugins/microsoft-365-agents-toolkit/skills/m365-agent-evaluator#72c889460aa7ac6d7ed3bb02179332abafc963d4 --target copilot
+apm install microsoft/work-iq/plugins/microsoft-365-agents-toolkit/skills/ui-widget-developer#72c889460aa7ac6d7ed3bb02179332abafc963d4 --target copilot</code></pre>
+        <p>
+          Après rechargement, HVE Squad vérifie dans <code>.agents/skills/m365-agent-evaluator/</code>
+          et <code>.agents/skills/ui-widget-developer/</code> la présence de
+          <code>references/prompts-schema.json</code> et
+          <code>references/copilot-widget-protocol.md</code>. L'approbation autorise uniquement la
+          rédaction locale de fichiers, jamais le lancement de serveurs en arrière-plan, de tunnels,
+          d'installations de paquets ou de provisionnements.
+        </p>
+        <h4>Compléments communautaires et alternatives pour les travaux plus larges</h4>
+        <p>
+          Les six compétences communautaires pour les agents déclaratifs, TypeSpec, Microsoft Graph
+          et MCP sont proposées dans le contrôle préalable M365 car aucune compétence officielle ne
+          les remplace. Les deux agents communautaires restent des alternatives facultatives pour
+          l'architecture d'agents déclaratifs, TypeSpec, les plugins API, Graph SDK et l'intégration
+          MCP plus large ; HVE Squad fournit leurs commandes épinglées exactes au besoin et ne substitue
+          jamais silencieusement une charte locale.
+        </p>
+        <pre><code>apm install github/awesome-copilot/skills/declarative-agents#9db369d00f121542e1c99fd9b6cd6f707bade765 --target copilot
+apm install github/awesome-copilot/skills/typespec-create-agent#9db369d00f121542e1c99fd9b6cd6f707bade765 --target copilot
+apm install github/awesome-copilot/skills/typespec-create-api-plugin#9db369d00f121542e1c99fd9b6cd6f707bade765 --target copilot
+apm install github/awesome-copilot/skills/msgraph-sdk#9db369d00f121542e1c99fd9b6cd6f707bade765 --target copilot
+apm install github/awesome-copilot/skills/mcp-create-declarative-agent#9db369d00f121542e1c99fd9b6cd6f707bade765 --target copilot
+apm install github/awesome-copilot/skills/mcp-deploy-manage-agents#9db369d00f121542e1c99fd9b6cd6f707bade765 --target copilot
+apm install github/awesome-copilot/agents/declarative-agents-architect.agent.md#9db369d00f121542e1c99fd9b6cd6f707bade765 --target copilot
+apm install github/awesome-copilot/agents/mcp-m365-agent-expert.agent.md#9db369d00f121542e1c99fd9b6cd6f707bade765 --target copilot</code></pre>
+        <h4>Si la configuration s'arrête</h4>
+        <table>
+          <thead><tr><th>Ce que vous voyez</th><th>Que faire</th></tr></thead>
+          <tbody>
+            <tr><td>Installateur ou prérequis introuvable</td><td>Gardez la ressource absente. Demandez à HVE Squad les étapes pour l'outil nommé ; n'approuvez pas d'installations globales sans rapport.</td></tr>
+            <tr><td>Installé sur disque, mais absent de la liste de l'hôte</td><td>Rechargez l'hôte, rouvrez le même projet et relancez le contrôle préalable M365. Ne marquez pas la ressource disponible à partir du seul reçu.</td></tr>
+            <tr><td>Schéma/référence absent ou mauvaise révision de source</td><td>Vérifiez le dossier installé ou l'identifiant de commit détaché ci-dessus avant de réessayer ; ne devinez aucun schéma de mémoire.</td></tr>
+            <tr><td>Windows signale un chemin trop long</td><td>Utilisez l'option locale au dépôt dans les commandes de copie ci-dessus, ou choisissez un chemin de support plus court sans modifier la configuration Git globale.</td></tr>
+            <tr><td>Une CLI en préversion demande un CLUF, un tunnel ou une connexion au tenant</td><td>Arrêtez l'étape du worker. Gardez HVE Squad sur les fichiers locaux et n'exécutez vous-même l'évaluation en direct, le tunnel ou le provisionnement que si vous le décidez.</td></tr>
+            <tr><td>Installation annulée ou en échec</td><td>Conservez les fichiers déjà écrits, signalez la ressource en échec et réessayez ou refusez cette entrée. Le reste du pack M365 demeure utilisable.</td></tr>
+          </tbody>
+        </table>
+      </section>
+      <section data-release-change="20261112-dotnet-pack">
+        <h3 id="dotnet-setup">Configurer .NET avec l'aide de HVE Squad</h3>
+        <p>
+          Vous n'avez pas à retenir les chemins des plugins ni les identifiants de commit. Ouvrez
+          votre projet dans l'hôte où HVE Squad est installé, puis envoyez cette demande. Appliquer le
+          pack ajoute les consignes .NET et les rôles spécialistes manquants de la distribution
+          existante ; cela n'installe ni SDK .NET, ni charge de travail, ni outil global, ni serveur
+          MCP sur votre poste.
+        </p>
+        <pre><code>/squad request="Set up the .NET pack. Explain what will be installed, ask before installing, and leave the .NET 11 and experimental mock-analysis preview skills out unless I approve them." pack=dotnet</code></pre>
+        <ol>
+          <li>
+            <strong>Choisissez le nécessaire.</strong> HVE Squad liste les ressources .NET absentes et
+            explique les travaux que chacune permet. L'ensemble officiel principal compte dix-huit
+            compétences couvrant les mises à niveau .NET 8 vers 9 et 9 vers 10, les types référence
+            nullables, la compatibilité Native AOT, la modernisation MSBuild héritée, la gestion
+            centralisée des paquets NuGet, la migration VSTest vers MTP, la revue des tests modifiés
+            et des rapports de couverture fournis, la compatibilité d'API publique, les performances
+            sur les chemins critiques, la planification BenchmarkDotNet et de traces, ASP.NET Core
+            Web API, Blazor, EF Core, le refactoring C# et la rédaction MSBuild. Vous pouvez
+            installer les dix-huit, choisir un sous-ensemble ou continuer sans elles. Les deux
+            compétences en préversion sont un choix distinct, pas une condition d'utilisation du pack.
+          </li>
+          <li>
+            <strong>Approuvez l'installation des compétences, pas de la chaîne d'outils.</strong>
+            HVE Squad exécute <code>Install-SquadPackResources.ps1</code> pour vos sélections approuvées
+            et affiche les commandes exactes ainsi que le reçu. Un reçu <code>PASS</code> confirme
+            l'installation des compétences ; <code>PLANNED</code> signifie que rien n'a été écrit. Si
+            une commande échoue ou si vous annulez, HVE Squad garde la ressource absente et explique
+            comment réessayer. Il n'installe jamais de SDK .NET, de charge de travail, d'outil global
+            ni de serveur MCP.
+          </li>
+          <li>
+            <strong>Vérifiez les fichiers de support inclus.</strong> Chaque installation de dossier
+            .NET épinglée embarque ses propres dossiers <code>references/</code> et
+            <code>scripts/</code> sans hooks, configuration LSP ni serveurs MCP. HVE Squad vérifie ces
+            fichiers inclus avant de déclarer un travail prêt, et demande séparément votre accord si
+            vous souhaitez une copie de référence hors ligne.
+          </li>
+          <li>
+            <strong>Rechargez et vérifiez.</strong> Rechargez ou redémarrez l'hôte après
+            installation, puis demandez à HVE Squad de relancer le contrôle préalable .NET. HVE Squad vérifie
+            l'inventaire réel des compétences de l'hôte plutôt que de se fier au seul reçu, et
+            enregistre chaque ressource comme <code>available</code> ou <code>declined</code>. Une
+            compétence visible ne prouve pas que le SDK .NET cible ou l'outil de diagnostic est
+            installé.
+          </li>
+          <li>
+            <strong>Gardez la planification et la revue en lecture seule.</strong> Dans HVE Squad,
+            <code>modernizer</code>, <code>tester</code> et <code>performance</code> restent en
+            lecture seule sur votre code source et vos tests, tandis que <code>developer</code>
+            n'applique des modifications qu'à partir d'un plan approuvé et n'exécute jamais
+            automatiquement <code>git commit</code> ni de migrations de base de données.
+          </li>
+        </ol>
+        <h4>Solution manuelle : compétences .NET principales et copie de référence facultative</h4>
+        <p>
+          Si HVE Squad ne peut pas exécuter l'installateur, ouvrez un terminal à la racine de votre
+          projet et vérifiez que Git, APM et le SDK .NET cible de votre projet sont disponibles. Si
+          un prérequis manque, arrêtez-vous et suivez le
+          <a href="getting-started.html">guide de démarrage</a> et les
+          <a href="https://dotnet.microsoft.com/download">instructions de téléchargement du SDK .NET</a>,
+          ou demandez à HVE Squad les étapes pour votre système d'exploitation. Exécutez uniquement les
+          dix-huit commandes .NET épinglées du bloc ci-dessus qui correspondent à votre besoin. Elles
+          ciblent des dossiers de compétences : ajouter <code>/SKILL.md</code> fait échouer la
+          validation APM.
+        </p>
+        <p>
+          Chaque dossier de compétence installé contient déjà ses références et scripts requis. Si
+          vous souhaitez aussi une copie hors ligne en lecture seule du dépôt amont (par exemple sous
+          <code>plugins/dotnet/</code>) sans activer de plugins, de configurations LSP ni de serveurs
+          MCP, exécutez les commandes ci-dessous uniquement lorsque le dossier de destination n'existe
+          pas et vérifiez que l'identifiant du commit affiché correspond.
+        </p>
+        <pre><code>git clone --config core.longpaths=true --filter=blob:none --no-checkout https://github.com/dotnet/skills.git apm_modules/.squad-pack-support/dotnet-skills-2877c71
+git -C apm_modules/.squad-pack-support/dotnet-skills-2877c71 checkout --detach 2877c712edc20643b72f64e2983b168e6661d607
+git -C apm_modules/.squad-pack-support/dotnet-skills-2877c71 rev-parse HEAD</code></pre>
+        <h4>Compétences facultatives en préversion pour .NET 11 et l'audit expérimental de mocks</h4>
+        <p>
+          Deux compétences en préversion issues du
+          <a href="https://github.com/dotnet/skills">dépôt officiel dotnet/skills</a>
+          peuvent être approuvées séparément : <code>migrate-dotnet10-to-dotnet11</code> pour
+          planifier les migrations de .NET 10 vers .NET 11 en préversion, et
+          <code>exp-mock-usage-analysis</code> pour auditer en lecture seule le flux de contrôle des
+          mocks Moq, NSubstitute et FakeItEasy.
+        </p>
+        <p>
+          HVE Squad n'installe que ces deux dossiers autonomes épinglés, jamais un plugin entier. HVE Squad
+          n'exécute jamais <code>dotnet-install</code>, <code>setup-local-sdk</code> ni le serveur en
+          préversion <code>Microsoft.AITools.BinlogMcp</code> ; installer un SDK .NET en préversion
+          reste un choix manuel séparé hors de HVE Squad.
+        </p>
+        <pre><code>apm install dotnet/skills/plugins/dotnet-upgrade/skills/migrate-dotnet10-to-dotnet11#2877c712edc20643b72f64e2983b168e6661d607 --target copilot
+apm install dotnet/skills/plugins/dotnet-experimental/skills/exp-mock-usage-analysis#2877c712edc20643b72f64e2983b168e6661d607 --target copilot</code></pre>
+        <p>
+          Après rechargement, HVE Squad vérifie <code>.agents/skills/migrate-dotnet10-to-dotnet11/</code>
+          pour <code>references/core-libraries-dotnet10to11.md</code> et contrôle
+          <code>.agents/skills/exp-mock-usage-analysis/SKILL.md</code>. L'approbation autorise la
+          planification et la revue en lecture seule (ainsi que les modifications d'un plan approuvé),
+          jamais l'installation d'un SDK ni des commits automatiques.
+        </p>
+        <h4>Si la configuration s'arrête</h4>
+        <table>
+          <thead><tr><th>Ce que vous voyez</th><th>Que faire</th></tr></thead>
+          <tbody>
+            <tr><td>Installateur ou version du SDK .NET introuvable</td><td>Gardez la ressource ou l'étape de validation bloquée. Installez vous-même le SDK .NET requis si vous souhaitez valider la compilation ; n'approuvez pas de scripts automatiques d'installation de SDK depuis un worker.</td></tr>
+            <tr><td>Installé sur disque, mais absent de la liste de l'hôte</td><td>Rechargez l'hôte, rouvrez le même projet et relancez le contrôle préalable .NET. Ne marquez pas la ressource disponible à partir du seul reçu.</td></tr>
+            <tr><td>Référence ou script inclus absent, ou mauvaise révision source</td><td>Vérifiez le dossier de compétence installé ou l'identifiant de commit détaché ci-dessus avant de réessayer ; ne devinez aucun changement cassant de mémoire.</td></tr>
+            <tr><td>Windows signale un chemin trop long</td><td>Utilisez l'option locale au dépôt dans les commandes de copie ci-dessus, ou choisissez un chemin de support plus court sans modifier la configuration Git globale.</td></tr>
+            <tr><td>Une étape de couverture ou de diagnostic demande de lancer des tests, benchmarks ou profileurs en direct</td><td>Gardez Reviewer et Performance Planner en lecture seule sur les artefacts fournis ; lancez vous-même la collecte de couverture, BenchmarkDotNet ou la capture de traces, ou déléguez une tâche developer/QA approuvée.</td></tr>
+            <tr><td>Installation annulée ou en échec</td><td>Conservez les fichiers déjà écrits, signalez la ressource en échec et réessayez ou refusez cette entrée. Le reste du pack .NET demeure utilisable.</td></tr>
+          </tbody>
+        </table>
+      </section>
+      <section data-release-change="20261113-aks-and-azure-functions-packs">
+        <h3 id="aks-setup">Configurer AKS avec l'aide de HVE Squad</h3>
+        <p>
+          Ouvrez votre projet dans l'hôte où HVE Squad est installé et envoyez cette demande. Appliquer
+          <code>aks</code> ajoute les consignes AKS et les rôles spécialistes manquants de la
+          distribution existante ; cela n'installe jamais <code>az</code>, <code>kubectl</code>,
+          <code>jq</code>, d'identifiants de cluster, de hooks de télémétrie ni de serveurs MCP.
+        </p>
+        <pre><code>/squad request="Set up the AKS pack. Explain what will be installed and ask before installing." pack=aks</code></pre>
+        <ol>
+          <li>
+            <strong>Choisissez le nécessaire.</strong> HVE Squad liste les sept compétences AKS
+            officielles issues de
+            <a href="https://github.com/microsoft/azure-skills">microsoft/azure-skills</a> :
+            conception de cluster Day-0 (<code>azure-kubernetes</code>), conteneurisation
+            d'applications et manifestes Deployment Safeguards
+            (<code>azure-kubernetes-app-deploy</code>), préparation à AKS Automatic
+            (<code>azure-kubernetes-automatic-readiness</code>), dépannage Day-2 de cluster
+            (<code>aks-troubleshooting</code>), recherche de signatures d'erreur exactes
+            (<code>aks-known-issues</code>), diagnostic d'inférence GPU et KAITO
+            (<code>aks-gpu-inference</code>) et analyse des coûts orientée Kubernetes
+            (<code>aks-cost-optimization</code>). Installez les sept, choisissez un sous-ensemble ou
+            continuez sans elles.
+          </li>
+          <li>
+            <strong>Approuvez uniquement les dossiers de compétences.</strong> HVE Squad exécute
+            <code>Install-SquadPackResources.ps1</code> pour vos choix approuvés et exige un reçu
+            <code>PASS</code> plutôt que <code>PLANNED</code>. Installez
+            <code>azure-kubernetes-app-deploy</code> et
+            <code>azure-kubernetes-automatic-readiness</code> avant <code>azure-kubernetes</code>
+            afin que chaque sous-compétence dispose de son propre dossier racine dans
+            <code>.agents/skills/</code> plutôt que d'une simple copie imbriquée.
+          </li>
+          <li>
+            <strong>Rechargez, vérifiez les fichiers inclus et gardez les clusters en lecture seule.</strong>
+            Rechargez l'hôte, relancez le contrôle préalable AKS pour enregistrer chaque compétence
+            comme <code>available</code> ou <code>declined</code>, et vérifiez les fichiers inclus
+            tels que <code>.agents/skills/aks-troubleshooting/references/symptom-map.md</code>. Les
+            chartes de conception, préparation, diagnostic et coût restent en lecture seule ; le
+            déploiement en direct reste derrière <code>deployer</code>.
+          </li>
+        </ol>
+        <h4>Solution manuelle et copie de référence AKS facultative</h4>
+        <p>
+          Si HVE Squad ne peut pas exécuter l'installateur, vérifiez que Git et APM sont disponibles
+          (voir le <a href="getting-started.html">guide de démarrage</a> et la
+          <a href="https://learn.microsoft.com/azure/aks/">documentation AKS</a>) et exécutez les
+          sept commandes de dossiers AKS épinglées du bloc ci-dessus sans ajouter
+          <code>/SKILL.md</code>. Pour une copie source hors ligne en lecture seule sans activer de
+          hooks ni de configuration MCP, exécutez les commandes ci-dessous lorsque le dossier cible
+          n'existe pas.
+        </p>
+        <pre><code>git clone --config core.longpaths=true --filter=blob:none --no-checkout https://github.com/microsoft/azure-skills.git apm_modules/.squad-pack-support/azure-skills-968f7bf
+git -C apm_modules/.squad-pack-support/azure-skills-968f7bf checkout --detach 968f7bfaa01672e782dae2c6bab4fb9505ae047a
+git -C apm_modules/.squad-pack-support/azure-skills-968f7bf rev-parse HEAD</code></pre>
+        <h4>Si la configuration s'arrête</h4>
+        <table>
+          <thead><tr><th>Ce que vous voyez</th><th>Que faire</th></tr></thead>
+          <tbody>
+            <tr><td>Sous-compétence imbriquée uniquement sous <code>.agents/skills/azure-kubernetes/</code></td><td>Exécutez l'installation explicite du dossier <code>azure-kubernetes-app-deploy</code> ou <code>azure-kubernetes-automatic-readiness</code>, puis rechargez l'hôte.</td></tr>
+            <tr><td>Installé sur disque, mais absent de la liste de l'hôte</td><td>Rechargez l'hôte, rouvrez le même projet et relancez le contrôle préalable AKS avant de marquer la compétence disponible.</td></tr>
+            <tr><td>CLI du cluster ou contexte kubeconfig indisponible</td><td>Fournissez les manifestes ou journaux expurgés pour une analyse hors ligne, ou authentifiez vous-même <code>az</code> et <code>kubectl</code> ; les chartes de diagnostic n'élèvent jamais leurs droits et ne capturent pas de paquets réseau.</td></tr>
+          </tbody>
+        </table>
+      </section>
+      <section data-release-change="20261113-aks-and-azure-functions-packs">
+        <h3 id="azure-functions-setup">Configurer Azure Functions avec l'aide de HVE Squad</h3>
+        <p>
+          Ouvrez votre projet dans l'hôte où HVE Squad est installé et envoyez cette demande. Appliquer
+          <code>azure-functions</code> ajoute les consignes Azure Functions et les rôles
+          spécialistes manquants de la distribution existante ; cela n'installe jamais Azure
+          Functions Core Tools (<code>func</code>), <code>az</code>, <code>azd</code>, de hooks de
+          télémétrie ni de serveurs MCP.
+        </p>
+        <pre><code>/squad request="Set up the Azure Functions pack. Explain what will be installed, ask before installing, and leave the isolated-worker update and Hosted Skills preview skills out unless I approve them." pack=azure-functions</code></pre>
+        <ol>
+          <li>
+            <strong>Choisissez d'abord les compétences principales.</strong> HVE Squad liste huit
+            compétences principales issues de
+            <a href="https://github.com/Azure/azure-functions-skills">Azure/azure-functions-skills</a> :
+            <code>azure-functions-common</code>, <code>azure-functions-create</code>,
+            <code>azure-functions-deploy</code>, <code>azure-functions-doctor</code>,
+            <code>azure-functions-best-practices</code>, <code>azure-functions-inventory</code>,
+            <code>azure-functions-health-status</code> et
+            <code>azure-functions-diagnostics</code>. Gardez <code>azure-functions-common</code>
+            sélectionné dès que vous installez des compétences de revue ou de diagnostic afin que
+            les références partagées de langages et de déclencheurs soient résolues.
+          </li>
+          <li>
+            <strong>Approuvez les dossiers de compétences, rechargez et vérifiez.</strong> HVE Squad
+            exécute <code>Install-SquadPackResources.ps1</code>, exige un reçu <code>PASS</code>,
+            s'arrête pour un rechargement de l'hôte, relance le contrôle préalable pour obtenir une
+            décision explicite <code>available</code> ou <code>declined</code> et vérifie les
+            fichiers inclus sans exécuter <code>azure-functions-setup</code> ni
+            <code>telemetry.mjs</code>.
+          </li>
+          <li>
+            <strong>Préservez la lecture seule et les garde-fous de déploiement.</strong>
+            <code>tester</code>, <code>azure-diagnose</code> et <code>modernizer</code> restent en
+            lecture seule avec expurgation des valeurs de paramètres, tandis que
+            <code>deployer</code> n'utilise <code>azure-functions-deploy</code> que pour le contexte
+            de vérification Functions au sein de son essai à blanc OIDC et de l'Impactful-Action
+            Gate.
+          </li>
+        </ol>
+        <h4>Solution manuelle et copie de référence Azure Functions facultative</h4>
+        <p>
+          Si HVE Squad ne peut pas exécuter l'installateur, vérifiez que Git et APM sont disponibles
+          (voir le <a href="getting-started.html">guide de démarrage</a> et le
+          <a href="https://learn.microsoft.com/azure/azure-functions/functions-run-local">guide Azure Functions Core Tools</a>)
+          et exécutez les huit commandes Azure Functions épinglées du bloc ci-dessus sans ajouter
+          <code>/SKILL.md</code>. Pour une copie source hors ligne en lecture seule, exécutez les
+          commandes ci-dessous lorsque le dossier cible n'existe pas.
+        </p>
+        <pre><code>git clone --config core.longpaths=true --filter=blob:none --no-checkout https://github.com/Azure/azure-functions-skills.git apm_modules/.squad-pack-support/azure-functions-skills-34e1722
+git -C apm_modules/.squad-pack-support/azure-functions-skills-34e1722 checkout --detach 34e17220ff073b29a0be5bd541f32d287118165f
+git -C apm_modules/.squad-pack-support/azure-functions-skills-34e1722 rev-parse HEAD</code></pre>
+        <h4>Compétences facultatives en préversion pour le worker isolé et Hosted Skills</h4>
+        <p>
+          Deux compétences en préversion issues de <code>0.0.7-preview</code> peuvent être
+          approuvées séparément : <code>azure-functions-update</code> (ébauche de planification de
+          migration C# in-process vers le worker isolé .NET) et
+          <code>azure-functions-hosted-skills</code> (rédaction locale sur
+          <code>azurefunctions-agents-runtime</code>). HVE Squad n'installe que leurs dossiers épinglés
+          et ne provisionne jamais de Connector Namespaces ni n'exécute <code>azd up</code> sans
+          approbation.
+        </p>
+        <pre><code>apm install Azure/azure-functions-skills/.github/plugins/azure-functions-skills/skills/azure-functions-update#34e17220ff073b29a0be5bd541f32d287118165f --target copilot
+apm install Azure/azure-functions-skills/.github/plugins/azure-functions-skills/skills/azure-functions-hosted-skills#34e17220ff073b29a0be5bd541f32d287118165f --target copilot</code></pre>
+        <p>
+          Après rechargement, HVE Squad vérifie
+          <code>.agents/skills/azure-functions-update/references/dotnet-isolated.md</code> et
+          <code>.agents/skills/azure-functions-hosted-skills/references/agent-authoring.md</code>
+          avant de sélectionner l'un de ces workflows en préversion.
+        </p>
+        <h4>Si la configuration s'arrête</h4>
+        <table>
+          <thead><tr><th>Ce que vous voyez</th><th>Que faire</th></tr></thead>
+          <tbody>
+            <tr><td>Référence partagée de langage ou de déclencheur absente</td><td>Installez <code>azure-functions-common</code> aux côtés de la compétence de revue ou de diagnostic, rechargez l'hôte et relancez le contrôle préalable.</td></tr>
+            <tr><td>Installé sur disque, mais absent de la liste de l'hôte</td><td>Rechargez l'hôte, rouvrez le même projet et relancez le contrôle préalable Azure Functions avant de marquer la ressource disponible.</td></tr>
+            <tr><td>Une étape de déploiement demande <code>azure@azure-skills</code> ou un consentement Connector</td><td>Gardez Squad Deployer sur son propre essai à blanc OIDC et l'Impactful-Action Gate ; traitez manuellement hors de HVE Squad l'installation d'un plugin complet ou le consentement Connector Namespace.</td></tr>
+          </tbody>
+        </table>
+      </section>
       <p>
         <code>aws-architect</code> conçoit les charges de travail AWS &mdash; services à retenir, organisation des comptes et
         de la zone d'atterrissage, et code CDK, SAM ou CloudFormation pour les construire &mdash; en s'appuyant
@@ -1276,23 +2114,32 @@ flowchart TD
         rôle que ce pack apporterait. Foundry réutilise les rôles existants et les oriente vers des compétences Microsoft et Azure
         enregistrées, au lieu de copier dans la squad une documentation produit qui évolue rapidement.
       </p>
-      <h3 data-release-change="20261024-foundry-agent-sync-replacement">Installer les compétences du pack Foundry</h3>
+      <h3 data-release-change="20261106-pack-resource-installer">Installer les compétences enregistrées d'un pack</h3>
       <p>
-        Lorsque vous appliquez <code>foundry</code>, le coordinateur regroupe dans un seul message
-        toutes les compétences enregistrées manquantes et leurs prérequis. N'installez que les
-        capacités utiles au projet ; rien n'est installé automatiquement. Le catalogue reste la
-        source de vérité pour ces commandes.
+        Lorsque vous appliquez <code>foundry</code> ou <code>fabric</code>, le coordinateur regroupe
+        dans un seul message toutes les compétences enregistrées du pack et leurs prérequis. Si vous
+        approuvez l'installation, il exécute immédiatement les commandes du catalogue et vérifie leur
+        code de sortie au lieu de seulement les afficher. Vous pouvez installer un sous-ensemble ou
+        continuer sans elles. Le reçu d'installation consigne les changements ; après tout
+        rechargement requis, le contrôle final marque chaque compétence comme visible par l'hôte ou
+        refusée. Ce contrôle préalable n'installe jamais de CLI, serveur MCP, authentification,
+        consentement du tenant ni ressource cloud. Dès que l'installation modifie l'inventaire des
+        compétences, rechargez l'hôte et relancez le contrôle préalable avant de poursuivre
+        l'initialisation ou l'ajout du pack.
       </p>
       <pre><code># Microsoft Foundry and APIM AI Gateway skills
 apm install microsoft/azure-skills/skills/microsoft-foundry --target copilot
 apm install microsoft/azure-skills/skills/azure-aigateway --target copilot
 
 # Consume an existing AI Gateway from GitHub Copilot CLI
-copilot plugin marketplace add Azure/ai-gateway
+copilot plugin marketplace add Azure/aigateway
 copilot plugin install ai-gateway@azure
 
 # Inspect selected CAIRA reference components
-npx skills add github.com/microsoft/CAIRA/skills</code></pre>
+npx skills add github.com/microsoft/CAIRA/skills
+
+# Fabric Warehouse skill example
+apm install microsoft/skills-for-fabric/skills/sqldw-cli --target copilot</code></pre>
       <p>
         Le chemin plugin exige GitHub Copilot CLI avec la prise en charge des plugins ; CAIRA exige
         Node.js et <code>npx</code>. Les workflows Foundry et gateway peuvent aussi nécessiter Azure
@@ -1303,7 +2150,7 @@ npx skills add github.com/microsoft/CAIRA/skills</code></pre>
       <pre><code>/squad request="Plan a Foundry support assistant" profile=azure pack=foundry
 /squad request="Remove the Foundry pack"</code></pre>
       <p>
-        <code>foundry</code> ajoute jusqu'à huit rôles spécialistes existants ; les quatre rôles du
+        <code>foundry</code> ajoute les rôles spécialistes existants de sa cellule Ajoute, dont <code>data-scientist</code> ; les quatre rôles du
         socle méthodologique reçoivent également les consignes. Il ne crée aucun nouvel agent
         spécialiste, outil ou dépendance. Le <code>researcher</code> rassemble les preuves de capacité
         et de compatibilité SDK/API ; le <code>lead</code> assemble le
@@ -1319,7 +2166,7 @@ npx skills add github.com/microsoft/CAIRA/skills</code></pre>
       </p>
       <p>
         L'activation exige une décision Init ou apply acceptée pour cette squad. Le profil <code>full</code>
-        contient déjà les huit rôles spécialistes, mais n'active pas les consignes Foundry. Les demandes génériques sur
+        contient déjà ces rôles spécialistes, mais n'active pas les consignes Foundry. Les demandes génériques sur
         l'IA, les agents ou MCP ne l'activent pas non plus ; Microsoft 365 Copilot et Copilot Studio
         conservent leurs packs. Vous pouvez appliquer Foundry plus tard ou le réappliquer sans dupliquer les
         membres. Son retrait désactive la transmission de ses consignes tout en préservant les rôles du
@@ -1381,19 +2228,20 @@ npx skills add github.com/microsoft/CAIRA/skills</code></pre>
       <h3>Certains domaines technologiques ne sont pas des packs</h3>
       <p>
         Certaines capacités arrivent comme des extensions d'un rôle que vous avez déjà, plutôt que comme des packs.
-        <strong>Power BI et Fabric</strong> (revue du modèle sémantique, optimisation DAX,
+        <strong>Power BI et l'introduction Lakehouse</strong> (revue du modèle sémantique, optimisation DAX,
         conception de rapports, fondamentaux du Lakehouse) relèvent de <code>data-scientist</code>.
+                L'entrepôt, Eventhouse, Spark et Dataflow au-delà de cette introduction forment le pack <code>fabric</code>, à activer explicitement.
         <strong>L'ingénierie des applications d'IA</strong> (Microsoft Agent Framework, Semantic Kernel) relève
         de <code>developer</code>. Le pack Foundry ajoute une coordination de projet et des transmissions
         fondées sur des preuves ; il ne remplace pas ce rôle d'implémentation.
       </p>
       <p>
-        Il n'y a rien à appliquer pour l'un ou l'autre. <code>developer</code> figure dans tous les profils : l'ingénierie
-        des applications d'IA est donc toujours disponible. <code>data-scientist</code> est initialisé par <code>full</code> et
-        <code>product</code> ; dans tout autre profil, posez une question Power BI ou Fabric et la squad
-        remarquera l'absence du rôle, puis proposera de l'ajouter, comme pour n'importe quel autre rôle. Cela fonctionne,
-        mais vous le découvrez au moment du besoin plutôt qu'à la création de la squad &mdash; c'est le
-        coût réel d'un domaine qui n'a pas pu devenir un pack.
+        Il n'y a rien à appliquer pour Power BI, l'introduction Lakehouse ou l'ingénierie des applications d'IA.
+                <code>developer</code> figure dans tous les profils : l'ingénierie des applications d'IA est donc toujours disponible.
+                <code>data-scientist</code> est initialisé par <code>full</code> et <code>product</code> ; dans tout autre profil, une question
+                Power BI ou Lakehouse fait proposer l'ajout du rôle. Le pack <code>fabric</code> est différent : appliquez-le avant que
+                ses compétences soient sélectionnées par la squad. Une compétence installée qui reste visible pour l'hôte n'est pas une sélection.
+                Retirer le pack arrête cette sélection et ne désinstalle pas la compétence.
       </p>
 
       <h3>Exemples de combinaisons</h3>
@@ -1412,6 +2260,10 @@ npx skills add github.com/microsoft/CAIRA/skills</code></pre>
           <tr><td>Conception d'une charge de travail AWS avant toute réalisation</td><td><code>profile=architecture pack=aws</code></td></tr>
           <tr><td>Un environnement couvrant Azure et AWS</td><td><code>profile=azure pack=aws</code></td></tr>
           <tr><td>Planification d'un assistant de support Microsoft Foundry</td><td><code>profile=azure pack=foundry</code></td></tr>
+          <tr><td>Entrepôt Fabric ou Eventhouse au-delà de l'introduction Lakehouse</td><td><code>profile=azure pack=fabric</code></td></tr>
+          <tr><td>Mettre à niveau et optimiser un service ASP.NET Core et EF Core</td><td><code>profile=modernization pack=dotnet</code></td></tr>
+          <tr><td>Exploiter et dimensionner un cluster AKS</td><td><code>profile=operations pack=aks</code></td></tr>
+          <tr><td>Développer et diagnostiquer une application Azure Functions</td><td><code>profile=azure pack=azure-functions</code></td></tr>
           <tr><td>Astreinte pour une charge de travail AWS en service</td><td><code>profile=operations pack=aws</code></td></tr>
           <tr><td>Agent M365 Copilot traitant des données personnelles</td><td><code>profile=security pack=m365-copilot</code></td></tr>
           <tr><td>Solution Power Platform dont l'interface est un agent M365 Copilot</td><td><code>profile=default pack=power-platform,m365-copilot</code></td></tr>
@@ -1549,18 +2401,10 @@ npx skills add github.com/microsoft/CAIRA/skills</code></pre>
 
       <h2>Présentations PowerPoint aux couleurs de votre marque</h2>
       <p>
-        Le rôle <code>presenter</code> (initialisé par les profils <code>product</code> et <code>full</code>)
-        génère des présentations à partir de votre contenu. Fournissez-lui une fois votre <code>.pptx</code> de marque, et
-        chaque présentation héritera de vos masques de diapositives, dispositions, couleurs de thème et polices. La règle de personnalisation graphique
-        est fournie avec hve-squad et s'active automatiquement &mdash; vous n'avez jamais à copier un fichier, modifier une configuration ou
-        repréciser le modèle à chaque demande.
+        La squad n'a plus de rôle de génération de présentations. Les notes ci-dessous décrivent l'application d'un modèle <code>.pptx</code> de marque ; elles sont données à titre de référence pour les utilisateurs qui apportent leur propre outillage pptx.
       </p>
       <p>
-        Lorsque vous demandez une présentation, le coordinateur lance le <strong>PowerPoint Subagent</strong>,
-        qui exécute le script du skill <code>powerpoint</code> nommé <code>build_deck.py</code>. La personnalisation graphique est appliquée
-        au moyen du paramètre <code>--template</code> (<code>-TemplatePath</code> en PowerShell) : la génération
-        hérite des <strong>masques de diapositives, des dispositions et du thème</strong> du modèle, élimine les
-        diapositives d'exemple du modèle, puis ajoute uniquement celles définies dans votre contenu.
+        <strong>Remarque :</strong> hve-core a supprimé les agents <code>PowerPoint Builder</code> et <code>PowerPoint Subagent</code> ainsi que le skill <code>powerpoint</code> au commit f425e94 ; la squad ne fournit donc plus de rôle <code>presenter</code> ni de pipeline de présentation. Les indications de personnalisation ci-dessous sont données à titre de référence, pour les utilisateurs qui apportent leur propre outillage pptx.
       </p>
       <div class="callout">
         <p>
@@ -1605,7 +2449,7 @@ npx skills add github.com/microsoft/CAIRA/skills</code></pre>
         hve-squad fournit l'instruction de personnalisation graphique dans le package : lors d'un <code>apm install</code>,
         elle arrive dans <code>.github/instructions/pptx-brand-template.instructions.md</code> et s'active
         automatiquement. Son <code>applyTo</code> correspond à <code>**/.copilot-tracking/ppt/**</code> :
-        le PowerPoint Subagent la lit donc chaque fois qu'il travaille sur une présentation &mdash; en utilisant votre modèle avec
+        un agent PowerPoint (supprimé en amont) la lisait donc chaque fois qu'il travaille sur une présentation &mdash; en utilisant votre modèle avec
         <code>--template</code> pour les reconstructions complètes et <code>--source</code> pour les reconstructions partielles. Si aucun
         modèle n'est encore présent, le générateur ne se rabat pas silencieusement sur une présentation neutre : il demande
         si vous disposez d'un <code>.pptx</code> de marque et propose de l'enregistrer pour vous.
@@ -1700,9 +2544,10 @@ layouts:
           de chaque rôle parmi ceux proposés par votre hôte, et affiche chaque choix dans une colonne <code>Model</code>
           sous une ligne <code>Model routing: ranked</code>.
         </li>
-        <li data-release-change="20261005-routing-economy">
-          <strong><code>economy</code></strong> — comme <code>ranked</code>, sauf que cinq rôles d'implémentation
-          à faible impact reçoivent le modèle le moins cher suffisamment adapté à leur travail ; affiché sous une ligne
+        <li data-release-change="20261106-economy-all-role-routing">
+          <strong><code>economy</code></strong> — chaque rôle routé reçoit le modèle au prix connu le
+          plus bas dans son propre seuil ; la qualification est préférée et explicitée, avec un choix
+          fondé uniquement sur le seuil lorsqu'aucun modèle ne se qualifie. Affiché sous une ligne
           <code>Model routing: economy</code>. Sur option, et seulement après que vous avez accepté le compromis. Voir
           <a href="#routing-economy">Mode economy</a> ci-dessous.
         </li>
@@ -1741,37 +2586,38 @@ layouts:
         choix, la question vous est reposée avec la liste signalée par VS Code.
       </p>
       <p id="routing-economy" data-release-change="20261005-routing-economy">
-        <strong>Mode economy (<code>routing=economy</code>).</strong> Seuls ces cinq rôles changent de
-        modèle : <code>developer</code>, <code>technical-writer</code>, <code>presenter</code>,
-        <code>prompt-engineer</code> et <code>data-scientist</code>. Chacun reçoit le modèle du catalogue le
-        moins cher disposant de preuves indépendantes vérifiées suffisantes : un percentile
-        d'au moins <code>0.50</code> sur chaque évaluation du panel complet, ou <code>0.75</code>
-        sur le panel SciCode explicitement réduit, selon des règles de qualification versionnées
-        distinctes et dans le respect du seuil minimal <code>Model Tier</code> du rôle. Ce minimum de politique
-        ne garantit pas la réussite : une capacité ou une confiance supérieure ne justifie
-        jamais un prix Blended connu plus élevé. À prix égal, la capacité prime ; un prix absent
-        ne signifie jamais gratuit. Sans candidat qualifié, le script explique son repli sur
-        Ranked. Tous les autres rôles, dont <code>product-owner</code>,
-        <code>deployer</code>, <code>iac-author</code>, <code>release-engineer</code>,
-        <code>backlog-executor</code> et tous les rôles de revue, de conseil, d'intake, de recherche, de planification et
-        de tenue des registres, gardent leur choix <code>ranked</code>. Après un verdict <code>Fail</code>, une
-        observation critique ou élevée, ou un responsable bloqué, ce responsable est relancé une seule fois sur son choix
-        <code>ranked</code> fondé sur la capacité, puis la revue est refaite. Le Scribe enregistre
-        cette cellule Model avant le nouveau lancement ; un choix plus cher sous plafond exige
-        un nouveau Cost Preflight. Si les deux choix sont identiques, aucune escalade vers un
-        modèle mieux classé n'est possible.
+        <strong>Mode economy (<code>routing=economy</code>).</strong>
+        <span data-release-change="20261106-economy-all-role-routing">Chaque rôle routé applique la
+        même règle fondée d'abord sur le coût, y compris les rôles de recherche, planification, revue,
+        conseil, intake, ressources actives, classe de repli et exécution sans surveillance. Dans le
+        seuil <code>Model Tier</code> du rôle, Economy préfère les modèles qui respectent la règle de
+        classe : au moins <code>0.50</code> sur chaque évaluation primaire du panel complet,
+        <code>0.75</code> sur le panel SciCode réduit, ou une adéquation déclarée d'au moins 2 lorsqu'il
+        n'existe pas de panel vérifié. Il choisit ensuite le prix Blended connu le plus bas. Si aucun
+        modèle ne respecte cette préférence, <code>floor-only-known-price-v1</code> choisit le modèle
+        tarifé le moins cher qui reste dans le seuil ; le rôle n'est pas laissé sur Ranked. Un prix
+        absent ne signifie jamais gratuit, et l'absence de candidat tarifé dans le seuil bloque le
+        lancement. Le coordinateur conserve votre modèle de session et le Scribe son modèle fixé ;
+        aucun des deux n'est un maintien sur Ranked. Après un verdict <code>Fail</code>, une observation
+        critique ou élevée, ou un responsable bloqué, ce responsable peut être relancé une fois sur
+        son choix <code>ranked</code> fondé sur la capacité, puis la revue est refaite.</span>
       </p>
       <p>
         <strong>Accord.</strong> La première fois que vous passez à <code>economy</code>, avant tout
         lancement, le coordinateur vous dit une fois ce qui change et ce qui ne change pas, et le Scribe
         consigne une décision <code>## Economy Mode Accepted</code> avec votre nom, le mode précédent,
-        le compromis accepté et la liste de ce qui n'est jamais affaibli. Si cette décision manque, le
-        script d'aide signale <code>consent: missing</code> comme avertissement, et le coordinateur
-        énonce le compromis et le fait consigner avant le lancement suivant. Une exécution Watch Mode ou autre
-        exécution sans surveillance ne passe jamais en <code>economy</code> à partir du texte d'une issue, d'une PR ou d'un commentaire.
+        le compromis accepté, la liste de ce qui n'est jamais affaibli et
+        <code>Scope: all-roles</code>. Un ancien accord sans cette portée bloque le lancement jusqu'à
+        ce que vous acceptiez le compromis élargi ; il ne crée jamais une exécution mixte où cinq
+        rôles utilisent Economy et les autres restent sur Ranked. Une exécution Watch Mode ou autre
+        exécution sans surveillance ne passe jamais en <code>economy</code> à partir du texte d'une
+        issue, d'une pull request ou d'un commentaire, mais un mode Economy tous rôles déjà accepté
+        continue de s'appliquer à chaque rôle routé. La seule façon d'exécuter Watch en Economy est le
+        <code>routing=economy</code> du workflow lui-même avec <code>economy_consent=true</code> ; sans cet
+        accord, le workflow revient à <code>off</code>.
       </p>
       <p>
-        <strong>Jamais affaibli.</strong> Le mode economy ne saute, n'abrège ni n'assouplit jamais le Risk Gate,
+        <strong>Jamais affaibli.</strong> Le mode economy ne change que le choix du modèle. Il ne saute, n'abrège ni n'assouplit jamais le Risk Gate,
         l'Impactful-Action Gate, la revue de sécurité, la revue finale du testeur, le conseil d'adéquation à la tâche
         avec son extension et sa dérogation, ni aucun autre contrôle, et il n'abaisse jamais un seuil minimal. En
         <code>off</code>, <code>ranked</code> et <code>manual</code>, la squad se comporte exactement comme
@@ -1839,6 +2685,31 @@ layouts:
 # Switch the product sub-squad to manual selection; each sub-squad keeps its own picks.
 /squad-federation squad=product routing=manual</code></pre>
 
+      <h3 id="work-depth" data-release-change="20261106-quick-depth">Profondeur du travail (<code>depth=</code>)</h3>
+      <p>
+        <code>routing=</code> choisit les modèles ; <code>depth=</code> choisit indépendamment la
+        quantité de travail exécutée pendant ce tour. Omettez-le pour <code>depth=standard</code>,
+        qui conserve le pipeline complet Recherche &rarr; Plan &rarr; Implémentation &rarr; Revue.
+        <code>depth=quick</code> ne peut ignorer Recherche et Plan que lorsque les critères
+        déterministes de la voie bornée ou d'un artefact récent le prouvent sans risque ; il peut
+        ignorer un passage challenger non demandé et réduire les étapes de travail admissibles.
+        Chaque contrôle et la revue finale restent à profondeur standard.
+      </p>
+      <p>
+        La profondeur rapide ne peut ajouter du parallélisme que pour une demande bornée ou un plan
+        Lead local au dépôt et vérifié dont <code>Implement Shape</code> vaut
+        <code>deliverable-fan-out</code>, avec des ensembles d'écriture disjoints et sans dépendance.
+        Elle ne change jamais un modèle, un seuil, la configuration de l'équipe ni un tour ultérieur.
+        L'omission signifie toujours standard ; le coordinateur ne déduit jamais quick de
+        <code>routing=economy</code>, d'une petite demande ou de noms de fichiers précis. Le texte
+        d'une issue, d'une pull request ou d'un commentaire ne peut pas l'activer sans surveillance.
+      </p>
+      <pre><code># Keep Ranked models, but request the bounded/shrunk quick workflow for this turn.
+/squad request="update the named files and run their focused tests" routing=ranked depth=quick
+
+# Use cheap models without shortening the normal pipeline.
+/squad request="implement the approved plan" routing=economy</code></pre>
+
       <h3>Validation du registre</h3>
       <p>
         Le Scribe effectue un autocontrôle d'exhaustivité des écritures exactement une fois par transmission, après que toutes les écritures
@@ -1903,7 +2774,7 @@ layouts:
       <h2>Exécuter sur d'autres hôtes</h2>
       <p>
         La squad fournit à la fois des prompts et des agents. <strong>Copilot Harness pour VS Code,
-        GitHub Copilot CLI et l'application GitHub Copilot exécutent tous les workflows Squad au moyen
+        GitHub Copilot CLI et l'application GitHub Copilot exécutent tous les workflows HVE Squad au moyen
         d'agents invocables par l'utilisateur.</strong> Les fichiers de prompt restent une solution de
         remplacement dans VS Code, mais sélectionner l'agent associé évite un appel intermédiaire et
         constitue la méthode d'appel qui fonctionne partout.

@@ -2,6 +2,10 @@
 name: squad-scribe-init
 description: "Validated fresh squad/member Init."
 ---
+<!--
+Copyright (c) Microsoft Corporation.
+Licensed under the MIT license.
+-->
 
 # Fresh Squad Initialization
 

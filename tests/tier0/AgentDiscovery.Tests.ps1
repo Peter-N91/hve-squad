@@ -1,5 +1,6 @@
 #Requires -Modules Pester
-# Copyright (c) 2026 Microsoft Corporation. All rights reserved.
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT license.
 # SPDX-License-Identifier: MIT
 
 [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSReviewUnusedParameter', 'SourceRoot',
@@ -17,10 +18,16 @@ BeforeAll {
         [IO.File]::WriteAllText($Path, "---`nname: $Name`n$Extra`n---`n# Fixture`n")
     }
 
+    function Write-SkillFile {
+        param([string]$Path, [string]$Name)
+        $null = [IO.Directory]::CreateDirectory((Split-Path -Parent $Path))
+        [IO.File]::WriteAllText($Path, "---`nname: $Name`ndescription: Fixture skill.`n---`n# Fixture`n")
+    }
+
     function New-AgentLayout {
         [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseShouldProcessForStateChangingFunctions', '',
             Justification = 'Creates only isolated Pester TestDrive fixtures.')]
-        param([switch]$Synced)
+        param([switch]$Synced, [switch]$Bundled)
         $base = Join-Path $TestDrive ([guid]::NewGuid().ToString('N'))
         $repo = Join-Path $base 'consumer repo'
         $null = [IO.Directory]::CreateDirectory($repo)
@@ -30,6 +37,7 @@ BeforeAll {
             $squad = Join-Path $base 'agentPlugins/squad-source/current-squad'
             $core = Join-Path $base 'agentPlugins/core-source/current-core'
         }
+        if ($Bundled) { $core = $squad }
         $skill = Join-Path $squad 'skills/squad'
         $null = [IO.Directory]::CreateDirectory($skill)
         Copy-Item -LiteralPath (Join-Path $script:DiscoverySource 'scripts') -Destination $skill -Recurse
@@ -38,7 +46,15 @@ BeforeAll {
         $null = [IO.Directory]::CreateDirectory((Join-Path $squad 'agents'))
         Copy-Item -LiteralPath (Join-Path $SourceRoot 'squad-src/.github/agents/squad') -Destination (Join-Path $squad 'agents') -Recurse
         Write-AgentFile -Path (Join-Path $core '.github/agents/security/security-planner.agent.md') -Name 'Security Planner' -Extra 'model: claude-sonnet-5.5'
-        [IO.File]::WriteAllText((Join-Path $core 'plugin.json'), '{"name":"hve-core","agents":[".github/agents/security/security-planner.agent.md"]}')
+        if ($Bundled) {
+            [IO.File]::WriteAllText(
+                (Join-Path $squad 'plugin.json'),
+                '{"name":"hve-squad","agents":["agents/squad/",".github/agents/security/security-planner.agent.md"]}'
+            )
+        }
+        else {
+            [IO.File]::WriteAllText((Join-Path $core 'plugin.json'), '{"name":"hve-core","agents":[".github/agents/security/security-planner.agent.md"]}')
+        }
         [pscustomobject]@{ Repo = $repo; Squad = $squad; Core = $core; Scripts = Join-Path $skill 'scripts'; Base = $base }
     }
 
@@ -48,13 +64,30 @@ BeforeAll {
         try { Get-SquadAgentIndex -RepoRoot $Layout.Repo }
         finally { Remove-Module $module.Name -Force }
     }
+
+    function Read-SkillIndex {
+        param($Layout, [string[]]$AvailableSkill = @())
+        $module = Import-Module (Join-Path $Layout.Scripts 'SquadCoordinator.psm1') -Force -PassThru -DisableNameChecking
+        try { Get-SquadSkillIndex -RepoRoot $Layout.Repo -AvailableSkill $AvailableSkill }
+        finally { Remove-Module $module.Name -Force }
+    }
 }
 
 AfterAll { $env:SQUAD_ACTIVE_PLUGIN_ROOTS = $script:OriginalActiveRoots }
 
-Describe 'Active host plugin agent discovery (COORD-13)' {
+Describe 'Bundled and legacy plugin agent discovery (COORD-13)' {
     BeforeEach { Remove-Item Env:SQUAD_ACTIVE_PLUGIN_ROOTS -ErrorAction SilentlyContinue }
-    It 'preserves the sibling-plugin layout used by <HostName>' -ForEach @(
+    It 'resolves the bundled HVE Core cast on <HostName> without host inventory' -ForEach @(
+        @{ HostName = 'VS Code' }, @{ HostName = 'Copilot CLI' }, @{ HostName = 'GitHub Copilot App' }
+    ) {
+        $layout = New-AgentLayout -Synced -Bundled
+        $index = Read-AgentIndex $layout
+        $index.ContainsKey('Squad Researcher') | Should -BeTrue
+        $index['Security Planner'].path | Should -BeExactly (Join-Path $layout.Squad '.github/agents/security/security-planner.agent.md')
+        $index['Security Planner'].model | Should -BeExactly 'claude-sonnet-5.5'
+    }
+
+    It 'preserves the legacy sibling-plugin layout used by <HostName>' -ForEach @(
         @{ HostName = 'CLI' }, @{ HostName = 'GitHub Copilot App' }
     ) {
         $layout = New-AgentLayout
@@ -83,6 +116,27 @@ Describe 'Active host plugin agent discovery (COORD-13)' {
         $index['Security Planner'].dispatchable | Should -BeTrue
     }
 
+    It 'discovers repository and explicit host skills without scanning unrelated plugin caches' {
+        $layout = New-AgentLayout -Synced
+        $localSkill = Join-Path $layout.Repo '.agents/skills/foundry-iq/SKILL.md'
+        Write-SkillFile $localSkill 'foundry-iq'
+        $index = Read-SkillIndex $layout -AvailableSkill @('use-ai-gateway')
+        $index['foundry-iq'].path | Should -BeExactly $localSkill
+        $index['use-ai-gateway'].source | Should -BeExactly 'host-inventory'
+    }
+
+    It 'discovers skills declared by an explicitly active plugin' {
+        $layout = New-AgentLayout -Synced
+        $pluginSkill = Join-Path $layout.Core 'skills/microsoft-foundry/SKILL.md'
+        Write-SkillFile $pluginSkill 'microsoft-foundry'
+        [IO.File]::WriteAllText(
+            (Join-Path $layout.Core 'plugin.json'),
+            '{"name":"hve-core","agents":[".github/agents/security/security-planner.agent.md"],"skills":["skills/"]}'
+        )
+        $env:SQUAD_ACTIVE_PLUGIN_ROOTS = ConvertTo-Json -InputObject @($layout.Core) -Compress
+        (Read-SkillIndex $layout)['microsoft-foundry'].path | Should -BeExactly $pluginSkill
+    }
+
     It 'uses the same active roots in the actual initialization proposal command' {
         $layout = New-AgentLayout -Synced
         $env:SQUAD_ACTIVE_PLUGIN_ROOTS = ConvertTo-Json -InputObject @($layout.Core) -Compress
@@ -103,9 +157,8 @@ Describe 'Active host plugin agent discovery (COORD-13)' {
         $index['Security Planner'].model | Should -BeExactly 'local-pin'
     }
 
-    It 'initializes and prepares native security dispatch through the synced plugin scripts' {
-        $layout = New-AgentLayout -Synced
-        $env:SQUAD_ACTIVE_PLUGIN_ROOTS = ConvertTo-Json -InputObject @($layout.Core) -Compress
+    It 'initializes and prepares native security dispatch through the bundled plugin scripts' {
+        $layout = New-AgentLayout -Synced -Bundled
         $choices = @{
             confirmed = $true; squadRoot = '.copilot-tracking/squad'; runId = 'plugin-discovery'
             profile = 'custom'; naming = 'skip'; sessionModel = 'claude-sonnet-5.5'
@@ -122,7 +175,7 @@ Describe 'Active host plugin agent discovery (COORD-13)' {
         ($output | ConvertFrom-Json).verified | Should -BeTrue
         $plan = @{
             squadRoot = '.copilot-tracking/squad'; units = @(@{ id = 'security'; role = 'security' })
-            agentTypes = @('hve-squad-hve-core:security-planner')
+            agentTypes = @('hve-squad:security-planner')
         }
         $planPath = Join-Path $layout.Repo 'plan.json'
         [IO.File]::WriteAllText($planPath, ($plan | ConvertTo-Json -Depth 10))
@@ -130,7 +183,7 @@ Describe 'Active host plugin agent discovery (COORD-13)' {
         $LASTEXITCODE | Should -Be 0 -Because $output
         $dispatch = $output | ConvertFrom-Json
         $dispatch.units[0].endpoint.agent | Should -BeExactly 'Security Planner'
-        $dispatch.units[0].endpoint.nativeAgentTypes.'Security Planner' | Should -BeExactly 'hve-squad-hve-core:security-planner'
+        $dispatch.units[0].endpoint.nativeAgentTypes.'Security Planner' | Should -BeExactly 'hve-squad:security-planner'
         $squadRoot = Join-Path $layout.Repo '.copilot-tracking/squad'
         $output = & pwsh -NoProfile -File (Join-Path $layout.Scripts 'Resolve-SquadModelRoute.ps1') -SquadRoot $squadRoot -Role security -SessionModel 'claude-haiku-5.5' 2>&1 | Out-String
         $LASTEXITCODE | Should -Be 0 -Because $output

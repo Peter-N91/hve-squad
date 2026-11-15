@@ -3,6 +3,10 @@ description: "Starts a read-only Squad Coach conversation that reads current cod
 agent: Squad Coach
 argument-hint: "[request=...] [host=vscode|cli|app]"
 ---
+<!--
+Copyright (c) Microsoft Corporation.
+Licensed under the MIT license.
+-->
 
 # Squad Coach
 

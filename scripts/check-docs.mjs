@@ -1,11 +1,15 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT license.
 import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { load } from "cheerio";
 import { buildPages, diagramSource, readSource, repositoryRoot } from "./docs-content.mjs";
 import { localizeDiagram } from "./diagram-locales.mjs";
+import { validateMermaidLicenses } from "./mermaid-licenses.mjs";
 
 const output = resolve(repositoryRoot, "_site");
+validateMermaidLicenses({ repositoryRoot, outputRoot: output });
 const normalized = value => value.replace(/\s+/g, " ").trim();
 const renderedDocuments = new Map();
 const pages = buildPages();
@@ -79,6 +83,20 @@ for (const page of pages) {
   const localizedDiagrams = diagrams.map((diagram, index) => localizeDiagram(diagram, page.language, page.slug, index));
   assert.deepEqual($(".diagram-code code").toArray().map(element => $(element).text()), localizedDiagrams, `${page.outputPath}: incorrect diagram translation`);
   assert.equal($('script[src*="cdn."]').length, 0, "Diagrams must be self-hosted.");
+  const fontStyles = $('link[rel="stylesheet"]').toArray()
+    .map(element => $(element).attr("href"))
+    .filter(href => href.startsWith("https://fonts.googleapis.com/"));
+  assert.equal(fontStyles.length, 1, `${page.outputPath}: expected one Google Fonts stylesheet`);
+  const fontUrl = new URL(fontStyles[0]);
+  assert.equal(fontUrl.pathname, "/css2");
+  assert.deepEqual(fontUrl.searchParams.getAll("family"), [
+    "JetBrains Mono:wght@100..800",
+    "Manrope:wght@200..800",
+    "Source Sans 3:ital,wght@0,200..900;1,200..900",
+  ]);
+  assert.equal(fontUrl.searchParams.get("display"), "swap");
+  assert.equal($('link[rel="preload"][as="font"]').length, 0, "Fonts must not preload removed local binaries.");
+  assert.equal($('script[src*="fonts.googleapis.com"], script[src*="fonts.gstatic.com"]').length, 0, "Fonts must not require JavaScript.");
 }
 
 for (const [filename, $] of renderedDocuments) {
@@ -100,6 +118,8 @@ for (const [filename, $] of renderedDocuments) {
 assert(existsSync(resolve(output, "pagefind/pagefind.js")), "Missing search index.");
 assert(existsSync(resolve(output, "assets/vendor/mermaid.min.js")), "Missing self-hosted Mermaid.");
 assert(existsSync(resolve(output, "assets/vendor/mermaid-LICENSE.txt")), "Missing Mermaid licence.");
+assert(!/\.woff2\b|@font-face/i.test(readFileSync(resolve(output, "assets/site.css"), "utf8")),
+  "Site CSS must use Google Fonts rather than local font binaries.");
 const entry = JSON.parse(readFileSync(resolve(output, "pagefind/pagefind-entry.json"), "utf8"));
 for (const page of pages) assert(entry.languages[page.language], `Missing ${page.language} search index.`);
 for (const excluded of ["planning", "architecture", ".copilot-tracking", "knowledge-docs"]) {

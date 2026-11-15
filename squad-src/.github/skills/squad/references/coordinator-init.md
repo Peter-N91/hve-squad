@@ -1,6 +1,10 @@
 ---
 description: "Confirmed script-backed squad/member initialization without model roster transcription."
 ---
+<!--
+Copyright (c) Microsoft Corporation.
+Licensed under the MIT license.
+-->
 
 # Coordinator Initialization
 
@@ -18,16 +22,22 @@ Run `Get-SquadInitContext.ps1 -RepoRoot <repo>` for the installed root, profiles
 packs, naming choices and project metadata; add `-Profile <id>` for resolved
 Primaries and availability. Use repository/request signals to recommend a
 profile; explicit `profile=` wins, then discovery, then `default`. Offer packs
-when their domain fits, never impose one. A pack adds to a profile and is not a
+when their domain fits, never impose one. Offer `fabric` for Warehouse, Eventhouse, Spark, or Dataflow work beyond the Lakehouse primer, `dotnet` for `.NET` upgrades, NuGet CPM, `.NET` test/API review, performance, or EF Core/ASP.NET Core work, `aks` for AKS cluster design, container manifests, AKS Automatic readiness, Day-2 AKS incidents, or AKS cost optimization, and `azure-functions` for Azure Functions apps, triggers/bindings, Function App triage/review, or Hosted Skills; do not apply any pack, and do not select its skills, unless that pack is active. A pack adds to a profile and is not a
 federation. A missing external agent is offered with its install path, not seeded.
+Pack Primaries for `power-platform` and `m365-copilot` are local charters.
+Read each row's Selection Cue: a broad match selects the community Alternate,
+and a missing Alternate escalates instead of substituting the Primary.
+For selected packs, complete *Pack Resource Preflight* in
+`profiles-and-packs.md` before roster confirmation. Explicit approval executes
+the installer now; displaying an install command is not installation.
 
 With neither top-level `team.md` nor `federation.md`, ask single squad versus
 federation first; single is the recommended start. Federation seeds nothing here:
 hand off to `/squad-federation`. An existing single squad moving to federation
 uses promotion, never fresh Init.
 
-Ask and wait for all required choices: profile/packs or custom roster, member
-naming, and approval channel. Use a host's combined native form only if it
+Ask and wait for all required choices: profile/packs or custom roster, every
+listed pack resource disposition, member naming, and approval channel. Use a host's combined native form only if it
 actually supports the distinct required answers; otherwise ask sequentially.
 Never silently default an unasked question. Inherited federation naming/notify
 skip their capture steps. Declining naming means `skip`; declining notifications
@@ -60,7 +70,8 @@ state. Required fields:
 Use only actual confirmed values. Optional fields: `packs` array; `roles` for
 `profile: custom`; `excludeRoles` for explicitly dropped non-spine roles;
 `names` role-to-name map; `modelRouting`, confirmed `models` map; `mode`,
-`modelOverrides`, and actual coordinator `usage`. Carry trusted active `routing=`
+`resourceDecisions` for every listed pack skill; host-verified `availableSkills`;
+`modelOverrides`; and actual coordinator `usage`. Carry trusted active `routing=`
 into `modelRouting`; do not lose it when Init interrupts the original request.
 Naming is `skip`, `aliases`,
 `custom` or `mixed`; custom supplies all names, mixed supplies selected ones.

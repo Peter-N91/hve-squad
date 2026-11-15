@@ -2,6 +2,10 @@
 title: Shared learnings
 description: Two governed options for sharing durable squad learnings: the cross-consumer package path and the tenant-internal private dependency path.
 ---
+<!--
+Copyright (c) Microsoft Corporation.
+Licensed under the MIT license.
+-->
 
 ## Overview
 

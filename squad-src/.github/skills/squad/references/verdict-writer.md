@@ -3,6 +3,10 @@ name: squad-verdict-writer
 description: "Deterministic Council, Intake Readiness, and Discovery Verdict payloads."
 license: MIT
 ---
+<!--
+Copyright (c) Microsoft Corporation.
+Licensed under the MIT license.
+-->
 
 # Deterministic Verdict Writer
 

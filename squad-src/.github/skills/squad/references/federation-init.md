@@ -7,6 +7,10 @@ metadata:
   spec_version: "1.0"
   last_updated: "2026-10-25"
 ---
+<!--
+Copyright (c) Microsoft Corporation.
+Licensed under the MIT license.
+-->
 
 # Deterministic Federation Init
 
@@ -20,6 +24,12 @@ profile, pack, resolved Primary, owner, description and meta-route, captures
 naming and notifications once, then waits for confirmation. No script decides
 those choices or grants approval.
 
+For every proposed member pack, run the shared Pack Resource Preflight before
+writing federation choices. Each member carries its complete
+`resourceDecisions` and relevant native `availableSkills`. If installation
+changes the on-disk skill inventory, stop before preparing the federation plan
+and resume preflight after the required host reload.
+
 Write confirmed choices to a new transport JSON outside squad state and run:
 
 ```powershell
@@ -32,7 +42,8 @@ Required choice fields are `confirmed: true`, `runId`, `naming`, `notify`, and
 
 * `name`: unique lower-kebab-case.
 * `profile`, plus optional standard Init fields such as `packs`, `roles`,
-  `excludeRoles`, names, routing and model choices.
+  `excludeRoles`, names, routing and model choices. Packs with registered skills
+  also carry `resourceDecisions` and `availableSkills`.
 * `owner`, optional and single-line.
 * `description`, single-line.
 * `routes`: one or more `{pattern, parallelEligible}` objects.

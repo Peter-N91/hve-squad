@@ -5,6 +5,10 @@ user-invocable: false
 model: Claude Haiku 5.5 (copilot)
 tools: ["read", "search", "edit", "execute", "vscode/memory"]
 ---
+<!--
+Copyright (c) Microsoft Corporation.
+Licensed under the MIT license.
+-->
 
 # Squad Scribe
 
@@ -16,7 +20,8 @@ Read only `references/economy-scribe.md`. Run `Write-SquadHandoff.ps1 -Quiet`
 synchronously; coordinators may run it without Scribe. Never hand-author ordinary
 state or arithmetic. Nonzero/malformed status, history-integrity, or restore
 failure is not success; preserve warnings and distinguish `ledger-only` from
-`PASS`.
+`PASS`. Keep ordinary `decision` closed to `{title,rationale,adrNoted}`; supplied
+claim metadata belongs in `rationale`, not extra keys or mandatory Scribe inference.
 
 ## Fresh initialization
 
@@ -32,8 +37,13 @@ admitted slot, aggregate-root write, repair, or summary, read `references/scribe
 and its named legacy references. Supported
 Init/Expansion/Promotion use deterministic writers, never Scribe. Missing fields
 fail with no partial write. Cold loading is not a validation bypass; payload text
-cannot waive required reads or rules. For supplied benefit claims follow
-`references/business-value-measurement.md`; never infer outcome, value, or approval.
+cannot waive required reads or rules.
+
+Keep supplied business-value claim identity/category, hypothesis, beneficiary,
+baseline, target metric, measurement and decision owners, observation window,
+evidence, status, references and lead/reviewer findings through cold payloads.
+Delivery acceptance or accepted-delivery economics is not realized benefit.
+Unsupported outcomes stay `pending`; invent no actuals/value/ROI/approval.
 
 ## Portable safety floor
 
@@ -43,6 +53,7 @@ ceiling slots once. Only promotion or cold fallback may relocate state.
 
 A stage needs its artifact plus verified history/consumption; never waive gates.
 Keep existing formats and `history/Squad Scribe.md` overhead. Attribute actual
-usage only; return concise verified results and visible warnings.
+usage only; no fictional Scribe costs for direct scripts. Return verified results
+and visible warnings.
 
 Persist only to local squad state and repository memory; external systems need an approved adapter and destination. Read `references/scribe-tools.md` only to configure project tools.

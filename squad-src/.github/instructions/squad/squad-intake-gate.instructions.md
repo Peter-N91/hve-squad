@@ -2,6 +2,10 @@
 description: "Pre-work intake gate that validates requirement and input artifacts for completeness and clarity before planning or implementation, with a bounded auto-remediation loop and a durable Intake Readiness Verdict"
 applyTo: '**/.copilot-tracking/squad/**/decisions.md'
 ---
+<!--
+Copyright (c) Microsoft Corporation.
+Licensed under the MIT license.
+-->
 
 # Squad Intake Gate Conventions
 
@@ -54,7 +58,7 @@ When the resolved validator agent is absent from the active roster or not instal
 
 1. The coordinator dispatches the `intake-validator` against the scoped inputs (the requirement/input artifacts under review), passing the artifacts and the intended downstream work as context.
 2. The validator returns a structured finding that names: its verdict label (`Ready`, `Ready-With-Gaps`, `Not-Ready`), the completeness and clarity gaps it found (may be empty), the specific clarifying questions a human must answer (may be empty), and any assumptions it recommends recording.
-3. The validator is read-only. The coordinator records its dispatch with `Write-SquadHandoff.ps1`, then sends the closed verdict payload to `Write-SquadVerdict.ps1`.
+3. The validator is read-only. The coordinator records its dispatch synchronously with `Write-SquadHandoff.ps1 -Quiet`, then sends the closed verdict payload to `Write-SquadVerdict.ps1 -Quiet` at the same root.
 4. Intake runs on its own turn edge: the coordinator does not dispatch planning or implementation on the same turn it runs the gate when the verdict is `Not-Ready`. A `Ready` or a remediated-then-`Ready` verdict clears the same-turn or next-turn work.
 
 ## Readiness Assessment

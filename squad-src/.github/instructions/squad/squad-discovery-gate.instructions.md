@@ -2,6 +2,10 @@
 description: "Opt-in pre-work discovery gate that brainstorms a brief when a turn has no requirement or input artifact to build on, producing a durable Discovery Verdict the intake gate then validates"
 applyTo: '**/.copilot-tracking/squad/**/decisions.md'
 ---
+<!--
+Copyright (c) Microsoft Corporation.
+Licensed under the MIT license.
+-->
 
 # Squad Discovery Gate Conventions
 

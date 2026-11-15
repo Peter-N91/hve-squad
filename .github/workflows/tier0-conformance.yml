@@ -1,3 +1,5 @@
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT license.
 name: Tier 0 Conformance
 
 # Static conformance of the package a consumer actually receives.

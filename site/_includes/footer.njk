@@ -1,7 +1,13 @@
+<!--
+Copyright (c) Microsoft Corporation.
+Licensed under the MIT license.
+-->
 <footer class="site-footer" data-pagefind-ignore>
   <div class="footer-inner">
     <div class="footer-brand"><strong>HVE Squad</strong></div>
     <div class="footer-source">{{ doc.footer | safe }}</div>
+    <p>Copyright (c) Microsoft Corporation. <a href="{{ doc.rootPrefix }}LICENSE.TXT">{{ doc.ui.license }}</a> · <a href="{{ doc.rootPrefix }}NOTICE">NOTICE</a></p>
+    <p>{% if doc.language == "fr" %}Polices : {% else %}Fonts: {% endif %}<a href="https://fonts.google.com/">Google Fonts</a> · <a href="https://policies.google.com/privacy">{% if doc.language == "fr" %}Confidentialité Google{% else %}Google privacy{% endif %}</a></p>
     {% include "footer-extra.njk" %}
   </div>
 </footer>

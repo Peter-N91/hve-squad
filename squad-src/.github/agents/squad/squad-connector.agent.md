@@ -4,6 +4,10 @@ description: "Delegate a bounded work-role task to a consumer-owned agent or orc
 user-invocable: false
 model: Claude Sonnet 5.5 (copilot)
 ---
+<!--
+Copyright (c) Microsoft Corporation.
+Licensed under the MIT license.
+-->
 
 # Squad Connector
 

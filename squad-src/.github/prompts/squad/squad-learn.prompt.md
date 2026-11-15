@@ -3,6 +3,10 @@ description: "Drafts a sanitized, broadly applicable learning from consumer-loca
 agent: Squad Learn
 argument-hint: "[target=upstream|tenant] [learning=...]"
 ---
+<!--
+Copyright (c) Microsoft Corporation.
+Licensed under the MIT license.
+-->
 
 # Squad Learn
 

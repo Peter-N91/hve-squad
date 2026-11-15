@@ -5,8 +5,12 @@ license: MIT
 metadata:
   authors: "Peter-N91/hve-squad"
   spec_version: "1.0"
-  last_updated: "2026-10-25"
+  last_updated: "2026-11-04"
 ---
+<!--
+Copyright (c) Microsoft Corporation.
+Licensed under the MIT license.
+-->
 
 # Deterministic Roster Expansion
 
@@ -21,6 +25,22 @@ routing edits, an existing Deliverable Root change, and `routing=off` retain the
 cold refresh procedure. A missing external Primary is offered with its install
 command and is never seeded.
 
+Before confirming a pack, complete *Pack Resource Preflight* in
+`profiles-and-packs.md`. Missing registered skills are installed only after the
+user approves execution. The planner refuses a pack whose listed resources do
+not all have a host-visible `available` or explicit `declined` disposition.
+
+A confirmed registered pack whose roles are already present is still a valid
+transaction when that pack is not already listed in `Packs:`. It changes only
+the `team.md` `Packs:` line and appends one decision. `addedRoles` is empty, no
+member row is invented, and routing stays byte-identical. Role-only confirmation
+of roles that are already present remains invalid, as do an empty pack cell, an
+unknown pack, a pack whose Adds cell is empty, and a pack already listed in
+`Packs:`. Reapplying an already-listed pack is rejected at planning and at
+apply, even when a sealed plan is otherwise hash-bound. Removing a pack is not
+this writer: drop the `Packs:` token through the cold path, then reapply here
+if the pack is confirmed again. The writer never drops a role or a pack token.
+
 ## Prepare and Confirm
 
 After the user accepts the proposed pack or roles, write a small choices JSON
@@ -32,6 +52,7 @@ outside squad state:
   "runId": "<actual run id>",
   "packs": ["aws"],
   "roles": ["backlog-executor"],
+  "resourceDecisions": {},
   "names": {
     "backlog-executor": "Tracker"
   },
@@ -40,8 +61,11 @@ outside squad state:
 }
 ```
 
-At least one of `packs` or `roles` is required. `names`, `models`, and `rationale`
-are optional. A supplied name must be unique in the selected roster. `models`
+At least one of `packs` or `roles` is required. `resourceDecisions` is required
+when a selected pack lists registered skills; it is empty or omitted otherwise.
+`availableSkills` carries the native host-visible inventory used for
+`available`. `names`, `models`, and `rationale` are optional. A supplied name
+must be unique in the selected roster. `models`
 is accepted only when the current roster already has active
 `ranked`, `economy`, or `manual` routing; otherwise new Model cells stay empty
 and lazy routing resolves them when those roles are first selected.
@@ -74,6 +98,8 @@ pwsh -NoProfile -File "<skill>/scripts/Expand-SquadRoster.ps1" `
 
 The writer takes the plain root lock, or the federation root then selected member
 lock, and revalidates the sealed baseline.
+It accepts `addedRoles: []` only when the sealed plan names at least one pack and
+that plan's `team.md` contains a `Packs:` line listing every requested pack.
 It writes only:
 
 * new rows appended to the existing `team.md` Members table;

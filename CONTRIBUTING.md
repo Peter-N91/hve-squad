@@ -3,22 +3,46 @@ title: Contributing to hve-squad
 description: How changes reach the hve-squad package and how to promote a sanitized shared learning through the fork and pull request review gate.
 ---
 
+## Contributor License Agreement
+
+This project welcomes contributions and suggestions. All contributions are
+subject to the [Microsoft Contributor License Agreement (CLA)](https://cla.opensource.microsoft.com/),
+declaring that you have the right to, and actually do, grant us the rights to
+use your contribution. Any required CLA must be completed before a contribution
+is accepted.
+
+For pull requests to the Microsoft-hosted repository, a CLA bot determines
+whether you need to provide a CLA and decorates the pull request with a status
+check or comment. Follow the bot's instructions. You only need to complete this
+once across repositories using the Microsoft CLA. If the check is missing,
+maintainers must verify the CLA before accepting the contribution.
+
+## Code of conduct
+
+This project has adopted the
+[Microsoft Open Source Code of Conduct](https://opensource.microsoft.com/codeofconduct/).
+See [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) and the
+[Code of Conduct FAQ](https://opensource.microsoft.com/codeofconduct/faq/), or
+contact [opencode@microsoft.com](mailto:opencode@microsoft.com) with questions
+or comments.
+
 ## Reporting a bug
 
 Open an issue at
 [github.com/Peter-N91/hve-squad/issues](https://github.com/Peter-N91/hve-squad/issues)
 using the **Bug report** template. It asks for the version, the host you ran on,
-what you expected against what happened, and steps to reproduce. Squad state
+what you expected against what happened, and steps to reproduce. HVE Squad state
 (`team.md` or `federation.md`, plus the relevant `history/` entry) is usually
 what pins a routing or ledger defect down, so include it when you can.
 
-Issues are triaged by a maintainer. There is no service-level agreement on a
-solo-maintained project, but a report that reproduces gets a response.
+Issues are triaged by a maintainer. There is no service-level agreement, but
+a report that reproduces helps maintainers investigate. See [SUPPORT.md](SUPPORT.md)
+for support scope and help resources.
 
 Two things do not belong in a public issue:
 
-* **Security vulnerabilities.** Report them privately through
-  [security advisories](https://github.com/Peter-N91/hve-squad/security/advisories/new).
+* **Security vulnerabilities.** Follow
+  [Microsoft's security reporting guidance](https://aka.ms/SECURITY.md).
   See [SECURITY.md](SECURITY.md).
 * **Defects in an upstream dependency.**
   [microsoft/hve-core](https://github.com/microsoft/hve-core/issues) owns the
@@ -28,7 +52,7 @@ Two things do not belong in a public issue:
 
 ## How contributions reach the package
 
-hve-squad gets better when a durable fix found in one environment reaches every other consumer hitting the same scenario. hve-squad ships through APM as one-directional package content: consumers pull the package, and the package never reads from consumer environments. The only route for a change to reach the published package is a fork and pull request against this repository.
+hve-squad gets better when a durable fix found in one environment reaches every other consumer hitting the same scenario. The Copilot plugin is the primary distribution and APM remains a one-directional repository fallback: consumers pull either distribution, and neither reads from consumer environments. The only route for a change to reach a published distribution is a fork and pull request against this repository.
 
 1. Fork the repository.
 2. Create a branch for your change.
@@ -36,7 +60,7 @@ hve-squad gets better when a durable fix found in one environment reaches every 
 4. Open a pull request against the default branch.
 5. A maintainer reviews, requests changes when needed, and merges.
 
-Merging publishes the change to the rolling pre-release within minutes, so it can be installed and tested straight away (see [Testing before a release](#testing-before-a-release)). When the pull request documents unreleased package behavior, mark the smallest affected element in both the English and French guides with that change fragment's `data-release-change` value. Pages renders the current pre-release badge only on those explicit markers while the fragment remains pending. It reaches consumers pinned to a released version when a maintainer cuts the next release, which happens when the pending work is judged ready rather than on a schedule.
+Merging publishes the rolling GitHub pre-release within minutes. Maintainers can then publish the same ref manually to the `plugin-preview` branch for plugin testing (see [Testing before a release](#testing-before-a-release)). When the pull request documents unreleased behavior, mark the smallest affected element in both the English and French guides with that change fragment's `data-release-change` value. Pages renders the current pre-release badge only on those explicit markers while the fragment remains pending. It reaches stable plugin and APM consumers when a maintainer cuts the next release and manually publishes the stable plugin.
 
 ## Recording your change
 
@@ -137,7 +161,16 @@ That is a shortcut for the Tier 0 runner. To invoke the tiers directly:
 
 # Tier 1 — mutation controls proving the state contract can fail
 ./tests/tier1/Invoke-Tier1Tests.ps1 -SelfCheck
+
+# The same cases spread over four worker processes, as CI runs them
+./tests/tier1/Invoke-Tier1Tests.ps1 -SelfCheck -Parallel 4
 ```
+
+Every Tier 1 self-check case starts child `pwsh` processes, so it is the slowest
+suite to run in one process. `-Parallel <n>` deals the work out to `n` worker
+processes. The runner discovers every case first and fails unless each one ran
+exactly once, so it changes scheduling, not coverage. The default runs everything
+in one process, as before.
 
 Pester 5.7.1 is required and is pinned deliberately; Pester 6 changes `-ForEach`
 and configuration semantics that these suites rely on:
@@ -155,11 +188,13 @@ retains its Pester XML report for seven days, so failures and slow cases can be
 inspected without another run.
 
 Local commands still run the complete selection by default. To reproduce one
-CI shard or run repository checks without downloading a package:
+CI shard, run repository checks without downloading a package, or audit
+first-party Microsoft MIT copyright headers directly:
 
 ```powershell
 ./tests/tier0/Invoke-Tier0Tests.ps1 -SourceRoot . -Shard Contracts
 ./tests/tier0/Invoke-Tier0Tests.ps1 -SourceRoot . -Scope Repository
+./scripts/Test-SourceHeaders.ps1
 ```
 
 The other shards are `Handoff`, `Lifecycle`, and `Coordinator`. Sharding changes
@@ -182,20 +217,23 @@ records the cases and known gaps.
 Releases are cut by hand when the pending work is judged ready, so merging is no longer the moment a change reaches consumers. What merging does reach is the **rolling pre-release**: one GitHub pre-release, rebuilt on every merge to the default branch, tagged with the version the pending fragments currently resolve to.
 
 Use [Install and test the pre-release](https://peter-n91.github.io/hve-squad/getting-started.html#testing-the-pre-release)
-for the current stable and pre-release numbers, exact install command, testing steps,
-and return-to-stable command. Install into a scratch project to try the merged batch
-before it ships. In this example, replace `vX.Y.z-pre` with the current rolling tag:
+for the exact plugin and APM fallback commands, testing steps, and return-to-stable
+instructions. After a maintainer dispatches **Publish Plugin** with channel
+`preview`, install the preview marketplace in a scratch environment:
 
-```powershell
-apm install "Peter-N91/hve-squad#vX.Y.z-pre" --target copilot
+```text
+copilot plugin marketplace add Peter-N91/hve-squad#plugin-preview
+copilot plugin install hve-squad@hve-squad-preview
 ```
 
-The exact tag is on the [Releases page](https://github.com/Peter-N91/hve-squad/releases), marked as a pre-release. Two things follow from how it is built:
+Use the rolling tag from the [Releases page](https://github.com/Peter-N91/hve-squad/releases)
+with APM CLI 0.29.0 only when repository-deployed customizations are the behavior
+under test. Two things follow from how the preview is built:
 
 * **The tag moves.** Re-run the install to pick up the newest build. It is a channel, not a fixed point, so it is for testing rather than for anything you depend on.
 * **The name can change.** The tag tracks the resolved version, so a `minor` fragment landing midweek renames the pre-release from `v0.13.4-pre` to `v0.14.0-pre` and the old one is deleted.
 
-Nothing about the preview consumes a fragment or writes to `CHANGELOG.md`. The documentation build uses those same pending fragments to badge sections changed by unreleased merge commits; documentation-only pull requests with `skip-changelog` are not badged. Release Prep consumes the fragments, so the next Pages build removes their badges automatically. The release is assembled from the same fragments the preview rendered, so what you tested is what ships.
+Nothing about either preview consumes a fragment or writes to `CHANGELOG.md`. The documentation build uses those same pending fragments to badge sections changed by unreleased merge commits; documentation-only pull requests with `skip-changelog` are not badged. Release Prep consumes the fragments, so the next Pages build removes their badges automatically. The plugin preview is generated from the same ref and pinned HVE Core commit.
 
 ## Shipping a fix without shipping everything else
 
@@ -203,7 +241,13 @@ A release ships a **commit**, not a selection of fragments. The tag is cut from 
 
 That leaves two cases, and only the second one needs anything unusual.
 
-**The default branch is shippable.** Dispatch Release Prep. Your fix goes out along with everything else pending, as one version. If a pending fragment asked for `minor`, that version is a minor — and it still contains your patch, so consumers get the fix. This is almost always the right answer, and the version number is not worth optimising.
+**The default branch is shippable.** Dispatch **Release Prep** and merge the
+resulting `chore/release-prep` pull request; merging dispatches `release.yml`,
+and after the GitHub Release passes its gates, dispatch **Publish Plugin** with
+channel `stable`. Your fix goes out along with everything else pending, as one
+version. If a pending fragment asked for `minor`, that version is a minor — and
+it still contains your patch, so consumers get the fix. This is almost always
+the right answer, and the version number is not worth optimising.
 
 **The default branch holds something that must not ship yet.** Then a release from it would carry that work out with your fix, so the fix has to come from somewhere that does not contain it: a hotfix branch cut off the last release tag.
 
@@ -215,7 +259,12 @@ apm run change            # Type: Fixed, Bump: patch
 git push -u origin hotfix/v0.14.1
 ```
 
-Dispatch **Release Prep** with `ref` set to `hotfix/v0.14.1`. It assembles the CHANGELOG from that branch's fragments only, bumps `apm.yml` to `0.14.1`, and cuts the tag from that branch. The rolling pre-release on the default branch is left alone, because the batch it describes is still pending.
+Dispatch **Release Prep** with `ref` set to `hotfix/v0.14.1` and merge the
+resulting `chore/release-prep-hotfix-v0-14-1` pull request into `hotfix/v0.14.1`.
+It assembles the CHANGELOG from that branch's fragments only, bumps `apm.yml` to
+`0.14.1`, and cuts the tag from that branch once merged. The rolling pre-release
+on the default branch is left alone, because the batch it describes is still
+pending.
 
 Then merge the hotfix branch back so the fix is not lost on the next release, and label that pull request `release-merge-back`. The label is what allows it to carry the `CHANGELOG.md` section and the version bump that Release Prep already wrote, both of which a normal pull request is rejected for touching.
 
@@ -230,6 +279,16 @@ apm run sync-deps
 ```
 
 That rewrites `dependencies:` in `apm.yml` to include your new files, and commits are expected to contain it. It deliberately does **not** move the `microsoft/hve-core` pin: with no `-Ref`, the script stays on whatever SHA `apm.yml` already names. Moving that pin re-points the entire package at a different upstream revision, which is a separate reviewed operation owned by the scheduled sync workflow, and CI rejects a pull request that does it.
+
+## Registering an external cast resource
+
+The External Cast in `squad-src/.github/skills/squad/references/roster-catalog.md` stays a ten-column table. Do not add a column. For each demanded job, choose one origin in this order: the vendor-owned product repository, then an official `github/copilot-plugins` marketplace entry resolved to its underlying vendor repository, then `github/awesome-copilot` or another community origin only when no official candidate passes the gate. Official ownership does not waive the gate.
+
+Record the class inline in the existing `Origin` cell as `` `owner/repo` (`vendor-official`|`github-marketplace`|`community`) ``, followed by the exact path. Allowed classes are exactly those three. Before a row is accepted, or before a touched row's `Verified On` date moves, re-run the eight-step gate at an exact ref and keep the path, frontmatter, licence, prerequisites, and install command from that evidence. Do not invent a SHA or path, and do not refresh a date you did not re-verify.
+
+Replace a community row only after parity, prerequisites, dispatchability, installability, licence, and the no-pack baseline have been checked. A narrower official resource is a different job or a rejected candidate, not an automatic replacement. When an accepted official row supersedes a community row for the same role and job, move the community resource to the blocklist with: `Gate step 5, second case — superseded by official origin <owner/repo> resource <name> at <ref>; equivalent job <job>; parity and install path re-verified <YYYY-MM-DD>. Do not resolve while the official row remains registered.`
+
+Cite licences against `.github/instructions/hve-core/licensing-posture.instructions.md`, the file delivered by the pinned hve-core package. If that delivered path is absent, or the published licence is ambiguous, leave the row unregistered. Do not invent a licence interpretation. Registry wording that ships to consumers is updated in English and French together, and the registry tests move in the same change.
 
 ## Proposing a shared learning
 

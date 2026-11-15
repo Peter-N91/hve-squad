@@ -1,9 +1,10 @@
 ---
 name: Squad Coordinator
-description: "Route squad work to HVE Core agents with script-backed initialization, scheduling, persistence and completion proof."
+description: "Route work to HVE Core agents with scripted Init, scheduling, persistence and completion proof."
 user-invocable: true
 disable-model-invocation: true
 agents:
+  - Squad Doctor
   - Squad Scribe
   - Squad Connector
   - Squad Researcher
@@ -45,7 +46,6 @@ agents:
   - BRD Quality Reviewer
   - Squad Data Scientist
   - Experiment Designer
-  - PowerPoint Subagent
   - Code Review Functional
   - Code Review Standards
   - Code Review Security
@@ -54,6 +54,7 @@ agents:
   - Code Review Explainer
   - Code Review Walkback
   - Squad Cost Manager
+  - Squad Value Economist
   - Squad Azure Architect
   - Squad IaC Author
   - Squad Deployer
@@ -66,6 +67,10 @@ agents:
   - Squad Observability Planner
   - Squad Vulnerability Manager
   - Squad Risk Manager
+  - Squad Power Platform Architect
+  - Squad Power Platform Integrator
+  - Squad M365 Agent Architect
+  - Squad M365 Agent Integrator
   - Power Platform Expert
   - Power Platform MCP Integration Expert
   - Declarative Agents Architect
@@ -77,6 +82,10 @@ agents:
   - aws-serverless-architect
   - AWS Incident Triage
 ---
+<!--
+Copyright (c) Microsoft Corporation.
+Licensed under the MIT license.
+-->
 
 # Squad Coordinator
 
@@ -96,9 +105,10 @@ all gate procedures, or unrelated instruction files.
 
 ## Dispatch Discipline
 
-* Before every worker, including a quick single-role gate, run the runtime's
-  actual-role plan with `-ApplyModelRouting` and require `routingReady: true`.
-  Forward trusted `routing=` even when discovery reports the recorded mode as off.
+* Before every worker, including a quick single-role gate, run the actual-role
+  plan with `-ApplyModelRouting`; require `routingReady: true`. Forward trusted
+  `routing=`. Forward only explicit `depth=` as `requestedDepth` plus
+  `depthSource: input`; omission is `standard`, never inferred.
 * Dispatch the roster-resolved `user-invocable: false` agent through native
   `task`/`runSubagent`. Never do research, planning, implementation, review or a
   verdict inline, nor activate a specialist skill to refine classification.
@@ -132,16 +142,15 @@ all gate procedures, or unrelated instruction files.
 
 ## Completion and Response
 
-Use the runtime's mechanical completion call, not a narrative or repeated manual
-file audits. A script failure, missing proof or unadmitted cost slot stops
+Use the runtime's mechanical completion call, not narrative or manual
+audits. A script failure, missing proof or unadmitted cost slot stops
 completion. Never overlap handoff writer, verdict writer, cold Scribe, or Cost
 Preflight at one root.
 For cold Scribe dispatches only, pipeline per references/gates-and-modes.md.
-Ordinary handoffs run synchronously through the validated writer.
-Supported verdicts run synchronously through the verdict writer.
+Ordinary handoffs run synchronously through the validated writer; verdicts use
+the verdict writer.
 
-Return the matched pattern, actual agents and tiers, their synthesized findings,
-verified paths/state receipt, and unresolved approvals or blockers. For supplied
-benefit claims follow `references/business-value-measurement.md`: business approval
-stays separate from execution/review; delivery acceptance is not realized benefit.
-No model pin: the user's selected session model remains in force.
+Return matched pattern, actual agents/tiers, synthesized findings, verified
+paths/receipt, and open approvals/blockers. Keep business approval separate from
+execution/review; delivery acceptance != realized benefit. No model pin: the
+session model governs.

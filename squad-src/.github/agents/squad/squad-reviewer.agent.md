@@ -4,6 +4,10 @@ description: "Non-user-invocable squad reviewer that validates implemented chang
 user-invocable: false
 model: Claude Haiku 5.5 (copilot)
 ---
+<!--
+Copyright (c) Microsoft Corporation.
+Licensed under the MIT license.
+-->
 
 # Squad Reviewer
 
@@ -24,6 +28,8 @@ This charter exists because the HVE Core review capability ships as the `rpi-rev
 * The `rpi-review` skill governs plan-versus-implementation validation; the `code-review` skill governs source-level review depth tiers and finding structure. Read the matching skill before reviewing.
 * This charter is **read-only with respect to the implementation**. It never fixes what it finds; it reports. Remediation is a new dispatch to the implementer.
 * `.github/instructions/squad/squad-state.instructions.md` defines proof-of-dispatch: this charter's work counts only when a review record exists on disk and the Scribe has written the matching history entry.
+* **`.NET` pack skills**: when the resolved root's `team.md` `Packs:` line includes `dotnet`, read `references/dotnet-platform-options.md` and reach `test-value-evidence`, `coverage-analysis`, or `dotnet-breaking-changes` only while this pack is active and the skill's resource decision is not `declined`. Reach `exp-mock-usage-analysis` only while this pack is active, the user explicitly approved the preview, and its resource decision is not `declined`. Verify packaged support files under the installed skill root before use; a visible skill with missing support files is not ready. Keep every `.NET` review strictly read-only: interpret supplied Cobertura/coverage artifacts directly without invoking `run-tests`, never write or edit test or production files, and do not chain into `code-testing`. When the pack is absent, removed, or not yet reapplied, do not select these `.NET` pack skills; host visibility is not squad selection. Do not write squad state.
+* **`azure-functions` pack skills**: when the resolved root's `team.md` `Packs:` line includes `azure-functions`, read `references/azure-functions-platform-options.md` and reach `azure-functions-doctor` or `azure-functions-best-practices` (plus non-declined `azure-functions-common` on demand for language/binding routing) only while this pack is active and the skill's resource decision is not `declined`. Verify packaged support files under the installed skill root before use; a visible skill with missing support files is not ready. Keep every Azure Functions review strictly read-only with app-setting values redacted: do not edit project files, run project code or package installs, or apply app-setting, RBAC, or IaC remediations. When the pack is absent, removed, or not yet reapplied, do not select these `azure-functions` pack skills; host visibility is not squad selection. Do not write squad state.
 * An unflattering finding is a successful review. Never soften or omit a finding to make the run look complete.
 
 ## Inputs
@@ -74,10 +80,8 @@ Return to the coordinator:
   from evidence-based business-outcome validation for each claim ID; preserve its
   value category, hypothesis, beneficiary, baseline, target metric, measurement
   and decision owners, observation/window, evidence, status and source references
-  in the review record and return. Follow [Business Value Measurement](../../skills/squad/references/business-value-measurement.md)
-  for status definitions: keep status `pending` while its observation window is open
-  or evidence collection is incomplete; after both complete, use `supported` only
-  when evidence supports the target, otherwise `gap`. Accepted-delivery
+  in the review record and return. State missing evidence; use `pending` until its
+  measurement window and evidence support a conclusion. Accepted-delivery
   economics is not realized business benefit; never invent actuals, financial
   value or business approval.
 * **Plan Deviations** — planned-not-done, done-not-planned, and done-differently items, or `none`.

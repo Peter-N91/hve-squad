@@ -1,13 +1,19 @@
 ---
-description: "Federation runtime: member scheduling, validated root writes and lifecycle policy."
+description: "Federation mechanics and lifecycle."
 ---
+<!--
+Copyright (c) Microsoft Corporation.
+Licensed under the MIT license.
+-->
 
 # Federation Runtime
 
-Success is isolated member work with dependency ordering and two-level proof.
-Federation is additive; scripts/autopilot grant no approval or specialist result.
+Verify isolated member work, dependencies and two-level proof. Federation is
+additive; scripts/autopilot grant no approval or specialist result.
 
 ## Detect and Load Only Active Policy
+
+Doctor requests/runtime failures: stop work; use `doctor.md` before Init/planning.
 
 Run `Get-SquadDispatchBrief.ps1 -RepoRoot <repo> -SquadRoot <root> -AsJson`.
 Forward trusted `routing=` via `-RequestedModelRouting <mode>`.
@@ -62,9 +68,8 @@ owner. Clarify unknown, ambiguous or equally specific conflicts; never guess.
 
 Put selected squads, explicit producer dependencies and proven write sets into
 `New-SquadDispatchPlan.ps1` input. Its waves are scheduling data, not admission.
-Dependencies override generic `Parallel-Eligible`. Source and target are members,
-not user-invocable coordinator agents: drive each selected member's standard
-protocol by native worker dispatch at its own root.
+Dependencies override generic `Parallel-Eligible`. Members, not user-invocable
+coordinators, are native worker targets at their own roots.
 Forward `endpoint.requestedModelRouting` into each member's actual-role plan with
 `-ApplyModelRouting`; require `routingReady: true` before workers, including quick
 single-role/targeted-autopilot work. Root plans do not activate member models.
@@ -74,12 +79,14 @@ Before child dispatch take the script snapshot with
 outside state; never author its costs/hashes. It preserves prior root overhead.
 
 Forward `profile`, `pack`, `discovery`, `tier`, `owner`, `execution`, `mode`,
-`cost-ceiling`, `routing`. Connectors are member-local; routing only narrows.
+`cost-ceiling`, `routing`, `depth`; explicit depth carries
+`depthSource: federation`, omission means `standard`. Connectors are member-local;
+routing and depth only narrow.
 Ordinary/targeted runs use independent member ceilings. Ask qualifying discovery
 once, never unattended. Expand a confirmed member roster before its new role.
 
-Verify the producer before its consumer. Resolve paths from current roster roots,
-verify files/decision references, then forward read-only `inputs=`. Missing input
+Resolve paths from current roster roots, verify files/decision references, then
+forward read-only `inputs=`. Missing input
 means recover: one
 producer run, only the producing stage for partial/stale output, offer expansion
 when unowned, or a user-named input/explicit gap decision. Interactive recovery

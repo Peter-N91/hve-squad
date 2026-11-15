@@ -1,4 +1,5 @@
-# Copyright (c) 2026 Microsoft Corporation. All rights reserved.
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT license.
 # SPDX-License-Identifier: MIT
 
 #Requires -Version 7.4
@@ -1117,7 +1118,14 @@ function ConvertTo-EfficiencyRunSummary {
     #>
     [CmdletBinding()]
     param([Parameter(Mandatory)][Collections.IDictionary]$Run)
-    $Summary = [ordered]@{ runId = $Run['metadata']['runId']; arm = $Run['metadata']['arm']; pair = $Run['metadata']['pair']; completed = [bool]$Run['completed']; checksPassed = Test-EfficiencyRun $Run -ObservationOnly:($Run['metadata']['compatibility']['evaluationPolicy'] -eq 'baseline-observation-v1') }
+    $Summary = [ordered]@{
+        runId = $Run['metadata']['runId']
+        arm = $Run['metadata']['arm']
+        pair = $Run['metadata']['pair']
+        depth = if ($Run['metadata'].ContainsKey('depth')) { $Run['metadata']['depth'] } else { 'standard' }
+        completed = [bool]$Run['completed']
+        checksPassed = Test-EfficiencyRun $Run -ObservationOnly:($Run['metadata']['compatibility']['evaluationPolicy'] -eq 'baseline-observation-v1')
+    }
     $Summary['functional'] = $Run['acceptance']
     $Summary['stateHistory'] = if ($Run['workflow']) { $Run['workflow']['checks'] } else { $null }
     $Summary['metrics'] = $Run['metrics']

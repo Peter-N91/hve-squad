@@ -1,4 +1,8 @@
 <!DOCTYPE html>
+<!--
+Copyright (c) Microsoft Corporation.
+Licensed under the MIT license.
+-->
 <html lang="fr">
 <head>
   <meta charset="UTF-8" />
@@ -240,7 +244,7 @@ flowchart LR
       <p>Les options se placent avant ou après votre demande. Les exemples les mettent en premier, sur leur propre ligne, car c'est plus lisible.</p>
 
       <h3 id="message-reference">Référence des messages</h3>
-      <p>Voici toutes les entrées qu'acceptent les prompts Squad livrés. Tout ce qui n'est pas listé ici est du texte ordinaire pour l'équipe.</p>
+      <p>Voici toutes les entrées qu'acceptent les prompts HVE Squad livrés. Tout ce qui n'est pas listé ici est du texte ordinaire pour l'équipe.</p>
       <div class="table-wrap">
         <table>
           <thead>
@@ -256,6 +260,7 @@ flowchart LR
             <tr><td><code>pack=</code></td><td>Un ou plusieurs noms de pack</td><td>Première exécution, ou ajout à une équipe</td><td>Spécialistes technologiques facultatifs. Voir <a href="usage.html#packs">Packs</a>.</td></tr>
             <tr><td><code>mode=</code></td><td><code>autonomous</code> ou <code>autopilot</code></td><td>Demandes de travail</td><td>Ce qui s'exécute avant que l'équipe vous sollicite. Omettez-le pour le mode interactif.</td></tr>
             <tr><td><code>routing=</code></td><td><code>off</code>, <code>ranked</code>, <code>economy</code>, <code>manual</code></td><td>Les deux coordinateurs</td><td>Le modèle d'IA utilisé par chaque rôle. Voir <a href="usage.html#model-selection-per-role">Sélection du modèle par rôle</a>.</td></tr>
+            <tr><td><code>depth=</code></td><td><code>quick</code> ou <code>standard</code></td><td>Demandes de travail</td><td>La quantité de travail exécutée par la squad pendant ce tour, indépendamment du routage des modèles. Omettez-le pour le pipeline standard complet.</td></tr>
             <tr><td><code>cost-ceiling=</code></td><td>Un nombre positif en USD, ou <code>unset</code></td><td>Demandes de travail</td><td>Une limite estimée de dépenses de modèles vérifiée avant le début du travail. Voir <a href="usage.html#cost-admission-control">Contrôle d'admission des coûts</a>.</td></tr>
             <tr><td><code>discovery=</code></td><td><code>quick</code>, <code>standard</code>, <code>deep</code>, <code>skip</code></td><td>Demandes de travail</td><td>Lance ou ignore l'entretien de découverte. Voir <a href="usage.html#discovery-gate-when-there-is-nothing-written-down-yet">Étape de découverte</a>.</td></tr>
             <tr><td><code>tier=</code>, <code>owner=</code>, <code>execution=</code></td><td>Voir Utilisation</td><td>Demandes de travail</td><td>Avancé : un niveau de modèle par tour, un membre nommé lorsque deux lignes partagent un rôle, et l'exécution par connecteur.</td></tr>
@@ -419,8 +424,8 @@ flowchart LR
             <tr><td>technical-writer</td><td><code>docs/</code></td></tr>
             <tr><td>architect, azure-architect et les autres rôles d'architecte</td><td><code>docs/architecture/</code></td></tr>
             <tr><td>risk-manager</td><td><code>docs/risks/</code></td></tr>
+            <tr><td>value-economist</td><td><code>.copilot-tracking/finops/</code></td></tr>
             <tr><td>data-scientist</td><td><code>outputs/</code></td></tr>
-            <tr><td>presenter</td><td><code>.copilot-tracking/ppt/&lt;date&gt;/&lt;deck-slug&gt;/</code></td></tr>
             <tr><td>security, rai, privacy, accessibility, supply-chain, performance, observability</td><td>Un dossier correspondant sous <code>.copilot-tracking/</code>, tel que <code>security-plans/</code> ou <code>rai-plans/</code></td></tr>
             <tr><td>scribe</td><td>Le dossier de la squad lui-même : il écrit l'état, pas des livrables.</td></tr>
           </tbody>

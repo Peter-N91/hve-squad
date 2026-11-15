@@ -1,5 +1,6 @@
 #!/usr/bin/env pwsh
-# Copyright (c) 2026 Microsoft Corporation. All rights reserved.
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT license.
 # SPDX-License-Identifier: MIT
 #Requires -Version 7.0
 
@@ -45,7 +46,11 @@
     For one completed dispatch, pass -RunId, -Agent, -Request, -Deliverable and -Outcome
     instead of preparing JSON. This builds the same payload with that agent as activeRoles
     and uses the same validation and write path. Optional -MemberName, -SelectionCue and
-    -PassedModel retain actual dispatch attribution. Optional -ConsumptionPath and
+    -PassedModel retain actual dispatch attribution. Optional -Mode (interactive, autonomous,
+    autopilot) states the run's mode and is persisted to state.json; without it the recorded
+    mode applies. Under autopilot a payload with more than one history record exits 1:
+    each stage is handed off, verified, and only then followed by the next role's dispatch.
+    Optional -ConsumptionPath and
     -OrchestrationConsumptionPath supply existing consumption JSON objects unchanged;
     omit them only when no usage block was supplied, to use the existing estimated fallback.
     This mode never captures a review, refreshes an artifact or repairs dispatch order.
@@ -127,8 +132,9 @@
 
     Economy-only warnings (never refusals): `WARN economy consent not recorded` when decisions.md has no
     `## Economy Mode Accepted` entry; a history record whose routeRationale does not start
-    with `Route: ` is prefixed with `Route: bounded` (payload route `bounded`) or
-    `Route: economy`, with a WARN; a record without routingIdentity gets a WARN.
+    with `Route: ` is prefixed with `Route: economy`, with a WARN; a record without
+    routingIdentity gets a WARN. In every routing mode, payload route `bounded` (the depth=quick
+    Bounded Lane) prefixes such a record with `Route: bounded` instead, with the same WARN.
 
     Routing selects models and admission policy, not the persistence mechanism.
     off, ranked, economy, and manual all use this writer.
@@ -235,6 +241,10 @@ param(
 
     [Parameter(Mandatory, ParameterSetName = 'SingleDispatch')]
     [string]$Outcome,
+
+    [Parameter(ParameterSetName = 'SingleDispatch')]
+    [ValidateSet('interactive', 'autonomous', 'autopilot')]
+    [string]$Mode,
 
     [Parameter(ParameterSetName = 'SingleDispatch')]
     [string]$MemberName,
@@ -678,7 +688,9 @@ function ConvertFrom-ModelPin {
     # 'Claude Haiku 4.5 (copilot)' and 'claude-haiku-4.5' both -> 'claude-haiku-4.5'; only a trailing vendor suffix is dropped, so '(fast mode)' stays part of the name.
     param([string]$Text)
     $key = (($Text.Trim().Trim('"', "'") -replace '\s*\((?:copilot|github|anthropic|openai)\)\s*$', '').Trim() -replace '\s+', '-').ToLowerInvariant()
-    if ($key -in @('hydrafusion', 'hydrafusion-balance', 'hydrafusion-efficiency')) { return 'hydrafusion-max' }
+    if ($key -in @('fusion', 'copilot-fusion', 'fusion-standard', 'copilot-fusion-standard', 'hydrafusion-standard', 'hydrafusion-efficiency')) { return 'fusion-standard' }
+    if ($key -in @('hydrafusion', 'fusion-high', 'copilot-fusion-high', 'hydrafusion-high', 'hydrafusion-balance')) { return 'hydrafusion' }
+    if ($key -in @('hydrafusion-max', 'fusion-max', 'copilot-fusion-max')) { return 'hydrafusion-max' }
     return $key
 }
 
@@ -860,7 +872,8 @@ function Get-DerivedConsumption {
     if (-not $priced) { $needsScribe.Add("$Where was omitted and model '$model' has no rate row and no '$tier' tier fallback row; the Scribe composes the block."); return $null }
     $pricedRow = @($RateRows | Where-Object { $_.Name -eq $priced }) | Select-Object -First 1
     $writesCache = ($pricedRow -and $pricedRow.CacheWrite -gt 0)
-    $tokenFactor = if ((ConvertFrom-ModelPin $model) -eq 'hydrafusion-max') { 0.35 } else { 1.0 }
+    $pinKey = ConvertFrom-ModelPin $model
+    $tokenFactor = if ($pinKey -eq 'hydrafusion-max') { 0.35 } elseif ($pinKey -eq 'hydrafusion') { 0.55 } else { 1.0 }
     $turns = [Math]::Max([long]$floors.Turns, $InternalToolCalls)
     $average = $floors.Base + $floors.Growth * ($turns - 1) / 2.0
     $gross = $turns * $average * $tokenFactor
@@ -931,11 +944,13 @@ if ($PSCmdlet.ParameterSetName -eq 'SingleDispatch') {
     foreach ($field in @('memberName', 'selectionCue', 'passedModel')) {
         if ($PSBoundParameters.ContainsKey($field)) { $record[$field] = $PSBoundParameters[$field] }
     }
-    $PayloadJson = [ordered]@{
+    $singlePayload = [ordered]@{
         runId          = $RunId
         historyRecords = @($record)
         stateAdvance   = [ordered]@{ activeRoles = @($Agent) }
-    } | ConvertTo-Json -Depth 8
+    }
+    if ($PSBoundParameters.ContainsKey('Mode')) { $singlePayload['mode'] = $Mode }
+    $PayloadJson = $singlePayload | ConvertTo-Json -Depth 8
 }
 else {
     if ($PSBoundParameters.ContainsKey('PayloadJson') -eq $PSBoundParameters.ContainsKey('PayloadPath')) {
@@ -1525,6 +1540,9 @@ $records = [System.Collections.Generic.List[hashtable]]::new()
 $recordNodes = $payload['historyRecords']
 if ((Get-Kind $recordNodes) -ne 'Array') { $problems.Add('payload.historyRecords must be an array (empty when no dispatch was recorded).') }
 else {
+    if ($mode -eq 'autopilot' -and $recordNodes.Count -gt 1) {
+        $problems.Add('autopilot records one hand-off per stage: write this stage''s record now and verify it before dispatching the next role; never merge stages into one hand-off (squad-autopilot.instructions.md).')
+    }
     $index = 0
     foreach ($node in $recordNodes) {
         $where = "historyRecords[$index]"
@@ -1652,16 +1670,19 @@ else {
 }
 
 # economy-mode.md Route Markers: every economy history entry starts its Route rationale with Route: economy or Route: bounded.
-foreach ($record in $records | Where-Object { $routingMode -eq 'economy' }) {
+# quick-depth.md Route Markers: a Bounded Lane dispatch (payload route bounded) starts with Route: bounded in every routing mode.
+foreach ($record in $records | Where-Object { $routingMode -eq 'economy' -or $route -eq 'bounded' }) {
     if ($null -eq $record.Routing) {
-        $handoffWarnings.Add("WARN $($record.Agent): no routingIdentity; under economy every history entry carries Route: economy (or Route: bounded) in its Route rationale bullet (economy-mode.md Route Markers).")
+        if ($routingMode -eq 'economy') {
+            $handoffWarnings.Add("WARN $($record.Agent): no routingIdentity; under economy every history entry carries Route: economy (or Route: bounded) in its Route rationale bullet (economy-mode.md Route Markers).")
+        }
         continue
     }
     $rationale = $record.Routing['routeRationale']
     if ($null -ne $rationale -and $rationale -notmatch '^Route: ') {
         $marker = if ($route -eq 'bounded') { 'Route: bounded' } else { 'Route: economy' }
         $record.Routing['routeRationale'] = "$marker; $rationale"
-        $handoffWarnings.Add("WARN $($record.Agent): routeRationale did not start with a Route marker; recorded as '$marker; ...' (economy-mode.md Route Markers).")
+        $handoffWarnings.Add("WARN $($record.Agent): routeRationale did not start with a Route marker; recorded as '$marker; ...' ($(if ($route -eq 'bounded') { 'quick-depth.md' } else { 'economy-mode.md' }) Route Markers).")
     }
 }
 

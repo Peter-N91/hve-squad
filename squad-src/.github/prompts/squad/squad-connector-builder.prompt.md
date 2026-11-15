@@ -3,6 +3,10 @@ description: "Starts the Squad Connector Builder to interactively scaffold a val
 agent: Squad Connector Builder
 argument-hint: "[request=...] [mode=interactive|template] [destination=<path>]"
 ---
+<!--
+Copyright (c) Microsoft Corporation.
+Licensed under the MIT license.
+-->
 
 # Squad Connector Builder
 

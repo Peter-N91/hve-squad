@@ -1,6 +1,7 @@
 #Requires -Modules Pester
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT license.
 #Requires -Version 7.4
-# Copyright (c) 2026 Microsoft Corporation. All rights reserved.
 # SPDX-License-Identifier: MIT
 
 # Tests package overlays and dependency-install retry/error handling.

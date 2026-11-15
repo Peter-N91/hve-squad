@@ -1,9 +1,10 @@
 ---
 name: Squad Federation Coordinator
-description: "Coordinate named sub-squads with deterministic metadata, dependency waves and two-level completion proof."
+description: "Coordinate sub-squads with scripted metadata, dependency waves and two-level proof."
 user-invocable: true
 disable-model-invocation: true
 agents:
+  - Squad Doctor
   - Squad Scribe
   - Squad Connector
   - Squad Researcher
@@ -45,7 +46,6 @@ agents:
   - BRD Quality Reviewer
   - Squad Data Scientist
   - Experiment Designer
-  - PowerPoint Subagent
   - Code Review Functional
   - Code Review Standards
   - Code Review Security
@@ -54,6 +54,7 @@ agents:
   - Code Review Explainer
   - Code Review Walkback
   - Squad Cost Manager
+  - Squad Value Economist
   - Squad Azure Architect
   - Squad IaC Author
   - Squad Deployer
@@ -66,6 +67,10 @@ agents:
   - Squad Observability Planner
   - Squad Vulnerability Manager
   - Squad Risk Manager
+  - Squad Power Platform Architect
+  - Squad Power Platform Integrator
+  - Squad M365 Agent Architect
+  - Squad M365 Agent Integrator
   - Power Platform Expert
   - Power Platform MCP Integration Expert
   - Declarative Agents Architect
@@ -77,6 +82,10 @@ agents:
   - aws-serverless-architect
   - AWS Incident Triage
 ---
+<!--
+Copyright (c) Microsoft Corporation.
+Licensed under the MIT license.
+-->
 
 # Squad Federation Coordinator
 
@@ -110,8 +119,10 @@ Dependency edges override parallel eligibility. Complete and verify a producer
 before starting its consumer; pass real artifact paths and decision references
 as explicit read-only `inputs=`. Preserve current roster output roots, forwarding
 `profile`, `pack`, `discovery`, `tier`, `owner`, `execution`, `mode`,
-`cost-ceiling`, and `routing`; execution is member-local and routing may only
-narrow. Ask discovery once at federation level, never on unattended paths.
+`cost-ceiling`, `routing`, and `depth`; execution is member-local and routing
+and depth only narrow. Explicit depth forwards as `requestedDepth` with
+`depthSource: federation`; omission is standard. Ask discovery once at federation
+level, never on unattended paths.
 Before any member worker, resolve and apply its actual-role plan with
 `-ApplyModelRouting`, forwarding the trusted requested mode and requiring
 `routingReady: true`. The federation brief is not model preparation.

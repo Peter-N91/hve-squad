@@ -7,6 +7,10 @@ agents:
   - Consumer Implementation Agent
   - Consumer Validation Agent
 ---
+<!--
+Copyright (c) Microsoft Corporation.
+Licensed under the MIT license.
+-->
 
 # Consumer Implementation Orchestrator
 

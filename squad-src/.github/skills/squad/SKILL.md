@@ -7,22 +7,25 @@ metadata:
   spec_version: "1.0"
   last_updated: "2026-10-25"
 ---
+<!--
+Copyright (c) Microsoft Corporation.
+Licensed under the MIT license.
+-->
 
 # Squad Operating Procedure
 
 ## Overview
 
-The user-invocable Squad Coordinator dispatches HVE Core agents and persists roster, routing, decisions, and history under `.copilot-tracking/squad/`; every squad verb reuses an existing HVE Core mechanism.
+The user-invocable Squad Coordinator dispatches HVE Core agents and persists state under `.copilot-tracking/squad/`, reusing HVE Core mechanisms.
 
-Compact contracts and scripts own routine coordination; cold procedures preserve
-compatibility. Instructions use artifact-specific scopes, not all squad state.
+Compact contracts and scripts own routine coordination; cold procedures keep compatibility. Instructions use artifact-specific scopes.
 
 ## Prerequisites
 
-* A `runSubagent` or `task` tool is available so the coordinator can dispatch `user-invocable: false` agents.
-* The deployed HVE Core cast exists (System Architecture Reviewer, Security Planner, RAI Planner, UX UI Designer, Finding Deep Verifier, PowerPoint Subagent) plus the squad-owned charters (Squad Scribe, Squad Researcher, Squad Lead, Squad Implementor, Squad Reviewer, Squad Challenger, Squad Technical Writer, Squad Prompt Engineer).
-* Each selected work endpoint resolves to an installed, dispatchable agent. Step 1b checks `Squad Connector` for a connector default; its consumer endpoint runs externally.
-* The memory tool is available for durable per-agent notes under `/memories/repo/`.
+* A `runSubagent` or `task` tool so the coordinator can dispatch `user-invocable: false` agents.
+* The deployed HVE Core cast (System Architecture Reviewer, Security Planner, RAI Planner, UX UI Designer, Finding Deep Verifier) plus squad-owned charters (Squad Scribe, Squad Researcher, Squad Lead, Squad Implementor, Squad Reviewer, Squad Challenger, Squad Technical Writer, Squad Prompt Engineer).
+* Each selected work endpoint resolves to an installed, dispatchable agent. Step 1b checks `Squad Connector` for connector defaults; consumer endpoints run externally.
+* Memory tool support for durable notes under `/memories/repo/`.
 
 ## Procedure
 
@@ -61,12 +64,15 @@ is an on-demand map, not a mandatory coordinator startup read.
 | [scribe-cold-gates-and-verdicts.md](references/scribe-cold-gates-and-verdicts.md) | Unsupported verdict fallback, autonomous-loop/autopilot summaries, notifications.md — Scribe only, conditional |
 | [seed-templates.md](references/seed-templates.md)             | First-run state templates: team.md and routing.md                              |
 | [consumption.md](references/consumption.md)                   | Consumption ledger templates, the cost estimator, and Cost Preflight           |
+| [business-value-measurement.md](references/business-value-measurement.md) | FinOps benefit claims, nine value categories, and evidence rules   |
+| [value-valuation.md](references/value-valuation.md)           | Stated monetary valuation formulas, basis buckets, and valuation CLI           |
 | [consumption-rates-template.md](references/consumption-rates-template.md) | Cold seed template for consumption-rates.md: rate tables, tier fallback, calibration |
 | [model-catalog.md](references/model-catalog.md)               | Declared model capability, pricing, and host-availability precedence           |
 | [model-benchmarks.md](references/model-benchmarks.md)         | Pinned benchmark knowledge base, source versions, and provenance for `ranked`  |
 | [model-routing.md](references/model-routing.md)               | Opt-in modes, Model cells, capability-first ranking, floors, and identity bullets |
 | [model-scoring.md](references/model-scoring.md) | Cold scoring methodology: policy changes or evidence audit only |
-| [economy-mode.md](references/economy-mode.md)                 | Only under `Model routing: economy`: consent, role allowlist, economy pick, one escalation |
+| [economy-mode.md](references/economy-mode.md) | Only under `Model routing: economy`: consent, scope, economy pick, one escalation |
+| [quick-depth.md](references/quick-depth.md) | Only under `depth=quick`, any routing mode: depth plan, bounded lane, parallel owners, escape hatch |
 | [federation-templates.md](references/federation-templates.md) | Federation-root seed templates                                                 |
 
 Other skill-root files retain their existing paths.

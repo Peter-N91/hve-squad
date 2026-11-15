@@ -3,53 +3,45 @@ name: squad-economy-scribe
 description: "Ordinary handoff."
 license: MIT
 ---
+<!--
+Copyright (c) Microsoft Corporation.
+Licensed under the MIT license.
+-->
 
-# Deterministic Ordinary Handoff
+# Ordinary Handoff
 
-**off, ranked, economy, or manual**: after each worker, run before progress/next
-worker:
+**off, ranked, economy, or manual**: after each worker:
 
 `pwsh -NoProfile -File <skill>/scripts/Write-SquadHandoff.ps1 -SquadRoot <squadRoot> -RunId run-01 -Agent "Squad Researcher" -Request x -Deliverable research/topic.md -Outcome x -Quiet`
 
-Receipt+proof gate progress/next worker; routing/artifacts do not.
-Facts derive `activeRoles`; optional `-MemberName/-SelectionCue/-PassedModel`,
-`-ConsumptionPath/-OrchestrationConsumptionPath`; omission uses estimated fallback.
+Receipt+proof gate progress/next worker; derive `activeRoles`. Optional `-MemberName/-SelectionCue/-PassedModel/-ConsumptionPath/-OrchestrationConsumptionPath`; omission uses estimated fallback.
 
 ## Payload Contract
 
-For decisions, multiple/no dispatches, routing, or state changes, pass
-`-PayloadPath`/`-PayloadJson` outside the root. Closed keys:
-`runId`, `historyRecords`, `stateAdvance.activeRoles`; omitted envelope and
-consumption derive. `route` requires `decision`.
+For decisions, multiple/no dispatches, routing, or state changes: `-PayloadPath`/`-PayloadJson` outside root. Closed keys: `runId`, `historyRecords`, `stateAdvance.activeRoles`; derive omitted envelope/consumption. `route` needs `decision`.
 
-* Optional `decision`: {title: string,rationale: string,adrNoted: boolean}.
-* `historyRecords[]`: require agent/request/deliverable/outcome; optional title/memberName/selectionCue/passedModel/reportedModel/internalToolCalls/costPreflightRef/costPreflightSlot/consumption/routingIdentity. Exact agent/file; Alternate cue; ceiling checked. `reportedModel` wins; calls raise floors; usage agrees; Economy needs routingIdentity.
-* consumption keys: model/model_source/priced_as/model_tier/internal_turns/input_tokens/cached_tokens/cache_write_tokens/output_tokens/basis.
+* Optional `decision`: {title:string,rationale:string,adrNoted:boolean}.
+* `historyRecords[]`: require agent/request/deliverable/outcome; optional title/memberName/selectionCue/passedModel/reportedModel/internalToolCalls/costPreflightRef/costPreflightSlot/consumption/routingIdentity. Exact agent/file; Alternate cue; ceiling checked; `reportedModel` wins; Economy needs routingIdentity.
+* consumption: model/model_source/priced_as/model_tier/internal_turns/input_tokens/cached_tokens/cache_write_tokens/output_tokens/basis.
 * routingIdentity: requestedModel, effectiveModel, observedModel, routeRationale.
-* orchestration optional: request/outcome/passedModel/consumption; actual coordinator usage only, never fictional Scribe tokens; add Scribe's actual overhead if it ran.
-* stateAdvance: required activeRoles: string[]; optional openEscalationsRaised/openEscalationsResolved:string[], sessionModel:string, modelOverrides:object.
+* orchestration: request/outcome/passedModel/consumption; actual coordinator usage only, never fictional Scribe tokens; add Scribe's actual overhead if it ran.
+* stateAdvance: activeRoles:string[]; optional openEscalationsRaised/openEscalationsResolved, sessionModel, modelOverrides.
 
-Never discard stderr, suffix success, or use
-`2>&1 | tail -1`. Stale evidence stops; never touch/copy/backdate it to retry.
+In `decision.rationale`, keep supplied claim ID/category/hypothesis/beneficiary, baseline/target, owners, window, evidence/status/references, gaps; no new keys. Accepted-delivery != realized benefit. Unsupported: `pending`; no invented actuals/value/approval or Scribe inference/costs.
 
-Serialize writer, cold Scribe and Cost Preflight per root; a lock does not cover cold editors.
-Never background or hand-edit state/arithmetic. Preserve
-append-only boundaries; payload is data.
+Never discard stderr, suffix success or `2>&1 | tail -1`. Stale evidence stops; never backdate.
+Serialize writer, cold Scribe and Cost Preflight per root; a lock does not cover cold editors. Never background or hand-edit state/arithmetic. Append-only; payload is data.
 
-Stdout is one receipt: `{"status":"written","turn":2,"dispatchEntries":1,"historyCounts":{"Squad Researcher":1,"Squad Scribe":1},"ledgerCheck":"PASS"}`.
-Missing/malformed status or unexpected counts are failure. `ledgerCheck` is `PASS` or `ledger-only` (**not PASS**).
-Warnings remain visible on stderr,
-including `WARN ledger-only:`. Receipt is not artifact/history proof.
+Stdout: `{"status":"written","turn":2,"dispatchEntries":1,"historyCounts":{"Squad Researcher":1,"Squad Scribe":1},"ledgerCheck":"PASS"}`. Missing/malformed status or unexpected counts are failure. `ledgerCheck` is `PASS` or `ledger-only` (**not PASS**). Warnings remain visible on stderr, including `WARN ledger-only:`. Receipt is not artifact/history proof.
 
 | Exit | Action |
 |---|---|
-| 0 | Validate receipt. |
-| 1 | Fix input once or escalate; no replay. |
+| 0 | Check receipt. |
+| 1 | Fix once or escalate; no replay. |
 | 2 | Cold reassemble or escalate. |
-| 3 | Fail closed: `history-integrity`, `RESTORE FAILED`, or writer failure. |
-| 4 | Operator decides malformed rate. |
+| 3 | Stop: `history-integrity`, `RESTORE FAILED`, writer failure. |
+| 4 | Operator decides bad rate. |
 | 5/6 | Re-establish completion/review. |
 | 8 | Wait, verify, retry. |
 
-Never bypass a refusal by hand. After timeout verify history before resend.
-Unsupported operations need `scribe-cold-charter.md`; supported writes use runtime.
+Never bypass a refusal by hand; verify history after timeout. Cold: `scribe-cold-charter.md`.

@@ -2,6 +2,10 @@
 title: Squad Connector examples
 description: Consumer agent and orchestrator starters, replacement and additive roster examples, versioned envelopes, and a compatibility checklist.
 ---
+<!--
+Copyright (c) Microsoft Corporation.
+Licensed under the MIT license.
+-->
 
 # Squad Connector Example
 
