@@ -817,6 +817,34 @@ Describe 'Universal compact metadata and deterministic scheduling (COORD-04..06)
         $requirements | Should -Match 'every required reviewer.s verified history entry'
     }
 
+    It 'completes one ordinary handoff without replay for <Case>' -ForEach @(
+        @{ Case = 'valid'; ExitCode = 0; Turn = 2 }
+        @{ Case = 'missing artifact'; ExitCode = 1; Turn = 1 }
+        @{ Case = 'primary selection cue'; ExitCode = 1; Turn = 1 }
+        @{ Case = 'completion mismatch'; ExitCode = 3; Turn = 2 }
+    ) {
+        $repo = New-FixtureRepo
+        $fixture = Initialize-Fixture $repo
+        $artifact = '.copilot-tracking/changes/completed.md'
+        if ($Case -ne 'missing artifact') { Write-FixtureText (Join-Path $repo $artifact) "# Work`n`nActual completed work." }
+        $record = @{ agent = 'Squad Implementor'; request = 'Implement'; deliverable = $artifact; outcome = 'Implemented.' }
+        if ($Case -eq 'primary selection cue') { $record.selectionCue = 'unused' }
+        $active = if ($Case -eq 'completion mismatch') { 'Squad Lead' } else { 'Squad Implementor' }
+        $payload = Join-Path $repo 'completion-payload.json'
+        Write-FixtureJson $payload @{ runId = 'fixture-run'; historyRecords = @($record); stateAdvance = @{ activeRoles = @($active) } }
+        $before = [IO.File]::ReadAllText($payload)
+        $result = Invoke-Local 'Complete-SquadHandoff.ps1' $repo @('-RepoRoot', $repo, '-SquadRoot', $fixture.Root, '-PayloadPath', $payload)
+        $result.ExitCode | Should -Be $ExitCode -Because $result.Output
+        (Get-Content (Join-Path $fixture.Root 'state.json') -Raw | ConvertFrom-Json).turn | Should -Be $Turn
+        [IO.File]::ReadAllText($payload) | Should -BeExactly $before
+        if ($Case -eq 'valid') {
+            $receipt = $result.Output.Trim().Split("`n") | Where-Object { $_ -match '^\{' } | ConvertFrom-Json
+            $receipt.verified | Should -BeTrue
+            $receipt.historyCounts.'Squad Implementor' | Should -Be 1
+        }
+        if ($Case -eq 'completion mismatch') { $result.Output | Should -Match 'without replay' }
+    }
+
     It 'carries requested <Mode> separately from recorded off without mutating discovery' -ForEach @(
         @{ Mode = 'ranked' }, @{ Mode = 'manual' }, @{ Mode = 'economy' }
     ) {

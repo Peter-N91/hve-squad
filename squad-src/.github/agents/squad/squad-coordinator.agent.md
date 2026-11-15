@@ -125,8 +125,10 @@ all gate procedures, or unrelated instruction files.
 * Capture host-reported model identity before pin/session inference, plus each
   agent's model and internal tool-call count. Keep `auto` literal session
   metadata; unreported actual usage is `unknown`, never a guessed model.
-* Run `Write-SquadHandoff.ps1 -Quiet` directly and synchronously with minimal
-  JSON for ordinary writes. After its handoff, run
+* Use `Complete-SquadHandoff.ps1 -RepoRoot <repo> -SquadRoot <root>
+  -PayloadPath <actual handoff JSON>` for ordinary writes. It runs
+  `Write-SquadHandoff.ps1 -Quiet` and turn-completion proof synchronously.
+  After its handoff, run
   `Write-SquadVerdict.ps1 -Quiet` directly for Council, Intake Readiness, and
   Discovery Verdicts and use the returned Decision Ref. Confirmed fresh Init may
   also run its validated helper directly. Unsupported operations use the cold

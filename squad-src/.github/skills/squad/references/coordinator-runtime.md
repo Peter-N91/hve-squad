@@ -121,9 +121,11 @@ Parallelize independent waves only.
 Require final model identity, tool-call count, paths, outcome, open questions.
 Review owners' final returns; use write-set snapshot/verify as needed.
 
-Run `Write-SquadHandoff.ps1 -Quiet` synchronously per `economy-scribe.md`.
-Exit 0 requires Section 5 proof before progress/next task; routing/artifact is
-no handoff. Exit 2 takes the cold path. Supply actual usage;
+Use `Complete-SquadHandoff.ps1 -RepoRoot <repo> -SquadRoot <root>
+-PayloadPath <actual handoff JSON>` per `economy-scribe.md`. It runs
+`Write-SquadHandoff.ps1 -Quiet` and Section 5 proof synchronously.
+Require exit 0 and `verified: true` before progress/next task. Exit 2 is cold.
+Supply actual usage;
 `activeRoles` lists workers, not Scribe. Gate verdicts use
 `Write-SquadVerdict.ps1 -Quiet` at that root per
 `verdict-writer.md`; validate its Decision Ref first.
@@ -135,18 +137,18 @@ For cold Scribe dispatches only, pipeline per references/gates-and-modes.md.
 
 ## 5. Complete Mechanically
 
-Separate writers from capture/cleanup; keep full receipts.
+Separate capture/cleanup from writers; keep full receipts.
 Check each native process exit immediately; a successful outer shell is not a successful writer.
-Refusal stops dependent dispatch. Validate JSON status, turn/counts and warnings; separately run
+Refusal stops dependent dispatch. Complete supplies receipt and proof.
+Legacy direct writers and cold Scribe separately run
 `Test-SquadTurnCompletion.ps1 -RepoRoot <repo> -SquadRoot <root>
 -ProofPath <actual handoff JSON> -ExpectedTurn <receipt turn>`.
 Cold consultative proofs include `role`, `findingsOnly` and `decisionRef`.
 It checks files, turn/member history, consumption, admission, ledger and state;
 no second audit or model verifier.
 
-Complete only with verified evidence. Backfill history, not the producer.
-`ledger-only` is never PASS. Missing proof, invented paths, unmatched agents or
-unadmitted slots require repair/escalation.
+Backfill history, not the producer. `ledger-only` is never PASS.
+Missing proof, invented paths, unmatched agents or unadmitted slots block completion.
 
 Return classification, agents/tiers, findings, verified paths/receipt, open
 gates; forward paths/excerpts.

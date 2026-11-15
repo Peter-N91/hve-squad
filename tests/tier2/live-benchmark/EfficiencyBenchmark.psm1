@@ -797,6 +797,29 @@ function Resolve-EfficiencyPlainPath {
     $Full.TrimEnd([IO.Path]::DirectorySeparatorChar)
 }
 
+function Resolve-EfficiencySourceRoot {
+    <# .SYNOPSIS
+    Resolves the caller-selected checkout alias, not links within its helper tree.
+    #>
+    [CmdletBinding()]
+    [OutputType([string])]
+    param([Parameter(Mandatory)][string]$Path)
+    $Full = [IO.Path]::GetFullPath($Path)
+    if (-not (Test-Path -LiteralPath $Full -PathType Container)) { throw 'Reviewed SourceRoot is unavailable.' }
+    $Root = [IO.Path]::GetPathRoot($Full)
+    $Current = $Root
+    foreach ($Part in @($Full.Substring($Root.Length) -split '[\\/]' | Where-Object { $_ })) {
+        $Item = Get-Item -LiteralPath (Join-Path $Current $Part) -Force -ErrorAction Stop
+        if ($Item.Attributes -band [IO.FileAttributes]::ReparsePoint) {
+            $Target = $Item.ResolveLinkTarget($true)
+            if ($null -eq $Target) { throw 'Reviewed SourceRoot link target is unavailable.' }
+            $Current = Resolve-EfficiencySourceRoot -Path $Target.FullName
+        }
+        else { $Current = $Item.FullName }
+    }
+    $Current
+}
+
 function Test-EfficiencyPathWithin {
     <# .SYNOPSIS
     Tests containment including the directory itself.
@@ -879,8 +902,10 @@ function Resolve-EfficiencySquadScriptCore {
     [OutputType([string])]
     param([string]$Name, [string]$SourceRoot, [string]$InstallRoot, [string]$Workspace, [string]$ExecutionPath, [hashtable]$IntegrityContext)
     if ($Name -notmatch '^[A-Za-z][A-Za-z0-9-]+\.(?:ps1|psm1)$') { throw 'A fixed shipped helper name is required.' }
+    $SourceAlias = [IO.Path]::GetFullPath($SourceRoot)
+    $SourceRoot = Resolve-EfficiencySourceRoot -Path $SourceAlias
     $Reviewed = Resolve-EfficiencyPlainPath (Join-Path $SourceRoot 'squad-src\.github\skills\squad\scripts')
-    $Expected = Join-Path $Reviewed $Name
+    $Expected = Resolve-EfficiencyPlainPath (Join-Path $Reviewed $Name)
     if (-not (Test-Path -LiteralPath $Expected -PathType Leaf)) { throw "Reviewed Squad helper '$Name' is unavailable." }
     $Candidates = [Collections.Generic.List[string]]::new()
     $Candidates.Add($Reviewed)
@@ -894,6 +919,10 @@ function Resolve-EfficiencySquadScriptCore {
         foreach ($Relative in @('.agents\skills\squad\scripts', 'skills\squad\scripts')) { $Candidates.Add((Join-Path $InstallRoot $Relative)) }
     }
     if ($ExecutionPath) {
+        $ExecutionPath = [IO.Path]::GetFullPath($ExecutionPath)
+        if (Test-EfficiencyPathWithin $ExecutionPath $SourceAlias) {
+            $ExecutionPath = Join-Path $SourceRoot ([IO.Path]::GetRelativePath($SourceAlias, $ExecutionPath))
+        }
         $ExecutionPath = Resolve-EfficiencyPlainPath $ExecutionPath
         if ($Workspace) {
             foreach ($Relative in @('.agents\skills\squad\scripts', 'skills\squad\scripts')) { $Candidates.Add((Join-Path $Workspace $Relative)) }
@@ -1403,7 +1432,7 @@ function Get-EfficiencyBookkeepingEvidence {
                         }
                         continue
                     }
-                    if ($Script -notin @('Initialize-Squad.ps1', 'Write-SquadHandoff.ps1')) { throw 'Unsupported command alongside receipt.' }
+                    if ($Script -notin @('Initialize-Squad.ps1', 'Write-SquadHandoff.ps1', 'Complete-SquadHandoff.ps1')) { throw 'Unsupported command alongside receipt.' }
                     $null = Resolve-EfficiencySquadScriptCore -Name $Script -SourceRoot $SourceRoot -InstallRoot $InstallRoot -Workspace $Root -ExecutionPath ([IO.Path]::GetFullPath($Name, $Root)) -IntegrityContext $IntegrityContext
                     $Bound = @{}
                     for ($Index = $Offset + 1; $Index -lt $Elements.Count; $Index++) {
@@ -1411,6 +1440,7 @@ function Get-EfficiencyBookkeepingEvidence {
                         if ($Parameter -isnot [Management.Automation.Language.CommandParameterAst] -or $Parameter.Argument -or $Bound.ContainsKey($Parameter.ParameterName)) { throw 'Ambiguous writer argument.' }
                         $Key = $Parameter.ParameterName
                         $Allowed = if ($Script -eq 'Initialize-Squad.ps1') { @('RepoRoot', 'AgentRepoRoot', 'PayloadPath', 'Direct') }
+                        elseif ($Script -eq 'Complete-SquadHandoff.ps1') { @('RepoRoot', 'SquadRoot', 'PayloadPath') }
                         else { @('SquadRoot', 'PayloadPath', 'RunId', 'Agent', 'Request', 'Deliverable', 'Outcome', 'SelectionCue', 'Mode', 'Turn', 'Since', 'SessionLog', 'Quiet') }
                         if ($Key -notin $Allowed) { throw 'Unsupported writer parameter.' }
                         if ($Key -in @('Direct', 'Quiet')) { $Bound[$Key] = $true }
@@ -1435,6 +1465,8 @@ function Get-EfficiencyBookkeepingEvidence {
                 catch { }
             }
             if ($Receipts.Count -ne 1) { continue }
+            if ($WriterCalls[0].script -eq 'Complete-SquadHandoff.ps1' -and
+                ($Receipts[0]['verified'] -isnot [bool] -or $Receipts[0]['verified'] -ne $true -or $ShellExitCode -ne 0)) { continue }
             if ($PostWriterCompletionIndex -ge 0 -or $ShellExitCode -ne 0) {
                 $NextLineIdx = $ReceiptLineIndices[0] + 1
                 $VerifiedImmediateZero = $PostWriterCompletionIndex -eq ($Ast.EndBlock.Statements.Count - 1) -and

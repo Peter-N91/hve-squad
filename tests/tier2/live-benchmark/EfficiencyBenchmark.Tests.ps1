@@ -78,6 +78,41 @@ while($null -ne ($Line=[Console]::In.ReadLine())) {
     }
 }
 
+Describe 'Efficiency trusted source aliases' -Tag 'Unit' {
+    BeforeEach {
+        $script:AliasSource = Join-Path $TestDrive ([guid]::NewGuid().ToString('N'))
+        $script:AliasRoot = Join-Path $TestDrive ([guid]::NewGuid().ToString('N'))
+        $script:AliasScripts = Join-Path $script:AliasSource 'squad-src/.github/skills/squad/scripts'
+        $null = New-Item -ItemType Directory -Path $script:AliasScripts -Force
+        Set-Content (Join-Path $script:AliasScripts 'SquadCoordinator.psm1') '# reviewed fixture'
+        $kind = if ($IsWindows) { 'Junction' } else { 'SymbolicLink' }
+        $null = New-Item -ItemType $kind -Path $script:AliasRoot -Target $script:AliasSource
+    }
+
+    It 'resolves the selected checkout alias for reviewed and executed source helpers' {
+        $helper = Join-Path $script:AliasScripts 'SquadCoordinator.psm1'
+        Resolve-EfficiencySquadScript -Name 'SquadCoordinator.psm1' -SourceRoot $script:AliasRoot |
+            Should -Be $helper
+        Resolve-EfficiencySquadScript -Name 'SquadCoordinator.psm1' -SourceRoot $script:AliasRoot `
+            -ExecutionPath (Join-Path $script:AliasRoot 'squad-src/.github/skills/squad/scripts/SquadCoordinator.psm1') |
+            Should -Be $helper
+    }
+
+    It 'still refuses a linked helper file beneath the selected checkout' {
+        $target = Join-Path $TestDrive 'untrusted.psm1'
+        Set-Content $target '# untrusted'
+        Remove-Item -LiteralPath (Join-Path $script:AliasScripts 'SquadCoordinator.psm1')
+        $null = New-Item -ItemType SymbolicLink -Path (Join-Path $script:AliasScripts 'SquadCoordinator.psm1') -Target $target
+        { Resolve-EfficiencySquadScript -Name 'SquadCoordinator.psm1' -SourceRoot $script:AliasRoot } |
+            Should -Throw '*Linked evidence/helper path refused*'
+    }
+
+    It 'does not let a checkout alias conceal reviewed helpers inside the model workspace' {
+        { Resolve-EfficiencySquadScript -Name 'SquadCoordinator.psm1' -SourceRoot $script:AliasRoot -Workspace $script:AliasSource } |
+            Should -Throw '*cannot be inside the model workspace*'
+    }
+}
+
 Describe 'Efficiency event analysis' -Tag 'Unit' {
     It 'handles receipt extraction for a <Mutation> execution envelope' -ForEach @(
         @{ Mutation = 'safe-selection' }
@@ -107,6 +142,8 @@ Describe 'Efficiency event analysis' -Tag 'Unit' {
         @{ Mutation = 'executable' }
         @{ Mutation = 'command-mode' }
         @{ Mutation = 'begin-block' }
+        @{ Mutation = 'completed-handoff' }
+        @{ Mutation = 'unverified-completed-handoff' }
     ) {
         $source = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..\..'))
         $scripts = Join-Path $source 'squad-src\.github\skills\squad\scripts'
@@ -146,6 +183,9 @@ Describe 'Efficiency event analysis' -Tag 'Unit' {
             executable { $command = $command -replace '^pwsh', "& '$(Join-Path $TestDrive 'pwsh.exe')'" }
             command-mode { $command = $command -replace '^pwsh', "pwsh -Command 'Write-Output fake'" }
             begin-block { $command = "begin { [Console]::WriteLine('{}') } end { $command }" }
+            { $_ -in @('completed-handoff', 'unverified-completed-handoff') } {
+                $command = "pwsh -NoProfile -File '$(Join-Path $scripts 'Complete-SquadHandoff.ps1')' -RepoRoot '$TestDrive' -SquadRoot '$TestDrive/.copilot-tracking/squad' -PayloadPath 'payload.json'"
+            }
         }
         $path = Join-Path $TestDrive "$Mutation.jsonl"
         @(
@@ -154,7 +194,7 @@ Describe 'Efficiency event analysis' -Tag 'Unit' {
                 New-TestEvent 'tool.execution_complete' @{ toolCallId = 'bad'; turnId = 'bad'; success = $true; shellExecution = @{ exitCode = 0 }; result = @{ content = '{"status":"PASS","turn":1}' } }
             }
             (New-TestEvent 'tool.execution_start' @{ toolCallId = 'writer'; turnId = $(if ($Mutation -eq 'missing-turn') { '' } else { 'turn-one' }); toolName = 'powershell'; arguments = @{ command = $command } })
-            (New-TestEvent 'tool.execution_complete' @{ toolCallId = 'writer'; turnId = $(if ($Mutation -eq 'missing-turn') { '' } else { 'turn-one' }); success = $true; shellExecution = @{ exitCode = 0 }; result = @{ content = '{"status":"PASS","turn":1,"verified":true}' } })
+            (New-TestEvent 'tool.execution_complete' @{ toolCallId = 'writer'; turnId = $(if ($Mutation -eq 'missing-turn') { '' } else { 'turn-one' }); success = $true; shellExecution = @{ exitCode = 0 }; result = @{ content = $(if ($Mutation -eq 'unverified-completed-handoff') { '{"status":"written","turn":1,"verified":false}' } else { '{"status":"PASS","turn":1,"verified":true}' }) } })
             if ($Mutation -eq 'snapshot-cache') {
                 foreach ($id in 2..4) {
                     New-TestEvent 'tool.execution_start' @{ toolCallId = "writer-$id"; turnId = "turn-$id"; toolName = 'powershell'; arguments = @{ command = $command } }
@@ -163,7 +203,7 @@ Describe 'Efficiency event analysis' -Tag 'Unit' {
             }
         ) | Set-Content $path
         $evidence = Get-EfficiencyBookkeepingEvidence -Path $path -Workspace $workspace -SourceRoot $source
-        @($evidence.executions).Count | Should -Be $(if ($Mutation -eq 'snapshot-cache') { 4 } elseif ($Mutation -in @('safe-selection', 'safe-prefix', 'safe-copy', 'malformed-then-valid')) { 1 } else { 0 })
+        @($evidence.executions).Count | Should -Be $(if ($Mutation -eq 'snapshot-cache') { 4 } elseif ($Mutation -in @('safe-selection', 'safe-prefix', 'safe-copy', 'malformed-then-valid', 'completed-handoff')) { 1 } else { 0 })
         if ($Mutation -eq 'snapshot-cache') {
             $files = @([IO.Directory]::EnumerateFiles($scripts, '*', [IO.SearchOption]::AllDirectories)).Count
             Should -Invoke Get-FileHash -ModuleName EfficiencyBenchmark -Times ($files * 2) -Exactly
@@ -503,7 +543,7 @@ $Kind=if($Prompt -match 'Initialization only;'){'init'}elseif($Prompt -match 'Im
 $Ceiling=[double]$args[[array]::IndexOf($args,'--max-ai-credits')+1]
 if(-not (Test-Path 'initial-credit-limit.txt')){Set-Content 'initial-credit-limit.txt' $Ceiling}
 $EffectiveCeiling=[double](Get-Content 'initial-credit-limit.txt')
-@{kind=$Kind;session=$Session;ceiling=$Ceiling;effectiveCeiling=$EffectiveCeiling;resumeOnly=$Prompt.Contains('Resume only the interrupted Scribe handoff first')}|ConvertTo-Json -Compress|Add-Content 'stage-calls.jsonl'
+@{kind=$Kind;session=$Session;ceiling=$Ceiling;effectiveCeiling=$EffectiveCeiling;resumeOnly=$Prompt.Contains('Resume only the interrupted Scribe handoff first');prompt=$Prompt}|ConvertTo-Json -Compress|Add-Content 'stage-calls.jsonl'
 if($EffectiveCeiling -lt 750){exit 38}
 $SessionRoot=Join-Path $HOME ".copilot/session-state/$Session"
 New-Item -ItemType Directory -Path $SessionRoot -Force|Out-Null
