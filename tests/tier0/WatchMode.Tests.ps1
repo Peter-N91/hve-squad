@@ -1718,7 +1718,12 @@ $Extra
     }
 
     It 'GATE-48 drops a skills-based pack until every registered skill is host-visible' {
-        $foundrySkills = @('microsoft-foundry', 'use-ai-gateway', 'azure-aigateway', 'caira', 'foundry-iq', 'appinsights-instrumentation')
+        $foundrySkills = @(
+            'microsoft-foundry', 'use-ai-gateway', 'azure-aigateway', 'caira',
+            'foundry-iq', 'appinsights-instrumentation', 'agentops-agent', 'eval-faq',
+            'agentops-config', 'agentops-eval', 'agentops-report', 'agentops-governance',
+            'agt-policy-authoring'
+        )
         $dependencies = @{ foundry = $foundrySkills }
         $packRoles = @{ foundry = @('data-scientist') }
         $dropped = Test-SquadWatchProfileSelection `
@@ -1729,7 +1734,7 @@ $Extra
             -Roster $script:WatchSpineRoles `
             -InstalledPacks @('foundry') `
             -PackSkillDependencies $dependencies `
-            -HostVisibleSkills @($foundrySkills | Select-Object -First 5) `
+            -HostVisibleSkills @($foundrySkills | Select-Object -First 12) `
             -CanonicalProfileRoles $script:WatchSpineRoles `
             -CanonicalPackRoles $packRoles
         $dropped.Valid | Should -BeTrue
@@ -2327,8 +2332,8 @@ $(Format-WatchSelectionMarkdown)
         $catalog = Get-SquadWatchProfileCatalog -Markdown $catalogText
         $catalog.Profiles['security'] | Should -Contain 'privacy'
         $catalog.PackSkills['m365-copilot'] | Should -HaveCount 14
-        $catalog.PackSkills['foundry'] | Should -HaveCount 6
-        $catalog.PackSkills['fabric'] | Should -HaveCount 8
+        $catalog.PackSkills['foundry'] | Should -HaveCount 13
+        $catalog.PackSkills['fabric'] | Should -HaveCount 15
         $catalog.PackSkills['dotnet'] | Should -HaveCount 20
         $catalog.PackSkills['aks'] | Should -HaveCount 7
         $catalog.PackSkills['azure-functions'] | Should -HaveCount 10
@@ -2350,8 +2355,12 @@ $(Format-WatchSelectionMarkdown)
             @{ Name = 'default'; Packs = @('azure-functions'); Installed = @('azure-functions'); Skills = @(); Roles = @($catalog.Profiles['default'] + $catalog.Packs['azure-functions'] | Select-Object -Unique); Ok = $false }
             @{ Name = 'default'; Packs = @('azure-functions'); Installed = @('azure-functions'); Skills = @($catalog.PackSkills['azure-functions'] | Where-Object { $_ -ne 'azure-functions-update' }); Roles = @($catalog.Profiles['default'] + $catalog.Packs['azure-functions'] | Select-Object -Unique); Ok = $false }
             @{ Name = 'default'; Packs = @('azure-functions'); Installed = @('azure-functions'); Skills = @($catalog.PackSkills['azure-functions']); Roles = @($catalog.Profiles['default'] + $catalog.Packs['azure-functions'] | Select-Object -Unique); Ok = $true }
-            @{ Name = 'default'; Packs = @('foundry'); Installed = @('foundry'); Skills = @(); Roles = @($catalog.Profiles['default'] + $catalog.Packs['foundry']); Ok = $false }
-            @{ Name = 'default'; Packs = @('foundry'); Installed = @('foundry'); Skills = @($catalog.PackSkills['foundry']); Roles = @($catalog.Profiles['default'] + $catalog.Packs['foundry']); Ok = $true }
+            @{ Name = 'default'; Packs = @('foundry'); Installed = @('foundry'); Skills = @(); Roles = @($catalog.Profiles['default'] + $catalog.Packs['foundry'] | Select-Object -Unique); Ok = $false }
+            @{ Name = 'default'; Packs = @('foundry'); Installed = @('foundry'); Skills = @($catalog.PackSkills['foundry'] | Where-Object { $_ -ne 'agentops-governance' }); Roles = @($catalog.Profiles['default'] + $catalog.Packs['foundry'] | Select-Object -Unique); Ok = $false }
+            @{ Name = 'default'; Packs = @('foundry'); Installed = @('foundry'); Skills = @($catalog.PackSkills['foundry']); Roles = @($catalog.Profiles['default'] + $catalog.Packs['foundry'] | Select-Object -Unique); Ok = $true }
+            @{ Name = 'default'; Packs = @('fabric'); Installed = @('fabric'); Skills = @(); Roles = @($catalog.Profiles['default'] + $catalog.Packs['fabric'] | Select-Object -Unique); Ok = $false }
+            @{ Name = 'default'; Packs = @('fabric'); Installed = @('fabric'); Skills = @($catalog.PackSkills['fabric'] | Where-Object { $_ -ne 'semantic-model-authoring' }); Roles = @($catalog.Profiles['default'] + $catalog.Packs['fabric'] | Select-Object -Unique); Ok = $false }
+            @{ Name = 'default'; Packs = @('fabric'); Installed = @('fabric'); Skills = @($catalog.PackSkills['fabric']); Roles = @($catalog.Profiles['default'] + $catalog.Packs['fabric'] | Select-Object -Unique); Ok = $true }
             @{ Name = 'security'; Packs = @(); Installed = @(); Roles = @($catalog.Profiles['security'] | Where-Object { $_ -ne 'privacy' }); Ok = $false }
             @{ Name = 'default'; Packs = @(); Installed = @(); Roles = @($catalog.Profiles['default'] + 'hacker'); Ok = $false }
         )
@@ -2387,6 +2396,10 @@ $(Format-WatchSelectionMarkdown)
             elseif (-not $case.Ok -and $case.Packs -contains 'foundry') {
                 $resolved.Ok | Should -BeFalse
                 $resolved.Reason | Should -Match '^pack-skill-not-visible:foundry:'
+            }
+            elseif (-not $case.Ok -and $case.Packs -contains 'fabric') {
+                $resolved.Ok | Should -BeFalse
+                $resolved.Reason | Should -Match '^pack-skill-not-visible:fabric:'
             }
             else {
                 $resolved.Ok | Should -BeTrue

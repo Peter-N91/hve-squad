@@ -164,12 +164,21 @@ BeforeAll {
             $decisions = [ordered]@{}
             foreach ($pack in $Choices.packs) {
                 if ($pack -eq 'foundry') {
-                    foreach ($resource in @('microsoft-foundry', 'use-ai-gateway', 'azure-aigateway', 'caira', 'foundry-iq', 'appinsights-instrumentation')) {
+                    foreach ($resource in @(
+                            'microsoft-foundry', 'use-ai-gateway', 'azure-aigateway', 'caira',
+                            'foundry-iq', 'appinsights-instrumentation', 'agentops-agent',
+                            'eval-faq', 'agentops-config', 'agentops-eval', 'agentops-report',
+                            'agentops-governance', 'agt-policy-authoring')) {
                         $decisions[$resource] = 'declined'
                     }
                 }
                 elseif ($pack -eq 'fabric') {
-                    foreach ($resource in @('sqldw-cli', 'sqldb-cli', 'eventhouse-cli', 'eventstream-cli', 'spark-cli', 'dataflows-cli', 'databricks-migration', 'pipeline-migration')) {
+                    foreach ($resource in @(
+                            'semantic-model-authoring', 'powerbi-report-cli',
+                            'e2e-medallion-architecture', 'sqldw-cli', 'sqldb-cli',
+                            'eventhouse-cli', 'eventstream-cli', 'activator-cli', 'spark-cli',
+                            'dataflows-cli', 'onelake-catalog-cli', 'databricks-migration',
+                            'synapse-migration', 'hdinsight-migration', 'pipeline-migration')) {
                         $decisions[$resource] = 'declined'
                     }
                 }
