@@ -149,8 +149,6 @@ file audits. A script failure, missing proof or unadmitted cost slot stops
 completion. Never overlap handoff writer, verdict writer, cold Scribe, or Cost
 Preflight at one root.
 For cold Scribe dispatches only, pipeline per references/gates-and-modes.md.
-Ordinary handoffs run synchronously through the validated writer.
-Supported verdicts run synchronously through the verdict writer.
 
 Return the matched pattern, actual agents and tiers, their synthesized findings,
 verified paths/state receipt, and unresolved approvals or blockers. No model pin:

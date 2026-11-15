@@ -98,11 +98,14 @@ Describe 'Efficiency trusted source aliases' -Tag 'Unit' {
             Should -Be $helper
     }
 
-    It 'still refuses a linked helper file beneath the selected checkout' {
-        $target = Join-Path $TestDrive 'untrusted.psm1'
-        Set-Content $target '# untrusted'
+    It 'still refuses a linked helper tree beneath the selected checkout' {
+        $target = Join-Path $TestDrive ([guid]::NewGuid().ToString('N'))
+        $null = New-Item -ItemType Directory -Path $target
+        Set-Content (Join-Path $target 'SquadCoordinator.psm1') '# untrusted'
         Remove-Item -LiteralPath (Join-Path $script:AliasScripts 'SquadCoordinator.psm1')
-        $null = New-Item -ItemType SymbolicLink -Path (Join-Path $script:AliasScripts 'SquadCoordinator.psm1') -Target $target
+        Remove-Item -LiteralPath $script:AliasScripts
+        $kind = if ($IsWindows) { 'Junction' } else { 'SymbolicLink' }
+        $null = New-Item -ItemType $kind -Path $script:AliasScripts -Target $target
         { Resolve-EfficiencySquadScript -Name 'SquadCoordinator.psm1' -SourceRoot $script:AliasRoot } |
             Should -Throw '*Linked evidence/helper path refused*'
     }
@@ -639,6 +642,10 @@ exit 0
                 else {
                     $Run.stages.name -join ',' | Should -Be 'init,requirements,build'
                     $Calls.kind -join ',' | Should -Be 'init,requirements,build'
+                    $buildPrompt = ($Calls | Where-Object kind -EQ build).prompt
+                    $buildPrompt | Should -Match 'producer-consumer ID boundary in separate processes'
+                    $buildPrompt | Should -Match 'list and mark the newly returned ID done'
+                    $buildPrompt | Should -Match 'reject the add without modifying stored bytes'
                     $Run.stages[2].process.exitCode | Should -Be 37
                 }
                 $Run.judge.valid | Should -BeFalse
@@ -667,6 +674,9 @@ exit 0
             foreach($Prefix in @('requirements','requirements-compaction','requirements-continuation')) { Test-Path (Join-Path $Trial "out/$Prefix-events.jsonl") | Should -BeTrue }
             Get-Content (Join-Path $Trial 'out/requirements-stdout.jsonl') -Raw | Should -Match '127666'
             $Calls = @(Get-Content (Join-Path $Trial 'workspace/stage-calls.jsonl') | ForEach-Object { $_ | ConvertFrom-Json })
+            if ($Outcome -eq 'recovered') {
+                ($Calls | Where-Object kind -EQ build).prompt | Should -Match 'producer-consumer ID boundary in separate processes'
+            }
             @($Calls.session | Sort-Object -Unique).Count | Should -Be 1
             ($Calls | Where-Object kind -EQ continuation).resumeOnly | Should -BeTrue
             @($Calls.ceiling | Sort-Object -Unique) | Should -Be @(750)

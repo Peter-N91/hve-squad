@@ -295,9 +295,9 @@ Describe 'Synchronous ordinary handoffs and cold Scribe pipelining (GATE-22..GAT
 
         It 'blocks progress completion and the next worker until ordinary proof succeeds' {
             $script:OrdinaryHandoffBody | Should -Match 'Receipt\+proof gate progress/next worker'
-            $script:CoordinatorRuntimeBody | Should -Match '(?s)Run `Write-SquadHandoff\.ps1 -Quiet` synchronously.+Exit 0 requires Section 5 proof before progress/next task'
-            $script:CoordinatorRuntimeBody | Should -Match 'routing/artifact is\s+no handoff'
-            $script:CoordinatorRuntimeBody | Should -Match 'Exit 2 takes the cold path'
+            $script:CoordinatorRuntimeBody | Should -Match '(?s)Use `Complete-SquadHandoff\.ps1.+Require exit 0 and `verified: true` before progress/next task'
+            $script:OrdinaryHandoffBody | Should -Match 'routing/artifacts do not'
+            $script:CoordinatorRuntimeBody | Should -Match 'Exit 2 is cold'
         }
 
         It 'applies the same per-stage barrier inside targeted federation autopilot' {

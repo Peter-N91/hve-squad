@@ -66,6 +66,9 @@ functional, review and quality failures are measured, not prerequisites for scor
 Feasible later stages and remaining runs still happen; missing grades remain
 unavailable, never zero or invented success. Reports retain individual checks,
 independent scores, timing, requests, credits and reliability counts.
+Both collection modes retain separate-process producer-consumer ID-boundary
+validation in the build request. Observation changes how failures are reported,
+not which product invariants the builder and closing reviewer must verify.
 
 Observational workflows have no request-count cap, allow up to 1,000 native autopilot
 continuations, and use a 180-minute hung-run watchdog. They reserve 30 credits for
@@ -94,9 +97,15 @@ artifacts; narrative receipts and zero Scribe dispatches alone prove nothing.
 The proof parser permits a single literal or previously bound `cd`, `chdir` or
 `Set-Location` to the exact workspace before the writer. Other roots, subdirectories,
 dynamic or post-writer locations remain rejected. Run writers separately from
-capture, copy, cleanup and probes; preserve the full receipt and invoke turn
-completion with its actual payload and expected turn. A bounded output prefix is
+capture, copy, cleanup and probes. The ordinary `Complete-SquadHandoff.ps1` helper
+freezes the actual payload, runs the existing writer and turn checker, and emits
+one verified receipt. Legacy direct writers still require separate turn completion
+with their actual payload and expected turn. A bounded output prefix is
 usable only when the complete receipt survives; truncated JSON is not proof.
+An explicitly selected source checkout may be reached through a directory alias
+(including a Windows mounted-volume path). The resolver canonicalizes that root
+before checking helpers; linked helper trees and model-workspace escapes remain
+refused. Saved scores are not reclassified after a resolver change.
 Exact-native ledgers are checked against native coverage, not repriced history
 estimates; fallback estimates retain their independent rate checks. Requirements
 also require the published BRD/PRD and dispatch-backed history pointing to nonempty

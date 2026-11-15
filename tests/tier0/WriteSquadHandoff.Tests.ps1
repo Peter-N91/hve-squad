@@ -2099,8 +2099,8 @@ Describe 'Write-SquadHandoff.ps1 compact all-mode Scribe read set (H1, WRT-08)' 
         $coordinator = @($script:HandoffModel.SquadAgents | Where-Object Name -eq 'squad-coordinator.agent.md')[0].Body
         $runtime = Get-Content -LiteralPath (Join-Path $PackageRoot '.agents/skills/squad/references/coordinator-runtime.md') -Raw
         $step = Get-Content -LiteralPath $script:EconomyScribePath -Raw
-        $runtime | Should -Match 'Run `Write-SquadHandoff\.ps1 -Quiet` synchronously per `economy-scribe\.md`'
-        $coordinator | Should -Match 'Run `Write-SquadHandoff\.ps1 -Quiet` directly and synchronously'
+        $runtime | Should -Match 'Use `Complete-SquadHandoff\.ps1'
+        $coordinator | Should -Match 'Use `Complete-SquadHandoff\.ps1'
         foreach ($parameter in @('RunId', 'Agent', 'Request', 'Deliverable', 'Outcome', 'ConsumptionPath', 'OrchestrationConsumptionPath')) {
             $step | Should -Match ([regex]::Escape("-$parameter"))
         }

@@ -44,7 +44,8 @@ if ($MyInvocation.InvocationName -ne '.') {
         if ($Written.exitCode -ne 0) { exit $Written.exitCode }
         $Receipt = $Written.stdout | ConvertFrom-Json -AsHashtable
         if ($Receipt -isnot [Collections.IDictionary] -or $Receipt['status'] -ne 'written' -or
-            $Receipt['ledgerCheck'] -ne 'PASS' -or $Receipt['turn'] -isnot [int]) {
+            $Receipt['ledgerCheck'] -ne 'PASS' -or
+            ($Receipt['turn'] -isnot [int] -and $Receipt['turn'] -isnot [long])) {
             throw 'Writer did not return a passing handoff receipt; persisted state is not completion proof.'
         }
         $Checked = Invoke-SquadLocalScript -Name 'Test-SquadTurnCompletion.ps1' -Arguments @(

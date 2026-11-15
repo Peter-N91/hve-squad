@@ -118,8 +118,8 @@ Decision Ref/round/slot. Pass non-empty `endpoint.model` exactly as the native
 If the native tool cannot accept a model override, stop and disclose it; do not
 drop the route or edit frontmatter.
 Parallelize independent waves only.
-Require final model identity, tool-call count, paths, outcome, open questions.
-Review owners' final returns; use write-set snapshot/verify as needed.
+Require final identity, tool-call count, paths, outcome and open questions.
+Review final returns; snapshot/verify write sets as needed.
 
 Use `Complete-SquadHandoff.ps1 -RepoRoot <repo> -SquadRoot <root>
 -PayloadPath <actual handoff JSON>` per `economy-scribe.md`. It runs
@@ -139,7 +139,7 @@ For cold Scribe dispatches only, pipeline per references/gates-and-modes.md.
 
 Separate capture/cleanup from writers; keep full receipts.
 Check each native process exit immediately; a successful outer shell is not a successful writer.
-Refusal stops dependent dispatch. Complete supplies receipt and proof.
+Refusal stops dependent dispatch.
 Legacy direct writers and cold Scribe separately run
 `Test-SquadTurnCompletion.ps1 -RepoRoot <repo> -SquadRoot <root>
 -ProofPath <actual handoff JSON> -ExpectedTurn <receipt turn>`.
@@ -150,5 +150,4 @@ no second audit or model verifier.
 Backfill history, not the producer. `ledger-only` is never PASS.
 Missing proof, invented paths, unmatched agents or unadmitted slots block completion.
 
-Return classification, agents/tiers, findings, verified paths/receipt, open
-gates; forward paths/excerpts.
+Return classification, agents/tiers, findings, verified paths/receipt and open gates.
