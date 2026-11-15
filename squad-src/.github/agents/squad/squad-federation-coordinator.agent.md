@@ -54,6 +54,7 @@ agents:
   - Code Review Explainer
   - Code Review Walkback
   - Squad Cost Manager
+  - Squad Value Economist
   - Squad Azure Architect
   - Squad IaC Author
   - Squad Deployer

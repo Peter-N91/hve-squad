@@ -28,7 +28,9 @@ The runtime comprises `Resolve-SquadConnectorDispatch.ps1`,
 the shared `SquadUsage.psm1`, `Set-SquadCostPreflight.ps1`,
 `Initialize-SquadConsumptionRates.ps1`, the allowlisted maintenance entrypoint
 `Invoke-SquadDoctor.ps1`, and the read-only governance report
-renderer `New-SquadGovernanceReport.ps1` with its `SquadGovernanceReport.*` modules.
+renderer `New-SquadGovernanceReport.ps1` with its `SquadGovernanceReport.*` modules,
+and the read-only FinOps monetary valuation engine `Measure-SquadBenefitValue.ps1`
+(`SquadBenefitValuation.psm1`), which refuses symbolic links and writes inside `.copilot-tracking/squad/`.
 The two buckets below cover configuration/dispatch and file exchange/persistence.
 Each enumerates all six STRIDE categories. Agent instructions are procedural
 controls, not a sandbox or a substitute for host filesystem permissions.

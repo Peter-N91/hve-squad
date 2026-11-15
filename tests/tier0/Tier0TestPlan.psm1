@@ -54,6 +54,7 @@ function Get-Tier0TestPlan {
                 'SquadDoctor.Tests.ps1'
                 'ConnectorDispatch.Tests.ps1'
                 'GovernanceReport.Tests.ps1'
+                'BenefitValuation.Tests.ps1'
             )
         }
         @{
