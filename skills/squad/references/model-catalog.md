@@ -5,7 +5,7 @@ license: MIT
 metadata:
   authors: "Peter-N91/hve-squad"
   spec_version: "1.1"
-  last_updated: "2026-11-14"
+  last_updated: "2026-11-16"
 ---
 <!--
 Copyright (c) Microsoft Corporation.
@@ -16,8 +16,8 @@ Licensed under the MIT license.
 
 **This catalog is declared, not live-discovered.** No chat or interactive Copilot host exposes a callable model-list API to the agent at dispatch time (research finding F7); the CLI's dispatch tool advertises an enum, which this catalog intersects. Every row below was retrieved by fetching GitHub's own documentation pages on the date stamped below (`scripts/Sync-ModelCatalog.ps1`), not by querying a runtime discovery endpoint. A routing procedure that reads this file is reading a curated, dated snapshot — never an assertion that the catalog was assembled live for the current session.
 
-* **Retrieved: 2026-11-14**
-* Sources (fetched directly for this snapshot; all retrieved 2026-11-14):
+* **Retrieved: 2026-11-16**
+* Sources (fetched directly for this snapshot; all retrieved 2026-11-16):
   * Supported AI models in GitHub Copilot — <https://docs.github.com/en/copilot/reference/ai-models/supported-models>
   * Models and pricing for GitHub Copilot — <https://docs.github.com/en/copilot/reference/copilot-billing/models-and-pricing>
   * AI model comparison — <https://docs.github.com/en/copilot/reference/ai-models/model-comparison>
@@ -37,7 +37,7 @@ This file is CODEOWNERS-level content refreshed by `scripts/Sync-ModelCatalog.ps
 
 The retrieval date above is this catalog's freshness signal. **A catalog older than 90 days from its `Retrieved:` date, or a catalog that fails to parse, is stale**: the routing procedure that would otherwise rank against it must fall back to `consumption.md`'s static `fast`/`default`/`extended` tiers and log a warning, rather than blocking the run or guessing at a value this file no longer confirms.
 
-`consumption-rates.md`'s `Observed-on:` date **must equal** this file's `Retrieved:` date exactly, not merely "close" — both are `2026-11-14` as of this snapshot. A future re-verification that updates one must update the other in the same change.
+`consumption-rates.md`'s `Observed-on:` date **must equal** this file's `Retrieved:` date exactly, not merely "close" — both are `2026-11-16` as of this snapshot. A future re-verification that updates one must update the other in the same change.
 
 ## How This Catalog Is Consumed
 
@@ -139,7 +139,7 @@ Catalog IDs use the same lowercase, hyphenated form as this CLI host's advertise
 
 ## Catalog: Pricing (USD per 1M tokens)
 
-Every single-model price below is transcribed verbatim from the "Models and pricing" page retrieved 2026-11-14; **`unpriced` never means `0`**. Copilot Fusion rows record representative blended solver rates for Cost Preflight and fallback estimation (live native billing charges each underlying model invoked). The `Rate-row alias` column names the exact `consumption-rates.md` "Model (as routed)" row this ID prices as.
+Every single-model price below is transcribed verbatim from the "Models and pricing" page retrieved 2026-11-16; **`unpriced` never means `0`**. Copilot Fusion rows record representative blended solver rates for Cost Preflight and fallback estimation (live native billing charges each underlying model invoked). The `Rate-row alias` column names the exact `consumption-rates.md` "Model (as routed)" row this ID prices as.
 
 ### OpenAI (has a documented long-context tier)
 
@@ -290,7 +290,7 @@ These models are named by the official sources but are not in the default static
 
 * **Claude Sonnet 4 is priced but not currently in Supported AI models.** The "Models and pricing" Anthropic table lists Claude Sonnet 4 ($3.00 / $0.30 / $3.75 / $15.00), while "Supported AI models" omits it. Retained cautiously so historical/legacy dispatches remain priceable and auditable.
 * **Copilot Fusion effort levels (`fusion-standard`, `hydrafusion`, `hydrafusion-max`).** Copilot Fusion dynamically selects models and execution patterns (`Single`, `Cascade`, `Critique`) across three user-selectable effort levels (`Standard`, `High`, `Max`) and bills each underlying model at its standard rate. The catalog records all three effort levels distinctly instead of collapsing `hydrafusion` (High) into `hydrafusion-max` (Max).
-* **Retired models pruned from active selection.** Models listed in GitHub's retirement history and absent from current supported/pricing tables — including Kimi K2.7 Code (2026-10-02), GPT-5.2-Codex (2026-06-05), GPT-5 mini (2026-10-19), GPT-5.1-Codex-Max (2026-04-01), GPT-5.4 (2026-10-19), Claude Sonnet 4 (2026-05-01), GPT-5.5 (2026-10-19), GPT-5.4 mini (2026-10-19), o4-mini (2025-10-23), MAI-Code-1-Flash (2026-09-10) — are excluded from active catalog ranking and benchmark coverage gates.
+* **Retired models pruned from active selection.** Models listed in GitHub's retirement history and absent from current supported/pricing tables — including Claude Sonnet 3.7 Thinking (2025-10-23), GPT-5.4 mini (2026-10-19), Gemini 2.0 Flash (2025-10-23), Claude Opus 4.6 (2026-09-01), Claude Opus 4.6 (fast mode) (preview) (2026-06-29), GPT-5.1-Codex (2026-04-01), Gemini 3.6 Flash (2026-10-02), Gemini 3.5 Flash (2026-10-02), GPT-5.1-Codex-Mini (2026-04-01), GPT-5.1 (2026-04-15) — are excluded from active catalog ranking and benchmark coverage gates.
 
 ## Squad Assignment Classes Referenced Above
 

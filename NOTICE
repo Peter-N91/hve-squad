@@ -49,13 +49,13 @@ github/awesome-copilot
 Included resources and documentation assets
 --------------------------------------------------------------------------------
 
-fredgis/sql-migration-advisor
-  https://github.com/fredgis/sql-migration-advisor
+microsoft/microsoft-sql
+  https://github.com/microsoft/microsoft-sql
   Copyright (c) Microsoft Corporation.
   Licensed under the MIT License.
-  The adapted skill retains its upstream attribution in:
+  The adapted compatibility fallback skill retains its upstream attribution in:
   squad-src/.github/skills/sql-migration-advisor/SKILL.md
-  Upstream license: https://github.com/fredgis/sql-migration-advisor/blob/main/LICENSE
+  Upstream license: https://github.com/microsoft/microsoft-sql/blob/main/LICENSE
 
   Permission is hereby granted, free of charge, to any person obtaining a copy
   of this software and associated documentation files (the "Software"), to deal

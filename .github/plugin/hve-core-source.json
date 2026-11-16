@@ -1,6 +1,6 @@
 {
   "repository": "microsoft/hve-core",
-  "commit": "0e5623a16e06c5b1353bbf77ad4cba49db4c28b1",
+  "commit": "09f6ee12f71d6a14695dd70beeff6cba57513f2d",
   "version": "3.2.2",
   "pluginManifestHash": "5db3e888c2c8030f09fb8773e5928e87d903770f85567ecce4aa8ef45587c69c",
   "files": [
