@@ -5,14 +5,14 @@ license: MIT
 metadata:
   authors: "Peter-N91/hve-squad"
   spec_version: "2.0"
-  last_updated: "2026-08-18"
-  skill_based_on: "fredgis/sql-migration-advisor (MIT)"
+  last_updated: "2026-11-16"
+  skill_based_on: "microsoft/microsoft-sql (MIT)"
 ---
 
 # SQL Migration Advisor — best path to Azure
 
 > **Compatibility fallback.** `Squad SQL Migration Advisor` prefers the upstream
-> `recommend-migration-path` plugin skill. Use this bundled copy only when that skill is unavailable,
+> `recommend-migration-path` skill from `microsoft/microsoft-sql` (`plugins/microsoft-sql-migration`). Use this bundled copy only when that skill is unavailable,
 > and do not use it to produce a prerequisite readiness plan.
 
 Help the user choose the **best migration path** for a SQL Server environment by
@@ -20,17 +20,17 @@ running a **short guided interview** and then producing a **grounded, determinis
 recommendation** (target + method + downtime + blockers + cost + program).
 
 This skill is **sourced from the knowledge base**
-[`docs/sql-server-to-azure-migration.md`](https://github.com/fredgis/sql-migration-advisor/blob/main/docs/sql-server-to-azure-migration.md)
+[`plugins/microsoft-sql-migration/skills/recommend-migration-path/references/knowledge-base.md`](https://github.com/microsoft/microsoft-sql/blob/eeb1c6867c2d128763516a1aad41671c593cc189/plugins/microsoft-sql-migration/skills/recommend-migration-path/references/knowledge-base.md)
 (FY27 SQL Motion, "SQL in a Day"). It mirrors the **AI Migration Agent I/O contract** in §14 of that doc.
 
-> Adapted for the HVE squad from [fredgis/sql-migration-advisor](https://github.com/fredgis/sql-migration-advisor) under the MIT License. Copyright notice retained per license terms.
+> Adapted for the HVE squad from [microsoft/microsoft-sql](https://github.com/microsoft/microsoft-sql) under the MIT License. Copyright notice retained per license terms.
 
 ## Source of truth (read this first)
 
-The **authoritative source** for every recommendation is the live document above. At the
+The **authoritative source** for every recommendation is the pinned official document above. At the
 start of a session, **fetch it** and use it as the ground truth:
 
-- Raw URL: `https://raw.githubusercontent.com/fredgis/sql-migration-advisor/main/docs/sql-server-to-azure-migration.md`
+- Raw URL: `https://raw.githubusercontent.com/microsoft/microsoft-sql/eeb1c6867c2d128763516a1aad41671c593cc189/plugins/microsoft-sql-migration/skills/recommend-migration-path/references/knowledge-base.md`
 - Use whatever fetch capability is available (e.g. the `fetch_webpage` tool, or `curl`/`Invoke-WebRequest`
   via a shell). Prefer the live doc so version gates, retirements and previews are always current.
 - **Fallback:** if the doc can't be fetched (offline / no network), use the bundled

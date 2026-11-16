@@ -483,6 +483,16 @@ git diff --check</code></pre>
         file under <code>.github/agents/</code>.
       </p>
       <p>
+        <strong>External cast re-verification:</strong> <code>scripts/Sync-ExternalCast.ps1</code> and
+        <code>.github/workflows/sync-external-cast.yml</code> enforce the 60-day renewal window ahead of
+        the 90-day <code>Verified On</code> backstop in <code>references/roster-catalog.md</code>. When an
+        upstream repository remains active under the same licence and the pinned resource blobs match
+        upstream <code>HEAD</code> with no added hooks or MCP manifests, the workflow opens a pull request
+        on <code>chore/sync-external-cast</code>; when upstream content, paths, frontmatter, hooks, MCP
+        manifests, or licences drift, it opens a <code>squad/auto</code> adaptation issue instead of
+        advancing <code>Verified On</code> silently.
+      </p>
+      <p>
         <strong>Model catalog and routing:</strong> <code>squad-src/.github/skills/squad/references/model-catalog.md</code>
         enumerates supported models, tiers, and availability. <code>references/model-routing.md</code> defines the
         ranked selection algorithm and precedence chain. The Scribe must not inherit the frontier session model

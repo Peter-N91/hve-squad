@@ -1,9 +1,9 @@
 # Decision rules — SQL Server → Azure (distilled from the knowledge base)
 
 Apply Steps **A → D** in order. Deterministic: same answers ⇒ same recommendation.
-Source of truth: `docs/sql-server-to-azure-migration.md` (fredgis/sql-migration-advisor), verified June 2026.
+Source of truth: `plugins/microsoft-sql-migration/skills/recommend-migration-path/references/knowledge-base.md` (microsoft/microsoft-sql), verified November 2026.
 
-> Adapted for the HVE squad from [fredgis/sql-migration-advisor](https://github.com/fredgis/sql-migration-advisor) under the MIT License. This is the offline fallback distillation; the live source doc wins on any disagreement.
+> Adapted for the HVE squad from [microsoft/microsoft-sql](https://github.com/microsoft/microsoft-sql) under the MIT License. This is the offline fallback distillation; the live source doc wins on any disagreement.
 
 Three layers, never mixed:
 
