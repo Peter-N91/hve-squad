@@ -103,6 +103,24 @@ jobs:
             esac
           done < /tmp/changed.txt
 
+      - name: Validate External Cast sync pull request scope
+        if: >-
+          github.event.pull_request.head.repo.full_name == github.repository &&
+          github.head_ref == 'chore/sync-external-cast'
+        env:
+          BASE_SHA: ${{ steps.diff.outputs.base_sha }}
+        run: |
+          while IFS= read -r file; do
+            [[ -z "$file" ]] && continue
+            case "$file" in
+              squad-src/.github/skills/squad/references/roster-catalog.md|.changes/unreleased/*.md) ;;
+              *)
+                echo "::error file=$file::External Cast sync pull requests on chore/sync-external-cast may only touch squad-src/.github/skills/squad/references/roster-catalog.md and .changes/unreleased/*.md (found '$file')."
+                exit 1
+                ;;
+            esac
+          done < /tmp/changed.txt
+
       # Exempt only same-repository Release Prep PRs (scope-checked above) and the
       # hotfix merge-back, which carries a release that already happened on another
       # branch.

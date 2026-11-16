@@ -467,6 +467,16 @@ git diff --check</code></pre>
         de l’agent dans <code>.github/agents/</code>.
       </p>
       <p>
+        <strong>Re-vérification du catalogue externe :</strong> <code>scripts/Sync-ExternalCast.ps1</code> et
+        <code>.github/workflows/sync-external-cast.yml</code> appliquent la fenêtre de renouvellement de 60 jours avant
+        le délai maximal de 90 jours sur <code>Verified On</code> dans <code>references/roster-catalog.md</code>. Lorsqu’un
+        dépôt amont reste actif sous la même licence et que les blobs épinglés de la ressource correspondent à
+        <code>HEAD</code> sans ajout de hooks ni de manifestes MCP, le workflow ouvre une pull request
+        sur <code>chore/sync-external-cast</code> ; lorsque le contenu amont, les chemins, le frontmatter, les hooks, les manifestes MCP
+        ou les licences divergent, il ouvre un ticket d’adaptation <code>squad/auto</code> au lieu
+        d’avancer <code>Verified On</code> silencieusement.
+      </p>
+      <p>
         <strong>Catalogue des modèles et routage :</strong> <code>squad-src/.github/skills/squad/references/model-catalog.md</code>
         énumère les modèles pris en charge, les niveaux et leur disponibilité. <code>references/model-routing.md</code> définit
         l’algorithme de sélection par classement et l’ordre de priorité. Le Scribe ne doit pas hériter du modèle de pointe de la session
