@@ -262,7 +262,7 @@ print(json.dumps({
             $data = $json | ConvertFrom-Json
 
             @($data.appPrTriggers) | Should -BeNullOrEmpty -Because 'no workflow reading AUTOMATION_APP_PRIVATE_KEY may trigger on pull_request or pull_request_target'
-            @($data.appJobs).Count | Should -Be 6 -Because 'sync-hve-core, sync-model-benchmarks, release-prep (prepare + dispatch-release), and release (tag + release) must mint scoped GitHub App tokens'
+            @($data.appJobs).Count | Should -Be 7 -Because 'sync-hve-core, sync-model-benchmarks, sync-external-cast, release-prep (prepare + dispatch-release), and release (tag + release) must mint scoped GitHub App tokens'
             foreach ($job in @($data.appJobs)) {
                 $job.envName | Should -BeExactly 'automation-governance' -Because "$($job.workflow)/$($job.job) must bind to automation-governance"
                 $job.deployment | Should -BeFalse -Because "$($job.workflow)/$($job.job) must set deployment: false"
@@ -297,6 +297,7 @@ print(json.dumps({
 
             $script:PrValidationRaw | Should -Match '- name: Validate Release Prep pull request scope'
             $script:PrValidationRaw | Should -Match '- name: Validate Sync and Adapt pull request scope'
+            $script:PrValidationRaw | Should -Match '- name: Validate External Cast sync pull request scope'
             $pinStep = Get-WorkflowStepBlock -Body $script:PrValidationRaw -Name 'Reject an unreviewed hve-core pin move'
             $pinStep | Should -Match 'github\.event\.pull_request\.head\.repo\.full_name == github\.repository'
             $pinStep | Should -Match "github\.head_ref == 'chore/sync-hve-core'"

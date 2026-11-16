@@ -1,0 +1,268 @@
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT license.
+name: Sync External Cast
+
+# Runs every Monday at 07:00 UTC or on demand.
+#
+# Enforces the 60-day renewal window ahead of the 90-day Verified On backstop
+# in squad-src/.github/skills/squad/references/roster-catalog.md using split-mode
+# verification:
+#   1. Zero-diff auto-renewal: when an opt-in row enters the 60-day renewal window,
+#      its upstream repository remains active, non-redirected, and under the same
+#      licence, its pinned path resolves, static frontmatter/hook/MCP checks pass,
+#      and its scoped blobs match upstream HEAD byte-for-byte, the workflow
+#      validates Tier 0 catalog/budget/prompt contracts and opens or updates a
+#      reviewed pull request on chore/sync-external-cast.
+#   2. Semantic / security escalation: when an upstream repository archives,
+#      redirects, becomes unreachable, changes licence, adds hooks or MCP
+#      declarations, or modifies skill/agent content at HEAD, silent renewal is
+#      refused and an idempotent squad/auto adaptation issue is opened with the
+#      exact delta brief for full Verification Gate review.
+
+on:
+  schedule:
+    - cron: '0 7 * * 1'
+  workflow_dispatch:
+    # checkov:skip=CKV_GHA_7:Manual dispatch (write access required); typed boolean inputs gate forced checks and dry-run mode only.
+    inputs:
+      force:
+        description: 'Check all registered External Cast rows regardless of Verified On age'
+        type: boolean
+        default: false
+      dry_run:
+        description: 'Verify upstream repositories and compute outputs without pushing a branch, PR, or issue'
+        type: boolean
+        default: false
+
+concurrency:
+  group: sync-external-cast
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  sync-external-cast:
+    name: Verify and renew External Cast rows
+    runs-on: ubuntu-latest
+    environment:
+      name: automation-governance
+      deployment: false
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Verify and renew External Cast rows
+        id: sync
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          FORCE: ${{ inputs.force }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          $params = @{
+            MarkdownPath = 'external-cast-delta.md'
+            GitHubOutput = $true
+          }
+          if ($env:FORCE -eq 'true') {
+            $params['Force'] = $true
+          }
+          if ($env:DRY_RUN -eq 'true') {
+            $params['DryRun'] = $true
+          }
+          $null = ./scripts/Sync-ExternalCast.ps1 @params
+          Get-Content -LiteralPath 'external-cast-delta.md' | Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY
+
+      - name: Install Pester
+        if: steps.sync.outputs.updated == 'true' && !inputs.dry_run
+        shell: pwsh
+        run: |
+          for ($attempt = 1; $attempt -le 3; $attempt++) {
+            try {
+              Install-Module Pester -RequiredVersion 5.7.1 -Force -Scope CurrentUser -SkipPublisherCheck -ErrorAction Stop
+              break
+            }
+            catch {
+              if ($attempt -eq 3) { throw }
+              Write-Warning "Pester install attempt $attempt failed; retrying."
+              Start-Sleep -Seconds (5 * $attempt)
+            }
+          }
+
+      - name: Validate catalog, hot-file budget, and prompt contracts
+        if: steps.sync.outputs.updated == 'true' && !inputs.dry_run
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          Set-StrictMode -Version Latest
+          $env:TIER0_BASE_SHA = (git rev-parse HEAD).Trim()
+          $repoRoot = (Resolve-Path -LiteralPath '.').Path
+          $tier0Config = New-PesterConfiguration
+          $tier0Config.Run.Container = @(
+            New-PesterContainer -Path './tests/tier0/PackRegistry.Tests.ps1' -Data @{ SourceRoot = $repoRoot }
+            New-PesterContainer -Path './tests/tier0/HotFileBudget.Tests.ps1' -Data @{ SourceRoot = $repoRoot }
+            New-PesterContainer -Path './tests/tier0/Performance.Tests.ps1' -Data @{ SourceRoot = $repoRoot }
+          )
+          $tier0Config.Run.PassThru = $true
+          $tier0Config.Output.Verbosity = 'Normal'
+          $tier0Res = Invoke-Pester -Configuration $tier0Config
+          if ($tier0Res.FailedCount -gt 0 -or $tier0Res.Result -ne 'Passed') {
+            throw "Tier 0 catalog/budget/contract checks failed ($($tier0Res.FailedCount) failure(s)); refusing to propose an invalid External Cast renewal."
+          }
+
+      - name: Generate GitHub App token
+        id: app_token
+        if: (steps.sync.outputs.updated == 'true' || steps.sync.outputs.needs_review == 'true') && !inputs.dry_run && vars.AUTOMATION_APP_CLIENT_ID != ''
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          client-id: ${{ vars.AUTOMATION_APP_CLIENT_ID }}
+          private-key: ${{ secrets.AUTOMATION_APP_PRIVATE_KEY }}
+          permission-contents: write
+          permission-issues: write
+          permission-pull-requests: write
+
+      - name: Verify automation credential
+        if: (steps.sync.outputs.updated == 'true' || steps.sync.outputs.needs_review == 'true') && !inputs.dry_run
+        env:
+          AUTOMATION_TOKEN: ${{ steps.app_token.outputs.token || secrets.SYNC_DEPS_TOKEN }}
+        run: |
+          if [[ -z "$AUTOMATION_TOKEN" ]]; then
+            echo "::error::No automation token available. Configure AUTOMATION_APP_CLIENT_ID + AUTOMATION_APP_PRIVATE_KEY in the 'automation-governance' environment (or transitional secret SYNC_DEPS_TOKEN)."
+            exit 1
+          fi
+
+      - name: Propose reviewed pull request
+        if: steps.sync.outputs.updated == 'true' && !inputs.dry_run
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ steps.app_token.outputs.token || secrets.SYNC_DEPS_TOKEN }}
+          REPO: ${{ github.repository }}
+          AS_OF: ${{ steps.sync.outputs.as_of }}
+          RENEWED_COUNT: ${{ steps.sync.outputs.auto_renewed_count }}
+          TOTAL_ROWS: ${{ steps.sync.outputs.total_rows }}
+          NEEDS_REVIEW_COUNT: ${{ steps.sync.outputs.needs_review_count }}
+        run: |
+          $branch = 'chore/sync-external-cast'
+          git config user.name 'github-actions[bot]'
+          git config user.email 'github-actions[bot]@users.noreply.github.com'
+          git remote set-url origin "https://x-access-token:$($env:GH_TOKEN)@github.com/$($env:REPO).git"
+          git checkout -B $branch
+
+          $fragmentBody = "- Renewed ``Verified On`` to ``$($env:AS_OF)`` for $($env:RENEWED_COUNT) zero-diff External Cast row(s) in ``roster-catalog.md`` after verifying upstream repository status, licence, and byte-identical resource blobs."
+          ./scripts/New-ChangeFragment.ps1 -Type Changed -Bump patch -Force `
+            -Title "sync external cast $($env:AS_OF)" `
+            -Body $fragmentBody
+
+          git add `
+            squad-src/.github/skills/squad/references/roster-catalog.md `
+            .changes/unreleased
+          if ((git status --porcelain).Count -eq 0) {
+            Write-Host '::notice::No working tree changes to commit.'
+            return
+          }
+
+          git commit -m "chore(cast): renew zero-diff external cast rows ($($env:AS_OF))"
+          git push --force origin "refs/heads/$branch"
+
+          $deltaSummary = Get-Content -LiteralPath 'external-cast-delta.md' -Raw
+          $prTitle = "chore(cast): renew zero-diff external cast rows ($($env:AS_OF))"
+          $prBody = @(
+            '## Summary'
+            ''
+            'Automated split-mode refresh of `Verified On` in `squad-src/.github/skills/squad/references/roster-catalog.md` for External Cast rows inside the 60-day renewal window whose upstream repositories, licences, frontmatter, and scoped file blobs remain byte-identical to their pinned commits.'
+            ''
+            "- **Verification date**: ``$($env:AS_OF)``"
+            "- **Zero-diff rows renewed**: **$($env:RENEWED_COUNT)** of $($env:TOTAL_ROWS)"
+            "- **Drifted / broken rows escalated separately**: **$($env:NEEDS_REVIEW_COUNT)**"
+            ''
+            $deltaSummary.TrimEnd()
+            ''
+            '## Validation'
+            ''
+            '- `Invoke-Pester` (`PackRegistry.Tests.ps1`, `HotFileBudget.Tests.ps1`, `Performance.Tests.ps1`): **passed**'
+          ) -join "`n"
+
+          $existingPr = gh pr list --repo $env:REPO --head $branch --state open --json number --jq '.[0].number'
+          if ($existingPr) {
+            gh pr edit $existingPr --repo $env:REPO --title $prTitle --body $prBody
+            Write-Host "::notice::Updated open External Cast sync PR #$existingPr."
+          }
+          else {
+            $url = gh pr create --repo $env:REPO --base main --head $branch --title $prTitle --body $prBody
+            Write-Host "::notice::Opened External Cast sync PR: $url"
+          }
+
+      - name: Raise adaptation issue for drifted or broken rows
+        if: steps.sync.outputs.needs_review == 'true' && !inputs.dry_run
+        id: raise
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          AS_OF: ${{ steps.sync.outputs.as_of }}
+          REVIEW_DIGEST: ${{ steps.sync.outputs.review_digest }}
+          NEEDS_REVIEW_COUNT: ${{ steps.sync.outputs.needs_review_count }}
+        with:
+          github-token: ${{ steps.app_token.outputs.token || secrets.SYNC_DEPS_TOKEN }}
+          script: |
+            const fs = require('fs');
+            const { owner, repo } = context.repo;
+            const asOf = process.env.AS_OF;
+            const digest = process.env.REVIEW_DIGEST;
+            const count = process.env.NEEDS_REVIEW_COUNT;
+
+            const marker = `<!-- external-cast-sync:${digest} -->`;
+            const existing = await github.paginate(github.rest.issues.listForRepo, {
+              owner, repo, state: 'open', labels: 'squad/auto', per_page: 100,
+            });
+            const match = existing.find(i => (i.body || '').includes(marker));
+            if (match) {
+              core.notice(`External Cast adaptation issue #${match.number} is already open for digest ${digest}.`);
+              core.setOutput('issue', String(match.number));
+              core.setOutput('created', 'false');
+              return;
+            }
+
+            const delta = fs.readFileSync('external-cast-delta.md', 'utf8');
+            const body = [
+              marker,
+              '',
+              '> Raised automatically by **Sync External Cast**. Silent `Verified On` renewal was',
+              `> refused for ${count} row(s) because upstream content, repository metadata, hooks/MCP, or licences changed.`,
+              '',
+              '## What happened',
+              '',
+              'One or more registered External Cast resources in `squad-src/.github/skills/squad/references/roster-catalog.md`',
+              'entered the 60-day renewal window with upstream file changes, or exhibited a repository/licence/path hazard.',
+              'External skills and agents contain executable prompt instructions, so changed upstream content must pass all',
+              'eight Verification Gate checks before `Verified On` or a pinned commit SHA advances.',
+              '',
+              '## Domain requirements',
+              '',
+              '1. Run the full eight-step **Verification Gate** in `squad-src/.github/skills/squad/references/roster-catalog.md`',
+              '   against each escalated row at its upstream `HEAD` commit SHA: origin/redirect check, frontmatter,',
+              '   `disable-model-invocation`, `tools:`, delegated-worker contract, HVE Core / sibling collision, prose and',
+              '   `apm.yml` `dependencies.mcp` / hook prerequisites, and licence posture.',
+              '2. For rows that pass at the new SHA, update their pinned SHA and `Verified On` together across',
+              '   `roster-catalog.md` and any synchronized pack options, EN/FR docs (`docs/usage.html`, `docs/fr/usage.html`),',
+              '   `apm.yml` (via `scripts/Update-ApmDependencies.ps1`), and `tests/tier0/PackRegistry.Tests.ps1`.',
+              '3. For rows that fail a gate check or are archived/superseded, move them to **External Cast Blocklist**',
+              '   with the failing step and date.',
+              '4. Add a `.changes/unreleased/` patch fragment and run `./scripts/Sync-ExternalCast.ps1 -DryRun` plus Tier 0.',
+              '',
+              delta.trimEnd(),
+            ].join('\n');
+
+            const issue = await github.rest.issues.create({
+              owner, repo,
+              title: `Re-gate drifted External Cast rows (${asOf}, ${digest})`,
+              body,
+              labels: ['squad/auto'],
+            });
+            core.notice(`Opened #${issue.data.number} for External Cast review digest ${digest}.`);
+            core.setOutput('issue', String(issue.data.number));
+            core.setOutput('created', 'true');

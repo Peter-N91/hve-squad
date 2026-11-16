@@ -1100,3 +1100,195 @@ Describe 'AKS and Azure Functions official packs' -Tag 'Unit' {
         }
     }
 }
+
+Describe 'External Cast backstop pins and split-mode renewal automation' -Tag 'Unit' {
+    It 'pins every Registered External Cast row to a 40-char SHA and keeps opt-in rows within the 90-day backstop' {
+        $lastUpdatedMatch = [regex]::Match($script:RosterCatalogBody, '(?m)^\s*last_updated:\s*"(?<Date>\d{4}-\d{2}-\d{2})"\s*$')
+        $lastUpdatedMatch.Success | Should -BeTrue
+        $catalogAsOf = [datetime]::ParseExact($lastUpdatedMatch.Groups['Date'].Value, 'yyyy-MM-dd', [System.Globalization.CultureInfo]::InvariantCulture)
+
+        $apmRaw = Get-Content -LiteralPath (Join-Path $SourceRoot 'apm.yml') -Raw
+        $rows = @(Get-MarkdownTableRows `
+                -Body (Get-MarkdownSectionBody -Body $script:RosterCatalogBody -Heading 'Registered External Cast') `
+                -HeaderCell 'Role')
+        $rows.Count | Should -BeGreaterOrEqual 124
+
+        foreach ($row in $rows) {
+            $tier = $row[2].Trim()
+            $resource = $row[3].Trim().Trim('`')
+            $kind = $row[4].Trim()
+            $install = $row[6].Trim()
+            $prereq = $row[8].Trim()
+            $verifiedOn = $row[10].Trim()
+
+            $verifiedOn | Should -Match '^\d{4}-\d{2}-\d{2}$' -Because "row '$resource' needs an ISO Verified On date"
+            $verifiedDate = [datetime]::ParseExact($verifiedOn, 'yyyy-MM-dd', [System.Globalization.CultureInfo]::InvariantCulture)
+            $ageDays = [int][Math]::Floor(($catalogAsOf - $verifiedDate).TotalDays)
+            $ageDays | Should -BeGreaterOrEqual 0 -Because "row '$resource' Verified On cannot exceed catalog last_updated"
+
+            if ($tier -eq 'bundled') {
+                $entryMatch = [regex]::Match($install, '^`(?<Entry>[^`]+#[0-9a-f]{40})` in apm\.yml$')
+                $entryMatch.Success | Should -BeTrue -Because "bundled row '$resource' must pin #<40-hex> in apm.yml"
+                $apmRaw | Should -Match ([regex]::Escape($entryMatch.Groups['Entry'].Value))
+            } else {
+                $ageDays | Should -BeLessOrEqual 90 -Because "opt-in row '$resource' must stay within the 90-day re-verification backstop"
+                if ($install -match '^`apm install ') {
+                    $install | Should -Match '^`apm install [^#\s`]+#[0-9a-f]{40} --target copilot`$' -Because "APM opt-in row '$resource' must pin #<40-hex> --target copilot"
+                    if ($kind -eq 'skill') {
+                        $install | Should -Not -Match '/SKILL\.md#' -Because "APM skill row '$resource' must use a directory path"
+                    }
+                } else {
+                    $prereq | Should -Match 'verified at `[0-9a-f]{40}`' -Because "non-APM opt-in row '$resource' must record its verified 40-char commit SHA"
+                }
+            }
+        }
+    }
+
+    It 'auto-renews zero-diff rows and escalates content, MCP, archive, or redirect drift in Sync-ExternalCast.ps1' {
+        $syncScript = Join-Path $SourceRoot 'scripts/Sync-ExternalCast.ps1'
+        Test-Path -LiteralPath $syncScript | Should -BeTrue
+
+        $pinSha = '1111111111111111111111111111111111111111'
+        $headSha = '2222222222222222222222222222222222222222'
+        $workDir = Join-Path $TestDrive ([guid]::NewGuid().ToString('N'))
+        New-Item -ItemType Directory -Path $workDir -Force | Out-Null
+
+        $apmFixture = Join-Path $workDir 'apm.yml'
+        Set-Content -LiteralPath $apmFixture -Value @(
+            'dependencies:'
+            '  apm:'
+            "    - acme/clean-repo/skills/bundled-skill#$pinSha"
+        )
+
+        $catalogFixture = Join-Path $workDir 'roster-catalog.md'
+        $initialCatalog = @(
+            '---'
+            'name: fixture-catalog'
+            'metadata:'
+            '  last_updated: "2026-09-01"'
+            '---'
+            ''
+            '#### Registered External Cast'
+            ''
+            '| Role | Tier | Resource | Resource Kind | Origin | Install or Entry | License | Prerequisites | Dispatchability Verified | Verified On |'
+            '|---|---|---|---|---|---|---|---|---|---|'
+            "| developer | bundled | ``bundled-skill`` | skill | ``acme/clean-repo`` (``vendor-official``), ``skills/bundled-skill/SKILL.md`` | ``acme/clean-repo/skills/bundled-skill#$pinSha`` in apm.yml | MIT | none | ``n/a`` | 2026-08-05 |"
+            "| developer | opt-in | ``zero-diff-skill`` | skill | ``acme/clean-repo`` (``vendor-official``), ``skills/zero-diff-skill/SKILL.md`` | ``apm install acme/clean-repo/skills/zero-diff-skill#$pinSha --target copilot`` | MIT | none | ``n/a`` | 2026-09-01 |"
+            "| developer | opt-in | ``fresh-skill`` | skill | ``acme/clean-repo`` (``vendor-official``), ``skills/fresh-skill/SKILL.md`` | ``apm install acme/clean-repo/skills/fresh-skill#$pinSha --target copilot`` | MIT | none | ``n/a`` | 2026-11-10 |"
+            "| developer | opt-in | ``changed-skill`` | skill | ``acme/clean-repo`` (``vendor-official``), ``skills/changed-skill/SKILL.md`` | ``apm install acme/clean-repo/skills/changed-skill#$pinSha --target copilot`` | MIT | none | ``n/a`` | 2026-09-01 |"
+            "| developer | opt-in | ``mcp-hazard-skill`` | skill | ``acme/clean-repo`` (``vendor-official``), ``skills/mcp-hazard-skill/SKILL.md`` | ``apm install acme/clean-repo/skills/mcp-hazard-skill#$pinSha --target copilot`` | MIT | none | ``n/a`` | 2026-09-01 |"
+            "| tester | opt-in | ``archived-skill`` | skill | ``acme/archived-repo`` (``community``), ``skills/archived-skill/SKILL.md`` | ``apm install acme/archived-repo/skills/archived-skill#$pinSha --target copilot`` | MIT | none | ``n/a`` | 2026-11-10 |"
+            "| tester | opt-in | ``redirected-skill`` | skill | ``acme/old-name`` (``community``), ``skills/redirected-skill/SKILL.md`` | ``apm install acme/old-name/skills/redirected-skill#$pinSha --target copilot`` | MIT | none | ``n/a`` | 2026-11-10 |"
+        ) -join "`n"
+        [System.IO.File]::WriteAllText($catalogFixture, "$initialCatalog`n", [System.Text.UTF8Encoding]::new($false))
+
+        $validFm = "---`nname: sample`ndescription: sample`n---`n# Sample`n"
+        $fixtureJsonPath = Join-Path $workDir 'upstream-fixture.json'
+        $fixtureData = @{
+            'acme/clean-repo' = @{
+                fullName = 'acme/clean-repo'
+                archived = $false
+                spdxId = 'MIT'
+                headSha = $headSha
+                trees = @{
+                    $pinSha = @{
+                        'LICENSE' = 'lic1'
+                        'skills/bundled-skill/SKILL.md' = 'b1'
+                        'skills/zero-diff-skill/SKILL.md' = 'z1'
+                        'skills/zero-diff-skill/references/guide.md' = 'z2'
+                        'skills/fresh-skill/SKILL.md' = 'f1'
+                        'skills/changed-skill/SKILL.md' = 'c1'
+                        'skills/mcp-hazard-skill/SKILL.md' = 'm1'
+                        'skills/mcp-hazard-skill/apm.yml' = 'm2'
+                    }
+                    $headSha = @{
+                        'LICENSE' = 'lic1'
+                        'skills/bundled-skill/SKILL.md' = 'b1'
+                        'skills/zero-diff-skill/SKILL.md' = 'z1'
+                        'skills/zero-diff-skill/references/guide.md' = 'z2'
+                        'skills/fresh-skill/SKILL.md' = 'f1'
+                        'skills/changed-skill/SKILL.md' = 'c2-modified'
+                        'skills/mcp-hazard-skill/SKILL.md' = 'm1'
+                        'skills/mcp-hazard-skill/apm.yml' = 'm2'
+                    }
+                }
+                contents = @{
+                    "${headSha}:skills/zero-diff-skill/SKILL.md" = $validFm
+                    "${headSha}:skills/changed-skill/SKILL.md" = $validFm
+                    "${headSha}:skills/mcp-hazard-skill/SKILL.md" = $validFm
+                    "${headSha}:skills/mcp-hazard-skill/apm.yml" = "name: mcp-hazard`ndependencies:`n  mcp:`n    - foo`n"
+                }
+            }
+            'acme/archived-repo' = @{
+                fullName = 'acme/archived-repo'
+                archived = $true
+                spdxId = 'MIT'
+                headSha = $headSha
+                trees = @{
+                    $pinSha = @{ 'LICENSE' = 'lic1'; 'skills/archived-skill/SKILL.md' = 'a1' }
+                    $headSha = @{ 'LICENSE' = 'lic1'; 'skills/archived-skill/SKILL.md' = 'a1' }
+                }
+                contents = @{}
+            }
+            'acme/old-name' = @{
+                fullName = 'acme/new-name'
+                archived = $false
+                spdxId = 'MIT'
+                headSha = $headSha
+                trees = @{
+                    $pinSha = @{ 'LICENSE' = 'lic1'; 'skills/redirected-skill/SKILL.md' = 'r1' }
+                    $headSha = @{ 'LICENSE' = 'lic1'; 'skills/redirected-skill/SKILL.md' = 'r1' }
+                }
+                contents = @{}
+            }
+        }
+        [System.IO.File]::WriteAllText($fixtureJsonPath, ($fixtureData | ConvertTo-Json -Depth 10), [System.Text.UTF8Encoding]::new($false))
+
+        $beforeBytes = [System.IO.File]::ReadAllText($catalogFixture)
+        $dryRes = & $syncScript -CatalogPath $catalogFixture -ApmPath $apmFixture -FixturePath $fixtureJsonPath -AsOf '2026-11-16' -DryRun
+        [System.IO.File]::ReadAllText($catalogFixture) | Should -BeExactly $beforeBytes
+        $dryRes.Updated | Should -BeTrue
+        $dryRes.AutoRenewedCount | Should -Be 1
+        $dryRes.NeedsReviewCount | Should -Be 4
+
+        $ghOutPath = Join-Path $workDir 'gh-output.txt'
+        $mdReportPath = Join-Path $workDir 'delta.md'
+        $oldGhOut = $env:GITHUB_OUTPUT
+        try {
+            $env:GITHUB_OUTPUT = $ghOutPath
+            $liveRes = & $syncScript -CatalogPath $catalogFixture -ApmPath $apmFixture -FixturePath $fixtureJsonPath -AsOf '2026-11-16' -MarkdownPath $mdReportPath -GitHubOutput -Confirm:$false
+            $liveRes.AutoRenewedResources | Should -BeExactly @('zero-diff-skill')
+            (@($liveRes.NeedsReviewResources | Sort-Object) -join ',') | Should -BeExactly 'archived-skill,changed-skill,mcp-hazard-skill,redirected-skill'
+            $liveRes.ReviewDigest | Should -Match '^[0-9a-f]{12}$'
+
+            $afterCatalog = [System.IO.File]::ReadAllText($catalogFixture)
+            $afterCatalog | Should -Match 'last_updated: "2026-11-16"'
+            $afterCatalog | Should -Match '\| developer \| opt-in \| `zero-diff-skill` .* \| 2026-11-16 \|'
+            $afterCatalog | Should -Match '\| developer \| opt-in \| `fresh-skill` .* \| 2026-11-10 \|'
+            $afterCatalog | Should -Match '\| developer \| opt-in \| `changed-skill` .* \| 2026-09-01 \|'
+            $afterCatalog | Should -Match '\| developer \| opt-in \| `mcp-hazard-skill` .* \| 2026-09-01 \|'
+
+            $reportBody = [System.IO.File]::ReadAllText($mdReportPath)
+            $reportBody | Should -Match 'content_changed'
+            $reportBody | Should -Match 'undisclosed_skill_apm_mcp'
+            $reportBody | Should -Match 'repo_archived'
+            $reportBody | Should -Match 'repo_redirected'
+
+            $ghOut = Get-Content -LiteralPath $ghOutPath
+            $ghOut | Should -Contain 'updated=true'
+            $ghOut | Should -Contain 'needs_review=true'
+            $ghOut | Should -Contain 'auto_renewed_count=1'
+            $ghOut | Should -Contain 'needs_review_count=4'
+        } finally {
+            $env:GITHUB_OUTPUT = $oldGhOut
+        }
+
+        $syncWf = Get-Content -LiteralPath (Join-Path $SourceRoot '.github/workflows/sync-external-cast.yml') -Raw
+        $prWf = Get-Content -LiteralPath (Join-Path $SourceRoot '.github/workflows/pr-validation.yml') -Raw
+        $syncWf | Should -Match 'PackRegistry\.Tests\.ps1'
+        $syncWf | Should -Match 'chore/sync-external-cast'
+        $syncWf | Should -Match 'external-cast-sync:'
+        $syncWf | Should -Not -Match 'git push .*main'
+        $prWf | Should -Match "github\.head_ref == 'chore/sync-external-cast'"
+    }
+}
