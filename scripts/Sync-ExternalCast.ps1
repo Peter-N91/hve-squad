@@ -452,10 +452,16 @@ function Test-ExternalCastRow {
 
     if ($RepoState.SpdxId -and $RepoState.SpdxId -ne 'NOASSERTION' -and $RepoState.SpdxId -ne $Row.License) {
         $hazards.Add("license_spdx_mismatch (expected $($Row.License), found $($RepoState.SpdxId))")
-    } elseif (-not $RepoState.SpdxId) {
+    } elseif (-not $RepoState.SpdxId -or $RepoState.SpdxId -eq 'NOASSERTION') {
         $headLic = Get-RootLicenseBlobSha -BlobMap $headTree
         if (-not $headLic) {
             $hazards.Add('license_missing')
+        } elseif ($Row.License -eq 'MIT' -and -not $UseFixture) {
+            $licPath = ($headLic -split ':', 2)[0]
+            $licText = Get-EntryContentText -RepoState $RepoState -Repo $Row.OriginRepo -Ref $RepoState.HeadSha -Path $licPath -UseFixture $UseFixture
+            if ($licText -notmatch '(?i)MIT License' -or $licText -notmatch '(?i)Permission is hereby granted, free of charge') {
+                $hazards.Add("license_text_unverified ($licPath)")
+            }
         }
     }
 

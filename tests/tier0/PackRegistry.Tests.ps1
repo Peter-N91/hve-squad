@@ -1108,17 +1108,16 @@ Describe 'External Cast backstop pins and split-mode renewal automation' -Tag 'U
         $catalogAsOf = [datetime]::ParseExact($lastUpdatedMatch.Groups['Date'].Value, 'yyyy-MM-dd', [System.Globalization.CultureInfo]::InvariantCulture)
 
         $apmRaw = Get-Content -LiteralPath (Join-Path $SourceRoot 'apm.yml') -Raw
-        $rows = @(Get-MarkdownTableRows `
-                -Body (Get-MarkdownSectionBody -Body $script:RosterCatalogBody -Heading 'Registered External Cast') `
-                -HeaderCell 'Role')
-        $rows.Count | Should -BeGreaterOrEqual 124
+        $registeredBody = Get-MarkdownSectionBody -Body $script:RosterCatalogBody -Heading 'Registered External Cast'
+        $registeredBody | Should -Not -Match 'fredgis'
+        $rows = @(Get-MarkdownTableRows -Body $registeredBody -HeaderCell 'Role')
+        $rows.Count | Should -BeGreaterOrEqual 139
 
         foreach ($row in $rows) {
             $tier = $row[2].Trim()
             $resource = $row[3].Trim().Trim('`')
             $kind = $row[4].Trim()
             $install = $row[6].Trim()
-            $prereq = $row[8].Trim()
             $verifiedOn = $row[10].Trim()
 
             $verifiedOn | Should -Match '^\d{4}-\d{2}-\d{2}$' -Because "row '$resource' needs an ISO Verified On date"
@@ -1132,15 +1131,62 @@ Describe 'External Cast backstop pins and split-mode renewal automation' -Tag 'U
                 $apmRaw | Should -Match ([regex]::Escape($entryMatch.Groups['Entry'].Value))
             } else {
                 $ageDays | Should -BeLessOrEqual 90 -Because "opt-in row '$resource' must stay within the 90-day re-verification backstop"
-                if ($install -match '^`apm install ') {
-                    $install | Should -Match '^`apm install [^#\s`]+#[0-9a-f]{40} --target copilot`$' -Because "APM opt-in row '$resource' must pin #<40-hex> --target copilot"
-                    if ($kind -eq 'skill') {
-                        $install | Should -Not -Match '/SKILL\.md#' -Because "APM skill row '$resource' must use a directory path"
-                    }
-                } else {
-                    $prereq | Should -Match 'verified at `[0-9a-f]{40}`' -Because "non-APM opt-in row '$resource' must record its verified 40-char commit SHA"
+                $install | Should -Match '^`apm install [^#\s`]+#[0-9a-f]{40} --target copilot`$' -Because "opt-in row '$resource' must pin #<40-hex> --target copilot"
+                if ($kind -eq 'skill') {
+                    $install | Should -Not -Match '/SKILL\.md#' -Because "APM skill row '$resource' must use a directory path"
                 }
             }
+        }
+    }
+
+    It 'sources SQL migration and Azure SQL skills from official microsoft/microsoft-sql and blocklists fredgis' {
+        $registeredBody = Get-MarkdownSectionBody -Body $script:RosterCatalogBody -Heading 'Registered External Cast'
+        $rows = @(Get-MarkdownTableRows -Body $registeredBody -HeaderCell 'Role')
+        $sqlRows = @($rows | Where-Object { $_[5].Trim() -match '^`microsoft/microsoft-sql`' })
+        $expectedSql = @(
+            'analyze-readiness-at-scale', 'design-azure-sql-schema', 'diagnose-blocking-and-deadlocks',
+            'diagnose-connection-errors', 'diagnose-resource-pressure', 'diagnose-slow-query',
+            'entra-id-auth', 'generate-migration-prerequisite-plan', 'get-migration-assessment',
+            'github-actions-for-sql', 'prevent-sql-injection', 'read-execution-plan',
+            'recommend-migration-path', 'rls-multi-tenant', 'schema-migrations-safely',
+            'sql-database-projects', 't-sql-correctness'
+        )
+        $sqlRows | Should -HaveCount 17
+        (@($sqlRows | ForEach-Object { $_[3].Trim().Trim('`') } | Sort-Object) -join ',') |
+            Should -BeExactly (($expectedSql | Sort-Object) -join ',')
+        foreach ($row in $sqlRows) {
+            $row[2].Trim() | Should -BeExactly 'opt-in'
+            $row[4].Trim() | Should -BeExactly 'skill'
+            $row[5].Trim() | Should -Match '^`microsoft/microsoft-sql` \(`vendor-official`\), `plugins/(microsoft-sql-migration|microsoft-sql)/skills/[^`]+/SKILL\.md`$'
+            $row[6].Trim() | Should -Match '^`apm install microsoft/microsoft-sql/plugins/(microsoft-sql-migration|microsoft-sql)/skills/[^#]+#eeb1c6867c2d128763516a1aad41671c593cc189 --target copilot`$'
+            $row[7].Trim() | Should -BeExactly 'MIT'
+            $row[8].Trim() | Should -Match 'Do not auto-install'
+            $row[10].Trim() | Should -BeExactly '2026-11-16'
+        }
+
+        @($rows | Where-Object { $_[3].Trim().Trim('`') -in @(
+                    'sql-backup-restore-to-azure-sql-vm-migration', 'sql-bacpac-to-azure-sql-db-migration',
+                    'sql-server-to-sql-mi-lrs-migration', 'evaluate-azure-migration-assessment',
+                    'evaluate-offline-migration-readiness', 'recommend-sku-sizing',
+                    'validate-post-migration-data', 'run-migration-assessment'
+                ) }) | Should -BeNullOrEmpty
+
+        $blocklist = Get-MarkdownSectionBody -Body $script:RosterCatalogBody -Heading 'External Cast Blocklist'
+        $blocklist | Should -Match 'sql-migration-advisor@fredgis'
+        $blocklist | Should -Match 'eeb1c6867c2d128763516a1aad41671c593cc189'
+
+        $sqlCharter = Get-Content -LiteralPath (Join-Path $SourceRoot 'squad-src/.github/agents/squad/squad-sql-migration-advisor.agent.md') -Raw
+        $sqlCharter | Should -Match 'microsoft/microsoft-sql/plugins/microsoft-sql-migration/skills/recommend-migration-path#eeb1c6867c2d128763516a1aad41671c593cc189'
+        $sqlCharter | Should -Match 'get-migration-assessment'
+        $sqlCharter | Should -Match 'analyze-readiness-at-scale'
+        $sqlCharter | Should -Not -Match 'fredgis'
+
+        $fallbackSkill = Get-Content -LiteralPath (Join-Path $SourceRoot 'squad-src/.github/skills/sql-migration-advisor/SKILL.md') -Raw
+        $fallbackRules = Get-Content -LiteralPath (Join-Path $SourceRoot 'squad-src/.github/skills/sql-migration-advisor/reference/decision-rules.md') -Raw
+        $noticeText = Get-Content -LiteralPath (Join-Path $SourceRoot 'NOTICE') -Raw
+        foreach ($text in @($fallbackSkill, $fallbackRules, $noticeText)) {
+            $text | Should -Match 'microsoft/microsoft-sql'
+            $text | Should -Not -Match 'fredgis'
         }
     }
 
