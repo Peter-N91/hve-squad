@@ -106,6 +106,14 @@ export const PACK_CARDS = Object.freeze([
         keywords: /\b(kubernetes|aks\b|k8s|helm\s+chart)\b/i,
     },
     {
+        id: 'azure-cloud',
+        title: 'Azure Cloud & FinOps Operations',
+        plainWhy: 'Adds official Azure cost governance, cross-service diagnostics, compliance, reliability, Azure Local, and cloud migration helpers.',
+        hasPreview: true,
+        previewNote: 'Optional multi-rack Azure Local preview helpers stay off unless you explicitly allow them.',
+        keywords: /\b(finops|azure\s+cost|azure\s+local|azure\s+stack\s+hci|azqr|zone\s+redundan|cross-cloud\s+migrat)\b/i,
+    },
+    {
         id: 'foundry',
         title: 'Custom AI Assistants (Microsoft Foundry)',
         plainWhy: 'Adds AI model gateway, prompt safety, and AI evaluation specialists.',
