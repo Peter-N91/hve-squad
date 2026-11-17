@@ -26,7 +26,7 @@ Two consequences matter before anyone builds a federation to solve a capability 
 
 Federate when sub-squads own separate outcomes — discovery work beside an infrastructure build, or Watch Mode giving each triggering event its own sub-squad and pull request. Do not federate to obtain a role.
 
-Registered packs are `power-platform`, `m365-copilot`, `aws`, `foundry`, `fabric`, `dotnet`, `aks`, and `azure-functions`; Foundry is normally `profile=azure pack=foundry`.
+Registered packs are `power-platform`, `m365-copilot`, `aws`, `foundry`, `fabric`, `dotnet`, `aks`, `azure-functions`, and `azure-cloud`; Foundry is normally `profile=azure pack=foundry`.
 
 ## Squad Root (`squadRoot`)
 

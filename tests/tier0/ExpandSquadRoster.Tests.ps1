@@ -232,6 +232,16 @@ BeforeAll {
                         $decisions[$resource] = 'declined'
                     }
                 }
+                elseif ($pack -eq 'azure-cloud') {
+                    foreach ($resource in @(
+                            'cost-estimation', 'cost-optimization', 'cost-analysis',
+                            'cost-governance', 'azure-diagnostics', 'azure-compliance',
+                            'azure-resource-lookup', 'azure-resource-visualizer',
+                            'azure-reliability', 'azure-quotas', 'azure-local',
+                            'azure-local-multi-rack', 'azure-cloud-migrate', 'azure-upgrade')) {
+                        $decisions[$resource] = 'declined'
+                    }
+                }
             }
             if ($decisions.Count) { $Choices.resourceDecisions = $decisions }
         }
@@ -1217,5 +1227,52 @@ Describe 'All-present registered pack expansion' {
         @($azurePlan.Receipt.addedRoles) | Should -BeNullOrEmpty
         (Invoke-Expansion -Repo $azureRepo -Plan $azurePlan).ExitCode | Should -Be 0
         [IO.File]::ReadAllText((Join-Path $azureRoot 'team.md')) | Should -Match '(?m)^Packs: aks, azure-functions$'
+    }
+
+    It 'applies, cold-removes, and reapplies azure-cloud while reusing existing roles and adding zero roles on azure and full (SRC-25)' {
+        $repo = New-RepoFixture
+        $root = Initialize-PlainSquad $repo
+        $cloudPlan = New-ExpansionPlanReady -Repo $repo -Choices @{
+            confirmed = $true
+            runId = 'azure-cloud-apply'
+            packs = @('azure-cloud')
+        }
+        $cloudPlan.Result.ExitCode | Should -Be 0 -Because $cloudPlan.Result.Output
+        (@($cloudPlan.Receipt.addedRoles | Sort-Object) -join ',') | Should -BeExactly 'asbuilt-author,azure-architect,azure-diagnose,cost-manager,modernizer'
+        $cloudPlan.Receipt.packResources.Count | Should -Be 14
+        $cloudPlan.Receipt.packResources['azure-local-multi-rack'] | Should -BeExactly 'declined'
+        (Invoke-Expansion -Repo $repo -Plan $cloudPlan).ExitCode | Should -Be 0
+        $teamPath = Join-Path $root 'team.md'
+        $applied = [IO.File]::ReadAllText($teamPath)
+        $applied | Should -Match '(?m)^Packs: azure-cloud$'
+        $applied | Should -Match 'Squad As-Built Author'
+        $applied | Should -Match 'Squad Cost Manager'
+
+        $removed = $applied -replace '(?m)^Packs: azure-cloud\r?\n', ''
+        $removed = [regex]::Replace($removed, '(?m)^\| (asbuilt-author|azure-architect|azure-diagnose|cost-manager|modernizer) \|.*\r?\n', '')
+        [IO.File]::WriteAllText($teamPath, $removed, [Text.UTF8Encoding]::new($false))
+        [IO.File]::ReadAllText($teamPath) | Should -Not -Match '(?m)^\| asbuilt-author \|'
+
+        $reapplied = New-ExpansionPlanReady -Repo $repo -Choices @{
+            confirmed = $true
+            runId = 'azure-cloud-reapply'
+            packs = @('azure-cloud')
+        }
+        $reapplied.Result.ExitCode | Should -Be 0 -Because $reapplied.Result.Output
+        (@($reapplied.Receipt.addedRoles | Sort-Object) -join ',') | Should -BeExactly 'asbuilt-author,azure-architect,azure-diagnose,cost-manager,modernizer'
+        (Invoke-Expansion -Repo $repo -Plan $reapplied).ExitCode | Should -Be 0
+        [IO.File]::ReadAllText($teamPath) | Should -Match '(?m)^Packs: azure-cloud$'
+
+        $azureRepo = New-RepoFixture
+        $azureRoot = Initialize-ProfileSquad -Repo $azureRepo -Profile 'azure'
+        $azurePlan = New-ExpansionPlan -Repo $azureRepo -Root $azureRoot -Choices @{
+            confirmed = $true
+            runId = 'azure-profile-azure-cloud'
+            packs = @('azure-cloud')
+        }
+        $azurePlan.Result.ExitCode | Should -Be 0 -Because $azurePlan.Result.Output
+        @($azurePlan.Receipt.addedRoles) | Should -BeNullOrEmpty
+        (Invoke-Expansion -Repo $azureRepo -Plan $azurePlan).ExitCode | Should -Be 0
+        [IO.File]::ReadAllText((Join-Path $azureRoot 'team.md')) | Should -Match '(?m)^Packs: azure-cloud$'
     }
 }

@@ -659,6 +659,77 @@ Describe 'Compact confirmed initialization (COORD-01..03)' {
         Get-FixtureHash $repo | Should -BeExactly $before
     }
 
+    It 'lists azure-cloud resources only when proposed, requires explicit dispositions while allowing preview decline, and previews pinned directory installs (SRC-24, SRC-25)' {
+        $repo = New-FixtureRepo
+        Write-FixtureText (Join-Path $repo '.agents/skills/cost-optimization/SKILL.md') "---`nname: cost-optimization`ndescription: Fixture.`n---`n"
+        Write-FixtureText (Join-Path $repo '.agents/skills/azure-local-multi-rack/SKILL.md') "---`nname: azure-local-multi-rack`ndescription: Fixture.`n---`n"
+
+        $withCloud = Invoke-Local 'Get-SquadInitContext.ps1' $repo @('-RepoRoot', $repo, '-Pack', 'azure-cloud')
+        $withCloud.ExitCode | Should -Be 0 -Because $withCloud.Output
+        $cloudContext = $withCloud.Output | ConvertFrom-Json
+        @($cloudContext.packResources) | Should -HaveCount 14
+        @($cloudContext.members | ForEach-Object role | Sort-Object) |
+            Should -Be @('asbuilt-author', 'azure-architect', 'azure-diagnose', 'cost-manager', 'modernizer')
+        $diskRow = @($cloudContext.packResources | Where-Object resource -eq 'cost-optimization')[0]
+        $diskRow.installedOnDisk | Should -BeTrue
+        $diskRow.hostVisible | Should -BeFalse
+        $diskRow.installed | Should -BeFalse
+        $diskRow.installOrEntry | Should -Match 'apm install microsoft/azure-skills/\.github/plugins/azure-cost/skills/cost-optimization#65922d293cba61a40d5edf61a9eb4b6b0e799788 --target copilot'
+
+        $data = Get-SquadInitData -RepoRoot $repo
+        $index = 0
+        foreach ($cast in $data.cast) {
+            $primary = $cast['Primary Agent (`name:`)']
+            if ($primary -notmatch '^[A-Za-z]' -or $primary -match '[/\\:]') { continue }
+            Write-FixtureText (Join-Path $repo '.github/agents' "fixture-cloud-$index.agent.md") "---`nname: $primary`n---`n"
+            $index++
+        }
+        $choices = New-Choices
+        $choices.packs = @('azure-cloud')
+        { New-SquadInitPayload -Choices $choices -RepoRoot $repo } | Should -Throw '*resourceDecisions*'
+        $choices.resourceDecisions = Get-PackResourceDecisions -Repo $repo -Packs @('azure-cloud')
+        $choices.resourceDecisions.Remove('azure-local-multi-rack')
+        { New-SquadInitPayload -Choices $choices -RepoRoot $repo } | Should -Throw '*Missing pack resource decision: azure-local-multi-rack*'
+        $choices.resourceDecisions['azure-local-multi-rack'] = 'available'
+        { New-SquadInitPayload -Choices $choices -RepoRoot $repo } | Should -Throw '*not visible*'
+        $choices.resourceDecisions['azure-local-multi-rack'] = 'declined'
+
+        $payload = New-SquadInitPayload -Choices $choices -RepoRoot $repo
+        $payload.packResources.Count | Should -Be 14
+        $payload.packResources['azure-local-multi-rack'] | Should -BeExactly 'declined'
+        @($payload.roster | ForEach-Object Role | Sort-Object) |
+            Should -Be @('asbuilt-author', 'azure-architect', 'azure-diagnose', 'cost-manager', 'developer', 'lead', 'modernizer', 'researcher', 'scribe', 'tester')
+
+        $choices.availableSkills = @('cost-optimization', 'azure-local-multi-rack')
+        $choices.resourceDecisions['cost-optimization'] = 'available'
+        $choices.resourceDecisions['azure-local-multi-rack'] = 'available'
+        $accepted = New-SquadInitPayload -Choices $choices -RepoRoot $repo
+        $accepted.packResources['cost-optimization'] | Should -BeExactly 'available'
+        $accepted.packResources['azure-local-multi-rack'] | Should -BeExactly 'available'
+
+        $before = Get-FixtureHash $repo
+        $allCloud = Invoke-Local 'Install-SquadPackResources.ps1' $repo @(
+            '-RepoRoot', $repo, '-Pack', 'azure-cloud', '-Confirmed', '-WhatIf'
+        )
+        $allCloud.ExitCode | Should -Be 0 -Because $allCloud.Output
+        $cloudReceipt = (@($allCloud.Output -split '\r?\n' | Where-Object { $_ -match '^\{"schemaVersion"' })[-1]) | ConvertFrom-Json
+        $cloudReceipt.status | Should -BeExactly 'PLANNED'
+        @($cloudReceipt.resources) | Should -HaveCount 14
+        (@($cloudReceipt.resources | ForEach-Object commands) -join "`n") | Should -Not -Match '/SKILL\.md'
+        (@($cloudReceipt.resources | ForEach-Object commands) -join "`n") | Should -Match 'cost-estimation#65922d293cba61a40d5edf61a9eb4b6b0e799788 --target copilot'
+
+        $subset = Invoke-Local 'Install-SquadPackResources.ps1' $repo @(
+            '-RepoRoot', $repo, '-Pack', 'azure-cloud', '-Resource', 'azure-diagnostics',
+            '-Confirmed', '-WhatIf'
+        )
+        $subset.ExitCode | Should -Be 0 -Because $subset.Output
+        $subsetReceipt = (@($subset.Output -split '\r?\n' | Where-Object { $_ -match '^\{"schemaVersion"' })[-1]) | ConvertFrom-Json
+        @($subsetReceipt.resources) | Should -HaveCount 1
+        $subsetReceipt.resources[0].commands | Should -Be @('apm install microsoft/azure-skills/skills/azure-diagnostics#65922d293cba61a40d5edf61a9eb4b6b0e799788 --target copilot')
+        $subsetReceipt.prerequisitesInstalled | Should -BeFalse
+        Get-FixtureHash $repo | Should -BeExactly $before
+    }
+
     It 'requires pack resource dispositions and persists the accepted Foundry activation' {
         $repo = New-FixtureRepo
         $data = Get-SquadInitData -RepoRoot $repo

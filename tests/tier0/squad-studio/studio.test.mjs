@@ -241,6 +241,11 @@ test('predefined init, intake document upload, pack preview guardrails, and coun
 
         const suggested = detectSuggestedPacks('', [savedDoc]);
         assert.equal(suggested[0]?.id, 'power-platform');
+        assert.ok(
+            detectSuggestedPacks('Review FinOps Azure cost guardrails and Azure Local sizing').some(
+                (pack) => pack.id === 'azure-cloud',
+            ),
+        );
 
         const launch = composeStudioLaunch({
             goalId: 'docs-report',
