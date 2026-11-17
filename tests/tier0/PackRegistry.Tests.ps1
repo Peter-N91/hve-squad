@@ -243,19 +243,21 @@ Describe 'Registered pack consistency' -Tag 'Unit' {
         $gateway[0][10].Trim() | Should -BeExactly '2026-11-15'
     }
 
-    It 'defers Azure same-job replacement without moving the blocklist' {
+    It 'keeps azure-deployment-preflight registered and blocklists coupled or multi-role Azure pipeline skills (SRC-03)' {
         $registered = Get-MarkdownSectionBody -Body $script:RosterCatalogBody -Heading 'Registered External Cast'
         $rows = @(Get-MarkdownTableRows -Body $registered -HeaderCell 'Role')
         $resources = @($rows | ForEach-Object { $_[3].Trim().Trim('`') })
         $resources | Should -Contain 'azure-deployment-preflight'
-        $resources | Should -Not -Contain 'azure-validate'
-        $resources | Should -Not -Contain 'azure-enterprise-infra-planner'
+        foreach ($blocked in @('azure-prepare', 'azure-validate', 'azure-deploy', 'azure-enterprise-infra-planner')) {
+            $resources | Should -Not -Contain $blocked
+        }
         $blocklist = Get-MarkdownSectionBody -Body $script:RosterCatalogBody -Heading 'External Cast Blocklist'
-        $blocklist | Should -Not -Match 'azure-deployment-preflight'
-        $blocklist | Should -Not -Match 'azure-validate'
-        $blocklist | Should -Not -Match 'azure-enterprise-infra-planner'
+        $blocklistResources = @(Get-MarkdownTableRows -Body $blocklist -HeaderCell 'Resource' | ForEach-Object { $_[1] }) -join ' '
+        $blocklistResources | Should -Not -Match '`azure-deployment-preflight`'
+        foreach ($blocked in @('azure-prepare', 'azure-validate', 'azure-deploy', 'azure-enterprise-infra-planner')) {
+            $blocklistResources | Should -Match ('`' + [regex]::Escape($blocked) + '`')
+        }
         $script:RosterCatalogBody | Should -Match '#### Deferred official candidates'
-        $script:RosterCatalogBody | Should -Match '33200af2901bce6da01ce37498aa2b68e0c43f7c'
     }
 }
 
@@ -1030,7 +1032,7 @@ Describe 'AKS and Azure Functions official packs' -Tag 'Unit' {
         $blocklistResources = @(Get-MarkdownTableRows -Body $blocklist -HeaderCell 'Resource' | ForEach-Object { $_[1] }) -join ' '
         $blocklistResources | Should -Match '`aks`'
         $blocklistResources | Should -Match '`platform-sre-kubernetes`'
-        foreach ($preserved in @('azure-deployment-preflight', 'azure-pricing', 'az-cost-optimize', 'azure-well-architected-review')) {
+        foreach ($preserved in @('azure-deployment-preflight', 'azure-pricing', 'azure-well-architected-review')) {
             @($rows | Where-Object { $_[3].Trim().Trim('`') -eq $preserved }) | Should -Not -BeNullOrEmpty
             $blocklistResources | Should -Not -Match ('`' + [regex]::Escape($preserved) + '`')
         }
@@ -1336,5 +1338,133 @@ Describe 'External Cast backstop pins and split-mode renewal automation' -Tag 'U
         $syncWf | Should -Match 'external-cast-sync:'
         $syncWf | Should -Not -Match 'git push .*main'
         $prWf | Should -Match "github\.head_ref == 'chore/sync-external-cast'"
+    }
+}
+
+Describe 'Azure Cloud and FinOps official pack' -Tag 'Unit' {
+    It 'reuses existing roles, offers all fourteen pinned microsoft/azure-skills entries, preserves azure-pricing and azure-deployment-preflight, and blocklists superseded or failing candidates (SRC-24)' {
+        function Get-RoleSet {
+            param([string]$Body, [string]$Header, [string]$Name)
+            $rows = @(Get-MarkdownTableRows -Body $Body -HeaderCell $Header)
+            $row = @($rows | Where-Object { $_[1].Trim().Trim('`') -eq $Name })
+            $row | Should -HaveCount 1
+            @($row[0][2] -split ',' | ForEach-Object { $_.Trim().Trim('`') } | Where-Object { $_ } | Sort-Object -Unique)
+        }
+
+        $adds = Get-RoleSet -Body $script:RosterBody -Header 'Pack' -Name 'azure-cloud'
+        $mirror = Get-RoleSet -Body $script:ProfilesBody -Header 'Pack' -Name 'azure-cloud'
+        ($mirror -join ',') | Should -BeExactly ($adds -join ',')
+        ($adds -join ',') | Should -BeExactly 'asbuilt-author,azure-architect,azure-diagnose,cost-manager,modernizer'
+
+        $full = Get-RoleSet -Body $script:RosterBody -Header 'Profile' -Name 'full'
+        $azure = Get-RoleSet -Body $script:RosterBody -Header 'Profile' -Name 'azure'
+        $default = Get-RoleSet -Body $script:RosterBody -Header 'Profile' -Name 'default'
+        $modernization = Get-RoleSet -Body $script:RosterBody -Header 'Profile' -Name 'modernization'
+        $operations = Get-RoleSet -Body $script:RosterBody -Header 'Profile' -Name 'operations'
+        @($adds | Where-Object { $_ -notin $full }) | Should -BeNullOrEmpty
+        @($adds | Where-Object { $_ -notin $azure }) | Should -BeNullOrEmpty
+        (@($adds | Where-Object { $_ -notin $default } | Sort-Object) -join ',') | Should -BeExactly 'asbuilt-author,azure-architect,azure-diagnose,cost-manager,modernizer'
+        @($adds | Where-Object { $_ -notin $modernization }) | Should -BeExactly @('azure-diagnose')
+        (@($adds | Where-Object { $_ -notin $operations } | Sort-Object) -join ',') | Should -BeExactly 'azure-architect,cost-manager,modernizer'
+
+        $rows = @(Get-MarkdownTableRows `
+                -Body (Get-MarkdownSectionBody -Body $script:RosterCatalogBody -Heading 'Registered External Cast') `
+                -HeaderCell 'Role')
+        $packSkillRows = @(Get-MarkdownTableRows `
+                -Body (Get-MarkdownSectionBody -Body $script:RosterCatalogBody -Heading 'Registered Pack Skills') `
+                -HeaderCell 'Pack')
+        $ordered = @($packSkillRows | Where-Object { $_[1].Trim() -eq 'azure-cloud' } | ForEach-Object { $_[2].Trim().Trim('`') })
+        $ordered | Should -HaveCount 14
+
+        $expected = @(
+            'azure-cloud-migrate', 'azure-compliance', 'azure-diagnostics', 'azure-local',
+            'azure-local-multi-rack', 'azure-quotas', 'azure-reliability', 'azure-resource-lookup',
+            'azure-resource-visualizer', 'azure-upgrade', 'cost-analysis', 'cost-estimation',
+            'cost-governance', 'cost-optimization'
+        )
+        (@($ordered | Sort-Object) -join ',') | Should -BeExactly ($expected -join ',')
+        $profileRow = @(Get-MarkdownTableRows -Body $script:ProfilesBody -HeaderCell 'Resource pack' |
+                Where-Object { $_[1].Trim().Trim('`') -eq 'azure-cloud' })[0]
+        (@($profileRow[2] -split ',' | ForEach-Object { $_.Trim() } | Sort-Object) -join ',') |
+            Should -BeExactly ($expected -join ',')
+
+        $packRows = @($rows | Where-Object { $_[3].Trim().Trim('`') -in $ordered })
+        $packRows | Should -HaveCount 14
+        foreach ($row in $packRows) {
+            $row[2].Trim() | Should -BeExactly 'opt-in'
+            $row[4].Trim() | Should -BeExactly 'skill'
+            $row[5].Trim() | Should -Match '^`microsoft/azure-skills` \(`vendor-official`\), `(\.github/plugins/(azure-cost|azure-local-skills)/skills/[^`]+|skills/[^`]+)/SKILL\.md`$'
+            $row[6].Trim() | Should -Match '^`apm install microsoft/azure-skills/[^#]+#65922d293cba61a40d5edf61a9eb4b6b0e799788 --target copilot`$'
+            $row[6].Trim() | Should -Not -Match '/SKILL\.md'
+            $row[7].Trim() | Should -BeExactly 'MIT'
+            $row[8].Trim() | Should -Match 'Reach only while `azure-cloud` is active'
+            $row[8].Trim() | Should -Match 'Do not auto-install'
+            $row[10].Trim() | Should -BeExactly '2026-11-17'
+        }
+
+        $preview = @($packRows | Where-Object { $_[3].Trim().Trim('`') -eq 'azure-local-multi-rack' })
+        $preview | Should -HaveCount 1
+        $preview[0][8] | Should -Match 'Preview'
+        $preview[0][8] | Should -Match 'explicit preview approval'
+
+        $bundledPricing = @($rows | Where-Object { $_[3].Trim().Trim('`') -eq 'azure-pricing' })
+        $bundledPricing | Should -HaveCount 1
+        $bundledPricing[0][2].Trim() | Should -BeExactly 'bundled'
+
+        @($rows | Where-Object { $_[3].Trim().Trim('`') -in @(
+                    'az-cost-optimize', 'finops-toolkit', 'azure-advisor',
+                    'azure-advisor-cost-optimization', 'azure-advisor-actionability',
+                    'azure-prepare', 'azure-validate', 'azure-deploy',
+                    'azure-enterprise-infra-planner', 'troubleshoot-observability'
+                ) }) | Should -BeNullOrEmpty
+
+        $blocklist = Get-MarkdownSectionBody -Body $script:RosterCatalogBody -Heading 'External Cast Blocklist'
+        $blocklistResources = @(Get-MarkdownTableRows -Body $blocklist -HeaderCell 'Resource' | ForEach-Object { $_[1] }) -join ' '
+        foreach ($blocked in @(
+                'az-cost-optimize', 'finops-toolkit', 'ftk-hubs-agent',
+                'azure-advisor', 'azure-advisor-cost-optimization', 'azure-advisor-actionability',
+                'azure-prepare', 'azure-validate', 'azure-deploy', 'azure-enterprise-infra-planner')) {
+            $blocklistResources | Should -Match ('`' + [regex]::Escape($blocked) + '`')
+        }
+    }
+
+    It 'guards multi-rack Azure Local preview selection, packaged support files, and read-only charter boundaries across charters and docs (SRC-25)' {
+        $guidance = Get-Content -LiteralPath (Join-Path $script:ReferenceRoot 'azure-cloud-platform-options.md') -Raw
+        $guidance | Should -Match 'Host visibility is not selection'
+        $guidance | Should -Match 'declined resource stays unavailable'
+        $guidance | Should -Match 'Preview is not the default'
+        $guidance | Should -Match 'finops-toolkit'
+        $guidance | Should -Match 'azure-advisor-cost-optimization'
+        $guidance | Should -Match 'azure-deployment-preflight'
+        $guidance | Should -Match 'not registered squad capabilities'
+        $guidance | Should -Match 'https://peter-n91\.github\.io/hve-squad/usage\.html#azure-cloud-setup'
+
+        $script:ProfilesBody | Should -Match '(?s)For `azure-cloud`, read \[azure-cloud-platform-options\.md\].*?before asking to install resources'
+        $script:RoutingBody | Should -Match 'azure-cloud'
+
+        foreach ($name in @(
+                'squad-asbuilt-author', 'squad-azure-architect', 'squad-azure-diagnose',
+                'squad-cost-manager', 'squad-deployer', 'squad-implementor',
+                'squad-modernization-planner')) {
+            $charter = Get-Content -LiteralPath (Join-Path $SourceRoot "squad-src/.github/agents/squad/$name.agent.md") -Raw
+            $charter | Should -Match 'azure-cloud-platform-options\.md'
+            $charter | Should -Match 'only while this pack is active'
+            $charter | Should -Match 'decision is not `declined`'
+            $charter | Should -Match 'missing support files is not ready'
+            $charter | Should -Match 'Do not write squad state'
+        }
+        foreach ($name in @('squad-azure-architect', 'squad-azure-diagnose')) {
+            $charter = Get-Content -LiteralPath (Join-Path $SourceRoot "squad-src/.github/agents/squad/$name.agent.md") -Raw
+            $charter | Should -Match 'user explicitly approved the preview'
+        }
+
+        foreach ($docs in @($script:EnglishDocs, $script:FrenchDocs)) {
+            $docs | Should -Match '<td(?:\s+[^>]*)?><code>azure-cloud</code></td>'
+            $docs | Should -Match 'id="azure-cloud-setup"'
+            $docs | Should -Match 'cost-optimization#65922d293cba61a40d5edf61a9eb4b6b0e799788 --target copilot'
+            $docs | Should -Match 'azure-diagnostics#65922d293cba61a40d5edf61a9eb4b6b0e799788 --target copilot'
+            $docs | Should -Match 'azure-local-multi-rack#65922d293cba61a40d5edf61a9eb4b6b0e799788 --target copilot'
+            $docs | Should -Match 'azure-skills-65922d2'
+        }
     }
 }

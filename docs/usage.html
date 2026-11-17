@@ -73,7 +73,7 @@ Licensed under the MIT license.
           proposes a recommended profile before creating anything.
         </li>
         <li>
-          <code>pack=power-platform</code>, <code>pack=m365-copilot</code>, <code>pack=aws</code>, <code data-release-change="20261008-foundry-agentic-pack">pack=foundry</code>, <code>pack=fabric</code>, <code>pack=dotnet</code>, <code>pack=aks</code>, or <code>pack=azure-functions</code>
+          <code>pack=power-platform</code>, <code>pack=m365-copilot</code>, <code>pack=aws</code>, <code data-release-change="20261008-foundry-agentic-pack">pack=foundry</code>, <code>pack=fabric</code>, <code>pack=dotnet</code>, <code>pack=aks</code>, <code>pack=azure-functions</code>, or <code>pack=azure-cloud</code>
           &mdash; adds a technology
           vertical's specialist roles, scoped guidance, or both on top of the profile. A pack never replaces the profile, and you
           can apply more than one (comma-separated). See <em>Packs</em> below.
@@ -1472,8 +1472,8 @@ flowchart TD
         <code>MCP M365 Agent Expert</code>. No cue match keeps the Primary. A missing Alternate is escalated, not replaced.
         <code>foundry</code> includes existing <code>data-scientist</code> so Foundry IQ has an owner in
         <code>azure +foundry</code>. <code>azure-deployment-preflight</code> remains the registered
-        pre-deployment skill. <code>azure-validate</code> and <code>azure-enterprise-infra-planner</code>
-        are neither registered nor blocklisted.
+        pre-deployment skill while <code>azure-prepare</code>, <code>azure-validate</code>,
+        <code>azure-deploy</code>, and <code>azure-enterprise-infra-planner</code> stay blocklisted.
       </p>
       <p data-release-change="20261104-official-source-packs">
         Install only the skill you need. The catalog is the source of truth. These are the granular
@@ -1550,7 +1550,20 @@ apm install Azure/azure-functions-skills/.github/plugins/azure-functions-skills/
 apm install Azure/azure-functions-skills/.github/plugins/azure-functions-skills/skills/azure-functions-best-practices#34e17220ff073b29a0be5bd541f32d287118165f --target copilot
 apm install Azure/azure-functions-skills/.github/plugins/azure-functions-skills/skills/azure-functions-inventory#34e17220ff073b29a0be5bd541f32d287118165f --target copilot
 apm install Azure/azure-functions-skills/.github/plugins/azure-functions-skills/skills/azure-functions-health-status#34e17220ff073b29a0be5bd541f32d287118165f --target copilot
-apm install Azure/azure-functions-skills/.github/plugins/azure-functions-skills/skills/azure-functions-diagnostics#34e17220ff073b29a0be5bd541f32d287118165f --target copilot</code></pre>
+apm install Azure/azure-functions-skills/.github/plugins/azure-functions-skills/skills/azure-functions-diagnostics#34e17220ff073b29a0be5bd541f32d287118165f --target copilot
+apm install microsoft/azure-skills/.github/plugins/azure-cost/skills/cost-estimation#65922d293cba61a40d5edf61a9eb4b6b0e799788 --target copilot
+apm install microsoft/azure-skills/.github/plugins/azure-cost/skills/cost-optimization#65922d293cba61a40d5edf61a9eb4b6b0e799788 --target copilot
+apm install microsoft/azure-skills/.github/plugins/azure-cost/skills/cost-analysis#65922d293cba61a40d5edf61a9eb4b6b0e799788 --target copilot
+apm install microsoft/azure-skills/.github/plugins/azure-cost/skills/cost-governance#65922d293cba61a40d5edf61a9eb4b6b0e799788 --target copilot
+apm install microsoft/azure-skills/skills/azure-diagnostics#65922d293cba61a40d5edf61a9eb4b6b0e799788 --target copilot
+apm install microsoft/azure-skills/skills/azure-compliance#65922d293cba61a40d5edf61a9eb4b6b0e799788 --target copilot
+apm install microsoft/azure-skills/skills/azure-resource-lookup#65922d293cba61a40d5edf61a9eb4b6b0e799788 --target copilot
+apm install microsoft/azure-skills/skills/azure-resource-visualizer#65922d293cba61a40d5edf61a9eb4b6b0e799788 --target copilot
+apm install microsoft/azure-skills/skills/azure-reliability#65922d293cba61a40d5edf61a9eb4b6b0e799788 --target copilot
+apm install microsoft/azure-skills/skills/azure-quotas#65922d293cba61a40d5edf61a9eb4b6b0e799788 --target copilot
+apm install microsoft/azure-skills/.github/plugins/azure-local-skills/skills/azure-local#65922d293cba61a40d5edf61a9eb4b6b0e799788 --target copilot
+apm install microsoft/azure-skills/skills/azure-cloud-migrate#65922d293cba61a40d5edf61a9eb4b6b0e799788 --target copilot
+apm install microsoft/azure-skills/skills/azure-upgrade#65922d293cba61a40d5edf61a9eb4b6b0e799788 --target copilot</code></pre>
       <table>
         <thead>
           <tr><th>Pack</th><th>Adds</th><th>Use when</th></tr>
@@ -1564,6 +1577,7 @@ apm install Azure/azure-functions-skills/.github/plugins/azure-functions-skills/
           <tr><td><code>dotnet</code></td><td>modernizer, tester, performance, developer</td><td>The project is built on .NET &mdash; SDK and target-framework upgrades, NuGet Central Package Management, VSTest-to-MTP runner migration, .NET test and breaking-change review, hot-path performance and BenchmarkDotNet planning, or EF Core, ASP.NET Core Web API, Blazor, C#, and MSBuild implementation. Opt-in; reuses <code>modernizer</code>, <code>tester</code>, <code>performance</code>, and <code>developer</code> and adds no role.</td></tr>
           <tr><td><code>aks</code></td><td>azure-architect, developer, modernizer, azure-diagnose, cost-manager</td><td>The project runs on Azure Kubernetes Service (AKS) &mdash; Day-0 cluster design, app containerization and Deployment Safeguard manifests, AKS Automatic readiness, Day-2 cluster/GPU incident triage, or Kubernetes-aware AKS cost optimization. Opt-in; reuses <code>azure-architect</code>, <code>developer</code>, <code>modernizer</code>, <code>azure-diagnose</code>, and <code>cost-manager</code> and adds no role.</td></tr>
           <tr><td><code>azure-functions</code></td><td>developer, deployer, tester, azure-diagnose, modernizer</td><td>The project is built on Azure Functions &mdash; v4 project and trigger scaffolding, gated Functions deployment verification, local workspace and best-practices review, Function App inventory/health/diagnostics, isolated-worker migration, or Hosted Skills. Opt-in; reuses <code>developer</code>, <code>deployer</code>, <code>tester</code>, <code>azure-diagnose</code>, and <code>modernizer</code> and adds no role.</td></tr>
+          <tr><td><code>azure-cloud</code></td><td>cost-manager, azure-diagnose, asbuilt-author, azure-architect, modernizer</td><td>Azure FinOps cost estimation, optimization, spend/spike analysis, and budget guardrails, cross-service production diagnostics, azqr and Key Vault compliance, Resource Graph lookup and Mermaid visualization, PaaS reliability and regional quota checks, standard or preview multi-rack Azure Local, or cross-cloud and Azure plan/SKU/SDK migration. Opt-in; reuses <code>cost-manager</code>, <code>azure-diagnose</code>, <code>asbuilt-author</code>, <code>azure-architect</code>, and <code>modernizer</code> and adds no role.</td></tr>
         </tbody>
       </table>
       <p>
@@ -2071,6 +2085,82 @@ apm install Azure/azure-functions-skills/.github/plugins/azure-functions-skills/
             <tr><td>Shared language or trigger reference missing</td><td>Install <code>azure-functions-common</code> alongside the review or diagnostic skill, reload the host, and rerun preflight.</td></tr>
             <tr><td>Installed on disk, but not in the host's skill list</td><td>Reload the host, reopen the same project, and rerun Azure Functions preflight before marking the resource available.</td></tr>
             <tr><td>Deployment step asks for <code>azure@azure-skills</code> or Connector consent</td><td>Keep Squad Deployer on its own OIDC dry-run and Impactful-Action Gate; handle whole-plugin installs or Connector Namespace consent manually outside HVE Squad.</td></tr>
+          </tbody>
+        </table>
+      </section>
+      <section data-release-change="20261117-azure-cloud-and-cost-pack">
+        <h3 id="azure-cloud-setup">Azure Cloud and FinOps setup, with help from HVE Squad</h3>
+        <p>
+          Open your project in the host where HVE Squad is installed and send this request. Applying
+          <code>azure-cloud</code> adds Azure Cloud and FinOps guidance and missing specialist roles
+          from the existing cast; it never installs <code>az</code>, <code>azqr</code>, CLI
+          extensions, telemetry hooks, or <code>@azure/mcp</code> servers.
+        </p>
+        <pre><code>/squad request="Set up the Azure Cloud pack. Explain what will be installed, ask before installing, and leave the multi-rack Azure Local preview out unless I approve it." pack=azure-cloud</code></pre>
+        <ol>
+          <li>
+            <strong>Choose core skills first.</strong> HVE Squad lists thirteen core skills from
+            <a href="https://github.com/microsoft/azure-skills">microsoft/azure-skills</a>:
+            <code>cost-estimation</code>, <code>cost-optimization</code>,
+            <code>cost-analysis</code>, <code>cost-governance</code>,
+            <code>azure-diagnostics</code>, <code>azure-compliance</code>,
+            <code>azure-resource-lookup</code>, <code>azure-resource-visualizer</code>,
+            <code>azure-reliability</code>, <code>azure-quotas</code>, <code>azure-local</code>,
+            <code>azure-cloud-migrate</code>, and <code>azure-upgrade</code>, while keeping bundled
+            <code>azure-pricing</code> unchanged for public retail pricing. Install all thirteen,
+            pick a subset, or continue without them.
+          </li>
+          <li>
+            <strong>Approve pinned skill directories, reload, and verify.</strong> HVE Squad runs
+            <code>Install-SquadPackResources.ps1</code>, requires a <code>PASS</code> receipt rather
+            than <code>PLANNED</code>, stops for a host reload, reruns preflight for explicit
+            <code>available</code> or <code>declined</code> dispositions, and checks packaged
+            support files under <code>.agents/skills/</code> without appending
+            <code>/SKILL.md</code> or activating plugin hooks.
+          </li>
+          <li>
+            <strong>Keep FinOps, compliance, reliability, and migration charters read-only.</strong>
+            <code>cost-manager</code>, <code>azure-diagnose</code>, <code>asbuilt-author</code>,
+            <code>azure-architect</code>, and <code>modernizer</code> diagnose, audit, and plan
+            without mutating live Azure resources, while <code>deployer</code> keeps
+            <code>azure-deployment-preflight</code> inside its OIDC dry-run and Impactful-Action
+            Gate.
+          </li>
+        </ol>
+        <h4>Manual fallback and optional Azure Cloud reference snapshot</h4>
+        <p>
+          If HVE Squad cannot run the installer, confirm Git and APM are available (see
+          <a href="getting-started.html">Getting started</a> and the
+          <a href="https://learn.microsoft.com/azure/cost-management-billing/">Microsoft Cost Management documentation</a>)
+          and run the thirteen pinned Azure Cloud directory commands in the block above without
+          appending <code>/SKILL.md</code>. For an optional read-only source snapshot, run the
+          commands below when the destination folder does not exist.
+        </p>
+        <pre><code>git clone --config core.longpaths=true --filter=blob:none --no-checkout https://github.com/microsoft/azure-skills.git apm_modules/.squad-pack-support/azure-skills-65922d2
+git -C apm_modules/.squad-pack-support/azure-skills-65922d2 checkout --detach 65922d293cba61a40d5edf61a9eb4b6b0e799788
+git -C apm_modules/.squad-pack-support/azure-skills-65922d2 rev-parse HEAD</code></pre>
+        <h4>Optional multi-rack Azure Local preview skill</h4>
+        <p>
+          One preview skill can be approved separately: <code>azure-local-multi-rack</code> for
+          rack-scale Azure Local architecture and operations over
+          <code>Microsoft.NetworkCloud</code> and <code>Microsoft.ManagedNetworkFabric</code>. HVE
+          Squad installs only its pinned skill directory and never mutates fabric, isolation
+          domains, or SAN resources.
+        </p>
+        <pre><code>apm install microsoft/azure-skills/.github/plugins/azure-local-skills/skills/azure-local-multi-rack#65922d293cba61a40d5edf61a9eb4b6b0e799788 --target copilot</code></pre>
+        <p>
+          After reload, HVE Squad verifies
+          <code>.agents/skills/azure-local-multi-rack/references/docs-map.md</code> and
+          <code>.agents/skills/azure-local-multi-rack/workflows/plan-and-deploy/plan-and-deploy.md</code>
+          before selecting the preview workflow.
+        </p>
+        <h4>If setup stops</h4>
+        <table>
+          <thead><tr><th>What you see</th><th>What to do</th></tr></thead>
+          <tbody>
+            <tr><td>Older command appended <code>/SKILL.md</code> and failed APM validation</td><td>Rerun using the pinned skill directory path without <code>/SKILL.md</code>, then reload the host.</td></tr>
+            <tr><td>Installed on disk, but not in the host's skill list</td><td>Reload the host, reopen the same project, and rerun Azure Cloud preflight before marking the resource available.</td></tr>
+            <tr><td>Migration or deployment guidance asks for <code>azure-prepare</code>, <code>azure-validate</code>, or <code>azure-deploy</code></td><td>Keep Squad Deployer on <code>azure-deployment-preflight</code>, its OIDC dry-run, and the Impactful-Action Gate rather than installing blocklisted pipeline skills.</td></tr>
           </tbody>
         </table>
       </section>

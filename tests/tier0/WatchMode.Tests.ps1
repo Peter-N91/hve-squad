@@ -2337,6 +2337,7 @@ $(Format-WatchSelectionMarkdown)
         $catalog.PackSkills['dotnet'] | Should -HaveCount 20
         $catalog.PackSkills['aks'] | Should -HaveCount 7
         $catalog.PackSkills['azure-functions'] | Should -HaveCount 10
+        $catalog.PackSkills['azure-cloud'] | Should -HaveCount 14
         $cases = @(
             @{ Name = 'default'; Packs = @(); Installed = @(); Roles = @($catalog.Profiles['default']); Ok = $true }
             @{ Name = 'security'; Packs = @(); Installed = @(); Roles = @($catalog.Profiles['security']); Ok = $true }
@@ -2355,6 +2356,9 @@ $(Format-WatchSelectionMarkdown)
             @{ Name = 'default'; Packs = @('azure-functions'); Installed = @('azure-functions'); Skills = @(); Roles = @($catalog.Profiles['default'] + $catalog.Packs['azure-functions'] | Select-Object -Unique); Ok = $false }
             @{ Name = 'default'; Packs = @('azure-functions'); Installed = @('azure-functions'); Skills = @($catalog.PackSkills['azure-functions'] | Where-Object { $_ -ne 'azure-functions-update' }); Roles = @($catalog.Profiles['default'] + $catalog.Packs['azure-functions'] | Select-Object -Unique); Ok = $false }
             @{ Name = 'default'; Packs = @('azure-functions'); Installed = @('azure-functions'); Skills = @($catalog.PackSkills['azure-functions']); Roles = @($catalog.Profiles['default'] + $catalog.Packs['azure-functions'] | Select-Object -Unique); Ok = $true }
+            @{ Name = 'default'; Packs = @('azure-cloud'); Installed = @('azure-cloud'); Skills = @(); Roles = @($catalog.Profiles['default'] + $catalog.Packs['azure-cloud'] | Select-Object -Unique); Ok = $false }
+            @{ Name = 'default'; Packs = @('azure-cloud'); Installed = @('azure-cloud'); Skills = @($catalog.PackSkills['azure-cloud'] | Where-Object { $_ -ne 'azure-local-multi-rack' }); Roles = @($catalog.Profiles['default'] + $catalog.Packs['azure-cloud'] | Select-Object -Unique); Ok = $false }
+            @{ Name = 'default'; Packs = @('azure-cloud'); Installed = @('azure-cloud'); Skills = @($catalog.PackSkills['azure-cloud']); Roles = @($catalog.Profiles['default'] + $catalog.Packs['azure-cloud'] | Select-Object -Unique); Ok = $true }
             @{ Name = 'default'; Packs = @('foundry'); Installed = @('foundry'); Skills = @(); Roles = @($catalog.Profiles['default'] + $catalog.Packs['foundry'] | Select-Object -Unique); Ok = $false }
             @{ Name = 'default'; Packs = @('foundry'); Installed = @('foundry'); Skills = @($catalog.PackSkills['foundry'] | Where-Object { $_ -ne 'agentops-governance' }); Roles = @($catalog.Profiles['default'] + $catalog.Packs['foundry'] | Select-Object -Unique); Ok = $false }
             @{ Name = 'default'; Packs = @('foundry'); Installed = @('foundry'); Skills = @($catalog.PackSkills['foundry']); Roles = @($catalog.Profiles['default'] + $catalog.Packs['foundry'] | Select-Object -Unique); Ok = $true }
@@ -2392,6 +2396,10 @@ $(Format-WatchSelectionMarkdown)
             elseif (-not $case.Ok -and $case.Packs -contains 'azure-functions') {
                 $resolved.Ok | Should -BeFalse
                 $resolved.Reason | Should -Match '^pack-skill-not-visible:azure-functions:'
+            }
+            elseif (-not $case.Ok -and $case.Packs -contains 'azure-cloud') {
+                $resolved.Ok | Should -BeFalse
+                $resolved.Reason | Should -Match '^pack-skill-not-visible:azure-cloud:'
             }
             elseif (-not $case.Ok -and $case.Packs -contains 'foundry') {
                 $resolved.Ok | Should -BeFalse
