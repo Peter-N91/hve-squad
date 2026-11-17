@@ -19,11 +19,57 @@ $ErrorActionPreference = 'Stop'
 
 $trustedRoot = [System.IO.Path]::GetFullPath($env:SQUAD_WATCH_TRUSTED_ROOT)
 $pinnedSha = [string]$env:SQUAD_WATCH_TRUSTED_SHA
-if (-not [string]::IsNullOrWhiteSpace($pinnedSha)) {
-    $assertScript = Join-Path $trustedRoot 'squad-src/.github/skills/squad/scripts/Assert-SquadWatchTrustedCheckout.ps1'
-    & $assertScript -TrustedRoot $trustedRoot -ExpectedSha $pinnedSha
+$configuredRoot = ([string]$env:SQUAD_WATCH_SKILL_ROOT).Trim().Replace('\', '/').TrimEnd('/')
+if (-not [string]::IsNullOrWhiteSpace($configuredRoot)) {
+    if ([System.IO.Path]::IsPathRooted($configuredRoot) -or
+        $configuredRoot.StartsWith('-') -or
+        $configuredRoot -match '[:\x00-\x1f]' -or
+        $configuredRoot -match '(^|/)\.\.?(/|$)') {
+        throw "Invalid SQUAD_WATCH_SKILL_ROOT '$configuredRoot': must be a safe repository-relative path."
+    }
 }
-$modulePath = Join-Path $trustedRoot 'squad-src/.github/skills/squad/scripts/SquadWatch.psm1'
+
+$skillRoot = ''
+if (-not [string]::IsNullOrWhiteSpace($pinnedSha)) {
+    $candidates = if ($configuredRoot) { @($configuredRoot) } else { @('.agents/skills/squad', '.github/skills/squad', 'squad-src/.github/skills/squad') }
+    foreach ($candidate in $candidates) {
+        & git -C $trustedRoot cat-file -e "${pinnedSha}:${candidate}/scripts/SquadWatch.psm1" 2>$null
+        if ($LASTEXITCODE -eq 0) {
+            $skillRoot = $candidate
+            break
+        }
+    }
+    if ([string]::IsNullOrWhiteSpace($skillRoot)) {
+        throw "Pinned Squad Watch skill root not found at $pinnedSha."
+    }
+    $assertBlobLines = @(& git -C $trustedRoot show "${pinnedSha}:${skillRoot}/scripts/Assert-SquadWatchTrustedCheckout.ps1" 2>&1)
+    if ($LASTEXITCODE -ne 0) {
+        throw 'Pinned trusted-checkout verifier is missing from git show.'
+    }
+    $tempRoot = if ($env:RUNNER_TEMP) { $env:RUNNER_TEMP } else { [System.IO.Path]::GetTempPath() }
+    $assertScript = Join-Path $tempRoot ("Assert-SquadWatchTrustedCheckout-" + [guid]::NewGuid().ToString('n') + '.ps1')
+    try {
+        [System.IO.File]::WriteAllText($assertScript, (($assertBlobLines -join "`n") + "`n"))
+        & $assertScript -TrustedRoot $trustedRoot -ExpectedSha $pinnedSha -SkillRoot $skillRoot
+    }
+    finally {
+        Remove-Item -LiteralPath $assertScript -Force -ErrorAction SilentlyContinue
+    }
+}
+else {
+    $candidates = if ($configuredRoot) { @($configuredRoot) } else { @('.agents/skills/squad', '.github/skills/squad', 'squad-src/.github/skills/squad') }
+    foreach ($candidate in $candidates) {
+        $candidateModule = Join-Path $trustedRoot ($candidate -replace '/', [System.IO.Path]::DirectorySeparatorChar) 'scripts/SquadWatch.psm1'
+        if (Test-Path -LiteralPath $candidateModule -PathType Leaf) {
+            $skillRoot = $candidate
+            break
+        }
+    }
+    if ([string]::IsNullOrWhiteSpace($skillRoot)) {
+        throw "Squad Watch skill root not found under '$trustedRoot'."
+    }
+}
+$modulePath = Join-Path $trustedRoot ($skillRoot -replace '/', [System.IO.Path]::DirectorySeparatorChar) 'scripts/SquadWatch.psm1'
 Import-Module $modulePath -Force
 Assert-SquadWatchTrustedHelper -TrustedRoot $trustedRoot -Path $modulePath | Out-Null
 
@@ -43,7 +89,7 @@ $rendered = $null
 if ($mode -eq 'pr') {
     $catalog = ''
     if (-not [string]::IsNullOrWhiteSpace($pinnedSha)) {
-        $catalogLines = @(& git -C $trustedRoot show "${pinnedSha}:squad-src/.github/skills/squad/references/profiles-and-packs.md" 2>&1)
+        $catalogLines = @(& git -C $trustedRoot show "${pinnedSha}:${skillRoot}/references/profiles-and-packs.md" 2>&1)
         if ($LASTEXITCODE -ne 0) {
             throw 'Pinned profile catalog is missing. Publication evidence cannot be recomputed.'
         }
@@ -55,7 +101,7 @@ else {
     $evidence = [string]$env:SQUAD_WATCH_EVIDENCE
     $catalog = ''
     if (-not [string]::IsNullOrWhiteSpace($pinnedSha)) {
-        $catalogLines = @(& git -C $trustedRoot show "${pinnedSha}:squad-src/.github/skills/squad/references/profiles-and-packs.md" 2>&1)
+        $catalogLines = @(& git -C $trustedRoot show "${pinnedSha}:${skillRoot}/references/profiles-and-packs.md" 2>&1)
         if ($LASTEXITCODE -ne 0) {
             throw 'Pinned profile catalog is missing. Publication evidence cannot be recomputed.'
         }

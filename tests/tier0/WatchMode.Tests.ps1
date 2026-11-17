@@ -1000,12 +1000,15 @@ Describe 'GATE-48 Watch workflow handoff preflight and record repair' {
 import json, sys, yaml
 from pathlib import Path
 workflow = yaml.safe_load(Path(sys.argv[1]).read_text(encoding="utf-8"))
-names = {"Prepare handoff validator", "Run the squad", "Stage changes for handoff"}
+names = {"Prepare handoff validator", "Run the squad", "Stage changes for handoff", "Sanitize publication diagnostics"}
 print(json.dumps({step["name"]: step["run"] for step in workflow["jobs"]["interpret"]["steps"] if step.get("name") in names}))
 '@
         $json = & python -c $extractor (Join-Path $script:SourceRootResolved '.github/workflows/squad-watch.yml')
         if ($LASTEXITCODE -ne 0) { throw 'Could not extract Watch handoff steps.' }
         $script:HandoffSteps = $json | ConvertFrom-Json -AsHashtable
+        $templateJson = & python -c $extractor (Join-Path $script:SourceRootResolved 'squad-src/.github/skills/squad/squad-watch.workflow.yml')
+        if ($LASTEXITCODE -ne 0) { throw 'Could not extract template Watch handoff steps.' }
+        $script:TemplateHandoffSteps = $templateJson | ConvertFrom-Json -AsHashtable
         $script:HandoffEnvironmentNames = @(
             'RUNNER_TEMP', 'GITHUB_WORKSPACE', 'GITHUB_OUTPUT', 'GITHUB_STEP_SUMMARY',
             'SUB_SQUAD', 'SOURCE_THREAD', 'SOURCE_THREAD_NUMBER', 'STABLE_REF',
@@ -1013,7 +1016,8 @@ print(json.dumps({step["name"]: step["run"] for step in workflow["jobs"]["interp
             'TRIGGER_ACTOR', 'TRIGGER_RECEIVED_AT', 'SQUAD_WATCH_TRUSTED_SHA',
             'WATCH_MODULE_HASH', 'BASELINE_HASH', 'VALIDATOR_HASH', 'EXISTING_PR',
             'PUBLICATION_BRANCH_EXISTS', 'COPILOT_GITHUB_TOKEN', 'SQUAD_PROMPT_FILE',
-            'MODEL_OVERRIDE', 'SQUAD_MODEL', 'RUN_KIND', 'WATCH_TEST_SCENARIO'
+            'MODEL_OVERRIDE', 'SQUAD_MODEL', 'RUN_KIND', 'WATCH_TEST_SCENARIO',
+            'AWF_IMAGE_TAG', 'AWF_ALLOW_DOMAINS', 'DIAGNOSTICS_OUT', 'GH_TOKEN', 'GITHUB_TOKEN'
         )
     }
 
@@ -1138,15 +1142,19 @@ print(json.dumps({step["name"]: step["run"] for step in workflow["jobs"]["interp
     }
 
     It 'runs the actual headless control flow without a model: <Name>' -ForEach @(
-        @{ Name = 'valid records'; Scenario = 'valid'; Kind = 'dispatch'; ExitCode = 0; Calls = 1; Checks = 1 }
-        @{ Name = 'one successful record repair'; Scenario = 'repair'; Kind = 'dispatch'; ExitCode = 0; Calls = 2; Checks = 2 }
-        @{ Name = 'unresolved failure'; Scenario = 'blocked'; Kind = 'dispatch'; ExitCode = 1; Calls = 2; Checks = 2 }
-        @{ Name = 'CLI execution failure'; Scenario = 'cli-failure'; Kind = 'dispatch'; ExitCode = 42; Calls = 1; Checks = 0 }
-        @{ Name = 'changed validator'; Scenario = 'tampered'; Kind = 'dispatch'; ExitCode = 1; Calls = 1; Checks = 0 }
-        @{ Name = 'review-only run'; Scenario = 'valid'; Kind = 'pull_request'; ExitCode = 0; Calls = 1; Checks = 0 }
+        @{ Name = 'valid records'; Scenario = 'valid'; Kind = 'dispatch'; ExitCode = 0; Calls = 1; Checks = 1; ImageTag = '0.29.13,squid=sha256:6e0cbf7f980beb78b5461563a8164f6439ca959bc93733d5a6b52972e523ed50,agent=sha256:b14bd399376180b5649a9324be3b50fbfc82bfe8f0c80045840416b5a4e65b96,api-proxy=sha256:baff00b856a4bdc93bce134928c70af3d3492f2e518757115042040674d56b0b' }
+        @{ Name = 'one successful record repair'; Scenario = 'repair'; Kind = 'dispatch'; ExitCode = 0; Calls = 2; Checks = 2; ImageTag = '0.29.13,squid=sha256:6e0cbf7f980beb78b5461563a8164f6439ca959bc93733d5a6b52972e523ed50,agent=sha256:b14bd399376180b5649a9324be3b50fbfc82bfe8f0c80045840416b5a4e65b96,api-proxy=sha256:baff00b856a4bdc93bce134928c70af3d3492f2e518757115042040674d56b0b' }
+        @{ Name = 'unresolved failure'; Scenario = 'blocked'; Kind = 'dispatch'; ExitCode = 1; Calls = 2; Checks = 2; ImageTag = '0.29.13,squid=sha256:6e0cbf7f980beb78b5461563a8164f6439ca959bc93733d5a6b52972e523ed50,agent=sha256:b14bd399376180b5649a9324be3b50fbfc82bfe8f0c80045840416b5a4e65b96,api-proxy=sha256:baff00b856a4bdc93bce134928c70af3d3492f2e518757115042040674d56b0b' }
+        @{ Name = 'CLI execution failure'; Scenario = 'cli-failure'; Kind = 'dispatch'; ExitCode = 42; Calls = 1; Checks = 0; ImageTag = '0.29.13,squid=sha256:6e0cbf7f980beb78b5461563a8164f6439ca959bc93733d5a6b52972e523ed50,agent=sha256:b14bd399376180b5649a9324be3b50fbfc82bfe8f0c80045840416b5a4e65b96,api-proxy=sha256:baff00b856a4bdc93bce134928c70af3d3492f2e518757115042040674d56b0b' }
+        @{ Name = 'changed validator'; Scenario = 'tampered'; Kind = 'dispatch'; ExitCode = 1; Calls = 1; Checks = 0; ImageTag = '0.29.13,squid=sha256:6e0cbf7f980beb78b5461563a8164f6439ca959bc93733d5a6b52972e523ed50,agent=sha256:b14bd399376180b5649a9324be3b50fbfc82bfe8f0c80045840416b5a4e65b96,api-proxy=sha256:baff00b856a4bdc93bce134928c70af3d3492f2e518757115042040674d56b0b' }
+        @{ Name = 'review-only run'; Scenario = 'valid'; Kind = 'pull_request'; ExitCode = 0; Calls = 1; Checks = 0; ImageTag = '0.29.13,squid=sha256:6e0cbf7f980beb78b5461563a8164f6439ca959bc93733d5a6b52972e523ed50,agent=sha256:b14bd399376180b5649a9324be3b50fbfc82bfe8f0c80045840416b5a4e65b96,api-proxy=sha256:baff00b856a4bdc93bce134928c70af3d3492f2e518757115042040674d56b0b' }
+        @{ Name = 'unpinned awf image tag'; Scenario = 'valid'; Kind = 'dispatch'; ExitCode = 1; Calls = 0; Checks = 0; ImageTag = '0.29.13' }
     ) {
         $root = Join-Path $TestDrive "runner $Name"
         New-Item -ItemType Directory -Path $root -Force | Out-Null
+        $workspaceDir = Join-Path $root 'workspace'
+        New-Item -ItemType Directory -Path (Join-Path $workspaceDir '.squad-trusted') -Force | Out-Null
+        $env:GITHUB_WORKSPACE = $workspaceDir.Replace('\', '/')
         $env:RUNNER_TEMP = $root.Replace('\', '/')
         $env:SQUAD_PROMPT_FILE = (Join-Path $root 'prompt.txt').Replace('\', '/')
         Set-WatchModeTestFile -Path $env:SQUAD_PROMPT_FILE -Content 'Fixture task.'
@@ -1154,12 +1162,45 @@ print(json.dumps({step["name"]: step["run"] for step in workflow["jobs"]["interp
         Set-WatchModeTestFile -Path $validator -Content 'fixture validator'
         $env:VALIDATOR_HASH = (Get-FileHash -LiteralPath $validator).Hash.ToLowerInvariant()
         $env:COPILOT_GITHUB_TOKEN = 'fixture-not-a-token'
+        $env:GH_TOKEN = 'fixture-gh-token'
+        $env:GITHUB_TOKEN = 'fixture-github-token'
+        $env:AWF_IMAGE_TAG = $ImageTag
+        $env:AWF_ALLOW_DOMAINS = 'api.github.com,github.com'
         $env:SQUAD_MODEL = 'fixture-model'
         $env:MODEL_OVERRIDE = ''
         $env:RUN_KIND = $Kind
         $env:WATCH_TEST_SCENARIO = $Scenario
         $stubs = @'
+awf() {
+  local has_img=0 has_dom=0 has_wd=0 has_ss=0 has_env_all=0 has_ro_trusted=0 excl_copilot=0 excl_gh=0 excl_github=0
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --) shift; break ;;
+      --image-tag) has_img=1; shift 2 ;;
+      --allow-domains) has_dom=1; shift 2 ;;
+      --container-workdir) has_wd=1; shift 2 ;;
+      --session-state-dir) has_ss=1; shift 2 ;;
+      --env-all) has_env_all=1; shift ;;
+      --mount)
+        [[ "$2" != *"/.squad-trusted:"*":ro" ]] || has_ro_trusted=1
+        shift 2
+        ;;
+      --exclude-env)
+        case "$2" in
+          COPILOT_GITHUB_TOKEN) excl_copilot=1 ;;
+          GH_TOKEN) excl_gh=1 ;;
+          GITHUB_TOKEN) excl_github=1 ;;
+        esac
+        shift 2
+        ;;
+      *) shift ;;
+    esac
+  done
+  [[ "$has_img" == 1 && "$has_dom" == 1 && "$has_wd" == 1 && "$has_ss" == 1 && "$has_env_all" == 1 && "$has_ro_trusted" == 1 && "$excl_copilot" == 1 && "$excl_gh" == 1 && "$excl_github" == 1 ]] || return 95
+  COPILOT_GITHUB_TOKEN="" GH_TOKEN="" GITHUB_TOKEN="" "$@"
+}
 copilot() {
+  [[ -z "${COPILOT_GITHUB_TOKEN:-}" && -z "${GH_TOKEN:-}" && -z "${GITHUB_TOKEN:-}" ]] || return 94
   local count=0 id="" resume=""
   [[ ! -f "$RUNNER_TEMP/calls" ]] || count="$(cat "$RUNNER_TEMP/calls")"
   count=$((count + 1))
@@ -1197,14 +1238,96 @@ pwsh() {
 '@
         $output = @(& bash -c ($stubs + "`n" + $script:HandoffSteps['Run the squad']) 2>&1)
         $LASTEXITCODE | Should -Be $ExitCode -Because ($output -join "`n")
-        [int](Get-Content -LiteralPath (Join-Path $root 'calls') -Raw) | Should -Be $Calls
+        $callCount = if (Test-Path -LiteralPath (Join-Path $root 'calls')) {
+            [int](Get-Content -LiteralPath (Join-Path $root 'calls') -Raw)
+        } else { 0 }
+        $callCount | Should -Be $Calls
         $checkCount = if (Test-Path -LiteralPath (Join-Path $root 'checks')) {
             [int](Get-Content -LiteralPath (Join-Path $root 'checks') -Raw)
         } else { 0 }
         $checkCount | Should -Be $Checks
-        if ($Kind -ne 'pull_request') {
+        if ($Calls -gt 0 -and $Kind -ne 'pull_request') {
             (Get-Content -LiteralPath $env:SQUAD_PROMPT_FILE -Raw) | Should -Match 'FINAL HANDOFF PREFLIGHT'
         }
+    }
+
+    It 'scrubs token patterns and skips reparse points before diagnostic artifact upload in <Variant>' -ForEach @(
+        @{ Variant = 'live'; StepKey = 'live' }
+        @{ Variant = 'template'; StepKey = 'template' }
+    ) {
+        $stepBody = if ($StepKey -eq 'live') {
+            $script:HandoffSteps['Sanitize publication diagnostics']
+        } else {
+            $script:TemplateHandoffSteps['Sanitize publication diagnostics']
+        }
+        $root = Join-Path $TestDrive "diag-$Variant"
+        $runnerTemp = Join-Path $root 'temp'
+        $workspace = Join-Path $root 'workspace'
+        $outside = Join-Path $root 'outside'
+        $memberDir = Join-Path $workspace '.copilot-tracking/squad/members/issue-7/history'
+        New-Item -ItemType Directory -Path $runnerTemp, $memberDir, $outside -Force | Out-Null
+        Set-WatchModeTestFile -Path (Join-Path $outside 'secret.txt') -Content 'outside-secret-payload'
+
+        $fakeFinePat = 'github_pat_' + ('A1b2C3d4_' * 4)
+        $fakeClassicPat = 'ghp_' + ('x9Y8z7W6v5U4t3S2r1Q0' * 2)
+        $fakeServerToken = 'ghs_' + ('m1N2o3P4q5R6s7T8u9V0' * 2)
+        $fakeJwt = 'eyJhbGciOiJSUzI1NiJ9.eyJzdWIiOiJ3YXRjaCJ9.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c'
+        $fakeOpenAi = 'sk-proj-' + ('K1l2M3n4O5p6Q7r8S9t0U1v2')
+        $safeSha = '62b7e8ff1884aa476185369fa6be85585029f4c9'
+
+        Set-WatchModeTestFile -Path (Join-Path $runnerTemp 'squad-watch-preflight.log') -Content @"
+Preflight error at commit $safeSha
+Authorization: Bearer $fakeFinePat
+Remote https://x-access-token:$fakeServerToken@github.com/org/repo.git
+COPILOT_GITHUB_TOKEN=$fakeClassicPat
+Placeholder sk-placeholder-for-api-proxy kept intact
+"@
+        Set-WatchModeTestFile -Path (Join-Path $memberDir 'run.md') -Content @"
+# Run Diagnostics
+JWT: $fakeJwt
+Key: $fakeOpenAi
+"@
+
+        $reparseCreated = $false
+        $linkDir = Join-Path $workspace '.copilot-tracking/squad/members/issue-7/linked-outside'
+        try {
+            New-Item -ItemType SymbolicLink -Path $linkDir -Target $outside -ErrorAction Stop | Out-Null
+            $reparseCreated = $true
+        }
+        catch {
+            if ($IsWindows) {
+                New-Item -ItemType Junction -Path $linkDir -Target $outside -ErrorAction Stop | Out-Null
+                $reparseCreated = $true
+            }
+        }
+        $reparseCreated | Should -BeTrue
+
+        $stagedOut = Join-Path $runnerTemp 'squad-watch-diagnostics-staged'
+        $env:RUNNER_TEMP = $runnerTemp
+        $env:GITHUB_WORKSPACE = $workspace
+        $env:SUB_SQUAD = 'issue-7'
+        $env:DIAGNOSTICS_OUT = $stagedOut
+
+        & ([scriptblock]::Create($stepBody))
+
+        $stagedLog = Get-Content -LiteralPath (Join-Path $stagedOut 'runner-temp/squad-watch-preflight.log') -Raw
+        $stagedRun = Get-Content -LiteralPath (Join-Path $stagedOut 'members/issue-7/history/run.md') -Raw
+
+        $stagedLog | Should -Match ([regex]::Escape($safeSha))
+        $stagedLog | Should -Match 'sk-placeholder-for-api-proxy'
+        $stagedLog | Should -Not -Match 'github_pat_'
+        $stagedLog | Should -Not -Match 'ghp_'
+        $stagedLog | Should -Not -Match 'ghs_'
+        $stagedLog | Should -Match 'Authorization: Bearer \[REDACTED\]'
+        $stagedLog | Should -Match 'https://x-access-token:\[REDACTED\]@github\.com'
+        $stagedLog | Should -Match 'COPILOT_GITHUB_TOKEN=\[REDACTED\]'
+
+        $stagedRun | Should -Not -Match ([regex]::Escape($fakeJwt))
+        $stagedRun | Should -Not -Match ([regex]::Escape($fakeOpenAi))
+        $stagedRun | Should -Match 'JWT: \[REDACTED\]'
+        $stagedRun | Should -Match 'Key: \[REDACTED\]'
+
+        Test-Path -LiteralPath (Join-Path $stagedOut 'members/issue-7/linked-outside/secret.txt') | Should -BeFalse
     }
 }
 
@@ -1595,7 +1718,12 @@ $Extra
     }
 
     It 'GATE-48 drops a skills-based pack until every registered skill is host-visible' {
-        $foundrySkills = @('microsoft-foundry', 'use-ai-gateway', 'azure-aigateway', 'caira', 'foundry-iq', 'appinsights-instrumentation')
+        $foundrySkills = @(
+            'microsoft-foundry', 'use-ai-gateway', 'azure-aigateway', 'caira',
+            'foundry-iq', 'appinsights-instrumentation', 'agentops-agent', 'eval-faq',
+            'agentops-config', 'agentops-eval', 'agentops-report', 'agentops-governance',
+            'agt-policy-authoring'
+        )
         $dependencies = @{ foundry = $foundrySkills }
         $packRoles = @{ foundry = @('data-scientist') }
         $dropped = Test-SquadWatchProfileSelection `
@@ -1606,7 +1734,7 @@ $Extra
             -Roster $script:WatchSpineRoles `
             -InstalledPacks @('foundry') `
             -PackSkillDependencies $dependencies `
-            -HostVisibleSkills @($foundrySkills | Select-Object -First 5) `
+            -HostVisibleSkills @($foundrySkills | Select-Object -First 12) `
             -CanonicalProfileRoles $script:WatchSpineRoles `
             -CanonicalPackRoles $packRoles
         $dropped.Valid | Should -BeTrue
@@ -2204,8 +2332,12 @@ $(Format-WatchSelectionMarkdown)
         $catalog = Get-SquadWatchProfileCatalog -Markdown $catalogText
         $catalog.Profiles['security'] | Should -Contain 'privacy'
         $catalog.PackSkills['m365-copilot'] | Should -HaveCount 14
-        $catalog.PackSkills['foundry'] | Should -HaveCount 6
-        $catalog.PackSkills['fabric'] | Should -HaveCount 8
+        $catalog.PackSkills['foundry'] | Should -HaveCount 13
+        $catalog.PackSkills['fabric'] | Should -HaveCount 15
+        $catalog.PackSkills['dotnet'] | Should -HaveCount 20
+        $catalog.PackSkills['aks'] | Should -HaveCount 7
+        $catalog.PackSkills['azure-functions'] | Should -HaveCount 10
+        $catalog.PackSkills['azure-cloud'] | Should -HaveCount 14
         $cases = @(
             @{ Name = 'default'; Packs = @(); Installed = @(); Roles = @($catalog.Profiles['default']); Ok = $true }
             @{ Name = 'security'; Packs = @(); Installed = @(); Roles = @($catalog.Profiles['security']); Ok = $true }
@@ -2215,8 +2347,24 @@ $(Format-WatchSelectionMarkdown)
             @{ Name = 'default'; Packs = @('m365-copilot'); Installed = @('m365-copilot'); Skills = @(); Roles = @($catalog.Profiles['default'] + $catalog.Packs['m365-copilot']); Ok = $false }
             @{ Name = 'default'; Packs = @('m365-copilot'); Installed = @('m365-copilot'); Skills = @($catalog.PackSkills['m365-copilot'] | Where-Object { $_ -ne 'ui-widget-developer' }); Roles = @($catalog.Profiles['default'] + $catalog.Packs['m365-copilot']); Ok = $false }
             @{ Name = 'default'; Packs = @('m365-copilot'); Installed = @('m365-copilot'); Skills = @($catalog.PackSkills['m365-copilot']); Roles = @($catalog.Profiles['default'] + $catalog.Packs['m365-copilot']); Ok = $true }
-            @{ Name = 'default'; Packs = @('foundry'); Installed = @('foundry'); Skills = @(); Roles = @($catalog.Profiles['default'] + $catalog.Packs['foundry']); Ok = $false }
-            @{ Name = 'default'; Packs = @('foundry'); Installed = @('foundry'); Skills = @($catalog.PackSkills['foundry']); Roles = @($catalog.Profiles['default'] + $catalog.Packs['foundry']); Ok = $true }
+            @{ Name = 'default'; Packs = @('dotnet'); Installed = @('dotnet'); Skills = @(); Roles = @($catalog.Profiles['default'] + $catalog.Packs['dotnet'] | Select-Object -Unique); Ok = $false }
+            @{ Name = 'default'; Packs = @('dotnet'); Installed = @('dotnet'); Skills = @($catalog.PackSkills['dotnet'] | Where-Object { $_ -ne 'exp-mock-usage-analysis' }); Roles = @($catalog.Profiles['default'] + $catalog.Packs['dotnet'] | Select-Object -Unique); Ok = $false }
+            @{ Name = 'default'; Packs = @('dotnet'); Installed = @('dotnet'); Skills = @($catalog.PackSkills['dotnet']); Roles = @($catalog.Profiles['default'] + $catalog.Packs['dotnet'] | Select-Object -Unique); Ok = $true }
+            @{ Name = 'default'; Packs = @('aks'); Installed = @('aks'); Skills = @(); Roles = @($catalog.Profiles['default'] + $catalog.Packs['aks'] | Select-Object -Unique); Ok = $false }
+            @{ Name = 'default'; Packs = @('aks'); Installed = @('aks'); Skills = @($catalog.PackSkills['aks'] | Where-Object { $_ -ne 'aks-troubleshooting' }); Roles = @($catalog.Profiles['default'] + $catalog.Packs['aks'] | Select-Object -Unique); Ok = $false }
+            @{ Name = 'default'; Packs = @('aks'); Installed = @('aks'); Skills = @($catalog.PackSkills['aks']); Roles = @($catalog.Profiles['default'] + $catalog.Packs['aks'] | Select-Object -Unique); Ok = $true }
+            @{ Name = 'default'; Packs = @('azure-functions'); Installed = @('azure-functions'); Skills = @(); Roles = @($catalog.Profiles['default'] + $catalog.Packs['azure-functions'] | Select-Object -Unique); Ok = $false }
+            @{ Name = 'default'; Packs = @('azure-functions'); Installed = @('azure-functions'); Skills = @($catalog.PackSkills['azure-functions'] | Where-Object { $_ -ne 'azure-functions-update' }); Roles = @($catalog.Profiles['default'] + $catalog.Packs['azure-functions'] | Select-Object -Unique); Ok = $false }
+            @{ Name = 'default'; Packs = @('azure-functions'); Installed = @('azure-functions'); Skills = @($catalog.PackSkills['azure-functions']); Roles = @($catalog.Profiles['default'] + $catalog.Packs['azure-functions'] | Select-Object -Unique); Ok = $true }
+            @{ Name = 'default'; Packs = @('azure-cloud'); Installed = @('azure-cloud'); Skills = @(); Roles = @($catalog.Profiles['default'] + $catalog.Packs['azure-cloud'] | Select-Object -Unique); Ok = $false }
+            @{ Name = 'default'; Packs = @('azure-cloud'); Installed = @('azure-cloud'); Skills = @($catalog.PackSkills['azure-cloud'] | Where-Object { $_ -ne 'azure-local-multi-rack' }); Roles = @($catalog.Profiles['default'] + $catalog.Packs['azure-cloud'] | Select-Object -Unique); Ok = $false }
+            @{ Name = 'default'; Packs = @('azure-cloud'); Installed = @('azure-cloud'); Skills = @($catalog.PackSkills['azure-cloud']); Roles = @($catalog.Profiles['default'] + $catalog.Packs['azure-cloud'] | Select-Object -Unique); Ok = $true }
+            @{ Name = 'default'; Packs = @('foundry'); Installed = @('foundry'); Skills = @(); Roles = @($catalog.Profiles['default'] + $catalog.Packs['foundry'] | Select-Object -Unique); Ok = $false }
+            @{ Name = 'default'; Packs = @('foundry'); Installed = @('foundry'); Skills = @($catalog.PackSkills['foundry'] | Where-Object { $_ -ne 'agentops-governance' }); Roles = @($catalog.Profiles['default'] + $catalog.Packs['foundry'] | Select-Object -Unique); Ok = $false }
+            @{ Name = 'default'; Packs = @('foundry'); Installed = @('foundry'); Skills = @($catalog.PackSkills['foundry']); Roles = @($catalog.Profiles['default'] + $catalog.Packs['foundry'] | Select-Object -Unique); Ok = $true }
+            @{ Name = 'default'; Packs = @('fabric'); Installed = @('fabric'); Skills = @(); Roles = @($catalog.Profiles['default'] + $catalog.Packs['fabric'] | Select-Object -Unique); Ok = $false }
+            @{ Name = 'default'; Packs = @('fabric'); Installed = @('fabric'); Skills = @($catalog.PackSkills['fabric'] | Where-Object { $_ -ne 'semantic-model-authoring' }); Roles = @($catalog.Profiles['default'] + $catalog.Packs['fabric'] | Select-Object -Unique); Ok = $false }
+            @{ Name = 'default'; Packs = @('fabric'); Installed = @('fabric'); Skills = @($catalog.PackSkills['fabric']); Roles = @($catalog.Profiles['default'] + $catalog.Packs['fabric'] | Select-Object -Unique); Ok = $true }
             @{ Name = 'security'; Packs = @(); Installed = @(); Roles = @($catalog.Profiles['security'] | Where-Object { $_ -ne 'privacy' }); Ok = $false }
             @{ Name = 'default'; Packs = @(); Installed = @(); Roles = @($catalog.Profiles['default'] + 'hacker'); Ok = $false }
         )
@@ -2237,9 +2385,29 @@ $(Format-WatchSelectionMarkdown)
                 $resolved.Ok | Should -BeFalse
                 $resolved.Reason | Should -Match '^pack-skill-not-visible:m365-copilot:'
             }
+            elseif (-not $case.Ok -and $case.Packs -contains 'dotnet') {
+                $resolved.Ok | Should -BeFalse
+                $resolved.Reason | Should -Match '^pack-skill-not-visible:dotnet:'
+            }
+            elseif (-not $case.Ok -and $case.Packs -contains 'aks') {
+                $resolved.Ok | Should -BeFalse
+                $resolved.Reason | Should -Match '^pack-skill-not-visible:aks:'
+            }
+            elseif (-not $case.Ok -and $case.Packs -contains 'azure-functions') {
+                $resolved.Ok | Should -BeFalse
+                $resolved.Reason | Should -Match '^pack-skill-not-visible:azure-functions:'
+            }
+            elseif (-not $case.Ok -and $case.Packs -contains 'azure-cloud') {
+                $resolved.Ok | Should -BeFalse
+                $resolved.Reason | Should -Match '^pack-skill-not-visible:azure-cloud:'
+            }
             elseif (-not $case.Ok -and $case.Packs -contains 'foundry') {
                 $resolved.Ok | Should -BeFalse
                 $resolved.Reason | Should -Match '^pack-skill-not-visible:foundry:'
+            }
+            elseif (-not $case.Ok -and $case.Packs -contains 'fabric') {
+                $resolved.Ok | Should -BeFalse
+                $resolved.Reason | Should -Match '^pack-skill-not-visible:fabric:'
             }
             else {
                 $resolved.Ok | Should -BeTrue
@@ -2800,5 +2968,41 @@ $(Format-WatchSelectionMarkdown)
         $appliedScript = Get-Content -LiteralPath (Join-Path $script:SourceRootResolved 'squad-src/.github/skills/squad/scripts/Invoke-SquadWatchAppliedPatch.ps1') -Raw
         $appliedScript | Should -Match 'TrustedBaseSha \$sha'
         $appliedScript | Should -Match 'StableRef \$env:STABLE_REF'
+    }
+
+    It 'resolves consumer and repository Watch skill roots from pinned git blobs and rejects unsafe SQUAD_WATCH_SKILL_ROOT paths' {
+        foreach ($layout in @('.agents/skills/squad', '.github/skills/squad', 'squad-src/.github/skills/squad')) {
+            $slug = ($layout -replace '[^a-z0-9]+', '-').Trim('-')
+            $root = Join-Path $TestDrive ("skill-root-" + $slug)
+            New-Item -ItemType Directory -Path $root -Force | Out-Null
+            Invoke-WatchModeGit -Repository $root -Arguments @('init', '-q') | Out-Null
+            Invoke-WatchModeGit -Repository $root -Arguments @('config', 'user.email', 'watch@example.test') | Out-Null
+            Invoke-WatchModeGit -Repository $root -Arguments @('config', 'user.name', 'Watch') | Out-Null
+            foreach ($rel in @(
+                "$layout/scripts/SquadWatch.psm1",
+                "$layout/scripts/SquadWatch.Delivery.ps1",
+                "$layout/scripts/Assert-SquadWatchTrustedCheckout.ps1",
+                "$layout/scripts/Invoke-SquadWatchAppliedPatch.ps1",
+                "$layout/scripts/Invoke-SquadWatchMarkedBody.ps1",
+                "$layout/references/profiles-and-packs.md"
+            )) {
+                $dest = Join-Path $root ($rel -replace '/', [System.IO.Path]::DirectorySeparatorChar)
+                New-Item -ItemType Directory -Path (Split-Path -Parent $dest) -Force | Out-Null
+                $sourceRel = $rel -replace ([regex]::Escape($layout)), 'squad-src/.github/skills/squad'
+                Copy-Item -LiteralPath (Join-Path $script:SourceRootResolved ($sourceRel -replace '/', [System.IO.Path]::DirectorySeparatorChar)) -Destination $dest -Force
+                Invoke-WatchModeGit -Repository $root -Arguments @('add', '--', $rel) | Out-Null
+            }
+            Invoke-WatchModeGit -Repository $root -Arguments @('commit', '-q', '-m', 'seed skill') | Out-Null
+            $sha = (Invoke-WatchModeGit -Repository $root -Arguments @('rev-parse', 'HEAD')).Output[-1].Trim()
+            Resolve-SquadWatchSkillRoot -TrustedRoot $root -ExpectedSha $sha | Should -BeExactly $layout
+            { Assert-SquadWatchTrustedCheckout -TrustedRoot $root -ExpectedSha $sha } | Should -Not -Throw
+        }
+
+        $apmRoot = Join-Path $TestDrive 'skill-root-agents-skills-squad'
+        $apmSha = (Invoke-WatchModeGit -Repository $apmRoot -Arguments @('rev-parse', 'HEAD')).Output[-1].Trim()
+        foreach ($badRoot in @('../escape', '/etc/passwd', '-option', 'custom:colon')) {
+            { Resolve-SquadWatchSkillRoot -TrustedRoot $apmRoot -ExpectedSha $apmSha -SkillRoot $badRoot } | Should -Throw '*Invalid SQUAD_WATCH_SKILL_ROOT*'
+        }
+        { Resolve-SquadWatchSkillRoot -TrustedRoot $apmRoot -ExpectedSha $apmSha -SkillRoot 'missing/skills/squad' } | Should -Throw '*missing SquadWatch.psm1*'
     }
 }

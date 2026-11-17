@@ -95,6 +95,7 @@ function Get-Tier0TestPlan {
                 'ResponsibleUse.Tests.ps1'
                 'Sign-PlannerArtifacts.Tests.ps1'
                 'SquadTelemetry.Tests.ps1'
+                'SquadStudioCanvas.Tests.ps1'
             )
         }
         @{

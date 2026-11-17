@@ -309,6 +309,11 @@ Describe 'Synchronous ordinary handoffs and cold Scribe pipelining (GATE-22..GAT
             $federation.Body | Should -Match 'Exit 2 keeps the existing cold-Scribe pipeline'
         }
 
+        It 'forwards the responsible-use contract through federation member coordinators' {
+            $script:FederationRuntimeBody | Should -Match '(?s)brief\s+`responsibleUsePath`/`sourceDataRule` verbatim'
+            $script:FederationRuntimeBody | Should -Match 'isolated contexts;\s+read policy\s+once'
+        }
+
         It 'removes wording that permits deferring ordinary persistence to a later Scribe pass' {
             $script:AutopilotInstructions.Body | Should -Not -Match 'Scribe-recorded stage'
             $script:GatesAndModesBody | Should -Not -Match 'Scribe-recorded stage'

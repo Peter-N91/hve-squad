@@ -1,0 +1,363 @@
+<!doctype html>
+<!--
+Copyright (c) Microsoft Corporation.
+Licensed under the MIT license.
+-->
+<html lang="en" data-studio-theme="__THEME__" data-studio-contrast="__CONTRAST__" data-csrf-token="__CSRF_TOKEN__">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>HVE Squad Studio</title>
+  <link rel="stylesheet" href="/ui/styles.css">
+  <script type="module" src="/ui/app.mjs"></script>
+</head>
+<body>
+  <svg class="sprite" aria-hidden="true" focusable="false" xmlns="http://www.w3.org/2000/svg">
+    <symbol id="i-sparkle" viewBox="0 0 16 16"><path d="M8 1.5l1.6 4.4L14 7.5l-4.4 1.6L8 13.5 6.4 9.1 2 7.5l4.4-1.6z"/></symbol>
+    <symbol id="i-globe" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.25"/><path d="M1.75 8h12.5M8 1.75c1.7 1.75 2.5 3.8 2.5 6.25S9.7 12.5 8 14.25M8 1.75C6.3 3.5 5.5 5.55 5.5 8s.8 4.5 2.5 6.25"/></symbol>
+    <symbol id="i-signpost" viewBox="0 0 16 16"><path d="M8 1.75v12.5M5.5 14.25h5"/><path d="M8 3.25h4.75l1.5 1.75-1.5 1.75H8M8 8.25H3.25L1.75 10l1.5 1.75H8"/></symbol>
+    <symbol id="i-presentation" viewBox="0 0 16 16"><rect x="2" y="2.5" width="12" height="8.5" rx="1.25"/><path d="M8 11v3M5.25 14h5.5M5 6.75l2-2 1.75 1.75L11 4.25"/></symbol>
+    <symbol id="i-document" viewBox="0 0 16 16"><path d="M3.25 1.75h6l3.5 3.5v9H3.25z"/><path d="M9.25 1.75v3.5h3.5M5.25 8h5.5M5.25 10.75h4"/></symbol>
+    <symbol id="i-shield" viewBox="0 0 16 16"><path d="M8 1.75l5.25 2v4c0 3.25-2.25 5.5-5.25 6.5-3-1-5.25-3.25-5.25-6.5v-4z"/><path d="M5.75 8l1.6 1.6 2.9-3.1"/></symbol>
+    <symbol id="i-check" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.25"/><path d="M5.25 8.25l1.9 1.9 3.6-3.9"/></symbol>
+    <symbol id="i-active" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.25"/><circle cx="8" cy="8" r="2.75" fill="currentColor" stroke="none"/></symbol>
+    <symbol id="i-clock" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.25"/><path d="M8 4.75V8l2.25 1.5"/></symbol>
+    <symbol id="i-hand" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.25"/><path d="M8 4.75v3.75M8 11.25v.01"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 16 16"><path d="M8 3v10M3 8h10"/></symbol>
+    <symbol id="i-wrench" viewBox="0 0 16 16"><path d="M10.5 2.5a3.5 3.5 0 0 0-3.2 4.9L2.6 12.1a1.2 1.2 0 0 0 1.7 1.7l4.7-4.7a3.5 3.5 0 0 0 4.9-3.2l-2.1 2.1-1.8-.4-.4-1.8z"/></symbol>
+    <symbol id="i-sliders" viewBox="0 0 16 16"><path d="M2 4.25h7M12.5 4.25H14M2 11.75h1.5M7 11.75h7"/><circle cx="10.75" cy="4.25" r="1.75"/><circle cx="5.25" cy="11.75" r="1.75"/></symbol>
+    <symbol id="i-eye" viewBox="0 0 16 16"><path d="M1.5 8s2.4-4.5 6.5-4.5S14.5 8 14.5 8s-2.4 4.5-6.5 4.5S1.5 8 1.5 8z"/><circle cx="8" cy="8" r="2"/></symbol>
+    <symbol id="i-open" viewBox="0 0 16 16"><path d="M9.25 2.75h4v4M13.25 2.75L7.5 8.5M11.75 9.5v3.25a1 1 0 0 1-1 1h-7.5a1 1 0 0 1-1-1v-7.5a1 1 0 0 1 1-1H6.5"/></symbol>
+    <symbol id="i-users" viewBox="0 0 16 16"><circle cx="6" cy="5.5" r="2.25"/><path d="M2 13.25c.5-2.3 2.1-3.5 4-3.5s3.5 1.2 4 3.5"/><circle cx="11.25" cy="6" r="1.75"/><path d="M11 9.75c1.5.15 2.7 1.15 3.1 3"/></symbol>
+    <symbol id="i-upload" viewBox="0 0 16 16"><path d="M8 10.5V2.75M4.75 6L8 2.75 11.25 6"/><path d="M2.5 10.75v2a1 1 0 0 0 1 1h9a1 1 0 0 0 1-1v-2"/></symbol>
+    <symbol id="i-puzzle" viewBox="0 0 16 16"><path d="M6.25 2.75a1.5 1.5 0 0 1 3 0v.75h2.5a1 1 0 0 1 1 1v2.5h-.75a1.5 1.5 0 0 0 0 3h.75v2.5a1 1 0 0 1-1 1h-8a1 1 0 0 1-1-1v-8a1 1 0 0 1 1-1h2.5z"/></symbol>
+    <symbol id="i-x" viewBox="0 0 16 16"><path d="M4 4l8 8M12 4l-8 8"/></symbol>
+  </svg>
+
+  <a class="skip-link" href="#mainContent">Skip to main workspace</a>
+
+  <header class="studio-header">
+    <div class="brand-row">
+      <div class="brand-identity">
+        <span class="brand-mark" aria-hidden="true">
+          <svg class="icon"><use href="#i-sparkle"/></svg>
+        </span>
+        <div>
+          <h1 class="brand-title">HVE Squad Studio</h1>
+          <p class="brand-status" id="agentStatusLine">Connecting to HVE Squad…</p>
+        </div>
+      </div>
+
+      <div class="header-controls">
+        <button type="button" class="pill-btn" id="modeToggleBtn" aria-pressed="false">
+          <svg class="icon" aria-hidden="true"><use href="#i-eye"/></svg>
+          <span id="modeToggleLabel">See Walkthrough</span>
+        </button>
+        <button type="button" class="icon-btn" id="settingsBtn" aria-haspopup="dialog" aria-expanded="false" aria-controls="settingsMenu" aria-label="Appearance and chat preferences">
+          <svg class="icon" aria-hidden="true"><use href="#i-sliders"/></svg>
+        </button>
+      </div>
+    </div>
+
+    <div class="walkthrough-bar" id="walkthroughBar" hidden>
+      <span class="walkthrough-label">Walkthrough screen:</span>
+      <div class="walkthrough-steps" id="walkthroughSteps" role="group" aria-label="Walkthrough screens"></div>
+      <button type="button" class="link-btn" id="exitWalkthroughBtn">Return to Live Workspace</button>
+    </div>
+
+    <nav class="primary-tabs" aria-label="HVE Squad Studio steps">
+      <div class="tab-list" role="tablist">
+        <button type="button" role="tab" class="tab-btn" id="tab-create" data-tab="create" aria-selected="true" aria-controls="panel-create">
+          <span class="step-num">1</span>
+          <span>What to Build</span>
+        </button>
+        <button type="button" role="tab" class="tab-btn" id="tab-progress" data-tab="progress" aria-selected="false" aria-controls="panel-progress">
+          <span class="step-num">2</span>
+          <span>Progress &amp; Choices</span>
+          <span class="badge badge-attention" id="progressBadge" hidden>!</span>
+        </button>
+        <button type="button" role="tab" class="tab-btn" id="tab-results" data-tab="results" aria-selected="false" aria-controls="panel-results">
+          <span class="step-num">3</span>
+          <span>Your Results</span>
+          <span class="badge" id="resultsBadge" hidden>0</span>
+        </button>
+      </div>
+    </nav>
+
+    <div class="settings-popover" id="settingsMenu" role="dialog" aria-labelledby="settingsTitle" hidden>
+      <div class="popover-head">
+        <h2 id="settingsTitle">Display &amp; Chat Coexistence</h2>
+        <button type="button" class="icon-btn" id="closeSettingsBtn" aria-label="Close settings">
+          <svg class="icon" aria-hidden="true"><use href="#i-x"/></svg>
+        </button>
+      </div>
+      <fieldset class="choice-pills" id="themeFieldset">
+        <legend>Color theme</legend>
+        <label><input type="radio" name="studioTheme" value="system"><span>Match App</span></label>
+        <label><input type="radio" name="studioTheme" value="light"><span>Light</span></label>
+        <label><input type="radio" name="studioTheme" value="dark"><span>Dark</span></label>
+      </fieldset>
+      <label class="toggle-row">
+        <input type="checkbox" id="contrastToggle">
+        <span>Higher border and text contrast</span>
+      </label>
+      <label class="toggle-row">
+        <input type="checkbox" id="plainTipsToggle">
+        <span>Show beginner explanations and examples</span>
+      </label>
+      <label class="toggle-row">
+        <input type="checkbox" id="neverAutoOpenToggle">
+        <span>Chat-first mode (keep HVE Squad Studio manual-only)</span>
+      </label>
+      <p class="popover-note">Technical users can always use HVE Squad directly in the chat window or CLI at any time — both share the same project progress.</p>
+    </div>
+  </header>
+
+  <main class="studio-main" id="mainContent" tabindex="-1">
+    <div class="toast-banner" id="toastBanner" role="status" aria-live="polite" hidden></div>
+
+    <section id="panel-create" role="tabpanel" aria-labelledby="tab-create" class="tab-panel">
+      <div class="hero-card">
+        <div class="hero-copy">
+          <h2>What would you like to build with HVE Squad?</h2>
+          <p id="heroSubtitle">No technical background or AI commands needed. Pick a starting card below, describe your idea in everyday words, or use the 3-click helper.</p>
+        </div>
+        <button type="button" class="secondary-btn" id="toggleHelperBtn" aria-expanded="false" aria-controls="helperDrawer">
+          <svg class="icon" aria-hidden="true"><use href="#i-signpost"/></svg>
+          <span id="toggleHelperLabel">Not sure where to start?</span>
+        </button>
+      </div>
+
+      <section class="helper-card" id="helperDrawer" aria-labelledby="helperHeading" hidden>
+        <div class="section-head">
+          <div>
+            <h3 id="helperHeading">Guided 3-Click Idea Helper</h3>
+            <p class="muted">Answer three quick plain-English questions and HVE Squad Studio will write a clear starting brief for you.</p>
+          </div>
+        </div>
+        <div id="helperStepsContainer" class="helper-steps"></div>
+        <div class="field-block">
+          <label for="helperTopicInput" class="field-label">In a few words, what is your idea or topic? <span class="muted">(optional)</span></label>
+          <input type="text" id="helperTopicInput" class="text-input" maxlength="500" placeholder="Example: Sunny Crumb Bakery daily menu and cake pre-orders">
+        </div>
+        <div class="action-row">
+          <button type="button" class="primary-btn" id="applyHelperBtn">Create my goal description</button>
+          <button type="button" class="ghost-btn" id="cancelHelperBtn">Close helper</button>
+        </div>
+      </section>
+
+      <section class="section-block" aria-labelledby="starterCardsHeading">
+        <div class="section-head">
+          <h3 id="starterCardsHeading">Choose a starting point</h3>
+          <span class="muted">Click any card to tailor HVE Squad for your goal</span>
+        </div>
+        <div class="goal-grid" id="goalCardsGrid" role="radiogroup" aria-labelledby="starterCardsHeading"></div>
+      </section>
+
+      <section class="section-block composer-card" aria-labelledby="goalInputLabel">
+        <div class="section-head">
+          <label id="goalInputLabel" for="goalTextarea" class="section-title">Describe what you want in everyday words</label>
+          <button type="button" class="link-btn" id="fillExampleBtn">Try a sample idea</button>
+        </div>
+        <textarea id="goalTextarea" class="goal-textarea" rows="4" maxlength="2000" placeholder="Describe what you would like to create, who it is for, and anything important to include…"></textarea>
+        <p class="tip-line" id="composerTip">Tip: Write just as you would explain it to a helpful colleague. HVE Squad handles the technical details automatically.</p>
+
+        <div class="upload-zone" id="uploadDropzone">
+          <div class="upload-row">
+            <div>
+              <span class="field-label">Have notes, a Word doc, PDF, or slides already? <span class="muted">(optional)</span></span>
+              <p class="muted">Attach documents so HVE Squad can check them for missing details before building.</p>
+            </div>
+            <div>
+              <input type="file" id="docFileInput" accept=".md,.txt,.docx,.pdf,.pptx,.xlsx,.csv,.json,.yml,.yaml,.html,.htm" multiple hidden>
+              <button type="button" class="secondary-btn" id="chooseFileBtn">
+                <svg class="icon" aria-hidden="true"><use href="#i-upload"/></svg>
+                <span>Attach Document</span>
+              </button>
+            </div>
+          </div>
+          <div id="uploadedFilesList" class="file-pill-list" hidden></div>
+          <label class="check-card" id="intakeToggleRow" hidden>
+            <input type="checkbox" id="validateIntakeCheckbox" checked>
+            <div>
+              <span class="radio-card-title">Check my attached document first for missing details (Recommended)</span>
+              <span class="radio-card-desc">HVE Squad checks completeness and clarity before building, fixes minor gaps automatically, and asks only if an important detail is missing.</span>
+            </div>
+          </label>
+        </div>
+      </section>
+
+      <section class="section-block surface-card" id="suggestedPacksCard" aria-labelledby="suggestedPacksHeading" hidden>
+        <div class="section-head">
+          <div class="title-with-icon">
+            <svg class="icon" aria-hidden="true"><use href="#i-puzzle"/></svg>
+            <div>
+              <h3 id="suggestedPacksHeading">Helpful Platform Specialists Available</h3>
+              <p class="muted" id="suggestedPacksSubtitle">Based on your goal or attached document, HVE Squad can include specialist add-ons.</p>
+            </div>
+          </div>
+        </div>
+        <div id="suggestedPacksList" class="pack-suggestion-list"></div>
+        <label class="check-card" id="packPreviewToggleRow" hidden>
+          <input type="checkbox" id="allowPackPreviewsCheckbox">
+          <div>
+            <span class="radio-card-title">Also allow experimental preview helpers for selected add-ons (optional)</span>
+            <span class="radio-card-desc" id="packPreviewDesc">Off by default — official stable helpers are already included automatically.</span>
+          </div>
+        </label>
+      </section>
+
+      <div class="manual-pack-bar">
+        <button type="button" class="link-btn" id="togglePacksDrawerBtn" aria-expanded="false" aria-controls="allPacksDrawer">
+          Building for a specific platform like Microsoft 365, Power Apps, .NET, or Cloud? (Optional add-ons)
+        </button>
+        <section class="surface-card" id="allPacksDrawer" aria-labelledby="allPacksHeading" hidden>
+          <div class="section-head">
+            <div>
+              <h3 id="allPacksHeading">Optional Platform Specialist Add-Ons</h3>
+              <p class="muted">You do not need to pick any of these unless your project targets a specific work platform.</p>
+            </div>
+          </div>
+          <div id="allPacksGrid" class="goal-grid"></div>
+        </section>
+      </div>
+
+      <section class="settings-grid" aria-label="Working style and budget">
+        <div class="option-card">
+          <h3>How should HVE Squad work with you?</h3>
+          <div id="workingStyleList" class="radio-stack"></div>
+          <div class="limit-block">
+            <label class="check-card" id="councilCheckupRow">
+              <input type="checkbox" id="councilCheckupCheckbox">
+              <div>
+                <span class="radio-card-title">Double-check safety, budget &amp; design before building</span>
+                <span class="radio-card-desc">Has extra specialists review the plan first — helpful for customer-facing, business, cloud, or AI projects.</span>
+              </div>
+            </label>
+          </div>
+        </div>
+
+        <div class="option-card">
+          <h3>Quality, speed &amp; optional spending limit</h3>
+          <div id="budgetStyleList" class="radio-stack"></div>
+          <div class="limit-block">
+            <span class="field-label">Optional AI spending cap for this run</span>
+            <div id="spendingPresetList" class="pill-group" role="radiogroup" aria-label="Spending limit"></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="predefined-strip" aria-labelledby="predefinedHeading">
+        <div class="predefined-main">
+          <div>
+            <h3 id="predefinedHeading" class="predefined-title">Pre-configured setup — no extra setup questions</h3>
+            <p class="predefined-items" id="predefinedSummaryText">Single chosen squad · Matched automatically · Updates right here in HVE Squad Studio &amp; chat</p>
+          </div>
+          <button type="button" class="link-btn" id="toggleProfileSelectBtn" aria-expanded="false" aria-controls="profileOverrideRow">Change chosen squad</button>
+        </div>
+        <div class="profile-override-row" id="profileOverrideRow" hidden>
+          <label for="profileOverrideSelect" class="field-label">Chosen squad for this project</label>
+          <select id="profileOverrideSelect" class="select-input"></select>
+        </div>
+      </section>
+
+      <div class="launch-footer">
+        <button type="button" class="launch-btn" id="launchBtn">
+          <svg class="icon" aria-hidden="true"><use href="#i-sparkle"/></svg>
+          <span>Start with HVE Squad</span>
+        </button>
+        <p class="reassurance-note">Works automatically whether or not you selected an agent first — single squad, squad profile, and notifications are already pre-configured for you.</p>
+      </div>
+    </section>
+
+    <section id="panel-progress" role="tabpanel" aria-labelledby="tab-progress" class="tab-panel" hidden>
+      <div id="permissionBanner" class="callout callout-permission" hidden></div>
+      <div id="errorBanner" class="callout callout-error" hidden></div>
+      <div id="intakeCheckupContainer" hidden></div>
+      <div id="councilCheckupContainer" hidden></div>
+      <div id="questionCardContainer" hidden></div>
+
+      <section class="section-block surface-card" aria-labelledby="milestonesHeading">
+        <div class="section-head">
+          <div>
+            <h2 id="milestonesHeading">Step-by-Step Progress</h2>
+            <p class="muted" id="progressSubtext">Plain-English updates as HVE Squad works on your goal.</p>
+          </div>
+          <span class="status-chip" id="runStateChip">Idle</span>
+        </div>
+        <div id="milestonesList" class="milestone-list"></div>
+      </section>
+
+      <section class="section-block surface-card" aria-labelledby="chosenSquadHeading">
+        <div class="section-head">
+          <div class="title-with-icon">
+            <svg class="icon" aria-hidden="true"><use href="#i-users"/></svg>
+            <div>
+              <h2 id="chosenSquadHeading">Your Chosen Squad</h2>
+              <p class="muted" id="chosenSquadSubtitle">Specialists coordinated automatically by HVE Squad</p>
+            </div>
+          </div>
+          <span class="budget-pill" id="spendingSummaryPill" hidden></span>
+        </div>
+        <div id="chosenSquadPacks" class="file-pill-list" hidden></div>
+        <div id="chosenSquadMembers" class="member-grid"></div>
+      </section>
+
+      <section class="section-block surface-card" id="decisionsSection" aria-labelledby="decisionsHeading" hidden>
+        <h2 id="decisionsHeading">Key Choices Recorded</h2>
+        <div id="decisionsList" class="decision-list"></div>
+      </section>
+    </section>
+
+    <section id="panel-results" role="tabpanel" aria-labelledby="tab-results" class="tab-panel" hidden>
+      <div id="latestSummaryCard" class="summary-banner" hidden></div>
+
+      <section class="section-block" aria-labelledby="deliverablesHeading">
+        <div class="section-head">
+          <div>
+            <h2 id="deliverablesHeading">What HVE Squad Created for You</h2>
+            <p class="muted">Open your finished files directly or read a plain-English preview right here.</p>
+          </div>
+        </div>
+        <div id="deliverablesGrid" class="deliverable-grid"></div>
+      </section>
+
+      <section class="section-block surface-card" aria-labelledby="refinementsHeading">
+        <div class="section-head">
+          <div>
+            <h2 id="refinementsHeading">Want to Adjust Anything?</h2>
+            <p class="muted">Pick a 1-click adjustment below and tell HVE Squad what you would like changed.</p>
+          </div>
+        </div>
+        <div id="refinementCardsGrid" class="refinement-grid" role="radiogroup" aria-labelledby="refinementsHeading"></div>
+        <div class="field-block">
+          <label for="refinementNoteInput" class="field-label">Details for HVE Squad <span class="muted" id="refinementTargetHint"></span></label>
+          <textarea id="refinementNoteInput" class="goal-textarea" rows="2" maxlength="1500" placeholder="Example: Make the buttons larger and add a section for weekend specials…"></textarea>
+        </div>
+        <div class="action-row">
+          <button type="button" class="primary-btn" id="sendRefinementBtn">Ask HVE Squad to Update</button>
+        </div>
+      </section>
+    </section>
+  </main>
+
+  <dialog class="preview-dialog" id="previewDialog" aria-labelledby="previewDialogTitle">
+    <div class="dialog-head">
+      <div>
+        <h2 id="previewDialogTitle">Preview</h2>
+        <p class="muted" id="previewDialogPath"></p>
+      </div>
+      <button type="button" class="icon-btn" id="closePreviewDialogBtn" aria-label="Close preview">
+        <svg class="icon" aria-hidden="true"><use href="#i-x"/></svg>
+      </button>
+    </div>
+    <div class="dialog-body">
+      <p class="muted" id="previewDialogNote" hidden></p>
+      <pre class="preview-content" id="previewDialogContent"></pre>
+    </div>
+  </dialog>
+
+  <div class="visually-hidden" id="srAnnouncer" role="status" aria-live="polite"></div>
+</body>
+</html>

@@ -1,4 +1,4 @@
-# Squad benchmark
+# HVE Squad benchmark
 
 [![Observed document quality, acceptance and average benchmark time](badge.svg)](report.md)
 

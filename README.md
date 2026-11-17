@@ -1,6 +1,6 @@
 ---
 title: hve-squad
-description: A GitHub Copilot plugin composing HVE Core and Squad agents, skills, rules, and hooks.
+description: A GitHub Copilot plugin composing HVE Core and HVE Squad agents, skills, rules, and hooks.
 ---
 
 <p align="center">
@@ -10,7 +10,7 @@ description: A GitHub Copilot plugin composing HVE Core and Squad agents, skills
 <h1 align="center">hve-squad</h1>
 
 <p align="center">
-  A GitHub Copilot plugin that bundles the pinned HVE Core cast with Squad agents, skills, rules,
+  A GitHub Copilot plugin that bundles the pinned HVE Core cast with HVE Squad agents, skills, rules,
   and hooks, and ships a Squad Coordinator that routes your request to agents in parallel.
   The APM package remains available as a repository-local fallback.
 </p>
@@ -65,6 +65,25 @@ initialization-to-completion example. The Coach uses the terms defined on
 [Concepts](https://peter-n91.github.io/hve-squad/concepts.html): read it first if team, federation, profile,
 pack, `init` or `promote` is new to you.
 
+## Prefer a visual workspace instead of chat commands? Open HVE Squad Studio
+
+Non-technical users, first-time AI users, and beginners working in the **GitHub Copilot app** can use **HVE Squad Studio** (`hve-squad-studio`)—an opt-in side-panel canvas that guides you through cards, uploads, and buttons instead of chat syntax, while keeping chat and CLI workflows completely unchanged for technical users.
+
+- **Installed with the plugin:** Installing `hve-squad` in the GitHub Copilot app (**Customize → Plugins**) includes **HVE Squad Studio** automatically in every new project session.
+- **Installed with the APM fallback (`apm install`):** Run this one-time helper command in your project (or pass `-Scope user` for your personal Copilot profile), then start a new session:
+
+```powershell
+pwsh -File .agents/skills/squad/scripts/Install-SquadStudioExtension.ps1 -Scope repository
+```
+
+- **How to start it (no agent selection or `init` needed):** Open the **Canvas** panel in the GitHub Copilot app and select **HVE Squad Studio**, or simply send `Open HVE Squad Studio` in chat—even without selecting an agent first.
+- **How it works in 3 steps:**
+  1. **Choose What to Build:** Pick a starter card (or use **Not sure where to start?**), optionally upload existing notes or documents for an automatic **Intake Gate** checkup, review any auto-suggested platform add-ons (packs) and optional **Safety, Budget & Design Checkups** (councils), and click **Start Building with HVE Squad**. Behind the scenes, **HVE Squad Studio** selects **Squad Coordinator** and pre-initializes a single chosen squad automatically.
+  2. **Watch Progress & Decide:** Follow plain-language progress, read checkup verdict cards, and answer one-question decision cards with a single click.
+  3. **Your Finished Work:** Open finished deliverables in your editor, read plain-English summaries, or apply one-click adjustments.
+
+See [Getting Started → HVE Squad Studio](https://peter-n91.github.io/hve-squad/getting-started.html#use-hve-squad-studio) for the full step-by-step guide.
+
 ## Documentation
 
 [![Observed efficiency benchmark: document quality, acceptance and average benchmark time](benchmarks/efficiency/badge.svg)](benchmarks/efficiency/report.md)
@@ -82,7 +101,7 @@ Full documentation lives on the project site:
 | Page                                                                          | What it covers                                                           |
 |-------------------------------------------------------------------------------|--------------------------------------------------------------------------|
 | [Concepts](https://peter-n91.github.io/hve-squad/concepts.html)               | The vocabulary in one place: teams, federations, profiles, packs, `init`, `promote`, autopilot, and where state lives |
-| [Getting Started](https://peter-n91.github.io/hve-squad/getting-started.html) | Plugin install and updates, preview testing, APM fallback, first run       |
+| [Getting Started](https://peter-n91.github.io/hve-squad/getting-started.html) | Plugin install and updates, Squad Coach, HVE Squad Studio, preview testing, APM fallback, first run |
 | [Usage](https://peter-n91.github.io/hve-squad/usage.html)                     | Profiles, autonomy modes, cost ceilings, remote approval, and Init Mode  |
 | [Ecosystem](https://peter-n91.github.io/hve-squad/ecosystem.html)             | The plugin, APM fallback, MCP server, MAF host, and which surface to use |
 | [Maintaining](https://peter-n91.github.io/hve-squad/maintaining.html)         | Dependency generation, author workflow, customization, release process   |
@@ -127,7 +146,7 @@ This repository is the source of truth and now publishes the installable plugin 
   publishes the squad as model-invocable tools, so hosts such as Copilot Studio can call it.
   Docs: [peter-n91.github.io/hve-squad-mcp](https://peter-n91.github.io/hve-squad-mcp/)
 - **[hve-squad-maf](https://github.com/Peter-N91/hve-squad-maf)** — the Microsoft Agent Framework
-  host for running Squad through MAF without changing the plugin distribution.
+  host for running HVE Squad through MAF without changing the plugin distribution.
 
 Use the plugin for VS Code, Copilot CLI, and the Copilot app. Use APM only when the customization
 must be copied into a repository, and use the MCP or MAF repository for those host models. See
@@ -363,7 +382,7 @@ PowerShell 7.4+ is required for the new coordinator helpers;
 hosts without it retain the full legacy procedure. Smaller prompts and offline
 script execution are not a claim about a particular live model's elapsed time.
 
-In VS Code Copilot Harness, use the agents dropdown to select the matching Squad agent. Send only
+In VS Code Copilot Harness, use the agents dropdown to select the matching HVE Squad agent. Send only
 the request text and arguments shown above; do not add a slash-command prefix.
 
 See [Getting Started](https://peter-n91.github.io/hve-squad/getting-started.html) for the full flow.
@@ -394,6 +413,12 @@ apm install "Peter-N91/hve-squad#vX.Y.z-pre" --target copilot
 
 That tag moves on every merge, so re-run the command to pick up the newest build. Use it
 to try a fix before it ships; pin a released version for anything you depend on.
+
+## Support
+
+For usage questions, troubleshooting, and bug reports, see [SUPPORT.md](SUPPORT.md). Support for
+this project is provided on a best-effort basis by maintainers and the community through GitHub
+Issues.
 
 ## Security
 
@@ -440,7 +465,7 @@ If these services are unavailable or blocked, the site uses system fallback
 fonts.
 
 The plugin runs through your selected Copilot host and model providers; their
-privacy and data-collection settings apply separately. Squad runtime artifacts
+privacy and data-collection settings apply separately. HVE Squad runtime artifacts
 can contain task information, and optional notification features send configured
 payloads to GitHub or a webhook. Review those destinations and avoid including
 secrets or personal information in public artifacts or notifications.

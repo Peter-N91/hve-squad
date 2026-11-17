@@ -17,6 +17,7 @@ name: Deploy Bicep
 
 on:
   workflow_dispatch:
+    # checkov:skip=CKV_GHA_7:Manual dispatch (write access required); project and environment inputs are passed via env and environment bindings, never interpolated into run commands.
     inputs:
       project:
         description: "Project folder under infra/bicep/"
@@ -34,11 +35,8 @@ on:
     paths:
       - "infra/bicep/**"
 
-# OIDC requires id-token: write. contents: read for checkout; pull-requests: write to post what-if.
-permissions:
-  id-token: write
-  contents: read
-  pull-requests: write
+# OIDC requires id-token: write and contents: read per job; top-level permissions stay empty.
+permissions: {}
 
 concurrency:
   group: deploy-bicep-${{ github.ref }}
@@ -54,11 +52,17 @@ jobs:
     name: What-if (no changes applied)
     runs-on: ubuntu-latest
     environment: ${{ github.event.inputs.environment || 'dev' }}
+    permissions:
+      contents: read
+      id-token: write
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Azure login (OIDC)
-        uses: azure/login@v2
+        uses: azure/login@7184910d9eb2b1c5e48f7073824a90609bb9b6d6 # v2.3.1
         with:
           client-id: ${{ secrets.AZURE_CLIENT_ID }}
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
@@ -81,20 +85,28 @@ jobs:
     if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     environment: ${{ github.event.inputs.environment || 'dev' }}
+    permissions:
+      contents: read
+      id-token: write
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Azure login (OIDC)
-        uses: azure/login@v2
+        uses: azure/login@7184910d9eb2b1c5e48f7073824a90609bb9b6d6 # v2.3.1
         with:
           client-id: ${{ secrets.AZURE_CLIENT_ID }}
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
       - name: Deploy
+        env:
+          RUN_NUMBER: ${{ github.run_number }}
         run: |
           az deployment group create \
             --resource-group "${RESOURCE_GROUP}" \
             --template-file "infra/bicep/${PROJECT}/main.bicep" \
             --parameters "infra/bicep/${PROJECT}/main.bicepparam" \
-            --name "deploy-${PROJECT}-${{ github.run_number }}"
+            --name "deploy-${PROJECT}-${RUN_NUMBER}"

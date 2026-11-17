@@ -63,6 +63,9 @@ jobs:
   sync-benchmarks:
     name: Refresh model catalog, rates, and benchmarks
     runs-on: ubuntu-latest
+    environment:
+      name: automation-governance
+      deployment: false
     permissions:
       contents: write
       pull-requests: write
@@ -145,16 +148,27 @@ jobs:
           Set-StrictMode -Version Latest
           $env:TIER0_BASE_SHA = (git rev-parse HEAD).Trim()
           $repoRoot = (Resolve-Path -LiteralPath '.').Path
-          $tier0Config = New-PesterConfiguration
-          $tier0Config.Run.Container = @(
-            New-PesterContainer -Path './tests/tier0/HotFileBudget.Tests.ps1' -Data @{ SourceRoot = $repoRoot }
-            New-PesterContainer -Path './tests/tier0/Performance.Tests.ps1' -Data @{ SourceRoot = $repoRoot }
-          )
-          $tier0Config.Run.PassThru = $true
-          $tier0Config.Output.Verbosity = 'Normal'
-          $tier0Res = Invoke-Pester -Configuration $tier0Config
-          if ($tier0Res.FailedCount -gt 0 -or $tier0Res.Result -ne 'Passed') {
-            throw "Tier 0 budget/contract checks failed ($($tier0Res.FailedCount) failure(s)); refusing to propose an invalid catalog or rates template."
+          $stageRoot = Join-Path ([System.IO.Path]::GetTempPath()) "sync-model-pkg-$([guid]::NewGuid().ToString('N').Substring(0, 8))"
+          try {
+            $skillDest = Join-Path $stageRoot '.agents/skills/squad'
+            New-Item -ItemType Directory -Path (Split-Path -Parent $skillDest) -Force | Out-Null
+            Copy-Item -LiteralPath (Join-Path $repoRoot 'squad-src/.github/skills/squad') -Destination $skillDest -Recurse -Force
+
+            $tier0Config = New-PesterConfiguration
+            $tier0Config.Run.Container = @(
+              New-PesterContainer -Path './tests/tier0/HotFileBudget.Tests.ps1' -Data @{ SourceRoot = $repoRoot }
+              New-PesterContainer -Path './tests/tier0/Performance.Tests.ps1' -Data @{ SourceRoot = $repoRoot }
+              New-PesterContainer -Path './tests/tier0/GetSquadDispatchBrief.Tests.ps1' -Data @{ PackageRoot = $stageRoot }
+            )
+            $tier0Config.Run.PassThru = $true
+            $tier0Config.Output.Verbosity = 'Normal'
+            $tier0Res = Invoke-Pester -Configuration $tier0Config
+            if ($tier0Res.FailedCount -gt 0 -or $tier0Res.Result -ne 'Passed') {
+              throw "Tier 0 budget/contract checks failed ($($tier0Res.FailedCount) failure(s)); refusing to propose an invalid catalog or rates template."
+            }
+          }
+          finally {
+            Remove-Item -LiteralPath $stageRoot -Recurse -Force -ErrorAction SilentlyContinue
           }
 
           $config = New-PesterConfiguration
@@ -176,11 +190,21 @@ jobs:
             throw 'Shared scoring views or policy identity differ from the generated snapshot; refusing publication.'
           }
 
+      - name: Generate GitHub App token
+        id: app_token
+        if: (steps.catalog.outputs.updated == 'true' || steps.sync.outputs.updated == 'true') && !inputs.dry_run && vars.AUTOMATION_APP_CLIENT_ID != ''
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          client-id: ${{ vars.AUTOMATION_APP_CLIENT_ID }}
+          private-key: ${{ secrets.AUTOMATION_APP_PRIVATE_KEY }}
+          permission-contents: write
+          permission-pull-requests: write
+
       - name: Propose reviewed pull request
         if: (steps.catalog.outputs.updated == 'true' || steps.sync.outputs.updated == 'true') && !inputs.dry_run
         shell: pwsh
         env:
-          GH_TOKEN: ${{ secrets.SYNC_DEPS_TOKEN || secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ steps.app_token.outputs.token || secrets.SYNC_DEPS_TOKEN || secrets.GITHUB_TOKEN }}
           CAT_RETRIEVED: ${{ steps.catalog.outputs.retrieved }}
           CAT_MODELS: ${{ steps.catalog.outputs.models_count }}
           CAT_ADDED: ${{ steps.catalog.outputs.added_models }}

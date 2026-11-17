@@ -1362,6 +1362,56 @@ function Get-SquadWatchPublicationDecision {
     }
 }
 
+function Resolve-SquadWatchSkillRoot {
+    <#
+    .SYNOPSIS
+        Resolves the repository-relative Squad skill root inside a pinned trusted checkout.
+    #>
+    [CmdletBinding()]
+    [OutputType([string])]
+    param(
+        [Parameter(Mandatory)]
+        [string]$TrustedRoot,
+
+        [Parameter(Mandatory)]
+        [string]$ExpectedSha,
+
+        [AllowNull()]
+        [string]$SkillRoot
+    )
+
+    $configured = if (-not [string]::IsNullOrWhiteSpace($SkillRoot)) {
+        $SkillRoot
+    }
+    else {
+        [string]$env:SQUAD_WATCH_SKILL_ROOT
+    }
+    if (-not [string]::IsNullOrWhiteSpace($configured)) {
+        $normalized = ($configured.Trim() -replace '\\', '/').TrimEnd('/')
+        if ([string]::IsNullOrWhiteSpace($normalized) -or
+            [System.IO.Path]::IsPathRooted($normalized) -or
+            $normalized.StartsWith('-') -or
+            $normalized -match '[:\x00-\x1f]' -or
+            $normalized -match '(^|/)\.\.?(/|$)') {
+            throw "Invalid SQUAD_WATCH_SKILL_ROOT '$configured': must be a safe repository-relative path."
+        }
+        & git -C $TrustedRoot cat-file -e "${ExpectedSha}:${normalized}/scripts/SquadWatch.psm1" 2>$null
+        if ($LASTEXITCODE -ne 0) {
+            throw "Pinned Squad Watch skill root '$normalized' is missing SquadWatch.psm1 at $ExpectedSha."
+        }
+        return $normalized
+    }
+
+    foreach ($candidate in @('.agents/skills/squad', '.github/skills/squad', 'squad-src/.github/skills/squad')) {
+        & git -C $TrustedRoot cat-file -e "${ExpectedSha}:${candidate}/scripts/SquadWatch.psm1" 2>$null
+        if ($LASTEXITCODE -eq 0) {
+            return $candidate
+        }
+    }
+
+    throw "Pinned Squad Watch skill root not found at $ExpectedSha (checked .agents/skills/squad, .github/skills/squad, squad-src/.github/skills/squad)."
+}
+
 function Assert-SquadWatchTrustedCheckout {
     <#
     .SYNOPSIS
@@ -1375,11 +1425,20 @@ function Assert-SquadWatchTrustedCheckout {
         [Parameter(Mandatory)]
         [string]$ExpectedSha,
 
-        [string[]]$RelativePaths
+        [string]$SkillRoot,
+
+        [string[]]$RelativePaths,
+
+        [string[]]$AdditionalRelativePaths
     )
 
     $scriptPath = Join-Path $PSScriptRoot 'Assert-SquadWatchTrustedCheckout.ps1'
-    & $scriptPath -TrustedRoot $TrustedRoot -ExpectedSha $ExpectedSha -RelativePaths $RelativePaths
+    & $scriptPath `
+        -TrustedRoot $TrustedRoot `
+        -ExpectedSha $ExpectedSha `
+        -SkillRoot $SkillRoot `
+        -RelativePaths $RelativePaths `
+        -AdditionalRelativePaths $AdditionalRelativePaths
 }
 
 function Add-SquadWatchTrustedExclude {

@@ -111,22 +111,18 @@ Admit settled slots before children; at/above ceiling starts nothing.
 For nontrivial work load `Get-SquadProcedure.ps1 -Name progress`.
 Progress UI: coordinator-owned, never role work or state.
 
-Dispatch each planned endpoint with native `task`/`runSubagent`, the request,
-scoped context, exact output-root argument, read-only inputs, and any admitted
-Decision Ref/round/slot. Pass non-empty `endpoint.model` exactly as the native
-`model`; omit only when empty. Never use `pricingModel` or frontmatter instead.
-If the native tool cannot accept a model override, stop and disclose it; do not
-drop the route or edit frontmatter.
-Parallelize independent waves only.
-Require final identity, tool-call count, paths, outcome and open questions.
-Review final returns; snapshot/verify write sets as needed.
+Dispatch native `task`/`runSubagent` endpoints with the request, scoped context,
+exact output root, read-only inputs and admitted refs. Forward the brief's
+`responsibleUsePath` for one worker-local policy read and `sourceDataRule`
+verbatim to every isolated worker; enforce both. Pass non-empty `endpoint.model`
+exactly; omit only when empty. Never use `pricingModel`/frontmatter. An unsupported
+override stops/discloses; never drop or edit the route. Parallelize only independent
+waves; require final identity/tool count/paths/outcome/open questions, then verify writes.
 
-Use `Complete-SquadHandoff.ps1 -RepoRoot <repo> -SquadRoot <root>
--PayloadPath <actual handoff JSON>` per `economy-scribe.md`. It runs
-`Write-SquadHandoff.ps1 -Quiet` and Section 5 proof synchronously.
-Require exit 0 and `verified: true` before progress/next task. Exit 2 is cold.
-Supply actual usage;
-`activeRoles` lists workers, not Scribe. Gate verdicts use
+Run `Complete-SquadHandoff.ps1 -RepoRoot <repo> -SquadRoot <root> -PayloadPath
+<actual handoff JSON>` synchronously per `economy-scribe.md`; it writes then proves.
+Require exit 0/`verified: true` before progress/next task; exit 2 is cold. Supply
+actual usage. `activeRoles` lists workers, not Scribe. Gate verdicts use
 `Write-SquadVerdict.ps1 -Quiet` at that root per
 `verdict-writer.md`; validate its Decision Ref first.
 

@@ -2117,6 +2117,7 @@ Export-ModuleMember -Function @(
     'ConvertTo-SquadWatchInertReview'
     'Add-SquadWatchForcedPublicationEvidence'
     'Assert-SquadWatchTrustedCheckout'
+    'Resolve-SquadWatchSkillRoot'
     'Add-SquadWatchTrustedExclude'
     'Get-SquadWatchProfileCatalog'
     'Resolve-SquadWatchCanonicalRoster'

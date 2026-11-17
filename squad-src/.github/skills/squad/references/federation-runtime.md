@@ -70,9 +70,10 @@ Put selected squads, explicit producer dependencies and proven write sets into
 `New-SquadDispatchPlan.ps1` input. Its waves are scheduling data, not admission.
 Dependencies override generic `Parallel-Eligible`. Members, not user-invocable
 coordinators, are native worker targets at their own roots.
-Forward `endpoint.requestedModelRouting` into each member's actual-role plan with
-`-ApplyModelRouting`; require `routingReady: true` before workers, including quick
-single-role/targeted-autopilot work. Root plans do not activate member models.
+Member plans pass `endpoint.requestedModelRouting` to `-ApplyModelRouting`;
+require `routingReady: true` before dispatch. Forward brief
+`responsibleUsePath`/`sourceDataRule` verbatim to isolated contexts; read policy
+once. Root models stay off.
 
 Before child dispatch take the script snapshot with
 `Get-SquadDispatchBrief.ps1 ... -AsJson -SnapshotPath <transport>`. Keep it

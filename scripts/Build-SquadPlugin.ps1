@@ -930,7 +930,7 @@ metadata:
 
 * **request** (required): The work for the squad this turn, from the user's own words.
 * **profile** (optional): The squad profile to seed when the project has no squad yet (`default`, `full`, `security`, `design`, `accessibility`, `architecture`, `azure`, `modernization`, `compliance`, `operations`, or `product`). Selects which cast the coordinator stamps out during Init Mode.
-* **pack** (optional): One or more comma-separated packs added on top of the profile (`power-platform`, `m365-copilot`, `aws`, `foundry`, `fabric`). A pack carries specialist roles, guidance, or both and never replaces the profile.
+* **pack** (optional): One or more comma-separated packs added on top of the profile (`power-platform`, `m365-copilot`, `aws`, `foundry`, `fabric`, `dotnet`, `aks`, `azure-functions`, `azure-cloud`). A pack carries specialist roles, guidance, or both and never replaces the profile.
 * **discovery** (optional): The depth of the opt-in discovery gate for this turn (`quick`, `standard`, `deep`, or `skip`). When omitted, the coordinator offers it once per topic in a `product` or `full` squad and stays silent in every other profile. Ignored on an unattended run.
 * **tier** (optional): A model-tier hint (`fast` or `default`) overriding cost-first defaults for this turn.
 * **owner** (optional): A `Member Name` from `team.md` that picks a specific named member when two rows share the same role.
@@ -1279,9 +1279,12 @@ if ($MyInvocation.InvocationName -ne '.') {
             }
 
             # Skill files cite the instruction files too (00-index.md names them by path),
-            # so they get the same rewrite the agents do — otherwise the index points at
-            # files the plugin does not ship.
-            $content = Convert-AgentCitations -FileName $subPath -Content $content
+            # so skill assets outside extensions/ get the same rewrite the agents do —
+            # otherwise workflow/template files point at files the plugin does not ship,
+            # while extension assets copy byte-identically.
+            if ($subPath -notlike 'extensions/*') {
+                $content = Convert-AgentCitations -FileName $subPath -Content $content
+            }
 
             Write-TextFile -Path (Join-Path $OutputRoot "skills/squad/$subPath") -Content $content -DryRun:$DryRun
         }
@@ -1318,6 +1321,12 @@ if ($MyInvocation.InvocationName -ne '.') {
         $hveCoreRules = @($hveCore.Components['rules'])
         $hveCoreSkills = @($hveCore.Components['skills'])
         $hveCoreExtensions = @($hveCore.Components['extensions'])
+        $squadExtensions = if (@($skillPaths | Where-Object { $_ -like 'squad-src/.github/skills/squad/extensions/*' }).Count -gt 0) {
+            @('skills/squad/extensions')
+        }
+        else {
+            @()
+        }
         $pluginManifest = [ordered]@{
             name        = 'hve-squad'
             version     = $source.PluginVersion
@@ -1335,7 +1344,7 @@ if ($MyInvocation.InvocationName -ne '.') {
             rules       = @($hveCoreRules | Sort-Object -Unique)
             skills      = @((@('skills/squad/') + $hveCoreSkills) | Sort-Object -Unique)
             hooks       = 'hooks.json'
-            extensions  = @($hveCoreExtensions | Sort-Object -Unique)
+            extensions  = @((@($squadExtensions) + $hveCoreExtensions) | Sort-Object -Unique)
         }
         $pluginManifestContent = ($pluginManifest | ConvertTo-Json -Depth 10) + "`n"
         Write-TextFile -Path (Join-Path $OutputRoot '.github/plugin/plugin.json') `

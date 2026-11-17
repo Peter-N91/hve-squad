@@ -81,7 +81,7 @@ Licensed under the MIT license.
       <p>Eleventy construit le site publié à partir des sources anglaises dans <code>docs/</code> et françaises dans <code>docs/fr/</code>, avec les mêmes noms de fichiers et des identifiants d'ancre communs. Les pages et index de recherche générés sont placés dans <code>_site/</code> ; ouvrir une page source d'origine n'affiche pas les encarts de version ni les commandes d'installation versionnées générés.</p>
       <p>Mettez à jour les deux langues dans le même changement. Conservez les noms et paramètres des commandes, et signalez les liens vers les guides externes, rapports historiques et vidéos disponibles uniquement en anglais. Le cadre publié, les traductions et l'apparence se trouvent dans <code>site/pages.njk</code>, <code>site/locales.json</code> et <code>site/assets/site.css</code>. Les onglets d'environnement appartiennent à chaque exemple de commande et partagent l'environnement sélectionné entre les exemples et les pages ; le changement de langue conserve la page courante.</p>
       <p>Les badges de préversion sont explicites ; ils ne sont pas déduits de l'historique Git. Pour un comportement du package nouvellement documenté, ajoutez <code>data-release-change="fragment-name"</code> au plus petit libellé, paragraphe, élément de liste, titre, cellule de tableau ou bloc <code>pre</code> complet concerné, dans les deux langues. Marquez un titre uniquement lorsque toute la section ou la page est nouvelle ; sinon, marquez l'option ou l'explication exacte afin que le contenu stable ne paraisse pas inédit. Ne placez jamais le marqueur dans un lien ou un bloc de code copiable et ne marquez pas les corrections uniquement documentaires. Ces pull requests utilisent <code>skip-changelog</code>. La version stable provient de la dernière publication stable de GitHub, et non de <code>apm.yml</code>. Les encarts et commandes d'installation de préversion apparaissent uniquement lorsqu'une préversion publiée, non brouillon, existe, avec le tag réel de la plus récente. Les badges de fonctionnalité exigent aussi un fragment en attente correspondant et disparaissent lorsqu'il est consommé.</p>
-      <p>Rédigez les exemples Squad exécutables dans des blocs <code>pre &gt; code</code> avec la syntaxe canonique des commandes slash. Le moteur de rendu partagé utilise cette source pour créer des requêtes sans préfixe pour VS Code, la CLI et l’application avec l’agent correspondant, en préservant les arguments et le texte multiligne. Séparez les commandes shell et les déclencheurs par commentaire GitHub ; marquez les références qui comparent explicitement les environnements avec <code>data-host-reference</code>. Sans JavaScript, les exemples canoniques d’origine restent lisibles.</p>
+      <p>Rédigez les exemples HVE Squad exécutables dans des blocs <code>pre &gt; code</code> avec la syntaxe canonique des commandes slash. Le moteur de rendu partagé utilise cette source pour créer des requêtes sans préfixe pour VS Code, la CLI et l’application avec l’agent correspondant, en préservant les arguments et le texte multiligne. Séparez les commandes shell et les déclencheurs par commentaire GitHub ; marquez les références qui comparent explicitement les environnements avec <code>data-host-reference</code>. Sans JavaScript, les exemples canoniques d’origine restent lisibles.</p>
       <pre><code>npm ci
 npm run docs:test
 npm run docs:build
@@ -127,7 +127,7 @@ apm run install-sync</code></pre>
         <li><code>apm run sync-deps</code></li>
         <li><code>apm lock</code></li>
         <li><code>apm pack</code> (facultatif)</li>
-        <li><code>apm run release-prep</code> — ou exécutez le workflow <strong>Release Prep</strong>, qui fait la même chose et pousse les changements.</li>
+        <li><code>apm run release-prep</code> — ou exécutez le workflow <strong>Release Prep</strong>, qui ouvre une pull request de publication soumise à revue et déclenche le tag et la version une fois fusionnée.</li>
       </ol>
 
       <h2>Fonctionnement de la génération des dépendances</h2>
@@ -152,8 +152,8 @@ flowchart TD
     A["Cron 06:00 UTC<br/>sync-hve-core.yml"] --> B["Get-HveCoreCastDelta.ps1<br/>pinned SHA vs hve-core main"]
     B --> C{"Does squad-src still reference<br/>a removed or un-dispatched agent?"}
 
-    C -- "no (mechanical)" --> D["Bump pin + assemble release<br/>from .changes fragments + push"]
-    D --> E["release.yml<br/>tag + GitHub Release"]
+    C -- "no (mechanical)" --> D["Bump pin + change fragment<br/>propose sync PR"]
+    D --> E["Merge PR -> preview.yml<br/>rolling pre-release"]
 
     C -- "yes (breaking)" --> F["Open issue labeled squad/auto<br/>body = full adaptation brief"]
     F --> G["squad-watch.yml<br/>fires on the label"]
@@ -174,10 +174,11 @@ flowchart TD
 
       <h3>Voie 1 &mdash; mécanique (aucun changement des agents fournis)</h3>
       <p>
-        <code>sync-hve-core.yml</code> déplace le SHA épinglé et enregistre ce déplacement dans un fragment de changement,
-        exactement comme le ferait un contributeur &mdash; la modification de la référence épinglée rejoint ainsi les contributions
-        fusionnées ce jour-là et est livrée avec la prochaine version préparée par quelqu’un, au lieu de produire
-        sa propre version chaque matin. Le workflow pousse les changements et s’arrête là. Une nouveauté par rapport au comportement antérieur : il exécute
+        <code>sync-hve-core.yml</code> déplace le SHA épinglé, valide la conformité Tier 0, enregistre ce
+        déplacement dans un fragment de changement, et ouvre ou met à jour une pull request sur
+        <code>chore/sync-hve-core</code> &mdash; la modification de la référence épinglée est ainsi relue comme toute contribution,
+        rejoint les changements fusionnés ce jour-là et est livrée avec la prochaine version préparée par quelqu’un, au lieu de produire
+        sa propre version chaque matin. Une nouveauté par rapport au comportement antérieur : il exécute
         d’abord le script de comparaison des agents comme <strong>garde-fou</strong>. Un déplacement de SHA ne peut pas réaffecter une ligne du roster,
         et le publier malgré tout distribue une squad dont les rôles ne correspondent à rien &mdash; c’est exactement
         ce qui s’est passé dans <code>0.10.11</code>.
@@ -286,13 +287,25 @@ flowchart TD
         ne sont livrés.
       </p>
       <p>
-        <code>squad-watch.workflow.yml</code> reste une ossature non prête à l’emploi. Ses autorisations d’écriture
-        larges, ses informations d’identification de checkout et <code>--allow-all-tools</code> sont une
-        exposition préexistante. La parité des déclencheurs n’est pas une parité de sécurité. Le <code>squad-watch.yml</code> actif de ce
-        dépôt est le workflow à jobs séparés. Copier l’ossature ne reproduit pas cette frontière. Le checkout du dépôt précède le checkout imbriqué <code>.squad-trusted</code>, afin qu’un checkout racine ultérieur ne supprime pas les aides épinglées. Les aides ne sont importées qu’après que <code>git show &lt;trustedBaseSha&gt;</code> a vérifié le vérificateur et les fichiers d’aide, y compris la correspondance du HEAD de <code>.squad-trusted</code> avec ce SHA.
-        Les Impactful-Action Gates et la sécurité contre l’injection sont inchangés. L’ossature ne
+        <code>squad-watch.workflow.yml</code> reproduit la frontière à jobs séparés du <code>squad-watch.yml</code>
+        actif : <code>interpret</code> en lecture seule avec <code>persist-credentials: false</code>, vérification à
+        l’exécution de l’absence de droits d’écriture sur <code>COPILOT_GITHUB_TOKEN</code> avant
+        <code>--allow-all-tools</code>, et jobs d’écriture distincts. Le checkout du dépôt précède le checkout imbriqué
+        <code>.squad-trusted</code>, afin qu’un checkout racine ultérieur ne supprime pas les aides épinglées. Les aides
+        se résolvent dans <code>.agents/skills/squad</code>, <code>.github/skills/squad</code> et
+        <code>squad-src/.github/skills/squad</code> (ou <code>SQUAD_WATCH_SKILL_ROOT</code>) et ne sont
+        importées qu’après que <code>git show &lt;trustedBaseSha&gt;</code> a vérifié le vérificateur et les
+        fichiers d’aide, y compris la correspondance du HEAD de <code>.squad-trusted</code> avec ce SHA.
+        Les Impactful-Action Gates et la sécurité contre l’injection sont inchangés. Le modèle ne
         revendique pas le rattachement actif d’une issue vers une pull request. Lorsque ce rattachement
         ne s’applique pas, le workflow actif échoue de façon fermée vers <code>pr-&lt;N&gt;</code>.
+      </p>
+      <p>
+        Dans le <code>squad-watch.yml</code> actif de ce dépôt, <code>interpret</code> exécute en outre
+        Copilot dans <code>github/gh-aw-firewall</code> (<code>awf</code>) afin que
+        <code>COPILOT_GITHUB_TOKEN</code> reste dans le sidecar <code>api-proxy</code> isolé hors du
+        conteneur de l’agent et que Squid applique une liste blanche de domaines sortants, tandis que les deux workflows nettoient et
+        filtrent les liens symboliques des diagnostics d’échec avant le téléversement d’artefacts.
       </p>
 
       <p>Exécutez vous-même le contrôle des différences à tout moment :</p>
@@ -302,10 +315,16 @@ flowchart TD
       <h3>Configuration requise</h3>
       <ul>
         <li>
-          <strong>Secrets.</strong> <code>COPILOT_GITHUB_TOKEN</code> &mdash; un PAT à granularité fine avec
-          l’autorisation <em>Copilot Requests</em> (le jeton Actions intégré ne peut pas authentifier Copilot).
-          <code>SYNC_DEPS_TOKEN</code> &mdash; utilisé pour lire <code>microsoft/hve-core</code> et pousser le
-          commit de publication.
+          <strong>Environnements, identifiants et variables.</strong> Associez les jobs Copilot sans interface à l’environnement
+          <code>copilot-headless</code> avec le secret <code>COPILOT_GITHUB_TOKEN</code> &mdash;
+          un PAT dédié à granularité fine disposant uniquement de l’autorisation <em>Copilot Requests</em> (aucun droit
+          d’écriture sur le dépôt ; le jeton Actions intégré ne peut pas authentifier Copilot) &mdash; et définissez la
+          variable de dépôt <code>SQUAD_WATCH_ENABLED</code> sur <code>true</code> lorsque les déclencheurs automatiques Watch
+          sont prêts. Associez les jobs de synchronisation et de publication à l’environnement
+          <code>automation-governance</code> avec la variable GitHub App
+          <code>AUTOMATION_APP_CLIENT_ID</code> et le secret <code>AUTOMATION_APP_PRIVATE_KEY</code> via
+          <code>actions/create-github-app-token</code> (ou le secret PAT transitoire
+          <code>SYNC_DEPS_TOKEN</code> avant le transfert d’organisation).
         </li>
         <li>
           <strong>Labels.</strong> Créez <code>squad/auto</code> et <code>squad/review</code>. Ce sont
@@ -317,15 +336,14 @@ flowchart TD
           <code>gh pr create</code> renvoie 403 et l’exécution se termine avec une branche mais sans PR.
         </li>
         <li>
-          <strong>Ensemble de règles de branche sur <code>main</code> :</strong> exige une pull request, avec
-          le rôle d’administrateur du dépôt comme seul acteur autorisé à les contourner. C’est la troisième couche d’application
+          <strong>Ensemble de règles de branche sur <code>main</code> :</strong> exige une pull request sans
+          contournement par PAT personnel nécessaire pour l’automatisation. C’est la troisième couche d’application
           de l’Impactful-Action Gate, et celle dont la configuration reste le plus souvent incomplète &mdash; une règle qui
           interdit seulement les pushs forcés et les suppressions n’empêche <em>pas</em> un push direct vers
-          <code>main</code> : elle en limite les dégâts. Le contournement réservé à l’administrateur sépare les deux
-          automatisations : <code>sync-hve-core.yml</code> pousse avec le PAT d’un mainteneur et passe
-          directement, tandis que Watch Mode pousse sous l’identité <code>github-actions[bot]</code>, qui ne détient
-          aucun rôle dans le dépôt et ne peut pas du tout atteindre <code>main</code>. Le nombre d’approbations requises est fixé
-          délibérément à zéro pour qu’un mainteneur seul ne soit pas empêché de fusionner sa propre pull request.
+          <code>main</code> : elle en limite les dégâts. Comme <code>sync-hve-core.yml</code>,
+          <code>release-prep.yml</code>, <code>sync-model-benchmarks.yml</code> et Watch Mode
+          (<code>github-actions[bot]</code>) ouvrent tous des pull requests au lieu de pousser directement vers
+          <code>main</code>, chaque changement atteint <code>main</code> via les contrôles de pull request.
         </li>
         <li>
           <strong>Modèle épinglé (déjà configuré).</strong> <code>squad-watch.yml</code> transmet
@@ -447,6 +465,16 @@ git diff --check</code></pre>
         <code>squad-src/.github/skills/squad/references/roster-catalog.md</code> (lu à la demande). Lorsque vous ajoutez un
         agent au catalogue, modifiez <code>references/roster-catalog.md</code> pour ajouter la ligne du rôle et lier le fichier
         de l’agent dans <code>.github/agents/</code>.
+      </p>
+      <p>
+        <strong>Re-vérification du catalogue externe :</strong> <code>scripts/Sync-ExternalCast.ps1</code> et
+        <code>.github/workflows/sync-external-cast.yml</code> appliquent la fenêtre de renouvellement de 60 jours avant
+        le délai maximal de 90 jours sur <code>Verified On</code> dans <code>references/roster-catalog.md</code>. Lorsqu’un
+        dépôt amont reste actif sous la même licence et que les blobs épinglés de la ressource correspondent à
+        <code>HEAD</code> sans ajout de hooks ni de manifestes MCP, le workflow ouvre une pull request
+        sur <code>chore/sync-external-cast</code> ; lorsque le contenu amont, les chemins, le frontmatter, les hooks, les manifestes MCP
+        ou les licences divergent, il ouvre un ticket d’adaptation <code>squad/auto</code> au lieu
+        d’avancer <code>Verified On</code> silencieusement.
       </p>
       <p>
         <strong>Catalogue des modèles et routage :</strong> <code>squad-src/.github/skills/squad/references/model-catalog.md</code>
@@ -589,8 +617,8 @@ git diff --check</code></pre>
         <li>Modifier <code>CHANGELOG.md</code> dans une pull request fait échouer le contrôle.</li>
         <li>Modifier la ligne <code>version:</code> dans <code>apm.yml</code> fait échouer le contrôle.</li>
         <li>
-          Déplacer la référence épinglée de <code>microsoft/hve-core</code> fait échouer le contrôle, sauf si la branche est une branche
-          d’adaptation Watch Mode (<code>squad/issue-*</code>). Modifier <code>dependencies:</code> est
+          Déplacer la référence épinglée de <code>microsoft/hve-core</code> fait échouer le contrôle, sauf si la pull request provient d’une branche
+          d’adaptation Watch Mode (<code>squad/issue-*</code>) ou de synchronisation mécanique (<code>chore/sync-hve-core</code>) du même dépôt. Modifier <code>dependencies:</code> est
           autrement autorisé &mdash; un contributeur qui ajoute un skill doit le faire, via <code>apm run sync-deps</code>,
           qui conserve par défaut la référence épinglée actuelle. Le contrôle sert de dernier garde-fou face à un
           <code>-Ref main</code> explicite qui contourne le contrôle des différences entre agents ; son message indique le SHA à transmettre
@@ -654,10 +682,11 @@ pwsh -File scripts/Invoke-ReleasePrep.ps1 -Version 1.0.0        # exact number, 
         <strong>Les publications sont déclenchées manuellement.</strong> Fusionner une pull request qui contient un fragment
         le pousse dans <code>.changes/unreleased/</code> sur <code>main</code> et ne publie rien.
         Aucune publication n’est non plus déclenchée par une minuterie. Lorsque le lot en attente est prêt, vous lancez
-        <strong>Release Prep</strong>, qui le livre en une seule version : il calcule le niveau, ajoute en tête
+        <strong>Release Prep</strong>, qui prépare une seule version : il calcule le niveau, ajoute en tête
         la section CHANGELOG avec le bloc d’installation pour les utilisateurs et la référence du lien, écrit
         <code>version:</code> dans <code>apm.yml</code>, supprime les fragments consommés, crée le commit
-        <code>chore(release): X.Y.Z</code>, déclenche <code>release.yml</code> pour créer le tag et la
+        <code>chore(release): X.Y.Z</code> sur <code>chore/release-prep</code> et ouvre une pull request soumise à revue ;
+        la fusion de cette pull request déclenche automatiquement <code>release.yml</code> pour créer le tag et la
         GitHub Release, puis retire la préversion.
       </p>
       <p>

@@ -123,6 +123,9 @@ jobs:
     name: Compare against baselines
     if: ${{ github.event_name != 'pull_request' }}
     runs-on: ubuntu-latest
+    environment:
+      name: copilot-headless
+      deployment: false
     timeout-minutes: 20
     permissions:
       contents: read
@@ -146,14 +149,14 @@ jobs:
       - name: Install pinned GitHub Copilot CLI
         if: ${{ inputs.judge-answer }}
         env:
-          COPILOT_CLI_VERSION: '1.0.78'
+          COPILOT_CLI_VERSION: '1.0.106'
         # zizmor: ignore[adhoc-packages] - the CLI ships only via npm and has no lockfile to install from; the exact pin above is the mitigation.
         run: npm install -g "@github/copilot@${COPILOT_CLI_VERSION}"
 
       - name: Compare
         shell: pwsh
         env:
-          COPILOT_GITHUB_TOKEN: ${{ secrets.copilot-token }}
+          COPILOT_GITHUB_TOKEN: ${{ secrets.copilot-token || secrets.COPILOT_GITHUB_TOKEN }}
           INPUT_THRESHOLD: ${{ inputs.threshold || '0.85' }}
           INPUT_BLOCKING: ${{ inputs.blocking }}
           INPUT_JUDGE: ${{ inputs.judge-answer }}

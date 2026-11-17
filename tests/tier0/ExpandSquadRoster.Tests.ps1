@@ -164,12 +164,21 @@ BeforeAll {
             $decisions = [ordered]@{}
             foreach ($pack in $Choices.packs) {
                 if ($pack -eq 'foundry') {
-                    foreach ($resource in @('microsoft-foundry', 'use-ai-gateway', 'azure-aigateway', 'caira', 'foundry-iq', 'appinsights-instrumentation')) {
+                    foreach ($resource in @(
+                            'microsoft-foundry', 'use-ai-gateway', 'azure-aigateway', 'caira',
+                            'foundry-iq', 'appinsights-instrumentation', 'agentops-agent',
+                            'eval-faq', 'agentops-config', 'agentops-eval', 'agentops-report',
+                            'agentops-governance', 'agt-policy-authoring')) {
                         $decisions[$resource] = 'declined'
                     }
                 }
                 elseif ($pack -eq 'fabric') {
-                    foreach ($resource in @('sqldw-cli', 'sqldb-cli', 'eventhouse-cli', 'eventstream-cli', 'spark-cli', 'dataflows-cli', 'databricks-migration', 'pipeline-migration')) {
+                    foreach ($resource in @(
+                            'semantic-model-authoring', 'powerbi-report-cli',
+                            'e2e-medallion-architecture', 'sqldw-cli', 'sqldb-cli',
+                            'eventhouse-cli', 'eventstream-cli', 'activator-cli', 'spark-cli',
+                            'dataflows-cli', 'onelake-catalog-cli', 'databricks-migration',
+                            'synapse-migration', 'hdinsight-migration', 'pipeline-migration')) {
                         $decisions[$resource] = 'declined'
                     }
                 }
@@ -189,6 +198,47 @@ BeforeAll {
                             'declarative-agents', 'typespec-create-agent', 'typespec-create-api-plugin',
                             'msgraph-sdk', 'mcp-create-declarative-agent', 'mcp-deploy-manage-agents',
                             'm365-agent-evaluator', 'ui-widget-developer')) {
+                        $decisions[$resource] = 'declined'
+                    }
+                }
+                elseif ($pack -eq 'dotnet') {
+                    foreach ($resource in @(
+                            'migrate-dotnet8-to-dotnet9', 'migrate-dotnet9-to-dotnet10',
+                            'migrate-dotnet10-to-dotnet11', 'migrate-nullable-references',
+                            'dotnet-aot-compat', 'msbuild-modernization', 'convert-to-cpm',
+                            'migrate-vstest-to-mtp', 'test-value-evidence', 'coverage-analysis',
+                            'dotnet-breaking-changes', 'exp-mock-usage-analysis',
+                            'analyzing-dotnet-performance', 'microbenchmarking',
+                            'dotnet-trace-collect', 'dotnet-webapi', 'author-component',
+                            'optimizing-ef-core-queries', 'csharp-refactoring', 'msbuild')) {
+                        $decisions[$resource] = 'declined'
+                    }
+                }
+                elseif ($pack -eq 'aks') {
+                    foreach ($resource in @(
+                            'azure-kubernetes-app-deploy', 'azure-kubernetes-automatic-readiness',
+                            'azure-kubernetes', 'aks-troubleshooting', 'aks-known-issues',
+                            'aks-gpu-inference', 'aks-cost-optimization')) {
+                        $decisions[$resource] = 'declined'
+                    }
+                }
+                elseif ($pack -eq 'azure-functions') {
+                    foreach ($resource in @(
+                            'azure-functions-common', 'azure-functions-create',
+                            'azure-functions-deploy', 'azure-functions-doctor',
+                            'azure-functions-best-practices', 'azure-functions-inventory',
+                            'azure-functions-health-status', 'azure-functions-diagnostics',
+                            'azure-functions-update', 'azure-functions-hosted-skills')) {
+                        $decisions[$resource] = 'declined'
+                    }
+                }
+                elseif ($pack -eq 'azure-cloud') {
+                    foreach ($resource in @(
+                            'cost-estimation', 'cost-optimization', 'cost-analysis',
+                            'cost-governance', 'azure-diagnostics', 'azure-compliance',
+                            'azure-resource-lookup', 'azure-resource-visualizer',
+                            'azure-reliability', 'azure-quotas', 'azure-local',
+                            'azure-local-multi-rack', 'azure-cloud-migrate', 'azure-upgrade')) {
                         $decisions[$resource] = 'declined'
                     }
                 }
@@ -1071,5 +1121,158 @@ Describe 'All-present registered pack expansion' {
         $after | Should -Match '(?m)^Packs: m365-copilot$'
         $after | Should -Match 'Squad M365 Agent Architect'
         $after | Should -Match 'Declarative Agents Architect'
+    }
+
+    It 'applies, cold-removes, and reapplies dotnet while reusing existing roles and adding zero roles on full (SRC-15)' {
+        $repo = New-RepoFixture
+        $root = Initialize-PlainSquad $repo
+        $before = [IO.File]::ReadAllText((Join-Path $root 'team.md'))
+        $before | Should -Not -Match '(?m)^\| modernizer \|'
+        $before | Should -Not -Match '(?m)^\| performance \|'
+        $plan = New-ExpansionPlanReady -Repo $repo -Choices @{
+            confirmed = $true
+            runId = 'dotnet-apply'
+            packs = @('dotnet')
+        }
+        $plan.Result.ExitCode | Should -Be 0 -Because $plan.Result.Output
+        (@($plan.Receipt.addedRoles | Sort-Object) -join ',') | Should -BeExactly 'modernizer,performance'
+        $plan.Receipt.packResources.Count | Should -Be 20
+        $plan.Receipt.packResources['migrate-dotnet10-to-dotnet11'] | Should -BeExactly 'declined'
+        $plan.Receipt.packResources['exp-mock-usage-analysis'] | Should -BeExactly 'declined'
+        (Invoke-Expansion -Repo $repo -Plan $plan).ExitCode | Should -Be 0
+        $teamPath = Join-Path $root 'team.md'
+        $applied = [IO.File]::ReadAllText($teamPath)
+        $applied | Should -Match '(?m)^Packs: dotnet$'
+        $applied | Should -Match 'Squad Modernization Planner'
+        $applied | Should -Match 'Squad Performance Planner'
+
+        $removed = $applied -replace '(?m)^Packs: dotnet\r?\n', ''
+        $removed = [regex]::Replace($removed, '(?m)^\| (modernizer|performance) \|.*\r?\n', '')
+        [IO.File]::WriteAllText($teamPath, $removed, [Text.UTF8Encoding]::new($false))
+        [IO.File]::ReadAllText($teamPath) | Should -Match '(?m)^\| developer \|'
+        [IO.File]::ReadAllText($teamPath) | Should -Match '(?m)^\| tester \|'
+        [IO.File]::ReadAllText($teamPath) | Should -Not -Match '(?m)^\| modernizer \|'
+
+        $reapplied = New-ExpansionPlanReady -Repo $repo -Choices @{
+            confirmed = $true
+            runId = 'dotnet-reapply'
+            packs = @('dotnet')
+        }
+        $reapplied.Result.ExitCode | Should -Be 0 -Because $reapplied.Result.Output
+        (@($reapplied.Receipt.addedRoles | Sort-Object) -join ',') | Should -BeExactly 'modernizer,performance'
+        (Invoke-Expansion -Repo $repo -Plan $reapplied).ExitCode | Should -Be 0
+        $after = [IO.File]::ReadAllText($teamPath)
+        $after | Should -Match '(?m)^Packs: dotnet$'
+        $after | Should -Match 'Squad Modernization Planner'
+
+        $fullRepo = New-RepoFixture
+        $fullRoot = Initialize-ProfileSquad -Repo $fullRepo -Profile 'full'
+        $fullPlan = New-ExpansionPlan -Repo $fullRepo -Root $fullRoot -Choices @{
+            confirmed = $true
+            runId = 'dotnet-full-apply'
+            packs = @('dotnet')
+        }
+        $fullPlan.Result.ExitCode | Should -Be 0 -Because $fullPlan.Result.Output
+        @($fullPlan.Receipt.addedRoles) | Should -BeNullOrEmpty
+        (Invoke-Expansion -Repo $fullRepo -Plan $fullPlan).ExitCode | Should -Be 0
+        [IO.File]::ReadAllText((Join-Path $fullRoot 'team.md')) | Should -Match '(?m)^Packs: dotnet$'
+    }
+
+    It 'applies, cold-removes, and reapplies aks and azure-functions while reusing existing roles and adding zero roles on azure and full (SRC-18)' {
+        $repo = New-RepoFixture
+        $root = Initialize-PlainSquad $repo
+        $aksPlan = New-ExpansionPlanReady -Repo $repo -Choices @{
+            confirmed = $true
+            runId = 'aks-apply'
+            packs = @('aks')
+        }
+        $aksPlan.Result.ExitCode | Should -Be 0 -Because $aksPlan.Result.Output
+        (@($aksPlan.Receipt.addedRoles | Sort-Object) -join ',') | Should -BeExactly 'azure-architect,azure-diagnose,cost-manager,modernizer'
+        $aksPlan.Receipt.packResources.Count | Should -Be 7
+        (Invoke-Expansion -Repo $repo -Plan $aksPlan).ExitCode | Should -Be 0
+        $teamPath = Join-Path $root 'team.md'
+        $applied = [IO.File]::ReadAllText($teamPath)
+        $applied | Should -Match '(?m)^Packs: aks$'
+        $applied | Should -Match 'Squad Azure Architect'
+        $applied | Should -Match 'Squad Azure Diagnose'
+
+        $removed = $applied -replace '(?m)^Packs: aks\r?\n', ''
+        $removed = [regex]::Replace($removed, '(?m)^\| (azure-architect|azure-diagnose|cost-manager|modernizer) \|.*\r?\n', '')
+        [IO.File]::WriteAllText($teamPath, $removed, [Text.UTF8Encoding]::new($false))
+        [IO.File]::ReadAllText($teamPath) | Should -Not -Match '(?m)^\| azure-diagnose \|'
+
+        $fnPlan = New-ExpansionPlanReady -Repo $repo -Choices @{
+            confirmed = $true
+            runId = 'azure-functions-apply'
+            packs = @('azure-functions')
+        }
+        $fnPlan.Result.ExitCode | Should -Be 0 -Because $fnPlan.Result.Output
+        (@($fnPlan.Receipt.addedRoles | Sort-Object) -join ',') | Should -BeExactly 'azure-diagnose,deployer,modernizer'
+        $fnPlan.Receipt.packResources.Count | Should -Be 10
+        $fnPlan.Receipt.packResources['azure-functions-update'] | Should -BeExactly 'declined'
+        $fnPlan.Receipt.packResources['azure-functions-hosted-skills'] | Should -BeExactly 'declined'
+        (Invoke-Expansion -Repo $repo -Plan $fnPlan).ExitCode | Should -Be 0
+        $afterFn = [IO.File]::ReadAllText($teamPath)
+        $afterFn | Should -Match '(?m)^Packs: azure-functions$'
+        $afterFn | Should -Match 'Squad Deployer'
+
+        $azureRepo = New-RepoFixture
+        $azureRoot = Initialize-ProfileSquad -Repo $azureRepo -Profile 'azure'
+        $azurePlan = New-ExpansionPlan -Repo $azureRepo -Root $azureRoot -Choices @{
+            confirmed = $true
+            runId = 'azure-both-packs'
+            packs = @('aks', 'azure-functions')
+        }
+        $azurePlan.Result.ExitCode | Should -Be 0 -Because $azurePlan.Result.Output
+        @($azurePlan.Receipt.addedRoles) | Should -BeNullOrEmpty
+        (Invoke-Expansion -Repo $azureRepo -Plan $azurePlan).ExitCode | Should -Be 0
+        [IO.File]::ReadAllText((Join-Path $azureRoot 'team.md')) | Should -Match '(?m)^Packs: aks, azure-functions$'
+    }
+
+    It 'applies, cold-removes, and reapplies azure-cloud while reusing existing roles and adding zero roles on azure and full (SRC-25)' {
+        $repo = New-RepoFixture
+        $root = Initialize-PlainSquad $repo
+        $cloudPlan = New-ExpansionPlanReady -Repo $repo -Choices @{
+            confirmed = $true
+            runId = 'azure-cloud-apply'
+            packs = @('azure-cloud')
+        }
+        $cloudPlan.Result.ExitCode | Should -Be 0 -Because $cloudPlan.Result.Output
+        (@($cloudPlan.Receipt.addedRoles | Sort-Object) -join ',') | Should -BeExactly 'asbuilt-author,azure-architect,azure-diagnose,cost-manager,modernizer'
+        $cloudPlan.Receipt.packResources.Count | Should -Be 14
+        $cloudPlan.Receipt.packResources['azure-local-multi-rack'] | Should -BeExactly 'declined'
+        (Invoke-Expansion -Repo $repo -Plan $cloudPlan).ExitCode | Should -Be 0
+        $teamPath = Join-Path $root 'team.md'
+        $applied = [IO.File]::ReadAllText($teamPath)
+        $applied | Should -Match '(?m)^Packs: azure-cloud$'
+        $applied | Should -Match 'Squad As-Built Author'
+        $applied | Should -Match 'Squad Cost Manager'
+
+        $removed = $applied -replace '(?m)^Packs: azure-cloud\r?\n', ''
+        $removed = [regex]::Replace($removed, '(?m)^\| (asbuilt-author|azure-architect|azure-diagnose|cost-manager|modernizer) \|.*\r?\n', '')
+        [IO.File]::WriteAllText($teamPath, $removed, [Text.UTF8Encoding]::new($false))
+        [IO.File]::ReadAllText($teamPath) | Should -Not -Match '(?m)^\| asbuilt-author \|'
+
+        $reapplied = New-ExpansionPlanReady -Repo $repo -Choices @{
+            confirmed = $true
+            runId = 'azure-cloud-reapply'
+            packs = @('azure-cloud')
+        }
+        $reapplied.Result.ExitCode | Should -Be 0 -Because $reapplied.Result.Output
+        (@($reapplied.Receipt.addedRoles | Sort-Object) -join ',') | Should -BeExactly 'asbuilt-author,azure-architect,azure-diagnose,cost-manager,modernizer'
+        (Invoke-Expansion -Repo $repo -Plan $reapplied).ExitCode | Should -Be 0
+        [IO.File]::ReadAllText($teamPath) | Should -Match '(?m)^Packs: azure-cloud$'
+
+        $azureRepo = New-RepoFixture
+        $azureRoot = Initialize-ProfileSquad -Repo $azureRepo -Profile 'azure'
+        $azurePlan = New-ExpansionPlan -Repo $azureRepo -Root $azureRoot -Choices @{
+            confirmed = $true
+            runId = 'azure-profile-azure-cloud'
+            packs = @('azure-cloud')
+        }
+        $azurePlan.Result.ExitCode | Should -Be 0 -Because $azurePlan.Result.Output
+        @($azurePlan.Receipt.addedRoles) | Should -BeNullOrEmpty
+        (Invoke-Expansion -Repo $azureRepo -Plan $azurePlan).ExitCode | Should -Be 0
+        [IO.File]::ReadAllText((Join-Path $azureRoot 'team.md')) | Should -Match '(?m)^Packs: azure-cloud$'
     }
 }

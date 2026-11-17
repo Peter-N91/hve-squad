@@ -2,38 +2,29 @@
 # Licensed under the MIT license.
 name: Release Prep
 
-# Turns the fragments collected in .changes/unreleased/ into a release.
+# Turns the fragments collected in .changes/unreleased/ into a reviewed release
+# pull request, then dispatches release.yml once that pull request merges.
 #
-#   1. Invoke-ReleasePrep.ps1 resolves the new version from the highest `bump`
-#      across all pending fragments, prepends the assembled CHANGELOG section,
-#      writes the version into apm.yml, and deletes the fragments it consumed.
-#   2. Commits and pushes to main.
-#   3. Dispatches release.yml, which cuts the tag and the GitHub Release from
-#      the section this run just wrote.
+#   1. On `workflow_dispatch`, Invoke-ReleasePrep.ps1 resolves the new version from
+#      the highest `bump` across all pending fragments, prepends the assembled
+#      CHANGELOG section, writes `version:` into apm.yml, and deletes the fragments
+#      it consumed.
+#   2. Pushes `chore/release-prep` (or `chore/release-prep-<ref>` for a hotfix
+#      branch) and opens or updates a reviewed pull request against the target
+#      branch — never pushing directly to `main`.
+#   3. When that release pull request merges (`push` on `main` or `hotfix/**`
+#      bumping `version:` in `apm.yml` and updating `CHANGELOG.md` for an untagged
+#      version), `dispatch-release` triggers `release.yml`, retires any rolling
+#      `-pre` pre-release on `main`, and refreshes published documentation.
 #
-# Triggers:
-#   workflow_dispatch (only)
-#     Releasing is a decision, not a timer. Fragments accumulate on main and stay
-#     installable through the rolling pre-release for as long as they need to,
-#     so a quick fix can ship the moment it is verified and a larger change can
-#     sit in preview until it is ready. Nothing releases until someone runs this.
-#
-# Merging does not release. A merged fragment lands in .changes/unreleased/ and
-# is picked up by preview.yml, which keeps one rolling pre-release in sync with
-# main so the pending batch can be installed and tested before this workflow
-# ships it. Whatever is pending on the released ref is what goes out, as one
-# version, at the highest `bump` any pending fragment asked for.
-#
-# The `ref` input exists because a release ships a *commit*, not a selection of
-# fragments: a tag cut from main contains everything merged into main, whatever
-# the CHANGELOG says. So when main holds work that must not ship yet, a fix is
-# released from a hotfix branch cut off the last release tag instead. See the
-# hotfix section in CONTRIBUTING.md.
-#
-# Step 3 is explicit because pushes authored by GITHUB_TOKEN do not trigger
-# other workflows. Release Prep dispatches release.yml instead of relying on a
-# push trigger. Requires the SYNC_DEPS_TOKEN PAT with Contents: read and write
-# and Actions: read and write.
+# Required configuration
+#   Environment `automation-governance` (`deployment: false`):
+#     Preferred (`microsoft/*` org governance): configure variable
+#       `AUTOMATION_APP_CLIENT_ID` and secret `AUTOMATION_APP_PRIVATE_KEY` for an
+#       org-owned GitHub App with Contents, Pull requests, and Actions read/write.
+#     Transitional fallback (pre-transfer): when `AUTOMATION_APP_CLIENT_ID` is
+#       unset, falls back to secret `SYNC_DEPS_TOKEN` (fine-grained PAT with
+#       Contents, Pull requests, and Actions read/write on this repository).
 
 on:
   workflow_dispatch:
@@ -63,11 +54,16 @@ on:
         required: false
         default: main
         type: string
+  push:
+    branches:
+      - main
+      - 'hotfix/**'
+    paths:
+      - 'CHANGELOG.md'
+      - 'apm.yml'
 
-# Shared with sync-hve-core.yml: both push a release commit to main, and two of
-# them racing means one loses to a non-fast-forward.
 concurrency:
-  group: release-main
+  group: release-prep-${{ github.event_name }}-${{ inputs.ref || github.ref_name }}
   cancel-in-progress: false
 
 permissions:
@@ -75,17 +71,60 @@ permissions:
 
 jobs:
   prepare:
-    name: Assemble changelog and bump version
+    name: Assemble changelog and propose release PR
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
+    environment:
+      name: automation-governance
+      deployment: false
     permissions:
       contents: write
-      actions: write
+      pull-requests: write
     steps:
+      - name: Validate target branch
+        id: target
+        env:
+          RAW_REF: ${{ inputs.ref || 'main' }}
+        run: |
+          REF="$RAW_REF"
+          if [[ ! "$REF" =~ ^[0-9A-Za-z][0-9A-Za-z._/-]*$ || "$REF" == *..* || "$REF" == *//* || "$REF" == */ || "$REF" == *. || "$REF" == chore/release-prep* ]]; then
+            echo "::error::Invalid target branch '$REF'."
+            exit 1
+          fi
+          if [[ "$REF" == "main" ]]; then
+            PR_BRANCH="chore/release-prep"
+          else
+            SAFE_REF=$(printf '%s' "$REF" | tr '/.' '--')
+            PR_BRANCH="chore/release-prep-${SAFE_REF}"
+          fi
+          echo "ref=$REF" >> "$GITHUB_OUTPUT"
+          echo "pr_branch=$PR_BRANCH" >> "$GITHUB_OUTPUT"
+
+      - name: Generate GitHub App token
+        id: app_token
+        if: vars.AUTOMATION_APP_CLIENT_ID != '' && !inputs.dry_run
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          client-id: ${{ vars.AUTOMATION_APP_CLIENT_ID }}
+          private-key: ${{ secrets.AUTOMATION_APP_PRIVATE_KEY }}
+          permission-contents: write
+          permission-pull-requests: write
+
+      - name: Verify automation credential
+        if: ${{ !inputs.dry_run }}
+        env:
+          AUTOMATION_TOKEN: ${{ steps.app_token.outputs.token || secrets.SYNC_DEPS_TOKEN }}
+        run: |
+          if [[ -z "$AUTOMATION_TOKEN" ]]; then
+            echo "::error::No automation token available. Configure AUTOMATION_APP_CLIENT_ID + AUTOMATION_APP_PRIVATE_KEY in the 'automation-governance' environment (or transitional secret SYNC_DEPS_TOKEN)."
+            exit 1
+          fi
+
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-          ref: ${{ inputs.ref }}
+          ref: ${{ steps.target.outputs.ref }}
 
       - name: Assemble release
         id: prep
@@ -105,48 +144,126 @@ jobs:
           if ($env:INPUT_DRY_RUN -eq 'true') { $prepArgs['DryRun'] = $true }
           ./scripts/Invoke-ReleasePrep.ps1 @prepArgs
 
-      - name: Commit and push
-        if: steps.prep.outputs.has_changes == 'true' && inputs.dry_run != true
+      - name: Propose release pull request
+        if: steps.prep.outputs.has_changes == 'true' && !inputs.dry_run
         env:
-          GITHUB_TOKEN: ${{ secrets.SYNC_DEPS_TOKEN }}
+          GH_TOKEN: ${{ steps.app_token.outputs.token || secrets.SYNC_DEPS_TOKEN }}
+          REPO: ${{ github.repository }}
           NEW_VERSION: ${{ steps.prep.outputs.version }}
-          REF: ${{ inputs.ref }}
+          REF: ${{ steps.target.outputs.ref }}
+          PR_BRANCH: ${{ steps.target.outputs.pr_branch }}
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git remote set-url origin \
-            "https://x-access-token:${GITHUB_TOKEN}@github.com/${{ github.repository }}.git"
+            "https://x-access-token:${GH_TOKEN}@github.com/${REPO}.git"
+          git checkout -B "$PR_BRANCH"
           git add apm.yml CHANGELOG.md .changes/unreleased
           if git diff --cached --quiet; then
             echo "::notice::Nothing to commit."
             exit 0
           fi
-          git commit -m "chore(release): $NEW_VERSION"
-          git push origin "HEAD:${REF}"
-          echo "::notice::Pushed release commit for v$NEW_VERSION to ${REF}"
+          TITLE="chore(release): ${NEW_VERSION}"
+          git commit -m "$TITLE"
+          git push --force origin "refs/heads/${PR_BRANCH}"
+
+          BODY_FILE="$RUNNER_TEMP/release-prep-pr-body.md"
+          cat > "$BODY_FILE" <<EOF
+          ## Summary
+
+          Assembled release \`v${NEW_VERSION}\` targeting \`${REF}\` via **Release Prep**.
+
+          - Updates \`CHANGELOG.md\` and \`apm.yml\` (\`version: ${NEW_VERSION}\`)
+          - Clears consumed fragments from \`.changes/unreleased/\`
+
+          Merging this pull request automatically triggers \`release.yml\` to tag \`v${NEW_VERSION}\` and publish the GitHub Release.
+          EOF
+          sed -i 's/^          //' "$BODY_FILE"
+
+          EXISTING_PR=$(gh pr list --repo "$REPO" --head "$PR_BRANCH" --base "$REF" --state open --json number --jq '.[0].number // empty')
+          if [[ -n "$EXISTING_PR" ]]; then
+            gh pr edit "$EXISTING_PR" --repo "$REPO" --title "$TITLE" --body-file "$BODY_FILE"
+            echo "::notice::Updated release pull request #${EXISTING_PR} for v${NEW_VERSION} (${REF})."
+          else
+            PR_URL=$(gh pr create --repo "$REPO" --base "$REF" --head "$PR_BRANCH" --title "$TITLE" --body-file "$BODY_FILE")
+            echo "::notice::Opened release pull request for v${NEW_VERSION} (${REF}): ${PR_URL}"
+          fi
+
+  dispatch-release:
+    name: Dispatch release after merge
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    environment:
+      name: automation-governance
+      deployment: false
+    permissions:
+      contents: write
+      actions: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 2
+
+      - name: Detect merged release commit
+        id: detect
+        env:
+          BRANCH: ${{ github.ref_name }}
+        run: |
+          if ! git rev-parse --verify HEAD^1 >/dev/null 2>&1; then
+            echo "should_release=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if ! git diff --name-only HEAD^1 HEAD | grep -qx 'CHANGELOG.md'; then
+            echo "should_release=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          NEW_VERSION=$(git diff -U0 HEAD^1 HEAD -- apm.yml | sed -nE 's/^\+version:[[:space:]]*([0-9]+\.[0-9]+\.[0-9]+([-.+][0-9A-Za-z.-]+)?)$/\1/p' | head -n1)
+          if [[ -z "$NEW_VERSION" ]]; then
+            echo "should_release=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          TAG="v${NEW_VERSION}"
+          if git ls-remote --tags origin "refs/tags/${TAG}" | awk '{print $2}' | grep -qx "refs/tags/${TAG}"; then
+            echo "should_release=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Tag ${TAG} already exists (hotfix merge-back or prior release) — skipping release dispatch."
+            exit 0
+          fi
+          echo "should_release=true" >> "$GITHUB_OUTPUT"
+          echo "version=${NEW_VERSION}" >> "$GITHUB_OUTPUT"
+          echo "ref=${BRANCH}" >> "$GITHUB_OUTPUT"
+
+      - name: Generate GitHub App token
+        id: app_token
+        if: steps.detect.outputs.should_release == 'true' && vars.AUTOMATION_APP_CLIENT_ID != ''
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          client-id: ${{ vars.AUTOMATION_APP_CLIENT_ID }}
+          private-key: ${{ secrets.AUTOMATION_APP_PRIVATE_KEY }}
+          permission-contents: write
+          permission-actions: write
 
       # Dispatched from main so the workflow definition is always the current one,
       # with the ref to tag passed as an input. A hotfix branch cut off an old
       # release tag carries that tag's copy of release.yml, which may predate the
       # ref input entirely.
       - name: Trigger release
-        if: steps.prep.outputs.has_changes == 'true' && inputs.dry_run != true
+        if: steps.detect.outputs.should_release == 'true'
         env:
-          GH_TOKEN: ${{ secrets.SYNC_DEPS_TOKEN }}
-          NEW_VERSION: ${{ steps.prep.outputs.version }}
-          REF: ${{ inputs.ref }}
+          GH_TOKEN: ${{ steps.app_token.outputs.token || secrets.SYNC_DEPS_TOKEN || secrets.GITHUB_TOKEN }}
+          NEW_VERSION: ${{ steps.detect.outputs.version }}
+          REF: ${{ steps.detect.outputs.ref }}
         run: |
           gh workflow run release.yml --ref main -f ref="$REF"
           echo "::notice::Triggered release.yml for v${NEW_VERSION} on ${REF}"
 
-      # The fragments this run consumed are what the pre-release was rendering,
-      # so it now describes a release that has shipped. preview.yml skips the
-      # release commit, so nobody else will clear it.
-      #
-      # A hotfix released off another branch consumed only that branch's
-      # fragments; main's batch is still pending, so its preview must survive.
+      # The fragments this release consumed are what the pre-release was rendering,
+      # so it now describes a release that has shipped. A hotfix released off
+      # another branch consumed only that branch's fragments; main's batch is still
+      # pending, so its preview must survive.
       - name: Retire the rolling pre-release
-        if: steps.prep.outputs.has_changes == 'true' && inputs.dry_run != true && inputs.ref == 'main'
+        if: steps.detect.outputs.should_release == 'true' && github.ref == 'refs/heads/main'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -158,12 +275,12 @@ jobs:
           for stale in "${found[@]}"; do
             if [[ -n "$stale" ]]; then
               echo "::notice::Retiring pre-release $stale"
-              gh release delete "$stale" --yes --cleanup-tag
+              gh release delete "$stale" --yes --cleanup-tag || true
             fi
           done
 
       - name: Refresh published documentation
-        if: always() && steps.prep.outputs.has_changes == 'true' && inputs.dry_run != true && inputs.ref == 'main'
+        if: always() && steps.detect.outputs.should_release == 'true' && github.ref == 'refs/heads/main'
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh workflow run docs.yml --repo "$GITHUB_REPOSITORY" --ref main

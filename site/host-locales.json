@@ -25,7 +25,7 @@
     "defaultRequests": {
       "/squad": "Initialize the squad.",
       "/squad-coach": "Help me choose the simplest HVE Squad setup for my goal.",
-      "/squad-doctor": "Check the Squad installation after this upgrade.",
+      "/squad-doctor": "Check the HVE Squad installation after this upgrade.",
       "/squad-connector-builder": "Help me scaffold a Squad Connector.",
       "/squad-external-agent-builder": "Help me create or adapt an external agent for HVE Squad.",
       "/squad-federation": "Initialize the federation.",
@@ -59,7 +59,7 @@
     "defaultRequests": {
       "/squad": "Initialise la squad.",
       "/squad-coach": "Aide-moi à choisir la configuration HVE Squad la plus simple pour mon objectif.",
-      "/squad-doctor": "Vérifie l'installation Squad après cette mise à jour.",
+      "/squad-doctor": "Vérifie l'installation HVE Squad après cette mise à jour.",
       "/squad-connector-builder": "Aide-moi à préparer un Squad Connector.",
       "/squad-external-agent-builder": "Aide-moi à créer ou adapter un agent externe pour HVE Squad.",
       "/squad-federation": "Initialise la fédération.",

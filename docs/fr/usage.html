@@ -51,8 +51,9 @@ Licensed under the MIT license.
   <main class="content">
     <div class="container">
       <h2>Appeler le coordinateur</h2>
-      <p>Adressez vos demandes dans la conversation de l'agent Squad correspondant, et non dans le terminal de votre système. Dans Copilot Harness pour VS Code, choisissez l'agent dans le sélecteur d'agents ; la CLI et l'application utilisent aussi l'agent correspondant. Consultez <a href="getting-started.html">Bien démarrer</a> pour l'installation et votre première conversation.</p>
+      <p>Adressez vos demandes dans la conversation de l'agent HVE Squad correspondant, et non dans le terminal de votre système. Dans Copilot Harness pour VS Code, choisissez l'agent dans le sélecteur d'agents ; la CLI et l'application utilisent aussi l'agent correspondant. Consultez <a href="getting-started.html">Bien démarrer</a> pour l'installation et votre première conversation.</p>
       <p>Pas encore d'initialisation, ou vous hésitez sur la marche à suivre ? Sélectionnez l'agent de conseil <strong>Squad Coach</strong> dans VS Code, la CLI ou l'application. Il lit le code et la documentation actuels et fournit un parcours détaillé prêt à copier sans modifier l'état. Consultez <a href="getting-started.html#chat-with-the-squad-coach">le guide du Coach</a>.</p>
+      <p data-release-change="20261114-hve-squad-studio-canvas">Vous préférez un espace visuel sans syntaxe de commande ? Dans l'application GitHub Copilot, ouvrez <a href="getting-started.html#use-hve-squad-studio">HVE Squad Studio</a> (<code>hve-squad-studio</code>) depuis le panneau Canvas ou envoyez <code>Open HVE Squad Studio</code> dans la conversation pour choisir un objectif, déposer des documents et consulter vos livrables via des cartes guidées.</p>
       <pre><code>/squad request="add input validation to the login form"</code></pre>
 
       <div class="callout">
@@ -72,7 +73,7 @@ Licensed under the MIT license.
           propose un profil recommandé avant toute création.
         </li>
         <li>
-          <code>pack=power-platform</code>, <code>pack=m365-copilot</code>, <code>pack=aws</code>, <code data-release-change="20261008-foundry-agentic-pack">pack=foundry</code> ou <code>pack=fabric</code>
+          <code>pack=power-platform</code>, <code>pack=m365-copilot</code>, <code>pack=aws</code>, <code data-release-change="20261008-foundry-agentic-pack">pack=foundry</code>, <code>pack=fabric</code>, <code>pack=dotnet</code>, <code>pack=aks</code>, <code>pack=azure-functions</code> ou <code>pack=azure-cloud</code>
           &mdash; ajoute au profil
           les rôles spécialisés, les consignes ciblées ou les deux pour un domaine technologique. Un pack ne remplace jamais le profil, et vous
           pouvez en appliquer plusieurs, séparés par des virgules. Voir <em>Packs</em> ci-dessous.
@@ -700,9 +701,9 @@ flowchart TD
           les PR plutôt que cette option.)
         </li>
         <li>
-          <strong>Installez le workflow de déclenchement.</strong> Copiez le workflow de référence
+          <strong>Installez le workflow de déclenchement.</strong> Copiez le workflow de référence à jobs séparés
           <code>.github/skills/squad/squad-watch.workflow.yml</code> vers
-          <code>.github/workflows/squad-watch.yml</code>, examinez-le comme une ossature non prête à l'emploi, et ne créez le commit qu'après avoir isolé les informations d'identification et la frontière d'application. Copier le fichier n'est pas une parité de sécurité.
+          <code>.github/workflows/squad-watch.yml</code>, vérifiez ses déclencheurs et le chemin de compétence pour votre dépôt, puis validez-le délibérément.
         </li>
         <li>
           <strong>Installez le dispositif de surveillance des approbations</strong> (si ce n'est pas déjà fait) pour que les approbations
@@ -951,8 +952,8 @@ dispatch-9911223344         # a free-form manual dispatch (workflow run id)</cod
         avant de nettoyer le runtime. En cas d'échec, il autorise une seule correction des enregistrements
         dans la même session d'agent, puis vérifie à nouveau. Le staging final répète les contrôles avec
         un validateur protégé par empreinte. Un travail inachevé bloque toujours la publication ; cette
-        reprise ne relance pas le pipeline. L'ossature consommateur documente le format des statuts,
-        mais ne fournit pas ce mécanisme de reprise.
+        reprise ne relance pas le pipeline. Le workflow actif comme le modèle de référence livré
+        intègrent ce précontrôle et cette reprise unique.
       </p>
       <p>
         L'exécution sélectionne exactement un profil canonique, et les packs éventuels, à partir de la demande. Elle consigne
@@ -1045,18 +1046,30 @@ dispatch-9911223344         # a free-form manual dispatch (workflow run id)</cod
         publiés : les noms de domaine nus, les e-mails, les mentions, les liens, les mots-clés de clôture et le HTML sont neutralisés, et la longueur est plafonnée.
       </p>
 
-      <h3>Le workflow livré est une ossature</h3>
+      <h3>Le workflow de référence livré</h3>
       <p>
-        <code>squad-watch.workflow.yml</code> est une ossature qui n'est pas prête à l'emploi. La copier ne revendique pas
-        une parité de sécurité avec un workflow à jobs séparés. Ses autorisations d'écriture larges, ses informations d'identification de checkout
-        et <code>--allow-all-tools</code> sont une exposition préexistante. Ce changement n'élargit pas l'autorisation des acteurs.
-        Isolez les informations d'identification, les aides de confiance et la frontière d'application avant d'activer
-        la copie. Le checkout du dépôt précède le checkout imbriqué <code>.squad-trusted</code>, afin qu'un checkout racine
-        ultérieur ne supprime pas les aides épinglées. Les aides ne sont importées qu'après que
+        <code>squad-watch.workflow.yml</code> livre le même modèle de privilèges à jobs séparés :
+        <code>interpret</code> en lecture seule avec <code>persist-credentials: false</code>, vérification à l'exécution
+        de l'absence de droits d'écriture sur <code>COPILOT_GITHUB_TOKEN</code> avant <code>--allow-all-tools</code>,
+        et jobs d'écriture distincts pour l'application du patch, les commentaires de revue et les escalades. Vérifiez
+        les déclencheurs, les protections de branche et l'expiration du jeton avant de valider une copie. Le checkout
+        du dépôt précède le checkout imbriqué <code>.squad-trusted</code>, afin qu'un checkout racine ultérieur ne
+        supprime pas les aides épinglées. Les aides se résolvent dans
+        <code>.agents/skills/squad</code> et <code>.github/skills/squad</code> (ou
+        <code>SQUAD_WATCH_SKILL_ROOT</code>) et ne sont importées qu'après que
         <code>git show &lt;trustedBaseSha&gt;</code> a vérifié le vérificateur et les fichiers d'aide,
         y compris la correspondance du HEAD de <code>.squad-trusted</code> avec ce SHA.
-        L'ossature ne revendique pas le rattachement actif d'une issue vers une pull request. Lorsque ce
+        Le modèle ne revendique pas le rattachement actif d'une issue vers une pull request. Lorsque ce
         rattachement ne s'applique pas, le workflow actif échoue de façon fermée vers <code>pr-&lt;N&gt;</code>.
+      </p>
+      <p>
+        Comme le modèle consommateur évite par défaut d'exiger des privilèges de conteneur,
+        <code>--allow-all-tools</code> partage l'environnement de processus du runner avec
+        <code>COPILOT_GITHUB_TOKEN</code> (portée limitée au quota Copilot, aucun droit d'écriture sur le dépôt) : définissez une expiration courte
+        du jeton, nettoyez les journaux de diagnostic téléversés (intégré), ou encapsulez l'étape dans
+        <code>github/gh-aw-firewall</code> (<code>awf</code>) comme le
+        <code>squad-watch.yml</code> actif de ce dépôt afin qu'un sidecar <code>api-proxy</code> isolé détienne le jeton hors
+        du conteneur de l'agent.
       </p>
 
       <h2>Retrouver les détails d'un point de contrôle</h2>
@@ -1436,8 +1449,8 @@ flowchart TD
       </p>
       <p data-release-change="20261104-official-source-packs">
         Un pack enregistré dont les rôles sont déjà dans l'équipe met à jour <code>Packs:</code> et
-        ajoute une décision. Il n'invente pas de membre. <code>full +foundry</code> et
-        <code>full +fabric</code> sont ce cas. Un pack déjà listé dans <code>Packs:</code> est rejeté. Retirer un pack arrête la sélection de la squad et la
+        ajoute une décision. Il n'invente pas de membre. <code>full +foundry</code>,
+        <code>full +fabric</code>, <code>full +dotnet</code>, <code>full +aks</code> et <code>full +azure-functions</code> sont ce cas. Un pack déjà listé dans <code>Packs:</code> est rejeté. Retirer un pack arrête la sélection de la squad et la
         transmission des consignes. Cela ne désinstalle pas une compétence que l'hôte peut encore voir,
         et ne la cache pas.
       </p>
@@ -1454,8 +1467,9 @@ flowchart TD
         correspondant, la Primary reste retenue. Une alternative absente est escaladée, pas remplacée.
         <code>foundry</code> inclut le <code>data-scientist</code> existant afin que Foundry IQ ait un
         propriétaire dans <code>azure +foundry</code>. <code>azure-deployment-preflight</code> reste la
-        compétence de validation avant déploiement. <code>azure-validate</code> et
-        <code>azure-enterprise-infra-planner</code> ne sont ni enregistrés ni bloqués.
+        compétence de validation avant déploiement tandis que <code>azure-prepare</code>,
+        <code>azure-validate</code>, <code>azure-deploy</code> et
+        <code>azure-enterprise-infra-planner</code> restent bloqués.
       </p>
       <p data-release-change="20261104-official-source-packs">
         N'installez que la compétence utile. Le catalogue fait foi. Ces commandes granulaires couvrent
@@ -1474,18 +1488,78 @@ apm install microsoft/Agents/agent-plugins/agents-for-net/skills/agents-sdk-dotn
 apm install microsoft/Agents/agent-plugins/agents-for-js/skills/agents-sdk-typescript-otel#a5caf57ff062369c410aa5542039b50ce1a9c7e8 --target copilot
 apm install microsoft/Agents/agent-plugins/agents-for-python/skills/agents-sdk-python-otel#a5caf57ff062369c410aa5542039b50ce1a9c7e8 --target copilot
 apm install microsoft/Agents/agent-plugins/agents-sdk-common/skills/agents-sdk-provision#a5caf57ff062369c410aa5542039b50ce1a9c7e8 --target copilot
-apm install microsoft/skills/.github/plugins/foundry-iq-skills/skills/foundry-iq/SKILL.md --target copilot
-apm install microsoft/azure-skills/skills/appinsights-instrumentation/SKILL.md --target copilot
-copilot plugin marketplace add Azure/aigateway
-copilot plugin install ai-gateway@azure
-apm install microsoft/skills-for-fabric/skills/sqldw-cli --target copilot
-apm install microsoft/skills-for-fabric/skills/sqldb-cli --target copilot
-apm install microsoft/skills-for-fabric/skills/eventhouse-cli --target copilot
-apm install microsoft/skills-for-fabric/skills/eventstream-cli --target copilot
-apm install microsoft/skills-for-fabric/skills/spark-cli --target copilot
-apm install microsoft/skills-for-fabric/skills/dataflows-cli --target copilot
-apm install microsoft/skills-for-fabric/skills/databricks-migration --target copilot
-apm install microsoft/skills-for-fabric/skills/pipeline-migration --target copilot</code></pre>
+apm install microsoft/azure-skills/skills/microsoft-foundry#968f7bfaa01672e782dae2c6bab4fb9505ae047a --target copilot
+apm install Azure/aigateway/skills/use-ai-gateway#8cba384de61ab9d438450a79f44fba0528c56d0a --target copilot
+apm install microsoft/azure-skills/skills/azure-aigateway#968f7bfaa01672e782dae2c6bab4fb9505ae047a --target copilot
+apm install microsoft/CAIRA/skills/caira#a36d043784b0ac899764212178df6d0f9e9b85d9 --target copilot
+apm install microsoft/azure-skills/skills/appinsights-instrumentation#968f7bfaa01672e782dae2c6bab4fb9505ae047a --target copilot
+apm install Azure/agentops/plugins/agentops/skills/agentops-agent#0f2173d03a63c73b9cf4a4d9978136cc5dec2909 --target copilot
+apm install microsoft/eval-guide/skills/eval-faq#7a22a8957ced79a35fd7b4634fd5b5eac56c308e --target copilot
+apm install Azure/agentops/plugins/agentops/skills/agentops-config#0f2173d03a63c73b9cf4a4d9978136cc5dec2909 --target copilot
+apm install Azure/agentops/plugins/agentops/skills/agentops-eval#0f2173d03a63c73b9cf4a4d9978136cc5dec2909 --target copilot
+apm install Azure/agentops/plugins/agentops/skills/agentops-report#0f2173d03a63c73b9cf4a4d9978136cc5dec2909 --target copilot
+apm install microsoft/agent-governance-toolkit/docs/skills/agt-policy-authoring#678070abf15417acdb4a5dd826667a5d83f54d67 --target copilot
+apm install microsoft/skills-for-fabric/skills/semantic-model-authoring#e31422e7d1045ef3a0906df9ff5991f2338af010 --target copilot
+apm install microsoft/skills-for-fabric/skills/powerbi-report-cli#e31422e7d1045ef3a0906df9ff5991f2338af010 --target copilot
+apm install microsoft/skills-for-fabric/skills/e2e-medallion-architecture#e31422e7d1045ef3a0906df9ff5991f2338af010 --target copilot
+apm install microsoft/skills-for-fabric/skills/sqldw-cli#e31422e7d1045ef3a0906df9ff5991f2338af010 --target copilot
+apm install microsoft/skills-for-fabric/skills/sqldb-cli#e31422e7d1045ef3a0906df9ff5991f2338af010 --target copilot
+apm install microsoft/skills-for-fabric/skills/eventhouse-cli#e31422e7d1045ef3a0906df9ff5991f2338af010 --target copilot
+apm install microsoft/skills-for-fabric/skills/eventstream-cli#e31422e7d1045ef3a0906df9ff5991f2338af010 --target copilot
+apm install microsoft/skills-for-fabric/skills/activator-cli#e31422e7d1045ef3a0906df9ff5991f2338af010 --target copilot
+apm install microsoft/skills-for-fabric/skills/spark-cli#e31422e7d1045ef3a0906df9ff5991f2338af010 --target copilot
+apm install microsoft/skills-for-fabric/skills/dataflows-cli#e31422e7d1045ef3a0906df9ff5991f2338af010 --target copilot
+apm install microsoft/skills-for-fabric/skills/onelake-catalog-cli#e31422e7d1045ef3a0906df9ff5991f2338af010 --target copilot
+apm install microsoft/skills-for-fabric/skills/databricks-migration#e31422e7d1045ef3a0906df9ff5991f2338af010 --target copilot
+apm install microsoft/skills-for-fabric/skills/synapse-migration#e31422e7d1045ef3a0906df9ff5991f2338af010 --target copilot
+apm install microsoft/skills-for-fabric/skills/hdinsight-migration#e31422e7d1045ef3a0906df9ff5991f2338af010 --target copilot
+apm install microsoft/skills-for-fabric/skills/pipeline-migration#e31422e7d1045ef3a0906df9ff5991f2338af010 --target copilot
+apm install dotnet/skills/plugins/dotnet-upgrade/skills/migrate-dotnet8-to-dotnet9#2877c712edc20643b72f64e2983b168e6661d607 --target copilot
+apm install dotnet/skills/plugins/dotnet-upgrade/skills/migrate-dotnet9-to-dotnet10#2877c712edc20643b72f64e2983b168e6661d607 --target copilot
+apm install dotnet/skills/plugins/dotnet-upgrade/skills/migrate-nullable-references#2877c712edc20643b72f64e2983b168e6661d607 --target copilot
+apm install dotnet/skills/plugins/dotnet-upgrade/skills/dotnet-aot-compat#2877c712edc20643b72f64e2983b168e6661d607 --target copilot
+apm install dotnet/skills/plugins/dotnet-msbuild/skills/msbuild-modernization#2877c712edc20643b72f64e2983b168e6661d607 --target copilot
+apm install dotnet/skills/plugins/dotnet-nuget/skills/convert-to-cpm#2877c712edc20643b72f64e2983b168e6661d607 --target copilot
+apm install dotnet/skills/plugins/dotnet-test-migration/skills/migrate-vstest-to-mtp#2877c712edc20643b72f64e2983b168e6661d607 --target copilot
+apm install dotnet/skills/plugins/dotnet-test/skills/test-value-evidence#2877c712edc20643b72f64e2983b168e6661d607 --target copilot
+apm install dotnet/skills/plugins/dotnet-test/skills/coverage-analysis#2877c712edc20643b72f64e2983b168e6661d607 --target copilot
+apm install dotnet/skills/plugins/dotnet/skills/dotnet-breaking-changes#2877c712edc20643b72f64e2983b168e6661d607 --target copilot
+apm install dotnet/skills/plugins/dotnet-diag/skills/analyzing-dotnet-performance#2877c712edc20643b72f64e2983b168e6661d607 --target copilot
+apm install dotnet/skills/plugins/dotnet-diag/skills/microbenchmarking#2877c712edc20643b72f64e2983b168e6661d607 --target copilot
+apm install dotnet/skills/plugins/dotnet-diag/skills/dotnet-trace-collect#2877c712edc20643b72f64e2983b168e6661d607 --target copilot
+apm install dotnet/skills/plugins/dotnet-aspnetcore/skills/dotnet-webapi#2877c712edc20643b72f64e2983b168e6661d607 --target copilot
+apm install dotnet/skills/plugins/dotnet-blazor/skills/author-component#2877c712edc20643b72f64e2983b168e6661d607 --target copilot
+apm install dotnet/skills/plugins/dotnet-data/skills/optimizing-ef-core-queries#2877c712edc20643b72f64e2983b168e6661d607 --target copilot
+apm install dotnet/skills/plugins/dotnet/skills/csharp-refactoring#2877c712edc20643b72f64e2983b168e6661d607 --target copilot
+apm install dotnet/skills/plugins/dotnet/skills/msbuild#2877c712edc20643b72f64e2983b168e6661d607 --target copilot
+apm install microsoft/azure-skills/skills/azure-kubernetes/azure-kubernetes-app-deploy#968f7bfaa01672e782dae2c6bab4fb9505ae047a --target copilot
+apm install microsoft/azure-skills/skills/azure-kubernetes/azure-kubernetes-automatic-readiness#968f7bfaa01672e782dae2c6bab4fb9505ae047a --target copilot
+apm install microsoft/azure-skills/skills/azure-kubernetes#968f7bfaa01672e782dae2c6bab4fb9505ae047a --target copilot
+apm install microsoft/azure-skills/.github/plugins/aks-skills/skills/aks-troubleshooting#968f7bfaa01672e782dae2c6bab4fb9505ae047a --target copilot
+apm install microsoft/azure-skills/.github/plugins/aks-skills/skills/aks-known-issues#968f7bfaa01672e782dae2c6bab4fb9505ae047a --target copilot
+apm install microsoft/azure-skills/.github/plugins/aks-skills/skills/aks-gpu-inference#968f7bfaa01672e782dae2c6bab4fb9505ae047a --target copilot
+apm install microsoft/azure-skills/.github/plugins/aks-skills/skills/aks-cost-optimization#968f7bfaa01672e782dae2c6bab4fb9505ae047a --target copilot
+apm install Azure/azure-functions-skills/.github/plugins/azure-functions-skills/skills/azure-functions-common#34e17220ff073b29a0be5bd541f32d287118165f --target copilot
+apm install Azure/azure-functions-skills/.github/plugins/azure-functions-skills/skills/azure-functions-create#34e17220ff073b29a0be5bd541f32d287118165f --target copilot
+apm install Azure/azure-functions-skills/.github/plugins/azure-functions-skills/skills/azure-functions-deploy#34e17220ff073b29a0be5bd541f32d287118165f --target copilot
+apm install Azure/azure-functions-skills/.github/plugins/azure-functions-skills/skills/azure-functions-doctor#34e17220ff073b29a0be5bd541f32d287118165f --target copilot
+apm install Azure/azure-functions-skills/.github/plugins/azure-functions-skills/skills/azure-functions-best-practices#34e17220ff073b29a0be5bd541f32d287118165f --target copilot
+apm install Azure/azure-functions-skills/.github/plugins/azure-functions-skills/skills/azure-functions-inventory#34e17220ff073b29a0be5bd541f32d287118165f --target copilot
+apm install Azure/azure-functions-skills/.github/plugins/azure-functions-skills/skills/azure-functions-health-status#34e17220ff073b29a0be5bd541f32d287118165f --target copilot
+apm install Azure/azure-functions-skills/.github/plugins/azure-functions-skills/skills/azure-functions-diagnostics#34e17220ff073b29a0be5bd541f32d287118165f --target copilot
+apm install microsoft/azure-skills/.github/plugins/azure-cost/skills/cost-estimation#65922d293cba61a40d5edf61a9eb4b6b0e799788 --target copilot
+apm install microsoft/azure-skills/.github/plugins/azure-cost/skills/cost-optimization#65922d293cba61a40d5edf61a9eb4b6b0e799788 --target copilot
+apm install microsoft/azure-skills/.github/plugins/azure-cost/skills/cost-analysis#65922d293cba61a40d5edf61a9eb4b6b0e799788 --target copilot
+apm install microsoft/azure-skills/.github/plugins/azure-cost/skills/cost-governance#65922d293cba61a40d5edf61a9eb4b6b0e799788 --target copilot
+apm install microsoft/azure-skills/skills/azure-diagnostics#65922d293cba61a40d5edf61a9eb4b6b0e799788 --target copilot
+apm install microsoft/azure-skills/skills/azure-compliance#65922d293cba61a40d5edf61a9eb4b6b0e799788 --target copilot
+apm install microsoft/azure-skills/skills/azure-resource-lookup#65922d293cba61a40d5edf61a9eb4b6b0e799788 --target copilot
+apm install microsoft/azure-skills/skills/azure-resource-visualizer#65922d293cba61a40d5edf61a9eb4b6b0e799788 --target copilot
+apm install microsoft/azure-skills/skills/azure-reliability#65922d293cba61a40d5edf61a9eb4b6b0e799788 --target copilot
+apm install microsoft/azure-skills/skills/azure-quotas#65922d293cba61a40d5edf61a9eb4b6b0e799788 --target copilot
+apm install microsoft/azure-skills/.github/plugins/azure-local-skills/skills/azure-local#65922d293cba61a40d5edf61a9eb4b6b0e799788 --target copilot
+apm install microsoft/azure-skills/skills/azure-cloud-migrate#65922d293cba61a40d5edf61a9eb4b6b0e799788 --target copilot
+apm install microsoft/azure-skills/skills/azure-upgrade#65922d293cba61a40d5edf61a9eb4b6b0e799788 --target copilot</code></pre>
       <table>
         <thead>
           <tr><th>Pack</th><th>Ajoute</th><th>À utiliser lorsque</th></tr>
@@ -1494,8 +1568,12 @@ apm install microsoft/skills-for-fabric/skills/pipeline-migration --target copil
           <tr><td><code>power-platform</code></td><td>pp-architect, pp-connector</td><td>Le projet repose sur Power Platform &mdash; Power Apps, Power Automate, Dataverse, Power Pages ou Copilot Studio</td></tr>
           <tr><td><code>m365-copilot</code></td><td>m365-agent-architect, m365-agent-integrator</td><td>Le projet repose sur Microsoft 365 Copilot &mdash; agents déclaratifs, définitions d'agents TypeSpec, plugins API, agents s'appuyant sur MCP ou intégration Microsoft Graph</td></tr>
           <tr><td><code>aws</code></td><td>aws-architect, aws-diagnose</td><td>Le projet repose sur AWS &mdash; Lambda et serverless, ECS ou EKS, CDK, SAM, CloudFormation, Organizations et zones d'atterrissage, ou une charge de travail AWS en service à diagnostiquer</td></tr>
-          <tr><td data-release-change="20261008-foundry-agentic-pack"><code>foundry</code></td><td>architect, azure-architect, deployer, prompt-engineer, security, rai, observability, cost-manager, data-scientist</td><td>Planification, revue indépendante et déploiement contrôlé d'un projet Microsoft Foundry avec un blueprint en sept blocs, des preuves de source et une vérification SDK/API ; réutilise les rôles existants, dont data-scientist pour Foundry IQ</td></tr>
-          <tr><td><code>fabric</code></td><td>data-scientist</td><td>Entrepôt Fabric, Eventhouse, Spark ou Dataflow au-delà de l'introduction Lakehouse. Activation explicite ; réutilise <code>data-scientist</code> et n'ajoute aucun rôle. Les commandes d'installation restent dans le catalogue. Rien n'est installé automatiquement.</td></tr>
+          <tr><td data-release-change="20261008-foundry-agentic-pack"><code>foundry</code></td><td>architect, azure-architect, deployer, prompt-engineer, security, rai, observability, cost-manager, data-scientist</td><td>Planification d'un projet Microsoft Foundry, préparation AgentOps d'évaluation et de gouvernance, rédaction de politiques AGT, revue indépendante et déploiement contrôlé avec un blueprint en sept blocs, des preuves de source et une vérification SDK/API ; réutilise les rôles existants, dont data-scientist pour Foundry IQ</td></tr>
+          <tr><td><code>fabric</code></td><td>data-scientist</td><td>Modèles sémantiques Power BI, DAX et rapports PBIR/PBIP, ainsi que Medallion Lakehouse, Warehouse, base SQL, Eventhouse, Eventstream, Activator, Spark, Dataflow Gen2, catalogue OneLake et migrations Databricks/Synapse/HDInsight/pipelines sur Microsoft Fabric. Activation explicite ; réutilise <code>data-scientist</code> et n'ajoute aucun rôle.</td></tr>
+          <tr><td><code>dotnet</code></td><td>modernizer, tester, performance, developer</td><td>Le projet repose sur .NET &mdash; mises à niveau de SDK et de framework cible, gestion centralisée des paquets NuGet, migration du runner VSTest vers MTP, revue des tests .NET et des changements cassants, planification des performances sur les chemins critiques et BenchmarkDotNet, ou implémentation EF Core, ASP.NET Core Web API, Blazor, C# et MSBuild. Activation explicite ; réutilise <code>modernizer</code>, <code>tester</code>, <code>performance</code> et <code>developer</code> sans ajouter de rôle.</td></tr>
+          <tr><td><code>aks</code></td><td>azure-architect, developer, modernizer, azure-diagnose, cost-manager</td><td>Le projet s'exécute sur Azure Kubernetes Service (AKS) &mdash; conception de cluster Day-0, conteneurisation d'applications et manifestes conformes aux Deployment Safeguards, préparation à AKS Automatic, diagnostic Day-2 d'incidents de cluster ou GPU, ou optimisation des coûts AKS orientée Kubernetes. Activation explicite ; réutilise <code>azure-architect</code>, <code>developer</code>, <code>modernizer</code>, <code>azure-diagnose</code> et <code>cost-manager</code> sans ajouter de rôle.</td></tr>
+          <tr><td><code>azure-functions</code></td><td>developer, deployer, tester, azure-diagnose, modernizer</td><td>Le projet repose sur Azure Functions &mdash; création de projets v4 et de déclencheurs, vérification contrôlée de déploiement Functions, audit d'espace de travail local et de bonnes pratiques, inventaire/santé/diagnostic de Function App, migration vers le worker isolé ou Hosted Skills. Activation explicite ; réutilise <code>developer</code>, <code>deployer</code>, <code>tester</code>, <code>azure-diagnose</code> et <code>modernizer</code> sans ajouter de rôle.</td></tr>
+          <tr><td><code>azure-cloud</code></td><td>cost-manager, azure-diagnose, asbuilt-author, azure-architect, modernizer</td><td>Estimation, optimisation, analyse des dépenses et pics FinOps Azure et garde-fous budgétaires, diagnostics de production inter-services, conformité azqr et Key Vault, inventaire Resource Graph et visualisation Mermaid, posture de fiabilité PaaS et quotas régionaux, Azure Local standard ou multi-baies en préversion, ou migration inter-clouds et mise à niveau de plans/SKU/SDK Azure. Activation explicite ; réutilise <code>cost-manager</code>, <code>azure-diagnose</code>, <code>asbuilt-author</code>, <code>azure-architect</code> et <code>modernizer</code> sans ajouter de rôle.</td></tr>
         </tbody>
       </table>
       <p>
@@ -1506,17 +1584,17 @@ apm install microsoft/skills-for-fabric/skills/pipeline-migration --target copil
         connecteur : rien n'atteint donc un environnement actif sans votre intervention.
       </p>
       <section data-release-change="20261111-power-platform-pack-parity">
-        <h3 id="power-platform-setup">Configurer Power Platform avec l'aide de Squad</h3>
+        <h3 id="power-platform-setup">Configurer Power Platform avec l'aide de HVE Squad</h3>
         <p>
           Vous n'avez pas à choisir vous-même les noms techniques des paquets. Ouvrez votre projet
-          dans l'hôte où Squad est installé, puis envoyez cette demande. Un pack ajoute de
+          dans l'hôte où HVE Squad est installé, puis envoyez cette demande. Un pack ajoute de
           l'expertise ; ce n'est ni une licence Power Platform, ni un environnement connecté, ni une
           autorisation de publier.
         </p>
         <pre><code>/squad request="Set up the Power Platform pack. Explain what will be installed, ask before installing, and leave the Copilot Studio preview out unless I approve it." pack=power-platform</code></pre>
         <ol>
           <li>
-            <strong>Choisissez le nécessaire.</strong> Squad présente les ressources absentes et
+            <strong>Choisissez le nécessaire.</strong> HVE Squad présente les ressources absentes et
             explique les travaux qu'elles permettent. L'ensemble officiel existant comprend six
             compétences pour la planification Power Pages, la création d'applications pilotées par
             modèle, Dataverse et les outils/widgets MCP. Vous pouvez choisir les six, un sous-ensemble,
@@ -1524,25 +1602,25 @@ apm install microsoft/skills-for-fabric/skills/pipeline-migration --target copil
             Studio en préversion sont un choix séparé, pas une condition d'utilisation du pack.
           </li>
           <li>
-            <strong>Approuvez l'installation, pas l'accès au tenant.</strong> Squad utilise
+            <strong>Approuvez l'installation, pas l'accès au tenant.</strong> HVE Squad utilise
             <code>Install-SquadPackResources.ps1</code> pour vos choix approuvés. Vous devez voir les
             commandes réelles et un reçu, pas seulement un conseil d'installation. Un reçu
             <code>PASS</code> confirme l'installation des fichiers ;
             <code>PLANNED</code> signifie que rien n'a été installé. Si une commande échoue ou si vous
-            annulez, Squad garde la ressource absente et explique le remède. Il n'installe pas de CLI,
+            annulez, HVE Squad garde la ressource absente et explique le remède. Il n'installe pas de CLI,
             ne configure pas MCP, ne vous connecte pas et n'accorde aucun consentement à votre place.
           </li>
           <li>
             <strong>Conservez les fichiers de support.</strong> Certaines compétences existantes ont
-            besoin de fichiers partagés hors de leur dossier. Squad les vérifie avant utilisation.
+            besoin de fichiers partagés hors de leur dossier. HVE Squad les vérifie avant utilisation.
             Avec votre accord séparé, il peut récupérer les sources exactes ci-dessous dans le
             dossier ignoré des dépendances, sans activer leurs hooks, leur configuration MCP ou leurs
-            compétences supplémentaires. Si un dossier existe déjà, Squad vérifie sa révision et son
+            compétences supplémentaires. Si un dossier existe déjà, HVE Squad vérifie sa révision et son
             contenu au lieu de l'écraser.
           </li>
           <li>
             <strong>Rechargez et vérifiez.</strong> Rechargez ou redémarrez l'hôte après installation,
-            puis demandez une nouvelle vérification à Squad. Squad utilise la liste réelle de
+            puis demandez une nouvelle vérification à HVE Squad. HVE Squad utilise la liste réelle de
             compétences de l'hôte, pas le reçu seul, et enregistre chaque ressource comme
             <code>available</code> ou <code>declined</code>. Des fichiers de support ou prérequis
             absents bloquent toujours le travail concerné. Une compétence visible ne prouve pas la
@@ -1558,12 +1636,12 @@ apm install microsoft/skills-for-fabric/skills/pipeline-migration --target copil
         </ol>
         <h4>Solution manuelle : compétences existantes et fichiers de support</h4>
         <p>
-          Si Squad ne peut pas exécuter l'installateur, ouvrez un terminal à la racine de votre
+          Si HVE Squad ne peut pas exécuter l'installateur, ouvrez un terminal à la racine de votre
           projet. Vérifiez la présence de Git, APM et Node.js ; la préversion exige Node.js 18 ou
           ultérieur. Si un outil manque, arrêtez-vous et suivez le
           <a href="getting-started.html">guide de démarrage</a> et les
           <a href="https://nodejs.org/en/download">instructions d'installation de Node.js</a>, ou
-          demandez à Squad les étapes pour votre système. N'approuvez pas d'installations globales
+          demandez à HVE Squad les étapes pour votre système. N'approuvez pas d'installations globales
           sans rapport. Parmi les six commandes PP épinglées plus haut, exécutez seulement celles
           que vous avez choisies. Elles ciblent des dossiers : ajouter <code>/SKILL.md</code> rend
           ces commandes APM invalides.
@@ -1572,7 +1650,7 @@ apm install microsoft/skills-for-fabric/skills/pipeline-migration --target copil
           Pour les fichiers partagés, exécutez les commandes suivantes seulement si les dossiers de
           destination n'existent pas. Ce sont des sources, pas des plugins activés. La révision
           affichée par chaque dernière commande doit correspondre à l'identifiant complet du commit
-          précédent. Indiquez à Squad ces racines de support :
+          précédent. Indiquez à HVE Squad ces racines de support :
           <code>plugins/power-pages/</code>, <code>plugins/model-apps/</code>,
           <code>plugins/mcp-apps/</code> et <code>.github/plugins/dataverse/</code>
           dans les sources correspondantes. Ne commitez pas ces dossiers.
@@ -1592,7 +1670,7 @@ git -C apm_modules/.squad-pack-support/dataverse-skills-27e6f6a rev-parse HEAD</
           connaissances ou d'importer une compétence vérifiée dans un <em>agent à boucle agentique
           existant, déjà cloné localement</em>. Ces chartes PP ne prennent pas en charge les rubriques
           des agents Standard et ne migrent aucun agent. Si vous ignorez votre modèle d'agent,
-          laissez d'abord Squad vérifier l'espace de travail local.
+          laissez d'abord HVE Squad vérifier l'espace de travail local.
         </p>
         <p>
           L'approbation installe l'ensemble épinglé : huit compétences, quatre agents, deux commandes
@@ -1600,12 +1678,12 @@ git -C apm_modules/.squad-pack-support/dataverse-skills-27e6f6a rev-parse HEAD</
           <code>add-knowledge</code> et <code>add-skill</code> sont admis pour PP. Le hook peut exécuter
           <code>npm install</code> pour <code>keytar</code> et
           <code>@azure/msal-node-extensions</code> et écrire un index local de chemins. Cette
-          configuration au démarrage exige un accord séparé ; Squad n'exécute pas le hook pour
+          configuration au démarrage exige un accord séparé ; HVE Squad n'exécute pas le hook pour
           terminer l'installation. Si l'hôte ne peut pas empêcher l'exécution d'un hook non approuvé,
           refusez cette préversion sur cet hôte. Le pack PP ordinaire reste utilisable.
         </p>
         <p>
-          Après votre choix explicite de la préversion et la décision sur ce hook, Squad peut
+          Après votre choix explicite de la préversion et la décision sur ce hook, HVE Squad peut
           installer l'ensemble une seule fois via l'une des deux ressources en préversion. Pour
           une installation manuelle, exécutez cette unique commande épinglée, puis rechargez l'hôte.
           N'installez pas les deux fichiers de compétence isolés : il manquerait les schémas et
@@ -1614,7 +1692,7 @@ git -C apm_modules/.squad-pack-support/dataverse-skills-27e6f6a rev-parse HEAD</
         <pre><code>apm install microsoft/copilot-studio-plugin#4014ae689d1228d86cb3aaab938b1e66f8e2e10d --target copilot</code></pre>
         <p>
           La racine complète de support est <code>apm_modules/microsoft/copilot-studio-plugin/</code>.
-          Squad y vérifie <code>reference/knowledge-schema.md</code>,
+          HVE Squad y vérifie <code>reference/knowledge-schema.md</code>,
           <code>reference/skill-schema.md</code> et <code>scripts/add-skill.js</code> ; la configuration
           au démarrage n'est pas nécessaire pour les trouver. La création locale n'autorise ni une
           pré-vérification SharePoint/OneDrive authentifiée, ni l'exécution d'une compétence importée,
@@ -1624,9 +1702,9 @@ git -C apm_modules/.squad-pack-support/dataverse-skills-27e6f6a rev-parse HEAD</
         <p>
           Les trois compétences communautaires sont aussi proposées dans la vérification PP. Les
           deux agents communautaires restent des alternatives facultatives pour les travaux plus
-          larges ; Squad propose leur remède d'installation exact si nécessaire, sans substituer
+          larges ; HVE Squad propose leur remède d'installation exact si nécessaire, sans substituer
           silencieusement une charte locale. Pour une installation manuelle, exécutez seulement les
-          lignes utiles ci-dessous, puis rechargez et demandez une vérification à Squad. Les outils
+          lignes utiles ci-dessous, puis rechargez et demandez une vérification à HVE Squad. Les outils
           de validation supplémentaires des connecteurs sont des prérequis, pas installés ici.
         </p>
         <pre><code>apm install github/awesome-copilot/skills/power-platform-architect#9db369d00f121542e1c99fd9b6cd6f707bade765 --target copilot
@@ -1638,9 +1716,9 @@ apm install github/awesome-copilot/agents/power-platform-mcp-integration-expert.
         <table>
           <thead><tr><th>Ce que vous voyez</th><th>Que faire</th></tr></thead>
           <tbody>
-            <tr><td>Installateur ou prérequis introuvable</td><td>Gardez la ressource absente. Demandez à Squad les étapes pour l'outil nommé ; n'approuvez pas une installation globale sans limite.</td></tr>
+            <tr><td>Installateur ou prérequis introuvable</td><td>Gardez la ressource absente. Demandez à HVE Squad les étapes pour l'outil nommé ; n'approuvez pas une installation globale sans limite.</td></tr>
             <tr><td>Installé sur disque, mais absent de la liste de l'hôte</td><td>Rechargez l'hôte, rouvrez le même projet et relancez la vérification PP. Ne déclarez pas la ressource disponible à partir du reçu seul.</td></tr>
-            <tr><td>Script/schéma partagé absent ou mauvaise révision</td><td>Demandez à Squad de vérifier la racine de support et la révision épinglée ci-dessus. N'inventez pas de schéma et ne lancez pas un autre script de configuration.</td></tr>
+            <tr><td>Script/schéma partagé absent ou mauvaise révision</td><td>Demandez à HVE Squad de vérifier la racine de support et la révision épinglée ci-dessus. N'inventez pas de schéma et ne lancez pas un autre script de configuration.</td></tr>
             <tr><td>Windows signale un chemin trop long</td><td>Utilisez l'option locale au dépôt des commandes de sources ci-dessus, ou un nouveau chemin de support plus court. N'écrasez pas un clone partiel et ne changez pas la configuration Git globale.</td></tr>
             <tr><td>Espace de travail Standard ou demande de connexion/consentement</td><td>Arrêtez le travail en préversion. Conservez le modèle existant et utilisez l'alternative pour travaux plus larges ou une configuration approuvée séparément.</td></tr>
             <tr><td>Installation annulée ou en échec</td><td>Conservez les fichiers terminés, signalez l'étape en échec et choisissez une nouvelle tentative approuvée ou refusez la ressource. Le reste du pack peut rester actif.</td></tr>
@@ -1656,10 +1734,10 @@ apm install github/awesome-copilot/agents/power-platform-mcp-integration-expert.
         aucun ne provisionne d'agent ni ne le publie dans votre tenant.
       </p>
       <section data-release-change="20261112-m365-pack-parity">
-        <h3 id="m365-copilot-setup">Configurer Microsoft 365 Copilot avec l'aide de Squad</h3>
+        <h3 id="m365-copilot-setup">Configurer Microsoft 365 Copilot avec l'aide de HVE Squad</h3>
         <p>
           Vous n'avez pas à retenir les chemins des dépôts ni les options des paquets. Ouvrez votre
-          projet dans l'hôte où Squad est installé, puis envoyez cette demande. Appliquer le pack
+          projet dans l'hôte où HVE Squad est installé, puis envoyez cette demande. Appliquer le pack
           ajoute les rôles spécialistes et les consignes M365 ; ce n'est ni une licence Microsoft 365
           Copilot, ni un consentement administrateur du tenant, ni une autorisation de provisionner
           ou de publier un agent.
@@ -1667,7 +1745,7 @@ apm install github/awesome-copilot/agents/power-platform-mcp-integration-expert.
         <pre><code>/squad request="Set up the Microsoft 365 Copilot pack. Explain what will be installed, ask before installing, and leave the Work IQ preview skills out unless I approve them." pack=m365-copilot</code></pre>
         <ol>
           <li>
-            <strong>Choisissez le nécessaire.</strong> Squad liste les ressources M365 absentes et
+            <strong>Choisissez le nécessaire.</strong> HVE Squad liste les ressources M365 absentes et
             explique les travaux que chacune active. L'ensemble officiel principal comprend six
             compétences Microsoft 365 Agents SDK pour la préparation à la production .NET, les
             manifestes d'application Teams, OpenTelemetry en .NET/TypeScript/Python et les plans de
@@ -1677,24 +1755,24 @@ apm install github/awesome-copilot/agents/power-platform-mcp-integration-expert.
             constituent un choix séparé, pas une condition d'utilisation du pack.
           </li>
           <li>
-            <strong>Approuvez l'installation, pas les actions sur le tenant.</strong> Squad utilise
+            <strong>Approuvez l'installation, pas les actions sur le tenant.</strong> HVE Squad utilise
             <code>Install-SquadPackResources.ps1</code> pour vos choix approuvés et affiche les
             commandes exactes ainsi que le reçu. Un reçu <code>PASS</code> confirme l'installation
             des compétences ; <code>PLANNED</code> signifie qu'aucun fichier n'a été écrit. En cas
-            d'échec ou d'annulation, Squad garde la ressource absente et indique comment réessayer.
+            d'échec ou d'annulation, HVE Squad garde la ressource absente et indique comment réessayer.
             Il n'installe jamais de CLI ni d'extension VS Code, n'accepte aucun CLUF, ne vous
             connecte pas et n'accorde aucun consentement de tenant.
           </li>
           <li>
             <strong>Vérifiez les fichiers de support inclus.</strong> Chaque dossier M365 épinglé
             embarque ses propres fichiers <code>references/</code> et <code>assets/</code> sans hook
-            ni serveur MCP. Squad vérifie la présence de ces fichiers avant d'annoncer qu'un travail
+            ni serveur MCP. HVE Squad vérifie la présence de ces fichiers avant d'annoncer qu'un travail
             est prêt, et demande un accord séparé si vous souhaitez une copie hors ligne de
             l'exemple de référence.
           </li>
           <li>
             <strong>Rechargez et vérifiez.</strong> Rechargez ou redémarrez l'hôte après
-            l'installation, puis demandez à Squad de relancer le contrôle préalable M365. Squad
+            l'installation, puis demandez à HVE Squad de relancer le contrôle préalable M365. HVE Squad
             inspecte la liste réelle des compétences de l'hôte plutôt que le seul reçu
             d'installation, et consigne chaque ressource comme <code>available</code> ou
             <code>declined</code>. Une compétence visible ne prouve pas l'accès au tenant.
@@ -1709,12 +1787,12 @@ apm install github/awesome-copilot/agents/power-platform-mcp-integration-expert.
         </ol>
         <h4>Solution manuelle : compétences Agents SDK principales et copie de référence facultative</h4>
         <p>
-          Si Squad ne peut pas lancer l'installateur, ouvrez un terminal à la racine du projet et
+          Si HVE Squad ne peut pas lancer l'installateur, ouvrez un terminal à la racine du projet et
           vérifiez la présence de Git et d'APM ; les flux TypeScript et les CLI en préversion
           nécessitent aussi Node.js lorsque vous les exécutez vous-même. Si un prérequis manque,
           arrêtez-vous et suivez le <a href="getting-started.html">guide de démarrage</a> ainsi que
           les <a href="https://nodejs.org/en/download">instructions d'installation de Node.js</a>, ou
-          demandez à Squad les étapes adaptées à votre système. Exécutez uniquement celles des six
+          demandez à HVE Squad les étapes adaptées à votre système. Exécutez uniquement celles des six
           commandes Agents SDK épinglées plus haut qui correspondent à votre stack. Elles ciblent
           des dossiers de compétences : ajouter <code>/SKILL.md</code> fait échouer la validation APM.
         </p>
@@ -1738,10 +1816,10 @@ git -C apm_modules/.squad-pack-support/agents-a5caf57 rev-parse HEAD</code></pre
           des widgets React + Fluent UI et les manifestes de plugin MCP associés.
         </p>
         <p>
-          Squad installe uniquement ces deux dossiers autonomes épinglés, jamais le plugin complet.
+          HVE Squad installe uniquement ces deux dossiers autonomes épinglés, jamais le plugin complet.
           L'exécution de la CLI en préversion publique <code>@microsoft/m365-copilot-eval</code>
           (avec acceptation humaine du CLUF, consentement administrateur WorkIQ, agent déployé et
-          juge Azure OpenAI) reste une action manuelle distincte hors de Squad. En amont,
+          juge Azure OpenAI) reste une action manuelle distincte hors de HVE Squad. En amont,
           <code>declarative-agent-developer</code>, <code>wiqd</code> et
           <code>setup-sso-ui-widget</code> restent exclus afin qu'une CLI expérimentale ou un script
           Entra en direct ne bloque jamais la rédaction locale d'agents déclaratifs.
@@ -1749,7 +1827,7 @@ git -C apm_modules/.squad-pack-support/agents-a5caf57 rev-parse HEAD</code></pre
         <pre><code>apm install microsoft/work-iq/plugins/microsoft-365-agents-toolkit/skills/m365-agent-evaluator#72c889460aa7ac6d7ed3bb02179332abafc963d4 --target copilot
 apm install microsoft/work-iq/plugins/microsoft-365-agents-toolkit/skills/ui-widget-developer#72c889460aa7ac6d7ed3bb02179332abafc963d4 --target copilot</code></pre>
         <p>
-          Après rechargement, Squad vérifie dans <code>.agents/skills/m365-agent-evaluator/</code>
+          Après rechargement, HVE Squad vérifie dans <code>.agents/skills/m365-agent-evaluator/</code>
           et <code>.agents/skills/ui-widget-developer/</code> la présence de
           <code>references/prompts-schema.json</code> et
           <code>references/copilot-widget-protocol.md</code>. L'approbation autorise uniquement la
@@ -1762,7 +1840,7 @@ apm install microsoft/work-iq/plugins/microsoft-365-agents-toolkit/skills/ui-wid
           et MCP sont proposées dans le contrôle préalable M365 car aucune compétence officielle ne
           les remplace. Les deux agents communautaires restent des alternatives facultatives pour
           l'architecture d'agents déclaratifs, TypeSpec, les plugins API, Graph SDK et l'intégration
-          MCP plus large ; Squad fournit leurs commandes épinglées exactes au besoin et ne substitue
+          MCP plus large ; HVE Squad fournit leurs commandes épinglées exactes au besoin et ne substitue
           jamais silencieusement une charte locale.
         </p>
         <pre><code>apm install github/awesome-copilot/skills/declarative-agents#9db369d00f121542e1c99fd9b6cd6f707bade765 --target copilot
@@ -1777,12 +1855,510 @@ apm install github/awesome-copilot/agents/mcp-m365-agent-expert.agent.md#9db369d
         <table>
           <thead><tr><th>Ce que vous voyez</th><th>Que faire</th></tr></thead>
           <tbody>
-            <tr><td>Installateur ou prérequis introuvable</td><td>Gardez la ressource absente. Demandez à Squad les étapes pour l'outil nommé ; n'approuvez pas d'installations globales sans rapport.</td></tr>
+            <tr><td>Installateur ou prérequis introuvable</td><td>Gardez la ressource absente. Demandez à HVE Squad les étapes pour l'outil nommé ; n'approuvez pas d'installations globales sans rapport.</td></tr>
             <tr><td>Installé sur disque, mais absent de la liste de l'hôte</td><td>Rechargez l'hôte, rouvrez le même projet et relancez le contrôle préalable M365. Ne marquez pas la ressource disponible à partir du seul reçu.</td></tr>
             <tr><td>Schéma/référence absent ou mauvaise révision de source</td><td>Vérifiez le dossier installé ou l'identifiant de commit détaché ci-dessus avant de réessayer ; ne devinez aucun schéma de mémoire.</td></tr>
             <tr><td>Windows signale un chemin trop long</td><td>Utilisez l'option locale au dépôt dans les commandes de copie ci-dessus, ou choisissez un chemin de support plus court sans modifier la configuration Git globale.</td></tr>
-            <tr><td>Une CLI en préversion demande un CLUF, un tunnel ou une connexion au tenant</td><td>Arrêtez l'étape du worker. Gardez Squad sur les fichiers locaux et n'exécutez vous-même l'évaluation en direct, le tunnel ou le provisionnement que si vous le décidez.</td></tr>
+            <tr><td>Une CLI en préversion demande un CLUF, un tunnel ou une connexion au tenant</td><td>Arrêtez l'étape du worker. Gardez HVE Squad sur les fichiers locaux et n'exécutez vous-même l'évaluation en direct, le tunnel ou le provisionnement que si vous le décidez.</td></tr>
             <tr><td>Installation annulée ou en échec</td><td>Conservez les fichiers déjà écrits, signalez la ressource en échec et réessayez ou refusez cette entrée. Le reste du pack M365 demeure utilisable.</td></tr>
+          </tbody>
+        </table>
+      </section>
+      <section data-release-change="20261112-dotnet-pack">
+        <h3 id="dotnet-setup">Configurer .NET avec l'aide de HVE Squad</h3>
+        <p>
+          Vous n'avez pas à retenir les chemins des plugins ni les identifiants de commit. Ouvrez
+          votre projet dans l'hôte où HVE Squad est installé, puis envoyez cette demande. Appliquer le
+          pack ajoute les consignes .NET et les rôles spécialistes manquants de la distribution
+          existante ; cela n'installe ni SDK .NET, ni charge de travail, ni outil global, ni serveur
+          MCP sur votre poste.
+        </p>
+        <pre><code>/squad request="Set up the .NET pack. Explain what will be installed, ask before installing, and leave the .NET 11 and experimental mock-analysis preview skills out unless I approve them." pack=dotnet</code></pre>
+        <ol>
+          <li>
+            <strong>Choisissez le nécessaire.</strong> HVE Squad liste les ressources .NET absentes et
+            explique les travaux que chacune permet. L'ensemble officiel principal compte dix-huit
+            compétences couvrant les mises à niveau .NET 8 vers 9 et 9 vers 10, les types référence
+            nullables, la compatibilité Native AOT, la modernisation MSBuild héritée, la gestion
+            centralisée des paquets NuGet, la migration VSTest vers MTP, la revue des tests modifiés
+            et des rapports de couverture fournis, la compatibilité d'API publique, les performances
+            sur les chemins critiques, la planification BenchmarkDotNet et de traces, ASP.NET Core
+            Web API, Blazor, EF Core, le refactoring C# et la rédaction MSBuild. Vous pouvez
+            installer les dix-huit, choisir un sous-ensemble ou continuer sans elles. Les deux
+            compétences en préversion sont un choix distinct, pas une condition d'utilisation du pack.
+          </li>
+          <li>
+            <strong>Approuvez l'installation des compétences, pas de la chaîne d'outils.</strong>
+            HVE Squad exécute <code>Install-SquadPackResources.ps1</code> pour vos sélections approuvées
+            et affiche les commandes exactes ainsi que le reçu. Un reçu <code>PASS</code> confirme
+            l'installation des compétences ; <code>PLANNED</code> signifie que rien n'a été écrit. Si
+            une commande échoue ou si vous annulez, HVE Squad garde la ressource absente et explique
+            comment réessayer. Il n'installe jamais de SDK .NET, de charge de travail, d'outil global
+            ni de serveur MCP.
+          </li>
+          <li>
+            <strong>Vérifiez les fichiers de support inclus.</strong> Chaque installation de dossier
+            .NET épinglée embarque ses propres dossiers <code>references/</code> et
+            <code>scripts/</code> sans hooks, configuration LSP ni serveurs MCP. HVE Squad vérifie ces
+            fichiers inclus avant de déclarer un travail prêt, et demande séparément votre accord si
+            vous souhaitez une copie de référence hors ligne.
+          </li>
+          <li>
+            <strong>Rechargez et vérifiez.</strong> Rechargez ou redémarrez l'hôte après
+            installation, puis demandez à HVE Squad de relancer le contrôle préalable .NET. HVE Squad vérifie
+            l'inventaire réel des compétences de l'hôte plutôt que de se fier au seul reçu, et
+            enregistre chaque ressource comme <code>available</code> ou <code>declined</code>. Une
+            compétence visible ne prouve pas que le SDK .NET cible ou l'outil de diagnostic est
+            installé.
+          </li>
+          <li>
+            <strong>Gardez la planification et la revue en lecture seule.</strong> Dans HVE Squad,
+            <code>modernizer</code>, <code>tester</code> et <code>performance</code> restent en
+            lecture seule sur votre code source et vos tests, tandis que <code>developer</code>
+            n'applique des modifications qu'à partir d'un plan approuvé et n'exécute jamais
+            automatiquement <code>git commit</code> ni de migrations de base de données.
+          </li>
+        </ol>
+        <h4>Solution manuelle : compétences .NET principales et copie de référence facultative</h4>
+        <p>
+          Si HVE Squad ne peut pas exécuter l'installateur, ouvrez un terminal à la racine de votre
+          projet et vérifiez que Git, APM et le SDK .NET cible de votre projet sont disponibles. Si
+          un prérequis manque, arrêtez-vous et suivez le
+          <a href="getting-started.html">guide de démarrage</a> et les
+          <a href="https://dotnet.microsoft.com/download">instructions de téléchargement du SDK .NET</a>,
+          ou demandez à HVE Squad les étapes pour votre système d'exploitation. Exécutez uniquement les
+          dix-huit commandes .NET épinglées du bloc ci-dessus qui correspondent à votre besoin. Elles
+          ciblent des dossiers de compétences : ajouter <code>/SKILL.md</code> fait échouer la
+          validation APM.
+        </p>
+        <p>
+          Chaque dossier de compétence installé contient déjà ses références et scripts requis. Si
+          vous souhaitez aussi une copie hors ligne en lecture seule du dépôt amont (par exemple sous
+          <code>plugins/dotnet/</code>) sans activer de plugins, de configurations LSP ni de serveurs
+          MCP, exécutez les commandes ci-dessous uniquement lorsque le dossier de destination n'existe
+          pas et vérifiez que l'identifiant du commit affiché correspond.
+        </p>
+        <pre><code>git clone --config core.longpaths=true --filter=blob:none --no-checkout https://github.com/dotnet/skills.git apm_modules/.squad-pack-support/dotnet-skills-2877c71
+git -C apm_modules/.squad-pack-support/dotnet-skills-2877c71 checkout --detach 2877c712edc20643b72f64e2983b168e6661d607
+git -C apm_modules/.squad-pack-support/dotnet-skills-2877c71 rev-parse HEAD</code></pre>
+        <h4>Compétences facultatives en préversion pour .NET 11 et l'audit expérimental de mocks</h4>
+        <p>
+          Deux compétences en préversion issues du
+          <a href="https://github.com/dotnet/skills">dépôt officiel dotnet/skills</a>
+          peuvent être approuvées séparément : <code>migrate-dotnet10-to-dotnet11</code> pour
+          planifier les migrations de .NET 10 vers .NET 11 en préversion, et
+          <code>exp-mock-usage-analysis</code> pour auditer en lecture seule le flux de contrôle des
+          mocks Moq, NSubstitute et FakeItEasy.
+        </p>
+        <p>
+          HVE Squad n'installe que ces deux dossiers autonomes épinglés, jamais un plugin entier. HVE Squad
+          n'exécute jamais <code>dotnet-install</code>, <code>setup-local-sdk</code> ni le serveur en
+          préversion <code>Microsoft.AITools.BinlogMcp</code> ; installer un SDK .NET en préversion
+          reste un choix manuel séparé hors de HVE Squad.
+        </p>
+        <pre><code>apm install dotnet/skills/plugins/dotnet-upgrade/skills/migrate-dotnet10-to-dotnet11#2877c712edc20643b72f64e2983b168e6661d607 --target copilot
+apm install dotnet/skills/plugins/dotnet-experimental/skills/exp-mock-usage-analysis#2877c712edc20643b72f64e2983b168e6661d607 --target copilot</code></pre>
+        <p>
+          Après rechargement, HVE Squad vérifie <code>.agents/skills/migrate-dotnet10-to-dotnet11/</code>
+          pour <code>references/core-libraries-dotnet10to11.md</code> et contrôle
+          <code>.agents/skills/exp-mock-usage-analysis/SKILL.md</code>. L'approbation autorise la
+          planification et la revue en lecture seule (ainsi que les modifications d'un plan approuvé),
+          jamais l'installation d'un SDK ni des commits automatiques.
+        </p>
+        <h4>Si la configuration s'arrête</h4>
+        <table>
+          <thead><tr><th>Ce que vous voyez</th><th>Que faire</th></tr></thead>
+          <tbody>
+            <tr><td>Installateur ou version du SDK .NET introuvable</td><td>Gardez la ressource ou l'étape de validation bloquée. Installez vous-même le SDK .NET requis si vous souhaitez valider la compilation ; n'approuvez pas de scripts automatiques d'installation de SDK depuis un worker.</td></tr>
+            <tr><td>Installé sur disque, mais absent de la liste de l'hôte</td><td>Rechargez l'hôte, rouvrez le même projet et relancez le contrôle préalable .NET. Ne marquez pas la ressource disponible à partir du seul reçu.</td></tr>
+            <tr><td>Référence ou script inclus absent, ou mauvaise révision source</td><td>Vérifiez le dossier de compétence installé ou l'identifiant de commit détaché ci-dessus avant de réessayer ; ne devinez aucun changement cassant de mémoire.</td></tr>
+            <tr><td>Windows signale un chemin trop long</td><td>Utilisez l'option locale au dépôt dans les commandes de copie ci-dessus, ou choisissez un chemin de support plus court sans modifier la configuration Git globale.</td></tr>
+            <tr><td>Une étape de couverture ou de diagnostic demande de lancer des tests, benchmarks ou profileurs en direct</td><td>Gardez Reviewer et Performance Planner en lecture seule sur les artefacts fournis ; lancez vous-même la collecte de couverture, BenchmarkDotNet ou la capture de traces, ou déléguez une tâche developer/QA approuvée.</td></tr>
+            <tr><td>Installation annulée ou en échec</td><td>Conservez les fichiers déjà écrits, signalez la ressource en échec et réessayez ou refusez cette entrée. Le reste du pack .NET demeure utilisable.</td></tr>
+          </tbody>
+        </table>
+      </section>
+      <section data-release-change="20261113-aks-and-azure-functions-packs">
+        <h3 id="aks-setup">Configurer AKS avec l'aide de HVE Squad</h3>
+        <p>
+          Ouvrez votre projet dans l'hôte où HVE Squad est installé et envoyez cette demande. Appliquer
+          <code>aks</code> ajoute les consignes AKS et les rôles spécialistes manquants de la
+          distribution existante ; cela n'installe jamais <code>az</code>, <code>kubectl</code>,
+          <code>jq</code>, d'identifiants de cluster, de hooks de télémétrie ni de serveurs MCP.
+        </p>
+        <pre><code>/squad request="Set up the AKS pack. Explain what will be installed and ask before installing." pack=aks</code></pre>
+        <ol>
+          <li>
+            <strong>Choisissez le nécessaire.</strong> HVE Squad liste les sept compétences AKS
+            officielles issues de
+            <a href="https://github.com/microsoft/azure-skills">microsoft/azure-skills</a> :
+            conception de cluster Day-0 (<code>azure-kubernetes</code>), conteneurisation
+            d'applications et manifestes Deployment Safeguards
+            (<code>azure-kubernetes-app-deploy</code>), préparation à AKS Automatic
+            (<code>azure-kubernetes-automatic-readiness</code>), dépannage Day-2 de cluster
+            (<code>aks-troubleshooting</code>), recherche de signatures d'erreur exactes
+            (<code>aks-known-issues</code>), diagnostic d'inférence GPU et KAITO
+            (<code>aks-gpu-inference</code>) et analyse des coûts orientée Kubernetes
+            (<code>aks-cost-optimization</code>). Installez les sept, choisissez un sous-ensemble ou
+            continuez sans elles.
+          </li>
+          <li>
+            <strong>Approuvez uniquement les dossiers de compétences.</strong> HVE Squad exécute
+            <code>Install-SquadPackResources.ps1</code> pour vos choix approuvés et exige un reçu
+            <code>PASS</code> plutôt que <code>PLANNED</code>. Installez
+            <code>azure-kubernetes-app-deploy</code> et
+            <code>azure-kubernetes-automatic-readiness</code> avant <code>azure-kubernetes</code>
+            afin que chaque sous-compétence dispose de son propre dossier racine dans
+            <code>.agents/skills/</code> plutôt que d'une simple copie imbriquée.
+          </li>
+          <li>
+            <strong>Rechargez, vérifiez les fichiers inclus et gardez les clusters en lecture seule.</strong>
+            Rechargez l'hôte, relancez le contrôle préalable AKS pour enregistrer chaque compétence
+            comme <code>available</code> ou <code>declined</code>, et vérifiez les fichiers inclus
+            tels que <code>.agents/skills/aks-troubleshooting/references/symptom-map.md</code>. Les
+            chartes de conception, préparation, diagnostic et coût restent en lecture seule ; le
+            déploiement en direct reste derrière <code>deployer</code>.
+          </li>
+        </ol>
+        <h4>Solution manuelle et copie de référence AKS facultative</h4>
+        <p>
+          Si HVE Squad ne peut pas exécuter l'installateur, vérifiez que Git et APM sont disponibles
+          (voir le <a href="getting-started.html">guide de démarrage</a> et la
+          <a href="https://learn.microsoft.com/azure/aks/">documentation AKS</a>) et exécutez les
+          sept commandes de dossiers AKS épinglées du bloc ci-dessus sans ajouter
+          <code>/SKILL.md</code>. Pour une copie source hors ligne en lecture seule sans activer de
+          hooks ni de configuration MCP, exécutez les commandes ci-dessous lorsque le dossier cible
+          n'existe pas.
+        </p>
+        <pre><code>git clone --config core.longpaths=true --filter=blob:none --no-checkout https://github.com/microsoft/azure-skills.git apm_modules/.squad-pack-support/azure-skills-968f7bf
+git -C apm_modules/.squad-pack-support/azure-skills-968f7bf checkout --detach 968f7bfaa01672e782dae2c6bab4fb9505ae047a
+git -C apm_modules/.squad-pack-support/azure-skills-968f7bf rev-parse HEAD</code></pre>
+        <h4>Si la configuration s'arrête</h4>
+        <table>
+          <thead><tr><th>Ce que vous voyez</th><th>Que faire</th></tr></thead>
+          <tbody>
+            <tr><td>Sous-compétence imbriquée uniquement sous <code>.agents/skills/azure-kubernetes/</code></td><td>Exécutez l'installation explicite du dossier <code>azure-kubernetes-app-deploy</code> ou <code>azure-kubernetes-automatic-readiness</code>, puis rechargez l'hôte.</td></tr>
+            <tr><td>Installé sur disque, mais absent de la liste de l'hôte</td><td>Rechargez l'hôte, rouvrez le même projet et relancez le contrôle préalable AKS avant de marquer la compétence disponible.</td></tr>
+            <tr><td>CLI du cluster ou contexte kubeconfig indisponible</td><td>Fournissez les manifestes ou journaux expurgés pour une analyse hors ligne, ou authentifiez vous-même <code>az</code> et <code>kubectl</code> ; les chartes de diagnostic n'élèvent jamais leurs droits et ne capturent pas de paquets réseau.</td></tr>
+          </tbody>
+        </table>
+      </section>
+      <section data-release-change="20261113-aks-and-azure-functions-packs">
+        <h3 id="azure-functions-setup">Configurer Azure Functions avec l'aide de HVE Squad</h3>
+        <p>
+          Ouvrez votre projet dans l'hôte où HVE Squad est installé et envoyez cette demande. Appliquer
+          <code>azure-functions</code> ajoute les consignes Azure Functions et les rôles
+          spécialistes manquants de la distribution existante ; cela n'installe jamais Azure
+          Functions Core Tools (<code>func</code>), <code>az</code>, <code>azd</code>, de hooks de
+          télémétrie ni de serveurs MCP.
+        </p>
+        <pre><code>/squad request="Set up the Azure Functions pack. Explain what will be installed, ask before installing, and leave the isolated-worker update and Hosted Skills preview skills out unless I approve them." pack=azure-functions</code></pre>
+        <ol>
+          <li>
+            <strong>Choisissez d'abord les compétences principales.</strong> HVE Squad liste huit
+            compétences principales issues de
+            <a href="https://github.com/Azure/azure-functions-skills">Azure/azure-functions-skills</a> :
+            <code>azure-functions-common</code>, <code>azure-functions-create</code>,
+            <code>azure-functions-deploy</code>, <code>azure-functions-doctor</code>,
+            <code>azure-functions-best-practices</code>, <code>azure-functions-inventory</code>,
+            <code>azure-functions-health-status</code> et
+            <code>azure-functions-diagnostics</code>. Gardez <code>azure-functions-common</code>
+            sélectionné dès que vous installez des compétences de revue ou de diagnostic afin que
+            les références partagées de langages et de déclencheurs soient résolues.
+          </li>
+          <li>
+            <strong>Approuvez les dossiers de compétences, rechargez et vérifiez.</strong> HVE Squad
+            exécute <code>Install-SquadPackResources.ps1</code>, exige un reçu <code>PASS</code>,
+            s'arrête pour un rechargement de l'hôte, relance le contrôle préalable pour obtenir une
+            décision explicite <code>available</code> ou <code>declined</code> et vérifie les
+            fichiers inclus sans exécuter <code>azure-functions-setup</code> ni
+            <code>telemetry.mjs</code>.
+          </li>
+          <li>
+            <strong>Préservez la lecture seule et les garde-fous de déploiement.</strong>
+            <code>tester</code>, <code>azure-diagnose</code> et <code>modernizer</code> restent en
+            lecture seule avec expurgation des valeurs de paramètres, tandis que
+            <code>deployer</code> n'utilise <code>azure-functions-deploy</code> que pour le contexte
+            de vérification Functions au sein de son essai à blanc OIDC et de l'Impactful-Action
+            Gate.
+          </li>
+        </ol>
+        <h4>Solution manuelle et copie de référence Azure Functions facultative</h4>
+        <p>
+          Si HVE Squad ne peut pas exécuter l'installateur, vérifiez que Git et APM sont disponibles
+          (voir le <a href="getting-started.html">guide de démarrage</a> et le
+          <a href="https://learn.microsoft.com/azure/azure-functions/functions-run-local">guide Azure Functions Core Tools</a>)
+          et exécutez les huit commandes Azure Functions épinglées du bloc ci-dessus sans ajouter
+          <code>/SKILL.md</code>. Pour une copie source hors ligne en lecture seule, exécutez les
+          commandes ci-dessous lorsque le dossier cible n'existe pas.
+        </p>
+        <pre><code>git clone --config core.longpaths=true --filter=blob:none --no-checkout https://github.com/Azure/azure-functions-skills.git apm_modules/.squad-pack-support/azure-functions-skills-34e1722
+git -C apm_modules/.squad-pack-support/azure-functions-skills-34e1722 checkout --detach 34e17220ff073b29a0be5bd541f32d287118165f
+git -C apm_modules/.squad-pack-support/azure-functions-skills-34e1722 rev-parse HEAD</code></pre>
+        <h4>Compétences facultatives en préversion pour le worker isolé et Hosted Skills</h4>
+        <p>
+          Deux compétences en préversion issues de <code>0.0.7-preview</code> peuvent être
+          approuvées séparément : <code>azure-functions-update</code> (ébauche de planification de
+          migration C# in-process vers le worker isolé .NET) et
+          <code>azure-functions-hosted-skills</code> (rédaction locale sur
+          <code>azurefunctions-agents-runtime</code>). HVE Squad n'installe que leurs dossiers épinglés
+          et ne provisionne jamais de Connector Namespaces ni n'exécute <code>azd up</code> sans
+          approbation.
+        </p>
+        <pre><code>apm install Azure/azure-functions-skills/.github/plugins/azure-functions-skills/skills/azure-functions-update#34e17220ff073b29a0be5bd541f32d287118165f --target copilot
+apm install Azure/azure-functions-skills/.github/plugins/azure-functions-skills/skills/azure-functions-hosted-skills#34e17220ff073b29a0be5bd541f32d287118165f --target copilot</code></pre>
+        <p>
+          Après rechargement, HVE Squad vérifie
+          <code>.agents/skills/azure-functions-update/references/dotnet-isolated.md</code> et
+          <code>.agents/skills/azure-functions-hosted-skills/references/agent-authoring.md</code>
+          avant de sélectionner l'un de ces workflows en préversion.
+        </p>
+        <h4>Si la configuration s'arrête</h4>
+        <table>
+          <thead><tr><th>Ce que vous voyez</th><th>Que faire</th></tr></thead>
+          <tbody>
+            <tr><td>Référence partagée de langage ou de déclencheur absente</td><td>Installez <code>azure-functions-common</code> aux côtés de la compétence de revue ou de diagnostic, rechargez l'hôte et relancez le contrôle préalable.</td></tr>
+            <tr><td>Installé sur disque, mais absent de la liste de l'hôte</td><td>Rechargez l'hôte, rouvrez le même projet et relancez le contrôle préalable Azure Functions avant de marquer la ressource disponible.</td></tr>
+            <tr><td>Une étape de déploiement demande <code>azure@azure-skills</code> ou un consentement Connector</td><td>Gardez Squad Deployer sur son propre essai à blanc OIDC et l'Impactful-Action Gate ; traitez manuellement hors de HVE Squad l'installation d'un plugin complet ou le consentement Connector Namespace.</td></tr>
+          </tbody>
+        </table>
+      </section>
+      <section data-release-change="20261117-azure-cloud-and-cost-pack">
+        <h3 id="azure-cloud-setup">Configurer Azure Cloud et FinOps avec l'aide de HVE Squad</h3>
+        <p>
+          Ouvrez votre projet dans l'hôte où HVE Squad est installé et envoyez cette demande.
+          Appliquer <code>azure-cloud</code> ajoute les consignes Azure Cloud et FinOps ainsi que
+          les rôles spécialistes manquants du catalogue existant ; cela n'installe jamais
+          <code>az</code>, <code>azqr</code>, d'extensions CLI, de hooks de télémétrie ni de
+          serveurs <code>@azure/mcp</code>.
+        </p>
+        <pre><code>/squad request="Set up the Azure Cloud pack. Explain what will be installed, ask before installing, and leave the multi-rack Azure Local preview out unless I approve it." pack=azure-cloud</code></pre>
+        <ol>
+          <li>
+            <strong>Choisissez d'abord les compétences de base.</strong> HVE Squad répertorie treize
+            compétences de base issues de
+            <a href="https://github.com/microsoft/azure-skills">microsoft/azure-skills</a> :
+            <code>cost-estimation</code>, <code>cost-optimization</code>,
+            <code>cost-analysis</code>, <code>cost-governance</code>,
+            <code>azure-diagnostics</code>, <code>azure-compliance</code>,
+            <code>azure-resource-lookup</code>, <code>azure-resource-visualizer</code>,
+            <code>azure-reliability</code>, <code>azure-quotas</code>, <code>azure-local</code>,
+            <code>azure-cloud-migrate</code> et <code>azure-upgrade</code>, tout en conservant la
+            compétence intégrée <code>azure-pricing</code> inchangée pour les tarifs publics au
+            détail. Installez les treize, choisissez un sous-ensemble ou continuez sans elles.
+          </li>
+          <li>
+            <strong>Approuvez les dossiers épinglés, rechargez et vérifiez.</strong> HVE Squad
+            exécute <code>Install-SquadPackResources.ps1</code>, exige un reçu <code>PASS</code>
+            plutôt que <code>PLANNED</code>, s'arrête pour un rechargement de l'hôte, relance le
+            contrôle préalable pour consigner des décisions <code>available</code> ou
+            <code>declined</code> explicites, et vérifie les fichiers inclus sous
+            <code>.agents/skills/</code> sans ajouter <code>/SKILL.md</code> ni activer de hooks.
+          </li>
+          <li>
+            <strong>Gardez les chartes FinOps, conformité, fiabilité et migration en lecture seule.</strong>
+            <code>cost-manager</code>, <code>azure-diagnose</code>, <code>asbuilt-author</code>,
+            <code>azure-architect</code> et <code>modernizer</code> diagnostiquent, auditent et
+            planifient sans modifier les ressources Azure actives, tandis que <code>deployer</code>
+            conserve <code>azure-deployment-preflight</code> au sein de son essai à blanc OIDC et de
+            l'Impactful-Action Gate.
+          </li>
+        </ol>
+        <h4>Solution manuelle et copie de référence Azure Cloud facultative</h4>
+        <p>
+          Si HVE Squad ne peut pas exécuter l'installateur, vérifiez que Git et APM sont disponibles
+          (voir le <a href="getting-started.html">guide de démarrage</a> et la
+          <a href="https://learn.microsoft.com/azure/cost-management-billing/">documentation Microsoft Cost Management</a>)
+          et exécutez les treize commandes Azure Cloud épinglées du bloc ci-dessus sans ajouter
+          <code>/SKILL.md</code>. Pour une copie source hors ligne en lecture seule, exécutez les
+          commandes ci-dessous lorsque le dossier cible n'existe pas.
+        </p>
+        <pre><code>git clone --config core.longpaths=true --filter=blob:none --no-checkout https://github.com/microsoft/azure-skills.git apm_modules/.squad-pack-support/azure-skills-65922d2
+git -C apm_modules/.squad-pack-support/azure-skills-65922d2 checkout --detach 65922d293cba61a40d5edf61a9eb4b6b0e799788
+git -C apm_modules/.squad-pack-support/azure-skills-65922d2 rev-parse HEAD</code></pre>
+        <h4>Compétence facultative en préversion pour Azure Local multi-baies</h4>
+        <p>
+          Une compétence en préversion peut être approuvée séparément :
+          <code>azure-local-multi-rack</code> pour l'architecture et l'exploitation Azure Local à
+          l'échelle de baies via <code>Microsoft.NetworkCloud</code> et
+          <code>Microsoft.ManagedNetworkFabric</code>. HVE Squad n'installe que son dossier épinglé
+          et ne modifie jamais la fabrique réseau, les domaines d'isolation ni le stockage SAN.
+        </p>
+        <pre><code>apm install microsoft/azure-skills/.github/plugins/azure-local-skills/skills/azure-local-multi-rack#65922d293cba61a40d5edf61a9eb4b6b0e799788 --target copilot</code></pre>
+        <p>
+          Après rechargement, HVE Squad vérifie
+          <code>.agents/skills/azure-local-multi-rack/references/docs-map.md</code> et
+          <code>.agents/skills/azure-local-multi-rack/workflows/plan-and-deploy/plan-and-deploy.md</code>
+          avant de sélectionner ce workflow en préversion.
+        </p>
+        <h4>Si la configuration s'arrête</h4>
+        <table>
+          <thead><tr><th>Ce que vous voyez</th><th>Que faire</th></tr></thead>
+          <tbody>
+            <tr><td>Une ancienne commande ajoutait <code>/SKILL.md</code> et échouait à la validation APM</td><td>Relancez avec le chemin du dossier de compétence épinglé sans <code>/SKILL.md</code>, puis rechargez l'hôte.</td></tr>
+            <tr><td>Installé sur disque, mais absent de la liste de l'hôte</td><td>Rechargez l'hôte, rouvrez le même projet et relancez le contrôle préalable Azure Cloud avant de marquer la ressource disponible.</td></tr>
+            <tr><td>Un guide de migration ou de déploiement demande <code>azure-prepare</code>, <code>azure-validate</code> ou <code>azure-deploy</code></td><td>Gardez Squad Deployer sur <code>azure-deployment-preflight</code>, son essai à blanc OIDC et l'Impactful-Action Gate plutôt que d'installer les compétences de pipeline bloquées.</td></tr>
+          </tbody>
+        </table>
+      </section>
+      <section data-release-change="20261115-foundry-and-fabric-pack-parity">
+        <h3 id="foundry-setup">Configurer Microsoft Foundry avec l'aide de HVE Squad</h3>
+        <p>
+          Ouvrez votre projet dans l'hôte où HVE Squad est installé et envoyez cette demande.
+          Appliquer <code>foundry</code> ajoute le blueprint Foundry en sept blocs et les rôles
+          spécialistes manquants du catalogue existant ; cela n'installe jamais <code>az</code>,
+          <code>azd</code>, <code>agentops-accelerator</code>, <code>assert-ai</code>,
+          <code>@microsoft/agent-governance-copilot-cli</code>, des hooks de télémétrie ni des
+          serveurs MCP.
+        </p>
+        <pre><code>/squad request="Set up the Foundry pack. Explain what will be installed, ask before installing, and leave the Foundry IQ and AgentOps governance preview skills out unless I approve them." pack=foundry</code></pre>
+        <ol>
+          <li>
+            <strong>Choisissez d'abord les compétences de base.</strong> HVE Squad répertorie onze
+            compétences de base issues de
+            <a href="https://github.com/microsoft/azure-skills">microsoft/azure-skills</a>,
+            <a href="https://github.com/Azure/aigateway">Azure/aigateway</a>,
+            <a href="https://github.com/microsoft/CAIRA">microsoft/CAIRA</a>,
+            <a href="https://github.com/Azure/agentops">Azure/agentops</a>,
+            <a href="https://github.com/microsoft/eval-guide">microsoft/eval-guide</a> et
+            <a href="https://github.com/microsoft/agent-governance-toolkit">microsoft/agent-governance-toolkit</a> :
+            <code>microsoft-foundry</code>, <code>use-ai-gateway</code>,
+            <code>azure-aigateway</code>, <code>caira</code>,
+            <code>appinsights-instrumentation</code>, <code>agentops-agent</code>,
+            <code>eval-faq</code>, <code>agentops-config</code>, <code>agentops-eval</code>,
+            <code>agentops-report</code> et <code>agt-policy-authoring</code>. Installez les onze,
+            choisissez un sous-ensemble ou continuez sans elles.
+          </li>
+          <li>
+            <strong>Approuvez les dossiers épinglés, rechargez et vérifiez.</strong> HVE Squad
+            exécute <code>Install-SquadPackResources.ps1</code>, exige un reçu <code>PASS</code>
+            plutôt que <code>PLANNED</code>, s'arrête pour un rechargement de l'hôte, relance le
+            contrôle préalable pour consigner des décisions <code>available</code> ou
+            <code>declined</code> explicites, et vérifie les fichiers inclus sous
+            <code>.agents/skills/</code> sans ajouter <code>/SKILL.md</code> ni activer de hooks.
+          </li>
+          <li>
+            <strong>Gardez la planification, la politique et l'évaluation en local.</strong>
+            <code>prompt-engineer</code>, <code>observability</code>, <code>security</code> et
+            <code>rai</code> rédigent <code>agentops.yaml</code>, les plans d'instrumentation,
+            <code>.agt/policy.json</code> et les preuves de gouvernance sans exécuter
+            <code>pip install</code>, <code>az role assignment create</code>,
+            <code>agentops eval run</code> ni <code>agentops cockpit</code> ; les déploiements
+            restent derrière <code>deployer</code>.
+          </li>
+        </ol>
+        <h4>Solution manuelle et copies de référence Foundry facultatives</h4>
+        <p>
+          Si HVE Squad ne peut pas exécuter l'installateur, vérifiez que Git et APM sont disponibles
+          (voir le <a href="getting-started.html">guide de démarrage</a> et la
+          <a href="https://learn.microsoft.com/azure/ai-foundry/">documentation Microsoft Foundry</a>)
+          et exécutez les onze commandes Foundry épinglées du bloc ci-dessus sans ajouter
+          <code>/SKILL.md</code>. Pour des copies sources hors ligne en lecture seule des
+          architectures CAIRA ou de la documentation AGT, exécutez les commandes ci-dessous lorsque
+          les dossiers cibles n'existent pas.
+        </p>
+        <pre><code>git clone --config core.longpaths=true --filter=blob:none --no-checkout https://github.com/microsoft/CAIRA.git apm_modules/.squad-pack-support/caira-a36d043
+git -C apm_modules/.squad-pack-support/caira-a36d043 checkout --detach a36d043784b0ac899764212178df6d0f9e9b85d9
+git -C apm_modules/.squad-pack-support/caira-a36d043 rev-parse HEAD
+git clone --config core.longpaths=true --filter=blob:none --no-checkout https://github.com/microsoft/agent-governance-toolkit.git apm_modules/.squad-pack-support/agent-governance-toolkit-678070a
+git -C apm_modules/.squad-pack-support/agent-governance-toolkit-678070a checkout --detach 678070abf15417acdb4a5dd826667a5d83f54d67
+git -C apm_modules/.squad-pack-support/agent-governance-toolkit-678070a rev-parse HEAD</code></pre>
+        <h4>Compétences facultatives en préversion pour Foundry IQ et la gouvernance AgentOps</h4>
+        <p>
+          Deux compétences en préversion peuvent être approuvées séparément :
+          <code>foundry-iq</code> (ancrage sur base de connaissances Foundry IQ issu du plugin
+          <code>0.2.8</code> en préversion) et <code>agentops-governance</code> (configuration
+          ASSERT <code>./assert/eval_config.yaml</code>, contrats de points de contrôle ACS
+          <code>acs.yaml</code>, revue Guided Guardrail et index de préparation Red-Team sans
+          charges offensives issus de <code>0.16.2</code>). Les modes New Foundry
+          <code>execution: cloud</code> OpenAI Evals et <code>azd ai agent eval</code> au sein de
+          <code>agentops-eval</code> exigent également une approbation explicite de préversion.
+        </p>
+        <pre><code>apm install microsoft/skills/.github/plugins/foundry-iq-skills/skills/foundry-iq#f03ec5392f7a0f3aca12af47477e92f1edf7b44c --target copilot
+apm install Azure/agentops/plugins/agentops/skills/agentops-governance#0f2173d03a63c73b9cf4a4d9978136cc5dec2909 --target copilot</code></pre>
+        <p>
+          Après rechargement, HVE Squad vérifie
+          <code>.agents/skills/foundry-iq/references/intent-routing.md</code> et
+          <code>.agents/skills/agentops-governance/SKILL.md</code> avant de sélectionner l'un de
+          ces workflows en préversion.
+        </p>
+        <h4>Si la configuration s'arrête</h4>
+        <table>
+          <thead><tr><th>Ce que vous voyez</th><th>Que faire</th></tr></thead>
+          <tbody>
+            <tr><td>Une ancienne commande ajoutait <code>/SKILL.md</code> et échouait à la validation APM</td><td>Relancez avec le chemin du dossier de compétence épinglé sans <code>/SKILL.md</code>, puis rechargez l'hôte.</td></tr>
+            <tr><td>Installé sur disque, mais absent de la liste de l'hôte</td><td>Rechargez l'hôte, rouvrez le même projet et relancez le contrôle préalable Foundry avant de marquer la ressource disponible.</td></tr>
+            <tr><td>Une étape d'évaluation ou de gouvernance demande d'exécuter <code>agentops eval run</code>, <code>agentops redteam run</code> ou <code>agt-copilot</code></td><td>Gardez les chartes sur la rédaction locale et la revue de rapports fournis ; lancez vous-même les évaluations facturées ou la validation CLI, ou déléguez une tâche QA approuvée.</td></tr>
+          </tbody>
+        </table>
+      </section>
+      <section data-release-change="20261115-foundry-and-fabric-pack-parity">
+        <h3 id="fabric-setup">Configurer Microsoft Fabric et Power BI avec l'aide de HVE Squad</h3>
+        <p>
+          Ouvrez votre projet dans l'hôte où HVE Squad est installé et envoyez cette demande.
+          Appliquer <code>fabric</code> réutilise <code>data-scientist</code> sur les workflows
+          officiels Power BI et Microsoft Fabric ; cela n'installe jamais <code>az</code>,
+          <code>sqlcmd</code>, <code>fab</code> ni <code>powerbi-report-author</code>, et ne
+          demande jamais de consentement de tenant.
+        </p>
+        <pre><code>/squad request="Set up the Fabric pack. Explain what will be installed, disclose any .github/mcp.json entries first, and ask before installing." pack=fabric</code></pre>
+        <ol>
+          <li>
+            <strong>Examinez les quinze compétences officielles et la déclaration MCP.</strong> HVE
+            Squad répertorie quinze compétences issues de
+            <a href="https://github.com/microsoft/skills-for-fabric">microsoft/skills-for-fabric</a> :
+            <code>semantic-model-authoring</code>, <code>powerbi-report-cli</code>,
+            <code>e2e-medallion-architecture</code>, <code>sqldw-cli</code>, <code>sqldb-cli</code>,
+            <code>eventhouse-cli</code>, <code>eventstream-cli</code>, <code>activator-cli</code>,
+            <code>spark-cli</code>, <code>dataflows-cli</code>, <code>onelake-catalog-cli</code>,
+            <code>databricks-migration</code>, <code>synapse-migration</code>,
+            <code>hdinsight-migration</code> et <code>pipeline-migration</code>. Avant approbation,
+            HVE Squad signale que <code>semantic-model-authoring</code> et
+            <code>powerbi-report-cli</code> inscrivent <code>powerbi-modeling-mcp</code>
+            (<code>@microsoft/powerbi-modeling-mcp@latest</code>) et que <code>sqldw-cli</code>
+            ainsi que <code>synapse-migration</code> inscrivent <code>fabric-sqlendpoint</code> dans
+            <code>.github/mcp.json</code>.
+          </li>
+          <li>
+            <strong>Approuvez les dossiers épinglés, rechargez et vérifiez le socle partagé.</strong>
+            HVE Squad exécute <code>Install-SquadPackResources.ps1</code>, exige un reçu
+            <code>PASS</code>, s'arrête pour un rechargement de l'hôte, relance le contrôle
+            préalable pour consigner des décisions <code>available</code> ou <code>declined</code>
+            explicites, et vérifie à la fois les références sous <code>.agents/skills/</code> et le
+            socle partagé <code>common/COMMON-CLI.md</code>. Conservez <code>spark-cli</code> aux
+            côtés de <code>e2e-medallion-architecture</code> lorsque les références de notebooks ou
+            de MLV médaillon sont nécessaires.
+          </li>
+          <li>
+            <strong>Gardez la rédaction en local et contrôlez les écritures Fabric.</strong> La
+            revue hors ligne <code>.tmdl</code>/PBIP, l'analyse de forme DAX et la planification
+            <code>_brief/report-spec.md</code> ou <code>Design Brief:</code> fonctionnent sans
+            démarrer de serveur MCP ; la création d'espaces de travail ou d'éléments,
+            <code>updateDefinition</code>, le déploiement ou l'actualisation de modèles, la
+            publication de rapports, <code>dacpac</code>, les écritures Activator et la remédiation
+            OneLake s'arrêtent pour approbation humaine.
+          </li>
+        </ol>
+        <h4>Solution manuelle et copie de support Fabric</h4>
+        <p>
+          Si HVE Squad ne peut pas exécuter l'installateur, vérifiez que Git et APM sont disponibles
+          (voir le <a href="getting-started.html">guide de démarrage</a> et la
+          <a href="https://learn.microsoft.com/fabric/">documentation Microsoft Fabric</a>) et
+          exécutez les quinze commandes Fabric épinglées du bloc ci-dessus sans ajouter
+          <code>/SKILL.md</code>. Pour alimenter une copie source <code>common/</code> en lecture
+          seule sans modifier <code>.github/mcp.json</code>, exécutez les commandes ci-dessous
+          lorsque le dossier cible n'existe pas.
+        </p>
+        <pre><code>git clone --config core.longpaths=true --filter=blob:none --no-checkout https://github.com/microsoft/skills-for-fabric.git apm_modules/.squad-pack-support/skills-for-fabric-e31422e
+git -C apm_modules/.squad-pack-support/skills-for-fabric-e31422e checkout --detach e31422e7d1045ef3a0906df9ff5991f2338af010
+git -C apm_modules/.squad-pack-support/skills-for-fabric-e31422e rev-parse HEAD</code></pre>
+        <h4>Si la configuration s'arrête</h4>
+        <table>
+          <thead><tr><th>Ce que vous voyez</th><th>Que faire</th></tr></thead>
+          <tbody>
+            <tr><td>Référence partagée <code>common/COMMON-CLI.md</code> ou compétence sœur <code>spark-cli</code> absente</td><td>Récupérez la copie de support épinglée <code>skills-for-fabric-e31422e</code> ci-dessus et installez <code>spark-cli</code> aux côtés de <code>e2e-medallion-architecture</code>, puis rechargez l'hôte.</td></tr>
+            <tr><td>Vous ne souhaitez pas d'entrées MCP non épinglées dans <code>.github/mcp.json</code></td><td>Refusez les quatre compétences déclarant MCP et utilisez la copie de support en lecture seule, ou épinglez/retirez l'entrée ajoutée dans <code>.github/mcp.json</code> avant de recharger.</td></tr>
+            <tr><td>Installé sur disque, mais absent de la liste de l'hôte</td><td>Rechargez l'hôte, rouvrez le même projet et relancez le contrôle préalable Fabric avant de marquer la ressource disponible.</td></tr>
           </tbody>
         </table>
       </section>
@@ -1819,24 +2395,22 @@ apm install github/awesome-copilot/agents/mcp-m365-agent-expert.agent.md#9db369d
         compétences, rechargez l'hôte et relancez le contrôle préalable avant de poursuivre
         l'initialisation ou l'ajout du pack.
       </p>
-      <pre><code># Microsoft Foundry and APIM AI Gateway skills
-apm install microsoft/azure-skills/skills/microsoft-foundry --target copilot
-apm install microsoft/azure-skills/skills/azure-aigateway --target copilot
+      <pre><code># Microsoft Foundry, AI Gateway, CAIRA, AgentOps, and AGT policy skill directories
+apm install microsoft/azure-skills/skills/microsoft-foundry#968f7bfaa01672e782dae2c6bab4fb9505ae047a --target copilot
+apm install Azure/aigateway/skills/use-ai-gateway#8cba384de61ab9d438450a79f44fba0528c56d0a --target copilot
+apm install microsoft/azure-skills/skills/azure-aigateway#968f7bfaa01672e782dae2c6bab4fb9505ae047a --target copilot
+apm install microsoft/CAIRA/skills/caira#a36d043784b0ac899764212178df6d0f9e9b85d9 --target copilot
+apm install Azure/agentops/plugins/agentops/skills/agentops-config#0f2173d03a63c73b9cf4a4d9978136cc5dec2909 --target copilot
+apm install microsoft/agent-governance-toolkit/docs/skills/agt-policy-authoring#678070abf15417acdb4a5dd826667a5d83f54d67 --target copilot
 
-# Consume an existing AI Gateway from GitHub Copilot CLI
-copilot plugin marketplace add Azure/aigateway
-copilot plugin install ai-gateway@azure
-
-# Inspect selected CAIRA reference components
-npx skills add github.com/microsoft/CAIRA/skills
-
-# Fabric Warehouse skill example
-apm install microsoft/skills-for-fabric/skills/sqldw-cli --target copilot</code></pre>
+# Power BI semantic model and Fabric Warehouse skill examples
+apm install microsoft/skills-for-fabric/skills/semantic-model-authoring#e31422e7d1045ef3a0906df9ff5991f2338af010 --target copilot
+apm install microsoft/skills-for-fabric/skills/sqldw-cli#e31422e7d1045ef3a0906df9ff5991f2338af010 --target copilot</code></pre>
       <p>
-        Le chemin plugin exige GitHub Copilot CLI avec la prise en charge des plugins ; CAIRA exige
-        Node.js et <code>npx</code>. Les workflows Foundry et gateway peuvent aussi nécessiter Azure
-        CLI, un compte ou projet Azure et une gateway existante. L'authentification de déploiement
-        reste exclusivement OIDC.
+        Chaque entrée de pack s'installe comme dossier de compétence APM épinglé sans ajouter
+        <code>/SKILL.md</code>. Les workflows actifs Foundry, gateway et Fabric peuvent séparément
+        nécessiter Azure CLI, un compte Azure ou espace de travail Fabric, ou une gateway existante ;
+        l'authentification de déploiement reste exclusivement OIDC.
       </p>
       <h3 data-release-change="20261008-foundry-agentic-pack">Consignes de projet Microsoft Foundry</h3>
       <pre><code>/squad request="Plan a Foundry support assistant" profile=azure pack=foundry
@@ -1953,6 +2527,9 @@ apm install microsoft/skills-for-fabric/skills/sqldw-cli --target copilot</code>
           <tr><td>Un environnement couvrant Azure et AWS</td><td><code>profile=azure pack=aws</code></td></tr>
           <tr><td>Planification d'un assistant de support Microsoft Foundry</td><td><code>profile=azure pack=foundry</code></td></tr>
           <tr><td>Entrepôt Fabric ou Eventhouse au-delà de l'introduction Lakehouse</td><td><code>profile=azure pack=fabric</code></td></tr>
+          <tr><td>Mettre à niveau et optimiser un service ASP.NET Core et EF Core</td><td><code>profile=modernization pack=dotnet</code></td></tr>
+          <tr><td>Exploiter et dimensionner un cluster AKS</td><td><code>profile=operations pack=aks</code></td></tr>
+          <tr><td>Développer et diagnostiquer une application Azure Functions</td><td><code>profile=azure pack=azure-functions</code></td></tr>
           <tr><td>Astreinte pour une charge de travail AWS en service</td><td><code>profile=operations pack=aws</code></td></tr>
           <tr><td>Agent M365 Copilot traitant des données personnelles</td><td><code>profile=security pack=m365-copilot</code></td></tr>
           <tr><td>Solution Power Platform dont l'interface est un agent M365 Copilot</td><td><code>profile=default pack=power-platform,m365-copilot</code></td></tr>
@@ -2463,7 +3040,7 @@ layouts:
       <h2>Exécuter sur d'autres hôtes</h2>
       <p>
         La squad fournit à la fois des prompts et des agents. <strong>Copilot Harness pour VS Code,
-        GitHub Copilot CLI et l'application GitHub Copilot exécutent tous les workflows Squad au moyen
+        GitHub Copilot CLI et l'application GitHub Copilot exécutent tous les workflows HVE Squad au moyen
         d'agents invocables par l'utilisateur.</strong> Les fichiers de prompt restent une solution de
         remplacement dans VS Code, mais sélectionner l'agent associé évite un appel intermédiaire et
         constitue la méthode d'appel qui fonctionne partout.

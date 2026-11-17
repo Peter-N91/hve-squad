@@ -67,7 +67,7 @@ function Get-SourceHeaderInventory {
     if ($LASTEXITCODE -ne 0) { throw 'git ls-files failed.' }
     $extensions = '.ps1', '.psm1', '.psd1', '.py', '.sh', '.js', '.mjs', '.css', '.html', '.svg', '.njk', '.md', '.yml', '.yaml'
     foreach ($path in ($paths | Sort-Object -Unique)) {
-        if ($path -notmatch '^(scripts|tests|squad-src|site|docs|benchmarks)/|^\.github/(workflows|ISSUE_TEMPLATE)/|^\.github/(pull_request_template\.md|dependabot\.yml|CODEOWNERS)$|^\.changes/unreleased/20261111-microsoft-release-readiness\.md$|^(eleventy\.config\.js|PSScriptAnalyzerSettings\.psd1|apm\.yml|\.gitignore|\.gitattributes)$') { continue }
+        if ($path -notmatch '^(scripts|tests|squad-src|site|docs|benchmarks|\.github)/|^\.changes/unreleased/20261111-microsoft-release-readiness\.md$|^(eleventy\.config\.js|PSScriptAnalyzerSettings\.psd1|apm\.yml|\.gitignore|\.gitattributes)$') { continue }
         $extension = [IO.Path]::GetExtension($path).ToLowerInvariant()
         $reason = if ($path -in '.gitignore', '.gitattributes', '.github/CODEOWNERS') {
             'Git metadata; not first-party source code'

@@ -305,11 +305,9 @@ A pack and a federation both add capability a single profile does not carry, so 
 > **One piece of work that needs extra expertise is a profile plus a pack.** Those roles must share a plan, a council, and a review.
 > **Two streams of work with separate deliverables and owners is a federation.** Those teams need coordination, not the same room.
 
-The reason is mechanical rather than stylistic. A pack composes *within* one roster: `pp-architect` and `privacy` are dispatched in the same turn against the same request, and both findings land in one Council Verdict, one plan, and one review. A federation coordinates *between* rosters: each `members/<name>/` is a complete squad with its own `team.md`, `decisions.md`, `history/`, and consumption ledger, and meta-routing decides which sub-squad owns a turn. Split one piece of work across two sub-squads and its two halves are decided in two councils that never met.
+A pack composes *within* one roster: `pp-architect` and `privacy` run in the same turn against one request and land in one Council Verdict, plan, and review. A federation coordinates *between* rosters: each `members/<name>/` keeps its own `team.md`, `decisions.md`, `history/`, and ledger, and meta-routing picks the sub-squad. Splitting one piece of work across two sub-squads splits its decision across two councils.
 
-Federation also does not remove the need for a pack — it multiplies it. A sub-squad is seeded from a profile, and a technology vertical reaches that sub-squad the same way it reaches any roster: by applying the pack to it. There is no path from federation to `pp-architect` that does not go through `power-platform`.
-
-A compliance-plus-Power-Platform project is therefore `profile=compliance pack=power-platform`, not two sub-squads, because compliance is a lens on the work rather than a stream of it. Two sub-squads earn their keep when there really are two products — a Power Platform app and an Azure data platform, different owners, shipping separately — and the first of those still carries the pack. See `.github/instructions/squad/squad-federation.instructions.md` for the federation mechanics.
+A sub-squad is seeded from a profile, so a vertical still arrives on it by applying the pack (`power-platform` for `pp-architect`). Compliance on Power Platform is `profile=compliance pack=power-platform`, whereas two separate products with distinct owners earn two sub-squads. See `.github/instructions/squad/squad-federation.instructions.md`.
 
 #### Composition Rules
 
@@ -322,9 +320,7 @@ A compliance-plus-Power-Platform project is therefore `profile=compliance pack=p
 
 #### Removing a Pack
 
-A pack is removable, and removing one is a roster change like any other rather than a special operation. A user who no longer works on a vertical should not carry its roles, its routing rows, or its context.
-
-Removal is safe for the record because of how squad state is already split. `decisions.md` and `history/<agent>.md` are **append-only**: removing a pack appends a new decision and edits nothing, and every dispatch a removed role ever ran stays in its history file. `team.md` and `routing.md` use replace semantics, so their rows come out cleanly. Nothing that happened is unwritten.
+A pack is removable like any other roster change; drop it when the project leaves that vertical. `decisions.md` and `history/<agent>.md` are **append-only**: removal appends one decision and edits no prior dispatch. `team.md` and `routing.md` use replace semantics, so their rows come out cleanly.
 
 Five rules keep a removal honest:
 
@@ -345,8 +341,12 @@ Optional `Guidance` files go only to the accepted pack's roles and the methodolo
 | `power-platform` | pp-architect, pp-connector | `power-platform-official-resources.md` | Built on Power Platform — Power Apps, Power Automate, Dataverse, Power Pages, or Copilot Studio        | Opt-in. Local Primaries; community Alternates stay external |
 | `m365-copilot`   | m365-agent-architect, m365-agent-integrator | `m365-copilot-platform-options.md` | Built on Microsoft 365 Copilot — declarative agents, TypeSpec agent definitions, API plugins, MCP-backed agents, or Microsoft Graph integration | Opt-in. Local Primaries; community Alternates stay external |
 | `aws`            | aws-architect, aws-diagnose |          | Built on AWS — Lambda and serverless, ECS or EKS, CDK, SAM, CloudFormation, Organizations and landing zones, or a live AWS workload to triage | Opt-in. Both roles rest on registered external agents; the install commands are in *Registered External Cast* |
-| `foundry`        | architect, azure-architect, deployer, prompt-engineer, security, rai, observability, cost-manager, data-scientist | `foundry-blueprint.md`; `foundry-platform-options.md` | Designing or delivering a Microsoft Foundry agentic AI project | Opt-in. Reuses existing roles and registered external skills; adds no replacement agent |
-| `fabric` | data-scientist | `fabric-blueprint.md` | Warehouse, Eventhouse, Spark, or Dataflow beyond the primer | Opt-in. No new role |
+| `foundry` | architect, azure-architect, deployer, prompt-engineer, security, rai, observability, cost-manager, data-scientist | `foundry-blueprint.md`; `foundry-platform-options.md` | Designing or delivering a Microsoft Foundry agentic AI project | Opt-in. No new role |
+| `fabric` | data-scientist | `fabric-blueprint.md` | Power BI models/DAX/reports, Medallion Lakehouse, Warehouse, Eventhouse, Spark, Dataflow, or Fabric migrations | Opt-in. No new role |
+| `dotnet` | modernizer, tester, performance, developer | `dotnet-platform-options.md` | .NET upgrades, NuGet CPM, test/API review, perf, or EF Core/ASP.NET | Opt-in. No new role |
+| `aks` | azure-architect, developer, modernizer, azure-diagnose, cost-manager | `aks-platform-options.md` | AKS cluster design, manifests, AKS Automatic, Day-2 triage, or AKS cost | Opt-in. No new role |
+| `azure-functions` | developer, deployer, tester, azure-diagnose, modernizer | `azure-functions-platform-options.md` | Azure Functions apps, triggers/bindings, Function App triage/review, or Hosted Skills | Opt-in. No new role |
+| `azure-cloud` | cost-manager, azure-diagnose, asbuilt-author, azure-architect, modernizer | `azure-cloud-platform-options.md` | Azure FinOps, diagnostics, compliance, reliability, Local, or upgrade | Opt-in. No new role |
 
 **AWS is a pack while `azure` is a profile, and that asymmetry is deliberate.** `azure` predates the pack mechanism and stays a profile by the decision recorded in *Profile or Pack*: this repository's work is intrinsically Azure-shaped, so an Azure squad behaves as the dominant team shape rather than as an addition to one. AWS is new capability, so the three tests govern it, and all three say pack — it carries no methodology spine, it is not incoherent alongside any profile, and it answers "what is it built on". The practical consequence is the one the tests intend: a multi-cloud project takes `profile=azure` plus `pack=aws` and gets both, where two competing profiles would have forced a false choice. An AWS-only project takes whichever profile matches its *work* — usually `architecture` or `default` — plus the pack. Carrying the `aws` pack says the squad can reason about AWS; it does not imply general multi-cloud capability, and it says nothing at all about Google Cloud, which has no coverage anywhere (see the `gcp` row in the *Cast Catalog*).
 
@@ -360,15 +360,18 @@ Optional `Guidance` files go only to the accepted pack's roles and the methodolo
 | One estate spanning Azure and AWS                                | `azure`        | `aws`                         |
 | Planning a Microsoft Foundry support assistant                   | `azure`        | `foundry`                     |
 | Fabric Warehouse work | `azure` | `fabric` |
+| Modernizing and tuning a .NET service | `modernization` | `dotnet` |
+| Operating and rightsizing an AKS cluster | `operations` | `aks` |
+| Building and triaging an Azure Functions app | `azure` | `azure-functions` |
 | On call for a live AWS workload                                  | `operations`   | `aws`                         |
 | A Microsoft 365 Copilot agent that handles personal data         | `security`     | `m365-copilot`                |
 | A Power Platform solution fronted by an M365 Copilot agent       | `default`      | `power-platform`, `m365-copilot` |
 
 The `operations` plus `aws` row is the case a profile could never have served: `operations` already carries `azure-diagnose`, and the pack adds `aws-diagnose` beside it, so one squad triages both clouds. The last row is the case a profile could not have served either, because two verticals apply at once and a profile is single-choice.
 
-Power BI is deliberately absent from the `power-platform` pack. Its upstream agents serve analytics modeling and report performance rather than Power Platform application delivery, so they belong with the data and analytics vertical, which is registered against `data-scientist` rather than as a pack of its own.
+Power BI is deliberately absent from `power-platform`: semantic models, DAX, PBIR/PBIP reports, and Microsoft Fabric workloads belong to `data-scientist` behind the `fabric` pack because upstream Power BI and Fabric agents failed the verification gate.
 
-Data and Power BI remain skills against existing roles: their assessed specialist agents failed the verification gate. General AI application engineering likewise remains with `developer`, not a duplicate `ai-engineer`. Product knowledge comes from verified upstream resources in *Registered External Cast*; pack guidance asks project-specific questions and assigns handoffs instead of restating volatile platform documentation.
+General AI application engineering likewise remains with `developer`, not a duplicate `ai-engineer`. Product knowledge comes from verified upstream resources in *Registered External Cast*; pack guidance asks project-specific questions and assigns handoffs instead of restating volatile platform documentation.
 
 Pack cues: Power Pages ALM planning, model-driven app building, Dataverse overview, or Copilot Studio knowledge YAML → Squad Power Platform Architect; broader Power Platform architecture or Copilot Studio, Power Automate, cloud flow, canvas app, DLP policy, or solution ALM → Power Platform Expert; codeful MCP tool or UI generation, Dataverse connection, or Copilot Studio skill import → Squad Power Platform Integrator; broader connector or integration work, custom connector, or connector certification → Power Platform MCP Integration Expert; .NET Agents SDK production readiness, Agents SDK Teams manifest, or M365 evaluation suite → Squad M365 Agent Architect; declarative agent, TypeSpec, API plugin, or broader M365 architecture, Microsoft 365 Copilot agent, agent manifest, or Agents Toolkit → Declarative Agents Architect; Agents SDK OpenTelemetry, Agents SDK provisioning, or Copilot MCP widget server → Squad M365 Agent Integrator; broader MCP-backed M365 integration, Microsoft Graph, Graph SDK, Graph permission scope, or MCP-backed Copilot agent → MCP M365 Agent Expert. PP knowledge YAML/skill import are preview: explicit approval and an existing agentic-loop workspace required. M365 eval/widget are preview. No match keeps the Primary. A matched Alternate that is absent escalates.
 
