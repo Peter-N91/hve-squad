@@ -340,7 +340,7 @@ $workflowDepth = $DepthSource -ceq 'workflow'
 $depth = if ($RequestedDepth -ceq 'quick' -and (-not $unattended -or $workflowDepth)) { 'quick' } else { 'standard' }
 $depthSourceUsed = if ($RequestedDepth) { $(if ($unattended -and $workflowDepth) { 'workflow' } else { 'input' }) } else { 'default' }
 $covered = $depth -eq 'quick' -and -not $federationParent -and -not $ceiling
-$autopilotRule = 'Before the first dispatch run Get-SquadProcedure.ps1 -Name autopilot,progress. After EACH role returns and its artifact exists, run one Write-SquadHandoff.ps1 -Mode autopilot with only that role''s record, verify it, then dispatch the next role; never merge stages into one hand-off.'
+$autopilotRule = 'Before the first dispatch run Get-SquadProcedure.ps1 -Name autopilot,progress. After EACH role returns and its artifact exists, run one Complete-SquadHandoff.ps1 with only that role''s record (or Write-SquadHandoff.ps1 -Mode autopilot and verify it), then dispatch the next role; never merge stages into one hand-off.'
 $out.Add("state: schema $($state['schemaVersion']), turn $turn (next hand-off turn: $($turn + 1)), mode $($state['mode']), updated $updated")
 $out.Add("federation: $(if ($federated) { 'yes' } else { 'no' }) | cost ceiling: $(if ($ceiling) { 'active' } else { 'none' }) | ledger: $ledger | model routing: $routing | concurrency cap: $cap")
 $autopilotRequested = $RequestedMode -ceq 'autopilot'
@@ -695,8 +695,8 @@ if ($payloadContract -match "^\(section '## Payload Contract' not found") {
 }
 $out.Add($payloadContract)
 $out.Add('')
-$out.Add("``pwsh -NoProfile -File '$(Join-Path $PSScriptRoot 'Write-SquadHandoff.ps1')' -SquadRoot '$SquadRoot' -PayloadPath <payload.json> -Quiet``")
-$out.Add('Validate the returned status, turn, and history counts; preserve stderr warnings and distinguish `ledger-only` from `PASS`. Use the Squad Scribe for cold operations.')
+$out.Add("``pwsh -NoProfile -File '$(Join-Path $PSScriptRoot 'Complete-SquadHandoff.ps1')' -RepoRoot '$RepoRoot' -SquadRoot '$SquadRoot' -PayloadPath <payload.json>``")
+$out.Add('Validate the returned status, verified flag, turn, and history counts; preserve stderr warnings and distinguish `ledger-only` from `PASS`. Use the Squad Scribe for cold operations.')
 
 $out.Add('')
 if ($depth -eq 'quick' -and -not $federationParent) {

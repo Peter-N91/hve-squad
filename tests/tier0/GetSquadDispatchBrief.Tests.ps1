@@ -230,7 +230,7 @@ Describe 'Get-SquadDispatchBrief.ps1' {
     It 'gives the coordinator the direct ordinary-writer command and keeps cold writes with the Scribe' {
         $result = Invoke-Brief -Repo (New-BriefRepo)
         $result.Output | Should -Match 'run the validated writer directly and synchronously\. Do not dispatch the Scribe for this write:'
-        $result.Output | Should -Match '`pwsh -NoProfile -File ''[^'']+Write-SquadHandoff\.ps1'' -SquadRoot ''[^'']+'' -PayloadPath <payload\.json> -Quiet`'
+        $result.Output | Should -Match '`pwsh -NoProfile -File ''[^'']+Complete-SquadHandoff\.ps1'' -RepoRoot ''[^'']+'' -SquadRoot ''[^'']+'' -PayloadPath <payload\.json>`'
         $result.Output | Should -Match '(?m)^## Payload Contract\r?$'
         $result.Output | Should -Match 'Optional `decision`:.*adrNoted: boolean'
         $result.Output | Should -Match 'historyRecords\[\].*passedModel.*routingIdentity'

@@ -2087,7 +2087,7 @@ function Resolve-SessionLogPathsLocal {
 }
 
 # A shell call that runs a history writer, or writes the ledger, marks the session that wrote an entry.
-$script:HandoffWriterPattern = '(?<![\w-])(?:Write-Squad(?:Federation)?Handoff|Write-SquadVerdict|Initialize-Squad(?:Federation)?|Promote-SquadFederation|Measure-SquadLedger)\.ps1(?![\w.-])'
+$script:HandoffWriterPattern = '(?<![\w-])(?:Complete-SquadHandoff|Write-Squad(?:Federation)?Handoff|Write-SquadVerdict|Initialize-Squad(?:Federation)?|Promote-SquadFederation|Measure-SquadLedger)\.ps1(?![\w.-])'
 
 function ConvertTo-RootKeyLocal {
     param([AllowEmptyString()][string]$Path)

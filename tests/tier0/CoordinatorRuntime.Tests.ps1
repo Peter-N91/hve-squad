@@ -845,6 +845,64 @@ Describe 'Universal compact metadata and deterministic scheduling (COORD-04..06)
         if ($Case -eq 'completion mismatch') { $result.Output | Should -Match 'without replay' }
     }
 
+    It 'surfaces Complete-SquadHandoff in autopilot dispatch briefs and Doctor runtime checks' {
+        $repo = New-FixtureRepo
+        $fixture = Initialize-Fixture $repo
+        $brief = Invoke-Local 'Get-SquadDispatchBrief.ps1' $repo @('-RepoRoot', $repo, '-SquadRoot', $fixture.Root, '-RequestedMode', 'autopilot', '-AsJson')
+        $brief.ExitCode | Should -Be 0 -Because $brief.Output
+        ($brief.Output | ConvertFrom-Json).modeRule | Should -Match 'Complete-SquadHandoff\.ps1'
+
+        $markdownBrief = Invoke-Local 'Get-SquadDispatchBrief.ps1' $repo @('-RepoRoot', $repo, '-SquadRoot', $fixture.Root)
+        $markdownBrief.ExitCode | Should -Be 0 -Because $markdownBrief.Output
+        $markdownBrief.Output | Should -Match 'Complete-SquadHandoff\.ps1'
+
+        $isolatedHelpers = Join-Path $TestDrive ('doctor-helpers-' + [guid]::NewGuid().ToString('N'))
+        Copy-Item -LiteralPath $script:Helpers -Destination $isolatedHelpers -Recurse
+        Remove-Item -LiteralPath (Join-Path $isolatedHelpers 'Complete-SquadHandoff.ps1') -Force
+        $doctorOut = & pwsh -NoProfile -File (Join-Path $isolatedHelpers 'Invoke-SquadDoctor.ps1') -RepoRoot $repo -SquadRoot $fixture.Root 2>&1 | Out-String
+        $LASTEXITCODE | Should -Not -Be 0
+        $doctorOut | Should -Match 'Installed runtime file missing: Complete-SquadHandoff\.ps1'
+    }
+
+    It 'recognizes Complete-SquadHandoff shell executions as own-root history writers during native ledger attribution' {
+        $repo = New-FixtureRepo
+        $fixture = Initialize-Fixture $repo
+        $writerHome = Join-Path $TestDrive ('copilot-home-' + [guid]::NewGuid().ToString('N'))
+        $writerSession = Join-Path $writerHome 'session-state' 'writer-session'
+        New-Item -ItemType Directory -Path $writerSession -Force | Out-Null
+        Write-FixtureText (Join-Path $writerSession 'workspace.yaml') "cwd: $repo`n"
+
+        Write-FixtureText (Join-Path $repo '.copilot-tracking/changes/owned.md') "# Owned`n`nDelivered.`n"
+        $payload = Join-Path $repo 'owned-handoff.json'
+        Write-FixtureJson $payload @{
+            runId = 'fixture-run'
+            historyRecords = @(@{ agent = 'Squad Implementor'; request = 'Build owned'; deliverable = '.copilot-tracking/changes/owned.md'; outcome = 'Built.' })
+            stateAdvance = @{ activeRoles = @('Squad Implementor') }
+        }
+        $now = [DateTimeOffset]::UtcNow
+        $eventsPath = Join-Path $writerSession 'events.jsonl'
+        $cmd = "pwsh -NoProfile -File '$(Join-Path $script:Helpers 'Complete-SquadHandoff.ps1')' -RepoRoot '$repo' -SquadRoot '$($fixture.Root)' -PayloadPath '$payload'"
+        @(
+            @{ type = 'session.start'; timestamp = $now.AddSeconds(-10).ToString('o'); data = @{ sessionId = 'writer-session' } }
+            @{ type = 'subagent.started'; agentId = 'impl-1'; timestamp = $now.AddSeconds(-8).ToString('o'); data = @{ agentName = 'Squad Implementor'; toolCallId = 'tc-impl' } }
+            @{ type = 'session.usage_record'; agentId = 'impl-1'; timestamp = $now.AddSeconds(-6).ToString('o'); data = @{ usage = @{ model = 'claude-sonnet-5.5'; inputTokens = 100; cacheReadTokens = 0; cacheWriteTokens = 0; outputTokens = 20; aiCreditsStatus = 'complete'; copilotUsage = @{ totalNanoAiu = 1000000000 }; accounting = @{ sourceSessionId = 'writer-session'; usageId = 'u-1' } } } }
+            @{ type = 'subagent.completed'; agentId = 'impl-1'; timestamp = $now.AddSeconds(-5).ToString('o'); data = @{ agentName = 'Squad Implementor'; toolCallId = 'tc-impl'; durationMs = 3000 } }
+            @{ type = 'tool.execution_start'; timestamp = $now.ToString('o'); data = @{ toolCallId = 'tc-handoff'; toolName = 'powershell'; arguments = @{ command = $cmd } } }
+        ) | ForEach-Object { $_ | ConvertTo-Json -Depth 12 -Compress } | Set-Content -LiteralPath $eventsPath -Encoding utf8NoBOM
+
+        $prevHome = $env:COPILOT_HOME
+        try {
+            $env:COPILOT_HOME = $writerHome
+            $completed = Invoke-Local 'Complete-SquadHandoff.ps1' $repo @('-RepoRoot', $repo, '-SquadRoot', $fixture.Root, '-PayloadPath', $payload)
+            $completed.ExitCode | Should -Be 0 -Because $completed.Output
+            $ledgerJson = Invoke-Local 'Measure-SquadLedger.ps1' $repo @('-SquadRoot', $fixture.Root, '-SessionLog', 'auto', '-Format', 'json')
+            $ledgerJson.ExitCode | Should -Be 0 -Because $ledgerJson.Output
+            $parsed = $ledgerJson.Output | ConvertFrom-Json
+            @($parsed.exact.sessionIds) | Should -Contain 'writer-session'
+        }
+        finally { $env:COPILOT_HOME = $prevHome }
+    }
+
     It 'carries requested <Mode> separately from recorded off without mutating discovery' -ForEach @(
         @{ Mode = 'ranked' }, @{ Mode = 'manual' }, @{ Mode = 'economy' }
     ) {

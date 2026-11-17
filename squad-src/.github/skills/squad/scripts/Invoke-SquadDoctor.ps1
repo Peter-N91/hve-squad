@@ -169,7 +169,7 @@ try {
     $SquadRoot = Resolve-SquadRepositoryPath -RepoRoot $RepoRoot -Path $SquadRoot -AllowMissing
     $receipt.repoRoot = $RepoRoot
     $receipt.squadRoot = $SquadRoot
-    foreach ($name in @('Get-SquadDispatchBrief.ps1', 'Initialize-SquadConsumptionRates.ps1', 'Measure-SquadLedger.ps1',
+    foreach ($name in @('Complete-SquadHandoff.ps1', 'Get-SquadDispatchBrief.ps1', 'Initialize-SquadConsumptionRates.ps1', 'Measure-SquadLedger.ps1',
             'New-SquadDispatchPlan.ps1', 'Write-SquadHandoff.ps1', 'Test-SquadTurnCompletion.ps1')) {
         if (-not (Test-Path -LiteralPath (Join-Path $PSScriptRoot $name) -PathType Leaf)) {
             throw "Installed runtime file missing: $name. Update/reinstall this distribution and start a fresh session."
