@@ -757,7 +757,7 @@ function Get-EfficiencyHistoryDeliverable {
     [CmdletBinding()]
     [OutputType([string])]
     param([string]$Root, [string]$Squad, [string]$Agent, [AllowNull()]$Metrics)
-    if ($null -eq $Metrics -or $null -eq $Metrics.dispatches -or -not $Metrics.dispatches.Contains($Agent)) { return }
+    if ($null -eq $Metrics -or -not (Test-EfficiencyDispatchObserved -Metrics $Metrics -Agent $Agent)) { return }
     $History = Join-Path $Squad "history/$Agent.md"
     if (-not (Test-Path -LiteralPath $History -PathType Leaf)) { return }
     $Text = Get-Content -LiteralPath $History -Raw
@@ -778,6 +778,26 @@ function Get-EfficiencyHistoryDeliverable {
             }
         }
     }
+}
+
+function Test-EfficiencyDispatchObserved {
+    <#
+    .SYNOPSIS
+    Tests dispatch membership across JSON hashtable and PSCustomObject shapes.
+    #>
+    param($Metrics, [Parameter(Mandatory)][string]$Agent)
+    if ($Metrics -is [Collections.IDictionary]) {
+        if (-not $Metrics.Contains('dispatches')) { return $false }
+        $Dispatches = $Metrics['dispatches']
+    }
+    else {
+        $Property = $Metrics.PSObject.Properties['dispatches']
+        if (-not $Property) { return $false }
+        $Dispatches = $Property.Value
+    }
+    if ($Dispatches -is [Collections.IDictionary]) { return $Dispatches.Contains($Agent) }
+    $Agents = $Dispatches.PSObject.Properties | ForEach-Object Name
+    $Agent -in $Agents
 }
 
 function Resolve-EfficiencyPlainPath {
@@ -961,6 +981,7 @@ function Get-EfficiencyBookkeepingEvidence {
     $Starts = @{}; $Seen = [Collections.Generic.HashSet[string]]::new()
     $BackgroundShells = @{}
     $Executions = [Collections.Generic.List[object]]::new()
+    $WriterAttempts = [Collections.Generic.List[object]]::new()
     $Rejections = [Collections.Generic.List[object]]::new()
     $ScribeStarts = @{}; $ScribeRuns = [Collections.Generic.List[object]]::new()
     $SessionId = $null; $Sessions = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
@@ -1451,6 +1472,12 @@ function Get-EfficiencyBookkeepingEvidence {
                 }
             }
             if ($WriterCalls.Count -ne 1) { continue }
+            $WriterAttempt = [ordered]@{
+                script = $WriterCalls[0].script
+                toolCallId = [string]$Data.toolCallId
+                turn = $null
+                accepted = $false
+            }
             $OutputLines = @($ResultText -split '\r?\n')
             $Receipts = [Collections.Generic.List[object]]::new()
             $ReceiptLineIndices = [Collections.Generic.List[int]]::new()
@@ -1464,17 +1491,29 @@ function Get-EfficiencyBookkeepingEvidence {
                 }
                 catch { }
             }
-            if ($Receipts.Count -ne 1) { continue }
+            if ($Receipts.Count -ne 1) {
+                $WriterAttempts.Add([pscustomobject]$WriterAttempt)
+                continue
+            }
+            $WriterAttempt.turn = if ($Receipts[0].Contains('turn')) { $Receipts[0].turn } else { $null }
             if ($WriterCalls[0].script -eq 'Complete-SquadHandoff.ps1' -and
-                ($Receipts[0]['verified'] -isnot [bool] -or $Receipts[0]['verified'] -ne $true -or $ShellExitCode -ne 0)) { continue }
+                ($Receipts[0]['verified'] -isnot [bool] -or $Receipts[0]['verified'] -ne $true -or $ShellExitCode -ne 0)) {
+                $WriterAttempts.Add([pscustomobject]$WriterAttempt)
+                continue
+            }
             if ($PostWriterCompletionIndex -ge 0 -or $ShellExitCode -ne 0) {
                 $NextLineIdx = $ReceiptLineIndices[0] + 1
                 $VerifiedImmediateZero = $PostWriterCompletionIndex -eq ($Ast.EndBlock.Statements.Count - 1) -and
                     $ImmediateExitMarkerAfterWriter -and
                     $NextLineIdx -lt $OutputLines.Count -and
                     $OutputLines[$NextLineIdx] -match '^exit[\s=]+0$'
-                if (-not $VerifiedImmediateZero) { continue }
+                if (-not $VerifiedImmediateZero) {
+                    $WriterAttempts.Add([pscustomobject]$WriterAttempt)
+                    continue
+                }
             }
+            $WriterAttempt.accepted = $true
+            $WriterAttempts.Add([pscustomobject]$WriterAttempt)
             $Executions.Add([pscustomobject]@{
                 script = $WriterCalls[0].script; parameters = $WriterCalls[0].parameters; receipt = $Receipts[0]
                 toolCallId = [string]$Data.toolCallId; hostTurnId = [string]$Data['turnId']; actorId = [string]$Start['agentId']
@@ -1496,7 +1535,7 @@ function Get-EfficiencyBookkeepingEvidence {
     if ($ExpectedSessionId -and ($Sessions.Count -ne 1 -or -not $Sessions.Contains($ExpectedSessionId))) {
         $SessionId = $null; $Executions.Clear(); $ScribeRuns.Clear()
     }
-    [pscustomobject]@{ path = (Resolve-Path -LiteralPath $Path).Path; sessionId = $SessionId; executions = $Executions.ToArray(); scribeRuns = $ScribeRuns.ToArray(); rejections = $Rejections.ToArray() }
+    [pscustomobject]@{ path = (Resolve-Path -LiteralPath $Path).Path; sessionId = $SessionId; executions = $Executions.ToArray(); writerAttempts = $WriterAttempts.ToArray(); scribeRuns = $ScribeRuns.ToArray(); rejections = $Rejections.ToArray() }
 }
 
 function Test-EfficiencyBookkeeping {
@@ -1522,6 +1561,7 @@ function Test-EfficiencyBookkeeping {
         $Run = [regex]::Match($Ledger, '(?m)^# Squad Consumption Ledger \(Run: (?<id>[^)\r\n]+)\)')
         if (-not $Run.Success) { return $false }
         $Records = [Collections.Generic.List[object]]::new()
+        $VerifiedWriterIds = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
         $Latest = $null; $LatestActive = @(); $LatestRunId = ''
         foreach ($Execution in $Evidence.executions) {
             $RecordCountBefore = $Records.Count
@@ -1554,7 +1594,7 @@ function Test-EfficiencyBookkeeping {
                     ($Bound.ContainsKey('RepoRoot') -and [IO.Path]::GetFullPath([string]$Bound['RepoRoot'], $Root) -ine $Root)) { continue }
                 if ($null -ne $Payload) {
                     if ([IO.Path]::GetFullPath([string]$Payload.squadRoot, $Root) -ine $Squad -or
-                        $Payload.runId -cne $Run.Groups['id'].Value) { continue }
+                        ($Receipt.turn -eq $State.turn -and $Payload.runId -cne $Run.Groups['id'].Value)) { continue }
                 }
                 $Actors = @(if ($Bound.ContainsKey('Direct')) { 'coordinator' } else { 'coordinator'; 'scribe' })
                 if (($Receipt['actors'] -join ',') -cne ($Actors -join ',') -or $Receipt['historyEntries'] -ne $Actors.Count) { continue }
@@ -1587,7 +1627,12 @@ function Test-EfficiencyBookkeeping {
                 if ([string]::IsNullOrWhiteSpace([string]$Payload.runId) -or $Payload.historyRecords.Count -ne $Receipt.dispatchEntries -or
                     ($Payload.Contains('turn') -and $Payload.turn -ne $Receipt.turn)) { continue }
                 foreach ($Record in $Payload.historyRecords) {
-                    if ($null -eq $Metrics -or -not $Metrics.dispatches.Contains($Record.agent) -or $Record.agent -eq 'Squad Scribe') { throw 'Missing real worker dispatch.' }
+                        $AllowedStageAgents = if ($Stage -eq 'requirements') {
+                            @('Squad Researcher', 'Squad Lead', 'BRD Builder', 'PRD Builder', 'BRD Quality Reviewer', 'PRD Quality Reviewer', 'Squad Reviewer')
+                        }
+                        else { @() }
+                        if ($Record.agent -notin $AllowedStageAgents) { throw 'Accepted writer receipt is not bound to the requested stage.' }
+                    if ($null -eq $Metrics -or -not (Test-EfficiencyDispatchObserved -Metrics $Metrics -Agent $Record.agent) -or $Record.agent -eq 'Squad Scribe') { throw 'Missing real worker dispatch.' }
                     if (-not $Receipt.historyCounts.Contains($Record.agent) -or
                         ($Receipt.historyCounts[$Record.agent] -isnot [int] -and $Receipt.historyCounts[$Record.agent] -isnot [long]) -or
                         $Receipt.historyCounts[$Record.agent] -lt 1) { throw 'Missing writer history count.' }
@@ -1601,27 +1646,50 @@ function Test-EfficiencyBookkeeping {
                 $LatestRunId = [string]$Payload.runId
             }
             $Latest = $Execution
+            $null = $VerifiedWriterIds.Add([string]$Execution.toolCallId)
             }
             catch {
                 if ($Records.Count -gt $RecordCountBefore) { $Records.RemoveRange($RecordCountBefore, $Records.Count - $RecordCountBefore) }
                 continue
             }
         }
-        if ($null -eq $Latest -or $Latest.receipt.turn -ne $State.turn -or $LatestRunId -cne $Run.Groups['id'].Value) {
+        $ExpectedTurn = if ($null -ne $Latest) { [int]$Latest.receipt.turn } else { 0 }
+        $CurrentTurn = [int]$State.turn
+        $CurrentStage = $ExpectedTurn -eq $CurrentTurn
+        if ($null -eq $Latest) {
+            if ($null -ne $FailureReason) { $FailureReason.Value = 'No accepted writer execution is available for this stage.' }
+            return $false
+        }
+        $UnverifiedWriterAttempts = @($Evidence.writerAttempts | Where-Object {
+                $_.accepted -and -not (
+                    ($Stage -ne 'init' -and $_.script -eq 'Initialize-Squad.ps1') -or
+                    $VerifiedWriterIds.Contains([string]$_.toolCallId)
+                )
+            })
+        if ($UnverifiedWriterAttempts.Count) {
+            if ($null -ne $FailureReason) { $FailureReason.Value = 'An accepted shell receipt failed stage proof binding.' }
+            return $false
+        }
+        if ($CurrentStage -and $LatestRunId -cne $Run.Groups['id'].Value) {
             if ($null -ne $FailureReason) { $FailureReason.Value = 'Accepted writer proof does not match the current state turn and ledger run.' }
             return $false
         }
-        $Updated = [DateTimeOffset]$State.updated
-        if ($Updated -lt ([DateTimeOffset]$Latest.startedAt).AddMinutes(-5) -or
-            $Updated -gt ([DateTimeOffset]$Latest.completedAt).AddMinutes(5)) { return $false }
+        $FailedWriterAttempt = @($Evidence.writerAttempts | Where-Object { -not $_.accepted })
+        if ($FailedWriterAttempt.Count) {
+            if ($null -ne $FailureReason) { $FailureReason.Value = 'A writer attempt in the stage log lacks an accepted receipt.' }
+            return $false
+        }
+        $Updated = if ($State.updated) { [DateTimeOffset]$State.updated } else { $null }
+        if ($CurrentStage -and ($Updated -lt ([DateTimeOffset]$Latest.startedAt).AddMinutes(-5) -or
+            $Updated -gt ([DateTimeOffset]$Latest.completedAt).AddMinutes(5))) { return $false }
         $CurrentAgents = @(if ($Stage -eq 'init') { 'Squad Scribe' } else { $LatestActive })
         foreach ($Agent in $CurrentAgents) {
             $History = Get-Content -LiteralPath (Join-Path $Squad "history\$Agent.md") -Raw
             $CurrentEntries = @([regex]::Matches($History, '(?ms)^### (?<time>\S+)[^\r\n]*\r?\n(?<body>.*?)(?=^### |\z)') |
-                Where-Object { $_.Groups['body'].Value -match ('(?m)^\* Turn: ' + $State.turn + '\r?$') })
-            if (-not @($CurrentEntries | Where-Object { [DateTimeOffset]$_.Groups['time'].Value -eq $Updated }).Count) { return $false }
+                Where-Object { $_.Groups['body'].Value -match ('(?m)^\* Turn: ' + $ExpectedTurn + '\r?$') })
+            if (-not $CurrentEntries.Count -or ($CurrentStage -and -not @($CurrentEntries | Where-Object { [DateTimeOffset]$_.Groups['time'].Value -eq $Updated }).Count)) { return $false }
         }
-        if ($Stage -eq 'init' -and ($State.turn -ne 1 -or @($State.activeRoles).Count -ne 0)) { return $false }
+        if ($Stage -eq 'init' -and $ExpectedTurn -ne 1) { return $false }
         $Required = @(if ($Stage -ne 'init') { 'BRD Builder'; 'PRD Builder'; 'BRD Quality Reviewer'; 'PRD Quality Reviewer' })
         foreach ($Agent in $Required) {
             if ($Agent -notin @($Records | ForEach-Object { $_.agent })) {
@@ -1630,8 +1698,13 @@ function Test-EfficiencyBookkeeping {
             }
         }
         $Proof = @{
-            runId = $Run.Groups['id'].Value; squadRoot = $Squad; turn = $State.turn
+            runId = $LatestRunId; squadRoot = $Squad; turn = $ExpectedTurn
             historyRecords = $Records.ToArray(); stateAdvance = @{ activeRoles = $LatestActive }
+        }
+        if (-not $CurrentStage) {
+            if ($Stage -eq 'init') { return $true }
+            $ProofRecords = @($Records | Where-Object { $_.turn -eq $ExpectedTurn })
+            return $ProofRecords.Count -gt 0 -and @($ProofRecords | Where-Object { $_.deliverable }).Count -eq $ProofRecords.Count
         }
         $Directory = New-EfficiencyCheckDirectory -Workspace $Root -EvidenceRoot $EvidenceRoot
         $ProofPath = Join-Path $Directory 'proof.json'
@@ -1639,7 +1712,7 @@ function Test-EfficiencyBookkeeping {
             $Proof | ConvertTo-Json -Depth 30 | Set-Content -LiteralPath $ProofPath -Encoding utf8NoBOM
             $Helper = Resolve-EfficiencySquadScript -Name 'SquadCoordinator.psm1' -SourceRoot $SourceRoot -InstallRoot $InstallRoot -Workspace $Root
             Import-Module $Helper -Force
-            $Result = Invoke-SquadLocalScript -Name 'Test-SquadTurnCompletion.ps1' -Arguments @('-RepoRoot', $Root, '-SquadRoot', $Squad, '-ProofPath', $ProofPath, '-ExpectedTurn', [string]$State.turn)
+            $Result = Invoke-SquadLocalScript -Name 'Test-SquadTurnCompletion.ps1' -Arguments @('-RepoRoot', $Root, '-SquadRoot', $Squad, '-ProofPath', $ProofPath, '-ExpectedTurn', [string]$ExpectedTurn)
             if ($Result.exitCode -ne 0) {
                 if ($null -ne $FailureReason) { $FailureReason.Value = $Result.stderr.Trim() }
                 return $false
@@ -1711,7 +1784,7 @@ function Test-EfficiencyWorkflow {
             if ($Row.Count -eq 1) {
                 $Cells = @($Row[0].Trim().Trim('|').Split('|') | ForEach-Object { $_.Trim().Trim('`') })
                 if ($Cells.Count -ge 4) {
-                    $Candidates = @($Cells[2]) + @($Cells[3].Split(',') | ForEach-Object { $_.Trim() })
+                    $Candidates = @($Cells[2]) + @($Cells[3].Split(',') | ForEach-Object { $_.Trim() } | Where-Object { $_ })
                     foreach ($Agent in $Candidates) {
                         foreach ($Full in @(Get-EfficiencyHistoryDeliverable -Root $Root -Squad $Squad -Agent $Agent -Metrics $Metrics)) {
                             $Valid = $true

@@ -1364,6 +1364,58 @@ Describe 'Efficiency actual direct bookkeeping proof' -Tag 'Unit' {
         }
         @(Get-ChildItem -LiteralPath (Join-Path $TestDrive 'out') -Filter '.efficiency-check-*').Count | Should -Be 0
     }
+
+    It 'validates a completed <Stage> stage after later turns advance state' -ForEach @(
+        @{ Stage = 'init' }
+        @{ Stage = 'requirements' }
+    ) {
+        $fixture = $script:ActualProofFixtures[$Stage]
+        foreach ($path in $fixture.original.Keys) { [IO.File]::WriteAllText($path, $fixture.original[$path]) }
+        $statePath = Join-Path $fixture.squad 'state.json'
+        $original = Get-Content -LiteralPath $statePath -Raw
+        $state = $original | ConvertFrom-Json -AsHashtable
+        $expectedTurn = [int]$state.turn
+        $state.turn = $expectedTurn + 1
+        $state.updated = [DateTimeOffset]::UtcNow.AddMinutes(1).ToString('o')
+        $state | ConvertTo-Json -Depth 20 | Set-Content -LiteralPath $statePath -Encoding utf8NoBOM
+        try {
+            $metrics = Measure-EfficiencyEvents -Path $fixture.events
+            $session = "actual-$Stage"
+            $evidence = Get-EfficiencyBookkeepingEvidence -Path $fixture.events -Workspace $fixture.root -SourceRoot $script:ProofSource -InstallRoot $script:ProofInstall -ExpectedSessionId $session
+            $result = Test-EfficiencyWorkflow -Workspace $fixture.root -Metrics $metrics -Stage $Stage -BookkeepingEvidence $evidence -SourceRoot $script:ProofSource -InstallRoot $script:ProofInstall -ExpectedSessionId $session
+            $result.checks.bookkeepingEvidence | Should -BeTrue -Because ($result.diagnostics.bookkeepingEvidence)
+            $result.passed | Should -BeTrue
+        }
+        finally {
+            $original | Set-Content -LiteralPath $statePath -Encoding utf8NoBOM -NoNewline
+        }
+    }
+
+    It 'rejects an accepted out-of-stage requirements writer receipt' {
+        $fixture = $script:ActualProofFixtures.requirements
+        foreach ($path in $fixture.original.Keys) { [IO.File]::WriteAllText($path, $fixture.original[$path]) }
+        $lines = @(Get-Content -LiteralPath $fixture.events | ForEach-Object { $_ | ConvertFrom-Json -AsHashtable })
+        $payloadPath = Join-Path $fixture.root 'handoff-out-of-stage.json'
+        @{
+            runId = 'proof-run'; turn = 7
+            historyRecords = @(@{ agent = 'Squad Implementor'; request = 'Build'; deliverable = 'src/task.ps1'; outcome = 'Done.' })
+            stateAdvance = @{ activeRoles = @('Squad Implementor') }
+        } | ConvertTo-Json -Depth 20 | Set-Content -LiteralPath $payloadPath
+        $turnId = 'out-of-stage'
+        $timestamp = [DateTimeOffset]::UtcNow.ToString('o')
+        $command = "pwsh -NoProfile -File '$(Join-Path $script:ProofScripts 'Complete-SquadHandoff.ps1')' -RepoRoot '$($fixture.root)' -SquadRoot '$($fixture.squad)' -PayloadPath '$payloadPath'"
+        $lines += @(
+            @{ type = 'tool.execution_start'; agentId = ''; timestamp = $timestamp; data = @{ toolCallId = $turnId; toolName = 'powershell'; turnId = $turnId; arguments = @{ command = $command } } }
+            @{ type = 'tool.execution_complete'; agentId = ''; timestamp = ([DateTimeOffset]$timestamp).AddSeconds(1).ToString('o'); data = @{ toolCallId = $turnId; turnId = $turnId; success = $true; shellExecution = @{ exitCode = 0 }; result = @{ content = '{"status":"written","turn":7,"dispatchEntries":1,"historyCounts":{"Squad Implementor":1,"Squad Scribe":7},"ledgerCheck":"PASS","verified":true}' } } }
+        )
+        $lines | ForEach-Object { $_ | ConvertTo-Json -Depth 30 -Compress } | Set-Content -LiteralPath $fixture.events
+        $metrics = Measure-EfficiencyEvents -Path $fixture.events
+        $metrics.dispatches['Squad Implementor'] = 1
+        $evidence = Get-EfficiencyBookkeepingEvidence -Path $fixture.events -Workspace $fixture.root -SourceRoot $script:ProofSource -InstallRoot $script:ProofInstall -ExpectedSessionId 'actual-requirements'
+        $result = Test-EfficiencyWorkflow -Workspace $fixture.root -Metrics $metrics -Stage requirements -BookkeepingEvidence $evidence -SourceRoot $script:ProofSource -InstallRoot $script:ProofInstall -ExpectedSessionId 'actual-requirements'
+        $result.checks.bookkeepingEvidence | Should -BeFalse
+        $result.passed | Should -BeFalse
+    }
 }
 
 Describe 'Efficiency quality and comparison gates' -Tag 'Unit' {
