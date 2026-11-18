@@ -158,6 +158,41 @@ Describe 'GATE-38 Init copies roster rows from the payload and never derives an 
 Describe 'Deterministic fresh Init' -Tag 'Unit' {
     BeforeAll {
         $script:InitScript = Join-Path $script:Model.SquadSkillRoot 'scripts/Initialize-Squad.ps1'
+
+        # Freeze contract-only identities while retaining the shipped template's shape checks.
+        $PricingFixtureSkill = Join-Path $TestDrive 'pricing-fixture-skill'
+        Copy-Item -LiteralPath $script:Model.SquadSkillRoot -Destination $PricingFixtureSkill -Recurse
+        $PricingTemplatePath = Join-Path $PricingFixtureSkill 'references/consumption-rates-template.md'
+        $PricingRows = @(
+            '| Fixture Fast Model | `fixture-fast-model` | fast | 1.00 | 0.10 | 0 | 5.00 | none (flat rate) | n/a | n/a | n/a | n/a | frozen pricing fixture |'
+            '| Fixture Default Model | `fixture-default-model` | default | 3.00 | 0.30 | 3.75 | 15.00 | none (flat rate) | n/a | n/a | n/a | n/a | frozen pricing fixture |'
+            '| Fixture Extended Model | `fixture-extended-model` | extended | 5.00 | 0.50 | 6.25 | 25.00 | none (flat rate) | n/a | n/a | n/a | n/a | frozen pricing fixture |'
+        )
+        $PricingFallbackRows = @{
+            fast     = '| fast | Fixture Fast Model | 1.00 | 0.10 | 0 | 5.00 |'
+            default  = '| default | Fixture Default Model | 3.00 | 0.30 | 3.75 | 15.00 |'
+            extended = '| extended | Fixture Extended Model | 5.00 | 0.50 | 6.25 | 25.00 |'
+        }
+        $PricingTemplateLines = [System.Collections.Generic.List[string]]::new()
+        $PricingRowsInserted = 0
+        $PricingFallbackRowsReplaced = 0
+        foreach ($Line in ((Get-Content -LiteralPath $PricingTemplatePath -Raw) -split '\r?\n')) {
+            if ($Line -match '^\| (fast|default|extended) \| ') {
+                $Line = $PricingFallbackRows[$Matches[1]]
+                $PricingFallbackRowsReplaced++
+            }
+            if ($Line.StartsWith('| (additional) |')) {
+                foreach ($PricingRow in $PricingRows) { $null = $PricingTemplateLines.Add($PricingRow) }
+                $PricingRowsInserted++
+            }
+            $null = $PricingTemplateLines.Add($Line)
+        }
+        if ($PricingRowsInserted -ne 1 -or $PricingFallbackRowsReplaced -ne 3) {
+            throw 'Cannot construct the frozen Init pricing fixture from the shipped rates template.'
+        }
+        Set-Content -LiteralPath $PricingTemplatePath -Value ($PricingTemplateLines -join "`n") -NoNewline -Encoding utf8NoBOM
+        $script:PricingInitScript = Join-Path $PricingFixtureSkill 'scripts/Initialize-Squad.ps1'
+
         function Get-InitPayload {
             param([string]$Root = '.copilot-tracking/squad')
             $Rows = @(
@@ -175,11 +210,11 @@ Describe 'Deterministic fresh Init' -Tag 'Unit' {
             }
         }
         function Invoke-InitPayload {
-            param($Payload, [string]$Repository)
+            param($Payload, [string]$Repository, [string]$InitScript = $script:InitScript)
             New-Item -ItemType Directory -Path $Repository -Force | Out-Null
             $InputPath = Join-Path $Repository 'init.json'
             $Payload | ConvertTo-Json -Depth 20 | Set-Content -LiteralPath $InputPath
-            $Output = & pwsh -NoProfile -File $script:InitScript -RepoRoot $Repository -PayloadPath $InputPath 2>&1
+            $Output = & pwsh -NoProfile -File $InitScript -RepoRoot $Repository -PayloadPath $InputPath 2>&1
             [pscustomobject]@{ ExitCode = $LASTEXITCODE; Output = $Output -join "`n" }
         }
     }
@@ -285,7 +320,7 @@ Describe 'Deterministic fresh Init' -Tag 'Unit' {
         $Payload = Get-InitPayload
         $Payload.Remove('usage')
         $Repository = Join-Path $TestDrive 'legacy-absent-usage'
-        $Result = Invoke-InitPayload $Payload $Repository
+        $Result = Invoke-InitPayload $Payload $Repository -InitScript $script:PricingInitScript
         $Result.ExitCode | Should -Be 0 -Because $Result.Output
         $Status = $Result.Output | ConvertFrom-Json
         $Status.historyEntries | Should -Be 2
@@ -302,12 +337,12 @@ Describe 'Deterministic fresh Init' -Tag 'Unit' {
         $Blocks.model_source | Should -Be @('unresolved', 'unresolved')
         $Blocks.basis | Should -Be @('tier-default', 'tier-default')
         $Blocks.model_tier | Should -Be @('default', 'fast')
-        $Blocks.priced_as | Should -Be @('Claude Sonnet 4.6', 'Claude Haiku 4.5')
+        $Blocks.priced_as | Should -Be @('Fixture Default Model', 'Fixture Fast Model')
+        $Blocks.cache_write_tokens | Should -Be @(24000, 0)
         foreach ($Block in $Blocks) {
             $Block.internal_turns | Should -Be 4
             $Block.input_tokens | Should -Be 15600
             $Block.cached_tokens | Should -Be 62400
-            $Block.cache_write_tokens | Should -Be 24000
             $Block.output_tokens | Should -Be 3200
         }
         @(Get-ChildItem -LiteralPath $Repository -Directory -Filter '.squad-init-*' -Recurse -Force).Count | Should -Be 0
@@ -337,15 +372,15 @@ Describe 'Deterministic fresh Init' -Tag 'Unit' {
     }
 
     It 'derives only permitted coordinator session attribution for <Session>' -ForEach @(
-        @{ Session = 'GPT-5.3-Codex'; Identity = 'GPT-5.3-Codex'; Source = 'session-inherited'; Price = 'GPT-5.3-Codex'; Basis = 'estimated'; CacheWrite = 0 }
-        @{ Session = ''; Identity = 'unknown'; Source = 'unresolved'; Price = 'Claude Sonnet 4.6'; Basis = 'tier-default'; CacheWrite = 24000 }
-        @{ Session = 'Claude Opus 5 (Copilot)'; Identity = 'Claude Opus 5 (Copilot)'; Source = 'session-inherited'; Price = 'Claude Opus 5'; Basis = 'estimated'; CacheWrite = 24000 }
+        @{ Session = 'fixture-fast-model'; Identity = 'fixture-fast-model'; Source = 'session-inherited'; Price = 'Fixture Fast Model'; Basis = 'estimated'; CacheWrite = 0 }
+        @{ Session = ''; Identity = 'unknown'; Source = 'unresolved'; Price = 'Fixture Default Model'; Basis = 'tier-default'; CacheWrite = 24000 }
+        @{ Session = 'Fixture Extended Model (Copilot)'; Identity = 'Fixture Extended Model (Copilot)'; Source = 'session-inherited'; Price = 'Fixture Extended Model'; Basis = 'estimated'; CacheWrite = 24000 }
     ) {
         $Payload = Get-InitPayload
         $Payload.Remove('usage')
         $Payload.sessionModel = $Session
         $Repository = Join-Path $TestDrive ([guid]::NewGuid().ToString('N'))
-        $Result = Invoke-InitPayload $Payload $Repository
+        $Result = Invoke-InitPayload $Payload $Repository -InitScript $script:PricingInitScript
         $Result.ExitCode | Should -Be 0 -Because $Result.Output
         $History = Get-Content -LiteralPath (Join-Path $Repository "$($Payload.squadRoot)/history/Squad Scribe.md") -Raw
         $Blocks = @([regex]::Matches($History, '(?ms)^```json\n(.*?)\n```') | ForEach-Object { $_.Groups[1].Value | ConvertFrom-Json })
@@ -567,16 +602,16 @@ Describe 'Deterministic fresh Init' -Tag 'Unit' {
     }
 
     It 'accepts coherent pricing for <ModelName> without changing actual attribution' -ForEach @(
-        @{ ModelName = 'Claude Opus 5'; Price = 'Claude Opus 5'; Tier = 'fast'; Source = 'dispatch-reported'; Basis = 'estimated' }
-        @{ ModelName = 'claude-haiku-4.5'; Price = 'Claude Haiku 4.5'; Tier = 'fast'; Source = 'dispatch-reported'; Basis = 'estimated' }
-        @{ ModelName = 'Unlisted Actual Model'; Price = 'Claude Sonnet 4.6'; Tier = 'default'; Source = 'operator-declared'; Basis = 'estimated' }
-        @{ ModelName = 'unknown'; Price = 'Claude Haiku 4.5'; Tier = 'fast'; Source = 'unresolved'; Basis = 'tier-default' }
+        @{ ModelName = 'Fixture Extended Model'; Price = 'Fixture Extended Model'; Tier = 'fast'; Source = 'dispatch-reported'; Basis = 'estimated' }
+        @{ ModelName = 'fixture-fast-model'; Price = 'Fixture Fast Model'; Tier = 'fast'; Source = 'dispatch-reported'; Basis = 'estimated' }
+        @{ ModelName = 'Unlisted Actual Model'; Price = 'Fixture Default Model'; Tier = 'default'; Source = 'operator-declared'; Basis = 'estimated' }
+        @{ ModelName = 'unknown'; Price = 'Fixture Fast Model'; Tier = 'fast'; Source = 'unresolved'; Basis = 'tier-default' }
     ) {
         $Payload = Get-InitPayload
         $Block = $Payload.usage[0].consumption
         $Block.model = $ModelName; $Block.priced_as = $Price; $Block.model_tier = $Tier; $Block.model_source = $Source; $Block.basis = $Basis
         $Repository = Join-Path $TestDrive ([guid]::NewGuid().ToString('N'))
-        $Result = Invoke-InitPayload $Payload $Repository
+        $Result = Invoke-InitPayload $Payload $Repository -InitScript $script:PricingInitScript
         $Result.ExitCode | Should -Be 0 -Because $Result.Output
         $History = Get-Content -LiteralPath (Join-Path $Repository "$($Payload.squadRoot)/history/Squad Scribe.md") -Raw
         $History | Should -Match ([regex]::Escape('"model": "' + $ModelName + '"'))
@@ -584,23 +619,23 @@ Describe 'Deterministic fresh Init' -Tag 'Unit' {
     }
 
     It 'rejects contradictory pricing <Case> and removes staged state' -ForEach @(
-        @{ Case = 'known model cheap real row'; ModelName = 'Claude Opus 5'; Price = 'Claude Haiku 4.5'; Source = 'dispatch-reported'; Basis = 'estimated' }
-        @{ Case = 'known model tier label'; ModelName = 'Claude Opus 5'; Price = 'default'; Source = 'dispatch-reported'; Basis = 'estimated' }
-        @{ Case = 'unlisted wrong fallback'; ModelName = 'Unlisted Actual Model'; Price = 'Claude Haiku 4.5'; Source = 'dispatch-reported'; Basis = 'estimated' }
-        @{ Case = 'unknown wrong fallback'; ModelName = 'unknown'; Price = 'Claude Haiku 4.5'; Source = 'unresolved'; Basis = 'tier-default' }
+        @{ Case = 'known model cheap real row'; ModelName = 'Fixture Extended Model'; Price = 'Fixture Fast Model'; Source = 'dispatch-reported'; Basis = 'estimated' }
+        @{ Case = 'known model tier label'; ModelName = 'Fixture Extended Model'; Price = 'default'; Source = 'dispatch-reported'; Basis = 'estimated' }
+        @{ Case = 'unlisted wrong fallback'; ModelName = 'Unlisted Actual Model'; Price = 'Fixture Fast Model'; Source = 'dispatch-reported'; Basis = 'estimated' }
+        @{ Case = 'unknown wrong fallback'; ModelName = 'unknown'; Price = 'Fixture Fast Model'; Source = 'unresolved'; Basis = 'tier-default' }
         @{ Case = 'unknown estimated'; ModelName = 'unknown'; Price = 'default'; Source = 'unresolved'; Basis = 'estimated' }
-        @{ Case = 'resolved tier-default'; ModelName = 'Claude Opus 5'; Price = 'Claude Opus 5'; Source = 'dispatch-reported'; Basis = 'tier-default' }
+        @{ Case = 'resolved tier-default'; ModelName = 'Fixture Extended Model'; Price = 'Fixture Extended Model'; Source = 'dispatch-reported'; Basis = 'tier-default' }
         @{ Case = 'unlisted tier-default'; ModelName = 'Unlisted Actual Model'; Price = 'default'; Source = 'dispatch-reported'; Basis = 'tier-default' }
         @{ Case = 'invented tier identity'; ModelName = 'default'; Price = 'default'; Source = 'dispatch-reported'; Basis = 'estimated' }
         @{ Case = 'normalized auto'; ModelName = ' auto '; Price = 'default'; Source = 'dispatch-reported'; Basis = 'estimated' }
-        @{ Case = 'unresolved concrete identity'; ModelName = 'Claude Opus 5'; Price = 'Claude Opus 5'; Source = 'unresolved'; Basis = 'estimated' }
-        @{ Case = 'inherited mismatch'; ModelName = 'Claude Opus 5'; Price = 'Claude Opus 5'; Source = 'session-inherited'; Basis = 'estimated' }
+        @{ Case = 'unresolved concrete identity'; ModelName = 'Fixture Extended Model'; Price = 'Fixture Extended Model'; Source = 'unresolved'; Basis = 'estimated' }
+        @{ Case = 'inherited mismatch'; ModelName = 'Fixture Extended Model'; Price = 'Fixture Extended Model'; Source = 'session-inherited'; Basis = 'estimated' }
     ) {
         $Payload = Get-InitPayload
         $Block = $Payload.usage[0].consumption
         $Block.model = $ModelName; $Block.priced_as = $Price; $Block.model_source = $Source; $Block.basis = $Basis
         $Repository = Join-Path $TestDrive $Case.Replace(' ', '-')
-        $Result = Invoke-InitPayload $Payload $Repository
+        $Result = Invoke-InitPayload $Payload $Repository -InitScript $script:PricingInitScript
         $Result.ExitCode | Should -Not -Be 0
         @(Get-ChildItem -LiteralPath $Repository -Filter state.json -File -Recurse).Count | Should -Be 0
         @(Get-ChildItem -LiteralPath $Repository -Directory -Filter '.squad-init-*' -Recurse -Force).Count | Should -Be 0
