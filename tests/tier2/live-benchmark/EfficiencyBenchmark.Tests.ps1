@@ -1429,6 +1429,88 @@ Describe 'Efficiency actual direct bookkeeping proof' -Tag 'Unit' {
         $result.checks.bookkeepingEvidence | Should -BeFalse
         $result.passed | Should -BeFalse
     }
+
+    It 'accepts nested substage payloads, recovered mid-stage exit-1 retries, and role-ID activeRoles' {
+        $fixture = $script:ActualProofFixtures.requirements
+        foreach ($path in $fixture.original.Keys) { [IO.File]::WriteAllText($path, $fixture.original[$path]) }
+        $nestedDir = Join-Path $fixture.root '.copilot-tracking/benchmark-evidence/closing'
+        $nestedPayload = Join-Path $nestedDir 'handoff.json'
+        $statePath = Join-Path $fixture.squad 'state.json'
+        try {
+            $null = New-Item -ItemType Directory -Path $nestedDir -Force
+            $lines = @(Get-Content -LiteralPath $fixture.events | ForEach-Object { $_ | ConvertFrom-Json -AsHashtable })
+            $firstHandoffIdx = [array]::FindIndex($lines, [Predicate[object]]{ param($x) $x.type -eq 'tool.execution_start' -and $x.data.arguments.command -match 'handoff-2\.json' })
+            $refusedId = 'recovered-exit1-refusal'
+            $refusedTime = $lines[$firstHandoffIdx].timestamp
+            $refusedCmd = $lines[$firstHandoffIdx].data.arguments.command
+            $refusedPair = @(
+                @{ type = 'tool.execution_start'; agentId = ''; timestamp = $refusedTime; data = @{ toolCallId = $refusedId; toolName = 'powershell'; turnId = $refusedId; arguments = @{ command = $refusedCmd } } }
+                @{ type = 'tool.execution_complete'; agentId = ''; timestamp = $refusedTime; data = @{ toolCallId = $refusedId; turnId = $refusedId; success = $true; shellExecution = @{ exitCode = 1 }; result = @{ content = "Write-SquadHandoff: invalid payload: historyRecords[0].memberName must be a non-empty string.`n<exit code 1>" } } }
+            )
+            $lines = @($lines[0..($firstHandoffIdx - 1)] + $refusedPair + $lines[$firstHandoffIdx..($lines.Count - 1)])
+            $closingStart = @($lines | Where-Object { $_.type -eq 'tool.execution_start' })[-1]
+            @{
+                runId = 'proof-run'; turn = 6
+                historyRecords = @(@{
+                    agent = 'Squad Reviewer'; request = 'Produce docs/requirements/reviews/Squad Reviewer.md'
+                    deliverable = 'docs/requirements/reviews/Squad Reviewer.md'; outcome = 'Delivered.'
+                })
+                stateAdvance = @{ activeRoles = @('tester') }
+            } | ConvertTo-Json -Depth 20 | Set-Content -LiteralPath $nestedPayload -Encoding utf8NoBOM
+            $closingStart.data.arguments.command = "pwsh -NoProfile -File '$(Join-Path $script:ProofScripts 'Complete-SquadHandoff.ps1')' -RepoRoot '$($fixture.root)' -SquadRoot '$($fixture.squad)' -PayloadPath '$nestedPayload'"
+            $closingComplete = @($lines | Where-Object { $_.type -eq 'tool.execution_complete' })[-1]
+            $closingComplete.data.result.content = ($closingComplete.data.result.content.Trim() -replace '\}\s*$', ',"verified":true}')
+            $state = Get-Content -LiteralPath $statePath -Raw | ConvertFrom-Json -AsHashtable
+            $state.activeRoles = @('tester')
+            $state | ConvertTo-Json -Depth 20 | Set-Content -LiteralPath $statePath -Encoding utf8NoBOM
+            $lines | ForEach-Object { $_ | ConvertTo-Json -Depth 30 -Compress } | Set-Content -LiteralPath $fixture.events
+            $metrics = Measure-EfficiencyEvents -Path $fixture.events
+            $evidence = Get-EfficiencyBookkeepingEvidence -Path $fixture.events -Workspace $fixture.root -SourceRoot $script:ProofSource -InstallRoot $script:ProofInstall -ExpectedSessionId 'actual-requirements'
+            $result = Test-EfficiencyWorkflow -Workspace $fixture.root -Metrics $metrics -Stage requirements -BookkeepingEvidence $evidence -SourceRoot $script:ProofSource -InstallRoot $script:ProofInstall -ExpectedSessionId 'actual-requirements'
+            $result.checks.bookkeepingEvidence | Should -BeTrue -Because ($result.diagnostics.bookkeepingEvidence)
+            $result.passed | Should -BeTrue
+        }
+        finally {
+            if (Test-Path -LiteralPath $nestedDir) { Remove-Item -LiteralPath $nestedDir -Recurse -Force }
+            foreach ($path in $fixture.original.Keys) { [IO.File]::WriteAllText($path, $fixture.original[$path]) }
+        }
+    }
+
+    It 'rejects unrecovered trailing exit-1 writer refusals and protected squad-state payload paths' {
+        $fixture = $script:ActualProofFixtures.requirements
+        foreach ($path in $fixture.original.Keys) { [IO.File]::WriteAllText($path, $fixture.original[$path]) }
+        $protectedPayload = Join-Path $fixture.squad 'forged-handoff.json'
+        try {
+            $lines = @(Get-Content -LiteralPath $fixture.events | ForEach-Object { $_ | ConvertFrom-Json -AsHashtable })
+            $trailId = 'trailing-refusal'
+            $trailTime = [DateTimeOffset]::UtcNow.ToString('o')
+            $trailCmd = (@($lines | Where-Object { $_.type -eq 'tool.execution_start' })[-1]).data.arguments.command
+            $withTrailingFailure = @($lines + @(
+                @{ type = 'tool.execution_start'; agentId = ''; timestamp = $trailTime; data = @{ toolCallId = $trailId; toolName = 'powershell'; turnId = $trailId; arguments = @{ command = $trailCmd } } }
+                @{ type = 'tool.execution_complete'; agentId = ''; timestamp = $trailTime; data = @{ toolCallId = $trailId; turnId = $trailId; success = $true; shellExecution = @{ exitCode = 1 }; result = @{ content = 'Write-SquadHandoff: refused; exit 1' } } }
+            ))
+            $withTrailingFailure | ForEach-Object { $_ | ConvertTo-Json -Depth 30 -Compress } | Set-Content -LiteralPath $fixture.events
+            $metrics = Measure-EfficiencyEvents -Path $fixture.events
+            $evidence = Get-EfficiencyBookkeepingEvidence -Path $fixture.events -Workspace $fixture.root -SourceRoot $script:ProofSource -InstallRoot $script:ProofInstall -ExpectedSessionId 'actual-requirements'
+            $trailingResult = Test-EfficiencyWorkflow -Workspace $fixture.root -Metrics $metrics -Stage requirements -BookkeepingEvidence $evidence -SourceRoot $script:ProofSource -InstallRoot $script:ProofInstall -ExpectedSessionId 'actual-requirements'
+            $trailingResult.checks.bookkeepingEvidence | Should -BeFalse
+            $trailingResult.diagnostics.bookkeepingEvidence | Should -Match 'unrecovered writer attempt'
+
+            $protectedLines = @($lines)
+            $targetStart = @($protectedLines | Where-Object { $_.type -eq 'tool.execution_start' -and $_.data.arguments.command -match 'handoff-2\.json' })[0]
+            $origPath = [regex]::Match($targetStart.data.arguments.command, "'([^']*handoff-2\.json)'").Groups[1].Value
+            Copy-Item -LiteralPath $origPath -Destination $protectedPayload -Force
+            $targetStart.data.arguments.command = $targetStart.data.arguments.command.Replace($origPath, $protectedPayload)
+            $protectedLines | ForEach-Object { $_ | ConvertTo-Json -Depth 30 -Compress } | Set-Content -LiteralPath $fixture.events
+            $protectedEvidence = Get-EfficiencyBookkeepingEvidence -Path $fixture.events -Workspace $fixture.root -SourceRoot $script:ProofSource -InstallRoot $script:ProofInstall -ExpectedSessionId 'actual-requirements'
+            $protectedResult = Test-EfficiencyWorkflow -Workspace $fixture.root -Metrics $metrics -Stage requirements -BookkeepingEvidence $protectedEvidence -SourceRoot $script:ProofSource -InstallRoot $script:ProofInstall -ExpectedSessionId 'actual-requirements'
+            $protectedResult.checks.bookkeepingEvidence | Should -BeFalse
+        }
+        finally {
+            if (Test-Path -LiteralPath $protectedPayload) { Remove-Item -LiteralPath $protectedPayload -Force }
+            foreach ($path in $fixture.original.Keys) { [IO.File]::WriteAllText($path, $fixture.original[$path]) }
+        }
+    }
 }
 
 Describe 'Efficiency quality and comparison gates' -Tag 'Unit' {
@@ -1765,7 +1847,7 @@ exit 37
         $script | Should -Match 'one bounded source-supported correction batch'
         $script | Should -Match 'Final outcome: Pass'
         $script | Should -Match 'Human-only KPI, baseline, date and approval gaps stay unavailable'
-        $script | Should -Match '\.copilot-tracking/benchmark-evidence/<stage>/'
+        $script | Should -Match '\.copilot-tracking/benchmark-evidence/'
         $script | Should -Match 'model never deletes'
         $script | Should -Match 'Remove-EfficiencyStagePayloadEvidence'
     }
@@ -1794,6 +1876,22 @@ exit 37
         { Remove-EfficiencyStagePayloadEvidence -Workspace $workspace -Stage requirements } |
             Should -Throw '*exceeds cleanup limits*'
         Test-Path -LiteralPath $requirements | Should -BeTrue
+    }
+
+    It 'cleans whole-root benchmark payload evidence while enforcing size limits' {
+        $workspace = Join-Path $TestDrive 'whole-root-payload-evidence'
+        $nestedA = Join-Path $workspace '.copilot-tracking/benchmark-evidence/brd'
+        $nestedB = Join-Path $workspace '.copilot-tracking/benchmark-evidence/closing'
+        $preservedReview = Join-Path $workspace '.copilot-tracking/reviews'
+        New-Item -ItemType Directory -Path $nestedA, $nestedB, $preservedReview -Force | Out-Null
+        'brd proof' | Set-Content -LiteralPath (Join-Path $nestedA 'handoff-2.json')
+        'closing proof' | Set-Content -LiteralPath (Join-Path $nestedB 'handoff.json')
+        'review capture' | Set-Content -LiteralPath (Join-Path $preservedReview 'capture.md')
+
+        Remove-EfficiencyStagePayloadEvidence -Workspace $workspace
+
+        Test-Path -LiteralPath (Join-Path $workspace '.copilot-tracking/benchmark-evidence') | Should -BeFalse
+        Test-Path -LiteralPath (Join-Path $preservedReview 'capture.md') | Should -BeTrue
     }
 }
 

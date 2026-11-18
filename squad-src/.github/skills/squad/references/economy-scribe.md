@@ -16,7 +16,7 @@ run once before progress/next worker:
 `pwsh -NoProfile -File <skill>/scripts/Complete-SquadHandoff.ps1 -RepoRoot <repo> -SquadRoot <squadRoot> -PayloadPath <actual handoff JSON>`
 
 Require exit 0, `status: written`, `verified: true`, `ledgerCheck: PASS` from
-one frozen payload. Keep warnings and evidence; no replay. Capture files outside.
+one frozen payload. Keep warnings/evidence; no replay. Capture files outside.
 Legacy single-dispatch writes need separate proof:
 
 `pwsh -NoProfile -File <skill>/scripts/Write-SquadHandoff.ps1 -SquadRoot <squadRoot> -RunId run-01 -Agent "Squad Researcher" -Request x -Deliverable research/topic.md -Outcome x -Quiet`
@@ -32,8 +32,8 @@ For decisions, multiple/no dispatches, routing or state changes, use
 consumption derive. `route` requires `decision`.
 
 * Optional `decision`: {title: string,rationale: string,adrNoted: boolean}.
-* `historyRecords[]`: require agent/request/deliverable/outcome; optional title/memberName/selectionCue/passedModel/reportedModel/internalToolCalls/costPreflightRef/costPreflightSlot/consumption/routingIdentity. Use exact agent/file, Alternate cue and checked ceiling; `reportedModel` wins, calls raise floors, usage agrees. Economy requires routingIdentity: requestedModel, effectiveModel, observedModel, routeRationale.
-* Consumption keeps ten fields; actual coordinator usage only, never fictional Scribe tokens; add Scribe's actual overhead if it ran.
+* `historyRecords[]`: require agent/request/deliverable/outcome; optional title/memberName/selectionCue/passedModel/reportedModel/internalToolCalls/costPreflightRef/costPreflightSlot/consumption/routingIdentity. Omit empty optionals; use exact agent/file, Alternate cue and ceiling; `reportedModel` wins, calls raise floors, usage agrees. Economy requires routingIdentity: requestedModel, effectiveModel, observedModel, routeRationale.
+* Consumption: ten fields; actual coordinator usage only, never fictional Scribe tokens; add Scribe's actual overhead if it ran.
 * `stateAdvance` has required `activeRoles: string[]`; optional `sessionModel`/`modelOverrides`
   and escalation keys follow the contract.
 

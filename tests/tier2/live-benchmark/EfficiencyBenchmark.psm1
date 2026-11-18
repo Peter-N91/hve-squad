@@ -820,15 +820,16 @@ function Resolve-EfficiencyPlainPath {
 function Remove-EfficiencyStagePayloadEvidence {
     <#
     .SYNOPSIS
-    Removes one verified stage's model-owned frozen payload directory after readiness passes.
+    Removes verified model-owned frozen payload evidence after readiness or workflow checks.
     #>
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)][string]$Workspace,
-        [Parameter(Mandatory)][ValidateSet('init', 'requirements', 'build')][string]$Stage
+        [ValidateSet('init', 'requirements', 'build')][string]$Stage
     )
     $Root = Resolve-EfficiencyPlainPath $Workspace
-    $Path = Resolve-EfficiencyPlainPath (Join-Path $Root ".copilot-tracking\benchmark-evidence\$Stage")
+    $RelativePath = if ($PSBoundParameters.ContainsKey('Stage') -and $Stage) { ".copilot-tracking\benchmark-evidence\$Stage" } else { '.copilot-tracking\benchmark-evidence' }
+    $Path = Resolve-EfficiencyPlainPath (Join-Path $Root $RelativePath)
     if (-not (Test-Path -LiteralPath $Path)) { return }
     if (-not (Test-EfficiencyPathWithin $Path $Root)) { throw 'Stage payload evidence leaves the workspace.' }
     $Entries = 0
@@ -1590,7 +1591,12 @@ function Test-EfficiencyBookkeeping {
         if (-not $Run.Success) { return $false }
         $Records = [Collections.Generic.List[object]]::new()
         $VerifiedWriterIds = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
-        $Latest = $null; $LatestActive = @(); $LatestRunId = ''
+        $AttemptIndexByToolCallId = @{}
+        for ($AttemptIdx = 0; $AttemptIdx -lt $Evidence.writerAttempts.Count; $AttemptIdx++) {
+            $AttemptCallId = [string]$Evidence.writerAttempts[$AttemptIdx].toolCallId
+            if ($AttemptCallId) { $AttemptIndexByToolCallId[$AttemptCallId] = $AttemptIdx }
+        }
+        $Latest = $null; $LatestActive = @(); $LatestRunId = ''; $LatestVerifiedAttemptIndex = -1
         foreach ($Execution in $Evidence.executions) {
             $RecordCountBefore = $Records.Count
             try {
@@ -1609,9 +1615,15 @@ function Test-EfficiencyBookkeeping {
                 $Receipt.turn -lt 1 -or $Receipt.turn -gt $State.turn) { continue }
             $Payload = $null
             if ($Bound.ContainsKey('PayloadPath')) {
-                $StagePayloadRoot = Resolve-EfficiencyPlainPath -Path (Join-Path $Root ".copilot-tracking\benchmark-evidence\$Stage") -Base $Root
                 $PayloadCandidate = Resolve-EfficiencyPlainPath -Path $Bound.PayloadPath -Base $Root
-                if (-not (Test-EfficiencyPathWithin $PayloadCandidate $StagePayloadRoot)) { continue }
+                if (-not (Test-EfficiencyPathWithin $PayloadCandidate $Root) -or
+                    (Test-EfficiencyPathWithin $PayloadCandidate $Squad)) { continue }
+                $BlockedPayloadRoot = $false
+                foreach ($ProtectedDir in @('.agents', '.github', 'apm_modules')) {
+                    $ProtectedFull = [IO.Path]::GetFullPath((Join-Path $Root $ProtectedDir)).TrimEnd([IO.Path]::DirectorySeparatorChar)
+                    if (Test-EfficiencyPathWithin $PayloadCandidate $ProtectedFull) { $BlockedPayloadRoot = $true; break }
+                }
+                if ($BlockedPayloadRoot) { continue }
                 if (Test-Path -LiteralPath $PayloadCandidate -PathType Leaf) {
                     if ((Get-Item -LiteralPath $PayloadCandidate).Length -gt 1048576) { continue }
                     $Payload = Get-Content -LiteralPath $PayloadCandidate -Raw | ConvertFrom-Json -AsHashtable
@@ -1677,7 +1689,11 @@ function Test-EfficiencyBookkeeping {
                 $LatestRunId = [string]$Payload.runId
             }
             $Latest = $Execution
-            $null = $VerifiedWriterIds.Add([string]$Execution.toolCallId)
+            $ExecCallId = [string]$Execution.toolCallId
+            $null = $VerifiedWriterIds.Add($ExecCallId)
+            if ($AttemptIndexByToolCallId.ContainsKey($ExecCallId) -and $AttemptIndexByToolCallId[$ExecCallId] -gt $LatestVerifiedAttemptIndex) {
+                $LatestVerifiedAttemptIndex = [int]$AttemptIndexByToolCallId[$ExecCallId]
+            }
             }
             catch {
                 if ($Records.Count -gt $RecordCountBefore) { $Records.RemoveRange($RecordCountBefore, $Records.Count - $RecordCountBefore) }
@@ -1687,15 +1703,13 @@ function Test-EfficiencyBookkeeping {
         $ExpectedTurn = if ($null -ne $Latest) { [int]$Latest.receipt.turn } else { 0 }
         $CurrentTurn = [int]$State.turn
         $CurrentStage = $ExpectedTurn -eq $CurrentTurn
-        if ($null -eq $Latest) {
+        if ($null -eq $Latest -or $CurrentTurn -lt $ExpectedTurn) {
             if ($null -ne $FailureReason) { $FailureReason.Value = 'No accepted writer execution is available for this stage.' }
             return $false
         }
         $UnverifiedWriterAttempts = @($Evidence.writerAttempts | Where-Object {
-                $_.accepted -and -not (
-                    ($Stage -ne 'init' -and $_.script -eq 'Initialize-Squad.ps1') -or
-                    $VerifiedWriterIds.Contains([string]$_.toolCallId)
-                )
+                $InStageAttempt = if ($Stage -eq 'init') { $_.script -eq 'Initialize-Squad.ps1' } else { $_.script -ne 'Initialize-Squad.ps1' }
+                $_.accepted -and $InStageAttempt -and -not $VerifiedWriterIds.Contains([string]$_.toolCallId)
             })
         if ($UnverifiedWriterAttempts.Count) {
             if ($null -ne $FailureReason) { $FailureReason.Value = 'An accepted shell receipt failed stage proof binding.' }
@@ -1705,15 +1719,24 @@ function Test-EfficiencyBookkeeping {
             if ($null -ne $FailureReason) { $FailureReason.Value = 'Accepted writer proof does not match the current state turn and ledger run.' }
             return $false
         }
-        $FailedWriterAttempt = @($Evidence.writerAttempts | Where-Object { -not $_.accepted })
-        if ($FailedWriterAttempt.Count) {
-            if ($null -ne $FailureReason) { $FailureReason.Value = 'A writer attempt in the stage log lacks an accepted receipt.' }
-            return $false
+        for ($AttemptIdx = 0; $AttemptIdx -lt $Evidence.writerAttempts.Count; $AttemptIdx++) {
+            $Attempt = $Evidence.writerAttempts[$AttemptIdx]
+            $InStageAttempt = if ($Stage -eq 'init') { $Attempt.script -eq 'Initialize-Squad.ps1' } else { $Attempt.script -ne 'Initialize-Squad.ps1' }
+            if ($InStageAttempt -and -not $Attempt.accepted -and $AttemptIdx -gt $LatestVerifiedAttemptIndex) {
+                if ($null -ne $FailureReason) { $FailureReason.Value = 'An unrecovered writer attempt follows the latest verified receipt.' }
+                return $false
+            }
         }
         $Updated = if ($State.updated) { [DateTimeOffset]$State.updated } else { $null }
         if ($CurrentStage -and ($Updated -lt ([DateTimeOffset]$Latest.startedAt).AddMinutes(-5) -or
             $Updated -gt ([DateTimeOffset]$Latest.completedAt).AddMinutes(5))) { return $false }
-        $CurrentAgents = @(if ($Stage -eq 'init') { 'Squad Scribe' } else { $LatestActive })
+        $CurrentAgents = @(if ($Stage -eq 'init') {
+                'Squad Scribe'
+            }
+            else {
+                $Records | Where-Object { $_.turn -eq $ExpectedTurn } | ForEach-Object { [string]$_.agent } | Where-Object { $_ } | Select-Object -Unique
+            })
+        if (-not $CurrentAgents.Count) { return $false }
         foreach ($Agent in $CurrentAgents) {
             $History = Get-Content -LiteralPath (Join-Path $Squad "history\$Agent.md") -Raw
             $CurrentEntries = @([regex]::Matches($History, '(?ms)^### (?<time>\S+)[^\r\n]*\r?\n(?<body>.*?)(?=^### |\z)') |
@@ -1721,11 +1744,27 @@ function Test-EfficiencyBookkeeping {
             if (-not $CurrentEntries.Count -or ($CurrentStage -and -not @($CurrentEntries | Where-Object { [DateTimeOffset]$_.Groups['time'].Value -eq $Updated }).Count)) { return $false }
         }
         if ($Stage -eq 'init' -and $ExpectedTurn -ne 1) { return $false }
+        $RecordedAgents = @($Records | ForEach-Object { [string]$_.agent })
         $Required = @(if ($Stage -ne 'init') { 'BRD Builder'; 'PRD Builder'; 'BRD Quality Reviewer'; 'PRD Quality Reviewer' })
         foreach ($Agent in $Required) {
-            if ($Agent -notin @($Records | ForEach-Object { $_.agent })) {
+            if ($Agent -notin $RecordedAgents) {
                 if ($null -ne $FailureReason) { $FailureReason.Value = "Missing verified handoff for required agent '$Agent'." }
                 return $false
+            }
+        }
+        if ($Stage -eq 'requirements') {
+            $TeamLines = @(Get-Content -LiteralPath (Join-Path $Squad 'team.md'))
+            $TesterRow = @($TeamLines | Where-Object { $_ -match '^\|\s*tester\s*\|' })
+            if ($TesterRow.Count -eq 1) {
+                $TesterCells = @($TesterRow[0].Trim().Trim('|').Split('|') | ForEach-Object { $_.Trim().Trim('`') })
+                if ($TesterCells.Count -ge 4) {
+                    $TesterCandidates = @(@($TesterCells[2]) + @($TesterCells[3].Split(',') | ForEach-Object { $_.Trim() }) |
+                        Where-Object { $_ -and $_ -notin @('none', 'n/a', '-', [string][char]0x2014) })
+                    if ($TesterCandidates.Count -and -not @($TesterCandidates | Where-Object { $_ -in $RecordedAgents }).Count) {
+                        if ($null -ne $FailureReason) { $FailureReason.Value = 'Missing verified handoff for required closing tester role.' }
+                        return $false
+                    }
+                }
             }
         }
         $Proof = @{

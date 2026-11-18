@@ -117,8 +117,8 @@ exact output root, read-only inputs and admitted refs. Forward the brief's
 verbatim to every isolated worker; enforce both. Pass non-empty `endpoint.model` exactly as the native
 `model`; omit only when empty. Never use `pricingModel` or frontmatter instead.
 If the native tool cannot accept a model override, stop and disclose it; never
-drop or edit the route. Parallelize only independent
-waves; require final identity/tool count/paths/outcome/open questions, then verify writes.
+drop/edit the route. Parallelize independent waves synchronously; require
+identity/calls/paths/outcome/questions, verify writes.
 
 Use `Complete-SquadHandoff.ps1 -RepoRoot <repo> -SquadRoot <root> -PayloadPath
 <actual handoff JSON>` synchronously per `economy-scribe.md`; it writes then proves.

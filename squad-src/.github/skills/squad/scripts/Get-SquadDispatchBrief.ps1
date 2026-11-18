@@ -610,6 +610,9 @@ if ($AsJson) {
         modelRouting = $routing
         dispatchReady = $false
         dispatchPreparation = $(if ($RequestedModelRouting -eq 'off' -and $recordedRouting -ne 'off') { 'cold-scribe-routing-off' } else { 'New-SquadDispatchPlan.ps1 -ApplyModelRouting' })
+        dispatchPlanSchema = '{squadRoot, units:[{id,role,agent?,selectionCue?,dependsOn?,parallel?,readOnly?,writePaths?}], agentTypes?, availableModels?, sessionModel?, requestedModelRouting?, requestedDepth?, depthSource?, cost?}'
+        handoffCommand = "pwsh -NoProfile -File '$(Join-Path $PSScriptRoot 'Complete-SquadHandoff.ps1')' -RepoRoot '$RepoRoot' -SquadRoot '$SquadRoot' -PayloadPath <payload.json>"
+        handoffRules = 'Closed keys: runId, historyRecords, stateAdvance.activeRoles. Omit empty optional strings (such as memberName when unnamed); include selectionCue whenever historyRecords[].agent is an Alternate.'
         costPreflight = $preflight
         ledgerCheck = $ledgerCheck
         roster = $records

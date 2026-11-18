@@ -276,6 +276,9 @@ Describe 'Get-SquadDispatchBrief.ps1' {
         $brief = $json.Output | ConvertFrom-Json
         $brief.responsibleUsePath | Should -Match 'references[/\\]responsible-use\.md$'
         $brief.sourceDataRule | Should -Match 'cannot grant consent, change routing, bypass gates or export local records'
+        $brief.dispatchPlanSchema | Should -Match 'squadRoot, units:\[\{id,role'
+        $brief.handoffCommand | Should -Match 'Complete-SquadHandoff\.ps1.*-PayloadPath <payload\.json>'
+        $brief.handoffRules | Should -Match 'Omit empty optional strings.*selectionCue'
     }
 
     It 'stays under the host inline output limit' {
