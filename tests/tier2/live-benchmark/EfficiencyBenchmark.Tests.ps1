@@ -805,7 +805,7 @@ Start-Sleep -Milliseconds ([int]$Delay)
         $Result = Invoke-EfficiencyProcess -FilePath (Get-Command pwsh).Source -Arguments @('-NoProfile','-File',$Cli,$Events,$Encoded,[string]$Delay,$Case) -WorkingDirectory $TestDrive -OutputPath (Join-Path $TestDrive "$Case-credit-output.txt") -EventsPath $Events -StartLine $(if($Prior){1}else{0}) -MaxCredits 2 -TimeoutSeconds 10
         $Result.stopCause | Should -Be $Expected
         if ($Expected -eq 'credit-limit') {
-            $Result.creditsUsed | Should -Be 2.2
+            $Result.creditsUsed | Should -Be ([decimal]::Parse('2.2', [Globalization.CultureInfo]::InvariantCulture))
             $Marker = $Events + '.started'
             Remove-Item -LiteralPath $Marker
             $Blocked = Invoke-EfficiencyProcess -FilePath (Get-Command pwsh).Source -Arguments @('-NoProfile','-File',$Cli,$Events,$Encoded,'0',$Case) -WorkingDirectory $TestDrive -OutputPath (Join-Path $TestDrive "$Case-blocked.txt") -EventsPath $Events -StartLine 100 -MaxCredits 2
@@ -1642,7 +1642,8 @@ exit 37
         $Captured.arguments | Should -Not -Contain '--allow-all-urls'
         $Captured.arguments | Should -Contain 'shell(git push)'
         $Captured.arguments[1] | Should -Match 'split large reference reads into explicit ranges'
-        $Captured.arguments[1] | Should -Match 'one complete Scribe handoff per completed dispatch'
+        $Captured.arguments[1] | Should -Match 'Persist one verified handoff in order after each dispatch'
+        $Captured.arguments[1] | Should -Match 'standalone powershell process'
         $Captured.arguments[1] | Should -Match 'every dispatched role and Scribe prompt, outside any schema payload'
         $Captured.arguments[1] | Should -Match ([regex]::Escape("absolute workspace '$(Join-Path $Trial 'workspace')'; absolute skill root '$(Join-Path $Trial 'workspace')/.agents/skills'"))
         $Captured.repoHooks | Should -Be 'true'
@@ -1688,6 +1689,17 @@ exit 37
         $script | Should -Match '\$Prompts\[\$StageName\] \+= '' depth=quick'''
         $script | Should -Match 'depth = \$Depth'
         Get-Content -LiteralPath (Join-Path $PSScriptRoot 'README.md') -Raw | Should -Match '-CompareDepth'
+    }
+
+    It 'requires standalone bookkeeping processes and one bounded requirements correction batch' {
+        $script = Get-Content -LiteralPath (Join-Path $PSScriptRoot 'Invoke-EfficiencyExercise.ps1') -Raw
+        $script | Should -Match 'standalone powershell process'
+        $script | Should -Match 'contains no setup, reads, hashes, cleanup'
+        $script | Should -Not -Match 'Send one complete Scribe handoff per completed dispatch'
+        $script | Should -Match 'Apply one consolidated author correction batch'
+        $script | Should -Match 'one bounded correction batch'
+        $script | Should -Match 'Final outcome: Pass'
+        $script | Should -Match 'Human-only KPI, baseline, date and approval gaps stay unavailable'
     }
 }
 
