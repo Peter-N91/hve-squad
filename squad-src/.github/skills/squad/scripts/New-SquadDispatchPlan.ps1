@@ -13,7 +13,7 @@
       execution?, dependsOn?: [], parallel?: bool, readOnly?: bool,
       writePaths?: [], allowedOutputs?: [] }], council?: bool, planPath?: string,
       admissionApproved?: bool, agentTypes?: [], availableModels?: [],
-      rejectedModels?: [],
+      availableAutoTiers?: [], rejectedModels?: [],
       sessionModel?: string, asOf?: date, requestedModelRouting?: ranked|economy|manual,
       manualModels?: {role:model}, economyConsent?: {user,tradeAccepted,neverWeakened,timestamp?},
       requestedDepth?: quick|standard, depthSource?: input|federation|workflow,
@@ -24,6 +24,10 @@
     agentTypes is the exact host-advertised custom-agent enum. When supplied,
     native type IDs are resolved by installed filename/name, never guessed from a
     display label or replaced with a built-in agent.
+    availableAutoTiers is the dispatch tool's advertised auto_tier enum when
+    availableModels includes auto. Only known Fusion tiers enter the inventory.
+    endpoint.nativeModelArgs is the native request; endpoint.model is the roster
+    route. Bare auto is not a route or a valid rejection ID.
     No model is launched. The default preview writes no state. Ranked, economy, and manual routing
     are resolved only for the actual role units in this input. Changed Model cells are
     returned as a compare-and-swap routing refresh for Set-SquadModelRouting.ps1.
@@ -90,7 +94,7 @@ try {
         if (-not $inputData.Contains($key)) { throw "Missing dispatch-plan field: $key" }
     }
     foreach ($key in $inputData.Keys) {
-        if ($key -notin @('squadRoot', 'units', 'council', 'planPath', 'admissionApproved', 'agentTypes', 'availableModels', 'rejectedModels', 'sessionModel', 'asOf', 'requestedModelRouting', 'manualModels', 'economyConsent', 'requestedDepth', 'depthSource', 'depthEvidence', 'reasoningEfforts', 'cost')) { throw "Unsupported dispatch-plan field: $key" }
+        if ($key -notin @('squadRoot', 'units', 'council', 'planPath', 'admissionApproved', 'agentTypes', 'availableModels', 'availableAutoTiers', 'rejectedModels', 'sessionModel', 'asOf', 'requestedModelRouting', 'manualModels', 'economyConsent', 'requestedDepth', 'depthSource', 'depthEvidence', 'reasoningEfforts', 'cost')) { throw "Unsupported dispatch-plan field: $key" }
     }
     if ($inputData.units -isnot [array] -or $inputData.units.Count -eq 0) { throw 'units must be a nonempty array.' }
     foreach ($key in @('council', 'admissionApproved')) {
@@ -106,6 +110,23 @@ try {
         if ($inputData.availableModels -isnot [array] -or @($inputData.availableModels | Where-Object { $_ -isnot [string] }).Count) { throw 'availableModels must be the host string array.' }
         $availableModels = @($inputData.availableModels)
     }
+    $autoTiers = @{}
+    if ($inputData.Contains('availableAutoTiers')) {
+        if ($inputData.availableAutoTiers -isnot [array] -or
+            @($inputData.availableAutoTiers | Where-Object { $_ -isnot [string] -or $_ -cnotmatch '^[a-z][a-z0-9-]{0,63}$' }).Count) {
+            throw 'availableAutoTiers must be the host auto_tier enum of lowercase ids.'
+        }
+        if ($inputData.availableAutoTiers.Count -gt 0 -and $availableModels -cnotcontains 'auto') {
+            throw 'availableAutoTiers requires auto in the same dispatch tool''s availableModels enum.'
+        }
+        foreach ($tierId in $inputData.availableAutoTiers) {
+            $routeId = Get-SquadFusionRouteKey $tierId
+            if ($routeId -and (-not $autoTiers.ContainsKey($routeId) -or $tierId -ceq $routeId)) {
+                $autoTiers[$routeId] = $tierId
+            }
+        }
+        $availableModels += @($autoTiers.Keys)
+    }
     $rejectedModels = @()
     if ($inputData.Contains('rejectedModels')) {
         if ($inputData.rejectedModels -isnot [array] -or @($inputData.rejectedModels | Where-Object { $_ -isnot [string] }).Count) { throw 'rejectedModels must be the host-rejected string array.' }
@@ -113,6 +134,7 @@ try {
         if (@($rejectedModels | Where-Object { -not $_ -or $_ -match '[\x00-\x1F\x7F\u0085\u2028\u2029]' }).Count) {
             throw 'rejectedModels entries must be nonempty single-line model ids.'
         }
+        if ('auto' -in $rejectedModels) { throw 'A rejected Auto-tier dispatch must name its planned Fusion route in rejectedModels, not auto.' }
     }
     $sessionModel = if ($inputData.Contains('sessionModel')) { [string]$inputData.sessionModel } else { '' }
     $asOf = if ($inputData.Contains('asOf')) {
@@ -451,6 +473,7 @@ try {
             $routeRationale = ''
             $cellStatus = ''
             $nodeRoutingChange = $null
+            $nativeModelArgs = [ordered]@{}
             if ($modelRouting -ne 'off' -and $unit.role -ne 'scribe') {
                 if ($null -eq $route) { throw "No model route was returned for role '$($unit.role)'." }
                 $model = [string]$route.resolved
@@ -460,6 +483,13 @@ try {
                     $candidates = @($route.candidates | ForEach-Object { $_.id }) -join ', '
                     throw "Role '$($unit.role)' has no admissible $modelRouting model. Cell status: $cellStatus. Candidates: $candidates"
                 }
+                $fusionRoute = Get-SquadFusionRouteKey $model
+                if ($fusionRoute -and $autoTiers.ContainsKey($fusionRoute)) {
+                    $model = $fusionRoute
+                    $nativeModelArgs = [ordered]@{ model = 'auto'; auto_tier = $autoTiers[$fusionRoute] }
+                    if ('low' -cin $reasoningEfforts) { $nativeModelArgs['reasoning_effort'] = 'low' }
+                }
+                else { $nativeModelArgs['model'] = $model }
                 if ($persistedModel -cne $model) {
                     $nodeRoutingChange = [ordered]@{
                         role = [string]$unit.role
@@ -476,7 +506,8 @@ try {
                 role = $unit.role; memberName = $selection.MemberName; agent = $agent
                 execution = $selection.Choice; connectorSelection = $selection
                 squadRoot = $root; deliverableRoot = $row['Deliverable Root']
-                model = $model; persistedModel = $persistedModel; pricingModel = $pricingModel
+                model = $model; nativeModelArgs = $nativeModelArgs
+                persistedModel = $persistedModel; pricingModel = $pricingModel
                 modelRouting = $modelRouting; modelCellStatus = $cellStatus
                 modelRationale = $routeRationale; assignmentClass = $assignmentClass
                 autonomyTier = $tier

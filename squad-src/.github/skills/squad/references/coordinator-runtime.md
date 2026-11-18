@@ -87,9 +87,8 @@ squad state. Run
 `New-SquadDispatchPlan.ps1 -RepoRoot <repo> -InputPath <json> -ApplyModelRouting`.
 It applies the hash-bound routing refresh and returns `routingReady: true`.
 Pass available `agentTypes`; use resolved native IDs, not guessed names.
-For active routing, `task` hosts pass their complete `availableModels` enum;
-`auto` is not inventory. A host without an enum may pass a concrete priced
-session model. Unresolved availability stops before refresh or dispatch.
+Supply host capabilities per `model-routing.md` Allowlist. Unresolved availability
+stops before refresh or dispatch.
 Unknown/unavailable/ambiguous endpoints stop. Confirmed missing catalog roles/packs
 use `roster-expansion.md`; substitution, recasting or removal needs a separate choice.
 
@@ -114,12 +113,13 @@ and blockers: coordinator-owned ephemeral UI, not role work or state.
 
 Dispatch each planned endpoint with native `task`/`runSubagent`, the request,
 scoped context, exact output-root argument, read-only inputs, and any admitted
-Decision Ref/round/slot. Pass non-empty `endpoint.model` exactly as the native
+Decision Ref/round/slot. Copy `endpoint.nativeModelArgs` verbatim, including its
 `model`; omit only when empty. Never use `pricingModel` or frontmatter instead.
 If the native tool cannot accept a model override, stop and disclose it; do not
 drop the route or edit frontmatter.
 Parallelize only an independent wave.
 Require final model identity, tool-call count, paths, outcome and open questions.
+Use the handoff fields in `model-routing.md` Identity Bullets.
 Review after owners' final returns; use write-set snapshot/verify when needed.
 
 Run `Write-SquadHandoff.ps1 -Quiet` synchronously per `economy-scribe.md`.

@@ -60,11 +60,11 @@ Among qualified candidates take the lowest **Blended** rate first, then higher g
 For example, B meets the minimum and costs less than A: Economy selects B even if A is substantially stronger. Ranked may select A on that same evidence. The modes can also select the same model; neither price nor a model name guarantees a different winner.
 
 * **Floors hold.** A floor is a minimum, never a ceiling, and the pick never leaves `model-routing.md` *Consequence Floors*; running a `default`-floor role on a `fast-lightweight` model takes a `team.md` Model Tier edit, never a routing input.
-* **Model cell.** As under `ranked`: the actual dispatch plan computes each selected role's pick, `Set-SquadModelRouting.ps1` applies changed cells through an exact hash check, and every dispatch copies the cell.
+* **Model cell.** As under `ranked`: compute each selected role's route, persist cells through the exact hash check, and dispatch with `endpoint.nativeModelArgs`.
 
 ## Host Rejection Retry
 
-A native model rejection is availability evidence, not a failed quality verdict. Stop the affected wave, carry the rejected id in `rejectedModels`, and rerun `New-SquadDispatchPlan.ps1 -ApplyModelRouting` for every remaining selected role with the same `requestedModelRouting`, the current host `availableModels` enum, and the accumulated rejections. Apply the refreshed cells and any new Cost Preflight before retrying; never pass the rejected id to another role in the wave.
+A native model rejection is availability evidence, not a failed quality verdict. Stop the wave. Replan the remaining roles with `New-SquadDispatchPlan.ps1 -ApplyModelRouting`, the same mode and host enums, and the rejected `endpoint.model` in `rejectedModels` (not bare `auto`). Apply the refreshed cells and any new Cost Preflight before retrying.
 
 Economy recomputes the cheapest qualified choice in its original floor. It does not switch to Ranked, consume the `escalation` field, or retry a different role on the rejected id. Reuse an already advertised list if the rejection did not return one. Without a confirmed host list, or if no priced floor-eligible model remains, stop rather than guess. Manual still asks the user again after a rejection.
 

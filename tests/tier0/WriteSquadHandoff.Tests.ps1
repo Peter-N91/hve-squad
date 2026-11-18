@@ -1717,6 +1717,57 @@ Describe 'Write-SquadHandoff.ps1 derives omitted payload fields' {
         }
     }
 
+    Context 'Fusion Auto handoff (SQ-35d)' {
+        BeforeEach {
+            $root = New-Root
+            $teamPath = Join-Path $root 'team.md'
+            $text = [regex]::Replace([IO.File]::ReadAllText($teamPath), '(?m)^\|[^\r\n]+\|(?=\r?$)', {
+                param($line)
+                $value = switch -Regex ($line.Value) {
+                    '^\| Role ' { 'Model'; break }
+                    '^\| -' { '---'; break }
+                    '^\| researcher ' { 'hydrafusion'; break }
+                    default { '-' }
+                }
+                "$($line.Value) $value |"
+            })
+            [IO.File]::WriteAllText($teamPath, $text)
+        }
+
+        It 'writes the Fusion request with <ExpectedModel> usage' -ForEach @(
+            @{ Reported = 'claude-sonnet-4.6'; ExpectedModel = 'claude-sonnet-4.6'; Source = 'dispatch-reported'; Observed = 'claude-sonnet-4.6' }
+            @{ Reported = ''; ExpectedModel = 'unknown'; Source = 'unresolved'; Observed = 'unreported' }
+        ) {
+            $payload = New-MinimalPayload
+            $payload.historyRecords[0]['passedModel'] = 'auto'
+            $payload.historyRecords[0]['passedAutoTier'] = 'fusion-high'
+            if ($Reported) { $payload.historyRecords[0]['reportedModel'] = $Reported }
+            $result = Invoke-Writer -Root $root -Payload $payload -Quiet
+            $result.ExitCode | Should -Be 0 -Because $result.Output
+            ($result.Stdout | ConvertFrom-Json).status | Should -Be 'written'
+            $block = Get-Block -Root $root -Agent 'Squad Researcher'
+            $block.model | Should -BeExactly $ExpectedModel
+            $block.model_source | Should -BeExactly $Source
+            $history = [IO.File]::ReadAllText((Join-Path $root 'history/Squad Researcher.md'))
+            $history | Should -Match ([regex]::Escape('**Requested model** — auto (auto_tier: fusion-high)'))
+            $history | Should -Match ([regex]::Escape("**Observed model** — $Observed"))
+        }
+
+        It 'rejects <Scenario> without writing a history entry' -ForEach @(
+            @{ Scenario = 'bare Auto'; Tier = ''; Message = 'supply the planned passedAutoTier' }
+            @{ Scenario = 'a different Fusion tier'; Tier = 'hydrafusion-max'; Message = 'must match the roster Fusion route' }
+        ) {
+            $payload = New-MinimalPayload
+            $payload.historyRecords[0]['passedModel'] = 'auto'
+            $payload.historyRecords[0]['reportedModel'] = 'claude-sonnet-4.6'
+            if ($Tier) { $payload.historyRecords[0]['passedAutoTier'] = $Tier }
+            $result = Invoke-Writer -Root $root -Payload $payload -Quiet
+            $result.ExitCode | Should -Be 1
+            $result.Output | Should -Match $Message
+            Join-Path $root 'history/Squad Researcher.md' | Should -Not -Exist
+        }
+    }
+
     Context 'Single-dispatch CLI facts (WRT-12)' {
         BeforeAll {
             function Get-DispatchFact {

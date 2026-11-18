@@ -217,7 +217,7 @@ Describe 'Get-SquadDispatchBrief.ps1' {
         $result.Output | Should -Match ([regex]::Escape('| tester | Squad Reviewer | yes | Claude Haiku 5.5 | none | Claude Haiku 5.5 (fast) | .copilot-tracking/reviews/ |'))
         $result.Output | Should -Match ([regex]::Escape('developer on its Model cell (add `"passedModel": "claude-haiku-5.5"`)'))
         $result.Output | Should -Match '"model":"claude-haiku-5.5","model_source":"cli-pinned","priced_as":"Claude Haiku 5.5"'
-        $result.Output | Should -Match ([regex]::Escape('Pass each role''s Model cell as the dispatch `model` exactly as written'))
+        $result.Output | Should -Match 'Copy the dispatch plan''s `endpoint\.nativeModelArgs` exactly'
     }
 
     It 'reads team.md by header name, so a reordered or drifted header still maps each column' {

@@ -547,6 +547,13 @@ function ConvertTo-SquadModelKey {
     $key
 }
 
+function Get-SquadFusionRouteKey {
+    param([AllowEmptyString()][AllowNull()][string]$Value)
+    $key = ConvertTo-SquadModelKey $Value
+    if ($key -in @('fusion-standard', 'hydrafusion', 'hydrafusion-max')) { return $key }
+    return ''
+}
+
 function Get-SquadRoleClassMap {
     param([string]$Path = (Join-Path $script:SkillRoot 'references' 'model-routing.md'))
     $section = Get-SquadReferenceSection -Path $Path -Heading '## Assignment Classes'
@@ -1106,4 +1113,4 @@ function Get-SquadDepthPlan {
     $result
 }
 
-Export-ModuleMember -Function Read-SquadTables, Get-SquadReferenceSection, Get-SquadRulePath, Resolve-SquadRepositoryPath, Get-SquadAgentIndex, Get-SquadSkillIndex, Get-SquadRoster, Invoke-SquadLocalScript, Get-SquadInitData, Get-SquadPackResourceInventory, Assert-SquadPackResourceDecisions, New-SquadInitPayload, Resolve-SquadConnectorExecution, Write-SquadTransportJson, Get-SquadFederationSnapshot, New-SquadOrchestrationConsumption, ConvertTo-SquadModelKey, Get-SquadRoleClassMap, Get-SquadDispatchReservation, Get-SquadDecision, Get-SquadPendingConnectors, Get-SquadDepthPlan, Get-SquadDepthStagePolicy, Get-SquadDepthClause, Get-SquadEconomyConsentScope, Test-SquadDeliverableFanOutPlan, Get-SquadDepthStageForUnit
+Export-ModuleMember -Function Read-SquadTables, Get-SquadReferenceSection, Get-SquadRulePath, Resolve-SquadRepositoryPath, Get-SquadAgentIndex, Get-SquadSkillIndex, Get-SquadRoster, Invoke-SquadLocalScript, Get-SquadInitData, Get-SquadPackResourceInventory, Assert-SquadPackResourceDecisions, New-SquadInitPayload, Resolve-SquadConnectorExecution, Write-SquadTransportJson, Get-SquadFederationSnapshot, New-SquadOrchestrationConsumption, ConvertTo-SquadModelKey, Get-SquadFusionRouteKey, Get-SquadRoleClassMap, Get-SquadDispatchReservation, Get-SquadDecision, Get-SquadPendingConnectors, Get-SquadDepthPlan, Get-SquadDepthStagePolicy, Get-SquadDepthClause, Get-SquadEconomyConsentScope, Test-SquadDeliverableFanOutPlan, Get-SquadDepthStageForUnit

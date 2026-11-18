@@ -481,6 +481,7 @@ Describe 'PKG-14 Plugin host discovery and hook commands' -Tag 'Unit' {
                     [string]$Mode = 'ranked',
                     [string]$Agent = 'hve-squad:squad-lead',
                     [string]$Model = '',
+                    [string]$AutoTier = '',
                     [string]$Cell = 'gpt-5.6-sol',
                     [string]$Shape = 'camel',
                     [switch]$Member,
@@ -501,6 +502,7 @@ Describe 'PKG-14 Plugin host discovery and hook commands' -Tag 'Unit' {
                 [IO.File]::WriteAllText((Join-Path $root 'team.md'), $teamText)
                 $dispatch = @{ agent_type = $Agent; prompt = "$Prompt at $root" }
                 if ($Model) { $dispatch.model = $Model }
+                if ($AutoTier) { $dispatch.auto_tier = $AutoTier }
                 $inputData = switch ($Shape) {
                     'camel' { @{ cwd = $repo; toolName = 'task'; toolArgs = $dispatch } }
                     'encoded' { @{ cwd = $repo; toolName = 'task'; toolArgs = ($dispatch | ConvertTo-Json -Compress) } }
@@ -538,6 +540,18 @@ Describe 'PKG-14 Plugin host discovery and hook commands' -Tag 'Unit' {
             $result.ExitCode | Should -Be 0 -Because $result.Output
             ($result.Output | ConvertFrom-Json).permissionDecision | Should -Be 'deny'
             ($result.Output | ConvertFrom-Json).permissionDecisionReason | Should -Match '-ApplyModelRouting'
+        }
+
+        It 'accepts only the matching Fusion Auto tier (SQ-35d)' {
+            foreach ($tier in @('hydrafusion-max', 'fusion-max')) {
+                $result = Invoke-DispatchGuard -Model auto -AutoTier $tier -Cell hydrafusion-max -Mode economy
+                $result.ExitCode | Should -Be 0 -Because $result.Output
+                ($result.Output | ConvertFrom-Json).permissionDecision | Should -Be 'allow'
+            }
+            $wrong = Invoke-DispatchGuard -Model auto -AutoTier hydrafusion -Cell hydrafusion-max -Mode economy
+            ($wrong.Output | ConvertFrom-Json).permissionDecision | Should -Be 'deny'
+            $bare = Invoke-DispatchGuard -Model auto -Cell hydrafusion-max -Mode economy
+            ($bare.Output | ConvertFrom-Json).permissionDecision | Should -Be 'deny'
         }
 
         It 'supports display names and native Alternate agent IDs' {

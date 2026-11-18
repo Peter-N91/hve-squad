@@ -778,7 +778,7 @@ if ($AvailableModels.Count -gt 0) {
         $AvailableModels |
             ForEach-Object { $_ -split ',' } |
             ForEach-Object { $_.Trim().ToLowerInvariant() } |
-            Where-Object { $_ } |
+            Where-Object { $_ -and $_ -ne 'auto' } |
             Sort-Object -Unique
     )
     $canonicalIds = [System.Collections.Generic.List[string]]::new()
