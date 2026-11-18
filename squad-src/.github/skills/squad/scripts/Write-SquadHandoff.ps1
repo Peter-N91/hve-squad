@@ -67,7 +67,8 @@
       decision {title, rationale, adrNoted} (optional),
       historyRecords [ {agent, title?, request, deliverable, outcome, memberName?,
         selectionCue? (required for an Alternate agent), reportedModel? (actual host/
-        worker identity), internalToolCalls? (nonnegative reported count), passedModel? (required with
+        worker identity), internalToolCalls? (nonnegative reported count), passedAutoTier? (with passedModel 'auto'),
+        passedModel? (required with
         cli-pinned and must equal model), costPreflightRef?/costPreflightSlot? (required
         together under an active ceiling), consumption? {ten fields}, routingIdentity?{
         requestedModel, effectiveModel, observedModel, routeRationale}} ] (may be empty),
@@ -841,7 +842,7 @@ function Get-EstimatorFloors {
 function Get-DerivedConsumption {
     # Fills an omitted consumption block from the role class's estimator floors, the model attribution ladder, and the rate row;
     # $null with the reason recorded for the Scribe when a figure cannot be produced.
-    param([string]$Agent, [string]$Role, [string]$PassedModel, [string]$Where, [string]$SessionModel, [switch]$Orchestration, [string]$ReportedModel, [long]$InternalToolCalls = 0)
+    param([string]$Agent, [string]$Role, [string]$PassedModel, [string]$Where, [string]$SessionModel, [switch]$Orchestration, [string]$ReportedModel, [long]$InternalToolCalls = 0, [switch]$FusionAuto)
     $class = 'bookkeeping'
     if (-not $Orchestration) {
         $resolvedRole = if ($Role) { $Role } elseif ($agentRoles.ContainsKey($Agent)) { $agentRoles[$Agent] } else { '' }
@@ -850,8 +851,9 @@ function Get-DerivedConsumption {
     $floors = Get-EstimatorFloors $class
     if ($null -eq $floors) { $needsScribe.Add("$Where was omitted and the $class dispatch-size estimator row cannot be read from consumption-rates.md or its template; the Scribe composes the block."); return $null }
     if ($SessionModel -and (Test-ModelLabel $SessionModel)) { $SessionModel = '' }
-    if ($PassedModel -and (Test-ModelLabel $PassedModel)) { $problems.Add("$Where passedModel '$PassedModel' is a routing label, not an actual model."); return $null }
+    if ($PassedModel -and -not $FusionAuto -and (Test-ModelLabel $PassedModel)) { $problems.Add("$Where passedModel '$PassedModel' is a routing label, not an actual model."); return $null }
     if ($ReportedModel) { $model = $ReportedModel; $source = 'dispatch-reported' }
+    elseif ($FusionAuto) { $model = 'unknown'; $source = 'unresolved' }
     elseif ($Orchestration) {
         if ($SessionModel) { $model = $SessionModel; $source = 'session-inherited' } else { $model = 'unknown'; $source = 'unresolved' }
     }
@@ -1313,7 +1315,10 @@ function Resolve-RosterIdentityLocal {
                 return $null
             }
             return [pscustomobject]@{
-                Row              = [pscustomobject]@{ Role = $target.Role; MemberName = $member; PrimaryAgent = 'Squad Connector' }
+                Row              = [pscustomobject]@{
+                    Role = $target.Role; MemberName = $member; PrimaryAgent = 'Squad Connector'
+                    RoutedModel = if ($roleRows.Count -eq 1) { $roleRows[0].RoutedModel } else { '' }
+                }
                 Role             = $target.Role
                 ClassRole        = $target.Role
                 IsPrimary        = $true
@@ -1356,8 +1361,15 @@ function Resolve-RosterIdentityLocal {
                 $problems.Add("$Where.memberName '$member' matched binding '$($binding.BindingId)' with unsupported target kind '$($binding.TargetKind)'.")
                 return $null
             }
+            $modelRows = @($allRosterRows | Where-Object {
+                    $_.Role -ceq $role -and $_.PrimaryAgent -cne 'Squad Connector' -and
+                    (-not $target.MemberName -or $_.MemberName -ceq $target.MemberName)
+                })
             return [pscustomobject]@{
-                Row       = [pscustomobject]@{ Role = $role; MemberName = $member; PrimaryAgent = 'Squad Connector' }
+                Row       = [pscustomobject]@{
+                    Role = $role; MemberName = $member; PrimaryAgent = 'Squad Connector'
+                    RoutedModel = if ($modelRows.Count -eq 1) { $modelRows[0].RoutedModel } else { '' }
+                }
                 Role      = $role
                 ClassRole = $classRole
                 IsPrimary = $true
@@ -1493,6 +1505,7 @@ if ($rosterTable) {
         $rosterRow = [pscustomobject]@{
             Role        = $roleId
             MemberName  = $member
+            RoutedModel = [string]$row['Model']
             PrimaryAgent = $primaryAgent
             AgentNames  = @($agentNames)
         }
@@ -1547,7 +1560,7 @@ else {
     foreach ($node in $recordNodes) {
         $where = "historyRecords[$index]"
         $index++
-        if (-not (Test-ObjectKeys -Node $node -Required @('agent', 'request', 'deliverable', 'outcome') -Optional @('consumption', 'title', 'memberName', 'selectionCue', 'passedModel', 'reportedModel', 'internalToolCalls', 'costPreflightRef', 'costPreflightSlot', 'routingIdentity', 'externalProvenance') -Where $where)) { continue }
+        if (-not (Test-ObjectKeys -Node $node -Required @('agent', 'request', 'deliverable', 'outcome') -Optional @('consumption', 'title', 'memberName', 'selectionCue', 'passedModel', 'passedAutoTier', 'reportedModel', 'internalToolCalls', 'costPreflightRef', 'costPreflightSlot', 'routingIdentity', 'externalProvenance') -Where $where)) { continue }
         $agent = Get-TextField -Node $node -Key 'agent' -Where $where
         $request = Get-TextField -Node $node -Key 'request' -Where $where
         $deliverable = Get-TextField -Node $node -Key 'deliverable' -Where $where
@@ -1556,6 +1569,7 @@ else {
         $memberName = Get-TextField -Node $node -Key 'memberName' -Where $where -Optional
         $selectionCue = Get-TextField -Node $node -Key 'selectionCue' -Where $where -Optional
         $passedModel = Get-TextField -Node $node -Key 'passedModel' -Where $where -Optional
+        $passedAutoTier = Get-TextField -Node $node -Key 'passedAutoTier' -Where $where -Optional
         $reportedModel = Get-TextField -Node $node -Key 'reportedModel' -Where $where -Optional
         $internalToolCalls = if ($null -ne $node['internalToolCalls']) { Get-NodeInt -Node $node['internalToolCalls'] } else { 0L }
         if ($null -ne $node['internalToolCalls'] -and ($null -eq $internalToolCalls -or $internalToolCalls -lt 0)) { $problems.Add("$where.internalToolCalls must be a nonnegative integer."); $internalToolCalls = 0L }
@@ -1625,11 +1639,44 @@ else {
                 }
             }
         }
+        $fusionAuto = $false
+        if ($passedAutoTier) {
+            if ($passedModel -cne 'auto' -or $passedAutoTier -cnotmatch '^[a-z][a-z0-9-]{0,63}$') {
+                $problems.Add("$where.passedAutoTier requires passedModel 'auto' and a named Fusion tier.")
+                continue
+            }
+            Import-Module (Join-Path $PSScriptRoot 'SquadCoordinator.psm1') -ErrorAction Stop
+            $fusionRoute = Get-SquadFusionRouteKey $passedAutoTier
+            if (-not $fusionRoute -or $routingMode -notin @('ranked', 'economy', 'manual') -or
+                $fusionRoute -cne (Get-SquadFusionRouteKey $identity.Row.RoutedModel)) {
+                $problems.Add("$where.passedAutoTier '$passedAutoTier' must match the roster Fusion route.")
+                continue
+            }
+            if ($consumption -and -not $reportedModel -and
+                ($consumption.model -ne 'unknown' -or $consumption.model_source -ne 'unresolved')) {
+                $problems.Add("$where.consumption must record unknown/unresolved when the Fusion dispatch has no reportedModel.")
+                continue
+            }
+            $fusionAuto = $true
+        }
+        elseif ($passedModel -ceq 'auto') {
+            $problems.Add("$where passedModel 'auto' is a routing label, not an actual model; supply the planned passedAutoTier.")
+            continue
+        }
         if ($null -eq $node['consumption']) {
-            $consumption = Get-DerivedConsumption -Agent $agent -Role $identity.ClassRole -PassedModel $passedModel -Where "$where.consumption" -SessionModel $derivationSession -ReportedModel $reportedModel -InternalToolCalls $internalToolCalls
+            $consumption = Get-DerivedConsumption -Agent $agent -Role $identity.ClassRole -PassedModel $passedModel -Where "$where.consumption" -SessionModel $derivationSession -ReportedModel $reportedModel -InternalToolCalls $internalToolCalls -FusionAuto:$fusionAuto
             if ($null -eq $consumption) { continue }
         }
-        Test-Attribution -Map $consumption -Where "$where.consumption" -PinAgent $agent -PassedModel $passedModel
+        $passedUsageModel = if (-not $fusionAuto) { $passedModel }
+        Test-Attribution -Map $consumption -Where "$where.consumption" -PinAgent $agent -PassedModel $passedUsageModel
+        if ($fusionAuto) {
+            $routing = [ordered]@{
+                requestedModel = "auto (auto_tier: $passedAutoTier)"
+                effectiveModel = $consumption.model
+                observedModel  = if ($reportedModel) { $reportedModel } else { 'unreported' }
+                routeRationale = if ($routing) { $routing.routeRationale } else { "Fusion route $fusionRoute" }
+            }
+        }
         $deliverablePath = ($deliverable -replace '\s+\([^)]*\)\s*$', '').Trim().Trim('`')
         $deliverableSize = if ($deliverable -match '\s+\(([^)]*)\)\s*$') { $Matches[1] } else { $null }
         if ($deliverablePath -match '^(?i)(n/?a|none|inline.*|no artifact.*)$') { $problems.Add("$where.deliverable names no artifact; a stage that wrote no file did not run."); continue }

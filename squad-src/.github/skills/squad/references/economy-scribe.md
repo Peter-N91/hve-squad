@@ -27,7 +27,7 @@ For decisions, multiple/no dispatches, routing, or state changes, pass
 consumption derive. `route` requires `decision`.
 
 * Optional `decision`: {title: string,rationale: string,adrNoted: boolean}.
-* `historyRecords[]`: require agent/request/deliverable/outcome; optional title/memberName/selectionCue/passedModel/reportedModel/internalToolCalls/costPreflightRef/costPreflightSlot/consumption/routingIdentity. Exact agent/file; Alternate cue; ceiling checked. `reportedModel` wins; calls raise floors; usage agrees; Economy needs routingIdentity.
+* `historyRecords[]`: require agent/request/deliverable/outcome; optional title/memberName/selectionCue/passedModel/passedAutoTier/reportedModel/internalToolCalls/costPreflightRef/costPreflightSlot/consumption/routingIdentity. Match roster, Alternate cue and ceiling. `reportedModel` wins; calls raise floors; Economy needs routingIdentity.
 * consumption keys: model/model_source/priced_as/model_tier/internal_turns/input_tokens/cached_tokens/cache_write_tokens/output_tokens/basis.
 * routingIdentity: requestedModel, effectiveModel, observedModel, routeRationale.
 * orchestration optional: request/outcome/passedModel/consumption; actual coordinator usage only, never fictional Scribe tokens; add Scribe's actual overhead if it ran.

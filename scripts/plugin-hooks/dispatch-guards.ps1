@@ -81,8 +81,17 @@ try {
         if (-not $allowed.Count) {
             Deny-Dispatch "Routed-model guard: $agentName has no resolved Model cell in $teamPath. Run New-SquadDispatchPlan.ps1 -ApplyModelRouting before dispatch."
         }
-        if ([string]$dispatch['model'] -cnotin $allowed) {
-            Deny-Dispatch "Routed-model guard: $teamPath routes $agentName to $($allowed -join ' or '). Copy the planned endpoint.model into the native model argument."
+        $nativeModel = [string]$dispatch['model']
+        $autoTier = if ($dispatch.ContainsKey('auto_tier')) { [string]$dispatch['auto_tier'] } else { [string]$dispatch['autoTier'] }
+        $matchesAllowed = $nativeModel -cin $allowed
+        if ($autoTier) {
+            $fusionRoute = Get-SquadFusionRouteKey $autoTier
+            $matchesAllowed = $nativeModel -ceq 'auto' -and $fusionRoute -and @(
+                $allowed | Where-Object { (Get-SquadFusionRouteKey $_) -ceq $fusionRoute }
+            ).Count -gt 0
+        }
+        if (-not $matchesAllowed) {
+            Deny-Dispatch "Routed-model guard: $teamPath routes $agentName to $($allowed -join ' or '). Copy the planned endpoint.nativeModelArgs."
         }
     }
     Write-Output '{"permissionDecision":"allow"}'

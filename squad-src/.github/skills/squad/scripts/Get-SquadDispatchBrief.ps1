@@ -464,7 +464,7 @@ $out.Add('')
 $out.Add('## Roster')
 $out.Add('')
 $out.Add('Resolve the roster Agent name to the host-advertised custom-agent type; a display name is not necessarily its API id. Use native dispatch, never `general-purpose`, `task`, or another built-in substitute.')
-if ($hasModel) { $out.Add('Pass each role''s Model cell as the dispatch `model` exactly as written; an empty cell passes no `model`. Scribe exception: omit the parameter so its explicit pin governs. Coordinators keep the selected session model.') }
+if ($hasModel) { $out.Add('Copy the dispatch plan''s `endpoint.nativeModelArgs` exactly; an empty map omits the override. Scribe keeps its explicit pin; coordinators keep the session model.') }
 $out.Add('')
 if ($hasModel) {
     $out.Add('| Role | Agent | Dispatchable | Pin | Model | Priced as (tier) | Deliverable root |')
@@ -515,7 +515,10 @@ foreach ($row in $roster.Rows) {
         }
     }
     if ($reach -ne 'yes' -or $class -notin 'implementation', 'review' -or -not $runs) { continue }
-    if ($cell) {
+    if ($cell -and (Get-SquadFusionRouteKey $cell)) {
+        $consumption.Add("- $role on Fusion: use the actual dispatch model and, for Auto, ``passedAutoTier``. Supply reportedModel when available; the writer derives usage.")
+    }
+    elseif ($cell) {
         $c = New-Consumption -Model $cell -Source 'cli-pinned' -Class $class
         $consumption.Add("- $role on its Model cell (add ``""passedModel"": ""$cell""``): $($c | ConvertTo-Json -Compress)")
     }

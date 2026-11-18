@@ -69,7 +69,7 @@ Highest wins, per role, evaluated independently for every dispatch:
 3. `tier=` (the existing static-tier input) or the seeded `team.md` Model Tier — today's fallback, unchanged.
 4. Omit the parameter — the no-policy default.
 
-**Dispatch copies the verified refreshed cell; it never retypes it.** Under an active routing policy, `New-SquadDispatchPlan.ps1` resolves the actual selected role units and `Set-SquadModelRouting.ps1` persists any changed cells first. Every later dispatch passes that row's `Model` cell character for character — never recalled, omitted, or adjusted to a "similar" id. The Scribe is the one exception: its own model pin governs. In the plugin distribution, the `dispatch-guards` `preToolUse` hook denies a mismatched dispatch and names the cell to copy; it only compares and never fills or changes a cell. **Requested model** in the identity bullets is the value actually passed, never the cell it should have been.
+**Dispatch copies the verified plan.** Persist refreshed `Model` cells before dispatch. Copy `endpoint.nativeModelArgs` exactly; the hook accepts a matching Fusion Auto tier or the standalone routed model on older tools. Only Scribe keeps its pin. The hook denies mismatches without editing cells.
 
 ## Assignment Classes
 
@@ -93,12 +93,12 @@ Availability precedence is `model-catalog.md`'s own (host-advertised enum ∩ ca
 
 | Host                                                        | Dispatch tool   | Available set                                                                                                                                                                                                                  | Value passed as `model`                             |
 |-------------------------------------------------------------|-----------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-----------------------------------------------------|
-| Copilot CLI, GitHub Copilot app, VS Code Copilot CLI harness | `task`          | The tool's advertised `model` enum — exactly what this user can run                                                                                                                                                            | The Model ID                                        |
+| Copilot CLI, GitHub Copilot app, VS Code Copilot CLI harness | `task`          | Advertised `model` IDs and usable Fusion `auto_tier` choices                                                                                                                                                                    | Standalone ID or `auto` with the advertised tier    |
 | VS Code, Local agent                                        | `runSubagent`   | No list is advertised. VS Code rejects a model above the session model's cost tier, so treat catalog ids whose `Input` rate is at or below a **concrete, priced** session model as available, unverified. `sessionModel: auto`, `unknown`, a tier label, or an unpriced model proves no availability and yields no automatic ranked/manual suggestion; wait for a concrete picker value or the model list returned by a rejected dispatch. That returned list replaces the derived set for the rest of the run | The display name from `consumption-rates.md`'s `Model (as routed)` column |
 
 Never offer or rank an id outside the host's available set, and label an unverified set as such in the question the user sees.
 
-On `task` hosts, pass the actual `model` enum as `availableModels`; `sessionModel` is metadata only. In every mode using `rejectedModels`, the planner stops before refreshing any Model cell unless it has a confirmed host list. Reuse an already advertised list; the rejection need not return a new one.
+Pass `availableModels` from `model`. If it includes `auto` and exposes `auto_tier`, pass that tool's `availableAutoTiers` and any `reasoningEfforts`. Advertised Fusion tiers add their own routes; `auto` alone is not inventory. Replan with the same confirmed enums, or stop before refreshing cells.
 
 ## Ranking Algorithm
 
@@ -136,7 +136,7 @@ An id the host advertises but `model-catalog.md` does not carry (catalog's `Adve
 
 ## Re-Rank and Substitution
 
-* **Native rejection, automatic modes**: stop the affected wave. Pass the exact rejected id as `rejectedModels` plus the complete host enum, then re-run `New-SquadDispatchPlan.ps1 -ApplyModelRouting` in the same mode for the selected roles. Ranked keeps its capability objective; the cost-first mode keeps its cost objective and never consumes its quality-failure `escalation`. Refresh cells before any retry.
+* **Native rejection, automatic modes**: stop the wave. Pass the rejected `endpoint.model` (the Fusion route, not `auto`) in `rejectedModels`. Re-run `New-SquadDispatchPlan.ps1 -ApplyModelRouting` in the same mode for the remaining roles and refresh cells before retry. Economy does not use its quality-failure `escalation`.
 * **Native rejection, `manual`**: never substitute. Re-run *Manual Model Selection* with the rejected id removed; unattended work stops or uses only the separately documented floor-safe fallback. Scribe pins, coordinator session models and `off` are not rerouted.
 * **Cost**: a retry that changes the model or price requires a new Cost Preflight round. A dispatch-time rejection is availability evidence, not evidence the role work failed.
 
@@ -152,14 +152,16 @@ A Watch Mode or other unattended trigger **ignores** `routing=`, `models=`, `tie
 
 The ten-field `#### Consumption` block defined in `entry-schemas.md` stays closed and unchanged — routing never adds a JSON key to it. When routing resolved this dispatch's id, the history entry additionally carries narrative bullets, placed beneath the existing block, using exactly these names:
 
-* **Requested model** — the id routing resolved and passed through the dispatch `model` parameter, or "none (parameter omitted)".
-* **Effective model** — the `model` value the closed consumption block actually recorded for this dispatch (identical to Requested model unless a substitution occurred).
+* **Requested model** — the native `model` argument, with `auto_tier` if passed, or "none (parameter omitted)".
+* **Effective model** — the `model` recorded in the closed consumption block.
 * **Observed model** — what the host reported the dispatch ran on, per the *Model Attribution* ladder's rung 1; `unreported` when the host gave no dispatch-line or self-reported model, `unverified` when only a lower rung (pin, session, or declaration) was available.
 * **Route rationale** — the mode and assignment class used, the candidate's rank position with its fit and the benchmark source, version, and evaluations used (or `declared-fit fallback` / "manual" / "floor fallback" / "stale-catalog fallback"), the floor applied, and any re-rank or refusal.
 
 These four names are the D9 contract: Tier1 fixtures and any Scribe-procedure wiring that populate them must use this exact wording and placement, never a new schema field.
 
-**Identity mismatch.** When Observed model is a concrete id — neither `unreported` nor `unverified` — and differs from Requested model (a Requested model of "none (parameter omitted)" is never a mismatch), or when Effective model differs from Requested model, the Route rationale bullet ends with the literal token `identity-mismatch: requested <id>, observed <id>` (or `effective <id>` for an Effective-versus-Requested mismatch). Pricing follows the Observed or Effective id's rate row per *Cost Preflight Pricing* below, never the Requested id's. The coordinator surfaces every `identity-mismatch` token from the turn in that turn's summary to the user, and in `mode=autopilot` a mismatch whose Observed or Effective id sits below the role's floor (*Consequence Floors* above) is a Risk Gate, reusing that section's own floor-exhaustion escalation rather than a new gate class. `unreported` and `unverified` are never a mismatch — they record an honest unknown, not a flag.
+For Fusion Auto, pass `passedModel: "auto"` and the exact `passedAutoTier` from the native call to the handoff writer. Include `reportedModel` only when reported. Let the writer derive usage; it validates the tier against the roster and records `unknown` rather than a pin when the model is unreported.
+
+**Identity mismatch.** A concrete Observed or Effective model that differs from a standalone Requested model ends Route rationale with `identity-mismatch: requested <id>, observed <id>` (or `effective <id>`). Omitted requests and unknown observations are not mismatches. A concrete observation behind a Fusion tier is expected; retain floor checks on that model. Usage pricing follows the Observed or Effective model. Surface each mismatch; in autopilot, a below-floor observation or mismatch invokes the existing Risk Gate (*Consequence Floors*).
 
 ## Cost Preflight Pricing
 

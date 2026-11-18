@@ -1122,7 +1122,16 @@ Describe 'Universal compact metadata and deterministic scheduling (COORD-04..06)
         $refusal.Output | Should -Match 'native rejection without host model inventory'
         Get-FixtureHash $fixture.Root | Should -BeExactly $before
 
-        $planInput['availableModels'] = @('hydrafusion', 'gpt-6.1-terra', 'gemini-4-argon')
+        $planInput['availableModels'] = @('auto', 'gpt-6.1-terra', 'gemini-4-argon')
+        $planInput['availableAutoTiers'] = @('hydrafusion')
+        $planInput['rejectedModels'] = @('auto')
+        Write-FixtureJson $path $planInput
+        $ambiguousRejection = Invoke-Local 'New-SquadDispatchPlan.ps1' $repo @('-RepoRoot', $repo, '-InputPath', $path, '-ApplyModelRouting')
+        $ambiguousRejection.ExitCode | Should -Be 1
+        $ambiguousRejection.Output | Should -Match 'name its planned Fusion route in rejectedModels'
+        Get-FixtureHash $fixture.Root | Should -BeExactly $before
+
+        $planInput['rejectedModels'] = @('Copilot Fusion High')
         Write-FixtureJson $path $planInput
         $result = Invoke-Local 'New-SquadDispatchPlan.ps1' $repo @('-RepoRoot', $repo, '-InputPath', $path, '-ApplyModelRouting')
         $result.ExitCode | Should -Be 0 -Because $result.Output
@@ -1160,10 +1169,58 @@ Describe 'Universal compact metadata and deterministic scheduling (COORD-04..06)
     It 'requires the planned model to control the native dispatch rather than agent frontmatter' {
         $runtime = Get-Content -LiteralPath (Join-Path $script:References 'coordinator-runtime.md') -Raw
         $coordinator = Get-Content -LiteralPath (Join-Path $SourceRoot 'squad-src/.github/agents/squad/squad-coordinator.agent.md') -Raw
-        $runtime | Should -Match 'Pass non-empty `endpoint\.model` exactly as the native\s+`model`; omit only when empty\.'
+        $runtime | Should -Match 'Copy `endpoint\.nativeModelArgs` verbatim'
         $runtime | Should -Match 'Never use `pricingModel` or frontmatter instead'
-        $coordinator | Should -Match 'Copy every non-empty planned `endpoint\.model` into the native dispatch\s+tool''s `model` argument exactly'
-        $coordinator | Should -Match 'never substitute the pricing model or defer an active route to frontmatter'
+        $coordinator | Should -Match 'Copy planned `endpoint\.nativeModelArgs` verbatim'
+        $coordinator | Should -Match 'never\s+substitute the pricing model or frontmatter'
+    }
+
+    It 'plans Fusion for <HostCase> without changing roster or preflight identity' -ForEach @(
+        @{ HostCase = 'Auto tier only'; Models = @('auto'); Tiers = @('fusion-high'); RouteId = 'hydrafusion'; WireModel = 'auto'; WireTier = 'fusion-high'; Efforts = @('low') }
+        @{ HostCase = 'Auto tier without effort'; Models = @('auto'); Tiers = @('hydrafusion-max'); RouteId = 'hydrafusion-max'; WireModel = 'auto'; WireTier = 'hydrafusion-max'; Efforts = @() }
+        @{ HostCase = 'standalone only'; Models = @('hydrafusion'); Tiers = @(); RouteId = 'hydrafusion'; WireModel = 'hydrafusion'; WireTier = ''; Efforts = @('low') }
+    ) {
+        $repo = New-FixtureRepo
+        $fixture = Initialize-Fixture $repo
+        $path = Join-Path $repo 'fusion-dispatch.json'
+        Write-FixtureJson $path @{
+            squadRoot = $fixture.Root; requestedModelRouting = 'economy'; sessionModel = 'auto'
+            availableModels = $Models; availableAutoTiers = $Tiers; reasoningEfforts = $Efforts
+            economyConsent = @{
+                user = 'fixture-user'
+                tradeAccepted = 'Every routed role uses the cheapest known-price model inside its floor.'
+                neverWeakened = 'Floors and gates remain unchanged.'
+            }
+            units = @(@{ id = 'work'; role = 'developer' })
+        }
+        $result = Invoke-Local 'New-SquadDispatchPlan.ps1' $repo @('-RepoRoot', $repo, '-InputPath', $path, '-ApplyModelRouting')
+        $result.ExitCode | Should -Be 0 -Because $result.Output
+        $plan = $result.Output | ConvertFrom-Json -AsHashtable
+        $endpoint = $plan.units[0].endpoint
+        $endpoint.model | Should -BeExactly $RouteId
+        $endpoint.pricingModel | Should -BeExactly $RouteId
+        $endpoint.nativeModelArgs['model'] | Should -BeExactly $WireModel
+        if ($WireTier) { $endpoint.nativeModelArgs['auto_tier'] | Should -BeExactly $WireTier }
+        else { $endpoint.nativeModelArgs.Contains('auto_tier') | Should -BeFalse }
+        if ($WireTier -and $Efforts.Count) { $endpoint.nativeModelArgs['reasoning_effort'] | Should -BeExactly 'low' }
+        else { $endpoint.nativeModelArgs.Contains('reasoning_effort') | Should -BeFalse }
+        (Get-SquadRoster $fixture.Root | Where-Object Role -eq 'developer').Model | Should -BeExactly $RouteId
+    }
+
+    It 'does not treat bare Auto as a manual route' {
+        $repo = New-FixtureRepo
+        $fixture = Initialize-Fixture $repo -ModelRouting manual
+        $path = Join-Path $repo 'bare-auto.json'
+        Write-FixtureJson $path @{
+            squadRoot = $fixture.Root; availableModels = @('auto')
+            manualModels = @{ lead = 'auto' }
+            units = @(@{ id = 'plan'; role = 'lead' })
+        }
+        $before = Get-FixtureHash $fixture.Root
+        $result = Invoke-Local 'New-SquadDispatchPlan.ps1' $repo @('-RepoRoot', $repo, '-InputPath', $path, '-ApplyModelRouting')
+        $result.ExitCode | Should -Be 1 -Because $result.Output
+        $result.Output | Should -Match "Role 'lead' has no admissible manual model"
+        Get-FixtureHash $fixture.Root | Should -BeExactly $before
     }
 
     It 'carries requested <Mode> separately from recorded off without mutating discovery' -ForEach @(
