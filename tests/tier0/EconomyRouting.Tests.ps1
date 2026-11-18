@@ -177,9 +177,20 @@ Describe 'Economy Mode keeps its scope, floors, and one escalation (SQ-35)' {
     }
 
     It 'escalates once to the ranked pick through the routing writer, reset by the next economy plan' {
-        $script:EconomySection | Should -Match ([regex]::Escape('After a `Fail` verdict, a Critical or High finding, or a `blocked` owner, re-dispatch that owner once on its ranked pick'))
+        $script:EconomySection | Should -Match ([regex]::Escape('After a `Fail` verdict, a Critical or High finding, or an owner that ran and then became `blocked`, re-dispatch that owner once on its ranked pick'))
         $script:EconomySection | Should -Match ([regex]::Escape('persist the cell through `Set-SquadModelRouting.ps1`'))
         $script:EconomySection | Should -Match ([regex]::Escape('the next economy plan resets the cell'))
+    }
+
+    It 'replans host-rejected Economy models in the same cost-first mode instead of using escalation' {
+        $script:EconomySection | Should -Match ([regex]::Escape('A native model rejection is availability evidence, not a failed quality verdict.'))
+        $script:EconomySection | Should -Match ([regex]::Escape('carry the rejected id in `rejectedModels`'))
+        $script:EconomySection | Should -Match ([regex]::Escape('It does not switch to Ranked, consume the `escalation` field'))
+        $script:DispatchPlan | Should -Match ([regex]::Escape("RejectedModels = `$rejectedModels"))
+        $script:Resolver | Should -Match 'rejection is not an Economy quality escalation'
+        $script:Routing | Should -Match 'Ranked keeps its capability objective; the cost-first mode keeps its cost objective'
+        $script:Routing | Should -Match '\*\*Native rejection, `manual`\*\*: never substitute'
+        $script:Routing | Should -Match 'Scribe pins, coordinator session models and `off` are not rerouted'
     }
 
     It 'asks for consent once and records it as an Economy Mode Accepted decision' {

@@ -1097,6 +1097,66 @@ Describe 'Universal compact metadata and deterministic scheduling (COORD-04..06)
         $plan.routingRefresh.changes[0].to | Should -BeExactly 'gpt-5.6-sol'
     }
 
+    It 'replans Lead and Tester in Economy only when the retry has confirmed host inventory' {
+        $repo = New-FixtureRepo
+        $fixture = Initialize-Fixture $repo -ModelRouting economy
+        $path = Join-Path $repo 'economy-rejection-plan.json'
+        $planInput = @{
+            squadRoot = $fixture.Root
+            sessionModel = 'gpt-6.1-sol'
+            rejectedModels = @('Copilot Fusion High')
+            economyConsent = @{
+                user = 'fixture-user'
+                tradeAccepted = 'Every routed role uses the cheapest known-price model inside its floor.'
+                neverWeakened = 'Floors and gates remain unchanged.'
+            }
+            units = @(
+                @{ id = 'plan'; role = 'lead'; readOnly = $true }
+                @{ id = 'review'; role = 'tester'; readOnly = $true }
+            )
+        }
+        $before = Get-FixtureHash $fixture.Root
+        Write-FixtureJson $path $planInput
+        $refusal = Invoke-Local 'New-SquadDispatchPlan.ps1' $repo @('-RepoRoot', $repo, '-InputPath', $path, '-ApplyModelRouting')
+        $refusal.ExitCode | Should -Be 1
+        $refusal.Output | Should -Match 'native rejection without host model inventory'
+        Get-FixtureHash $fixture.Root | Should -BeExactly $before
+
+        $planInput['availableModels'] = @('hydrafusion', 'gpt-6.1-terra', 'gemini-4-argon')
+        Write-FixtureJson $path $planInput
+        $result = Invoke-Local 'New-SquadDispatchPlan.ps1' $repo @('-RepoRoot', $repo, '-InputPath', $path, '-ApplyModelRouting')
+        $result.ExitCode | Should -Be 0 -Because $result.Output
+        $plan = $result.Output | ConvertFrom-Json
+        $plan.modelRejections | Should -Be @('hydrafusion')
+        @($plan.units.endpoint.model) | Should -Be @('gpt-6.1-terra', 'gpt-6.1-terra')
+        $plan.units[0].endpoint.modelRouting | Should -Be 'economy'
+        $plan.units[1].endpoint.modelRouting | Should -Be 'economy'
+        $roster = Get-SquadRoster $fixture.Root
+        @($roster | Where-Object Role -in @('lead', 'tester') | ForEach-Object Model) |
+            Should -Be @('gpt-6.1-terra', 'gpt-6.1-terra')
+    }
+
+    It 'refuses a rejected Manual cell instead of silently substituting a model' {
+        $repo = New-FixtureRepo
+        $fixture = Initialize-Fixture $repo -ModelRouting manual
+        $path = Join-Path $repo 'manual-rejection-plan.json'
+        Write-FixtureJson $path @{
+            squadRoot = $fixture.Root
+            sessionModel = 'gpt-6.1-sol'
+            availableModels = @('gpt-6.1-sol', 'gpt-6.1-terra')
+            rejectedModels = @('gpt-6.1-sol')
+            manualModels = @{ lead = 'gpt-6.1-sol' }
+            units = @(@{ id = 'plan'; role = 'lead'; readOnly = $true })
+        }
+        $before = Get-FixtureHash $fixture.Root
+        $result = Invoke-Local 'New-SquadDispatchPlan.ps1' $repo @('-RepoRoot', $repo, '-InputPath', $path, '-ApplyModelRouting')
+        $result.ExitCode | Should -Be 1
+        $result.Output | Should -Match "Role 'lead' has no admissible manual model"
+        $result.Output | Should -Match 'refused: not available on this host'
+        $result.Output | Should -Not -Match '"routingReady":true'
+        Get-FixtureHash $fixture.Root | Should -BeExactly $before
+    }
+
     It 'requires the planned model to control the native dispatch rather than agent frontmatter' {
         $runtime = Get-Content -LiteralPath (Join-Path $script:References 'coordinator-runtime.md') -Raw
         $coordinator = Get-Content -LiteralPath (Join-Path $SourceRoot 'squad-src/.github/agents/squad/squad-coordinator.agent.md') -Raw
