@@ -293,12 +293,15 @@ function Get-SquadBenchmarkRecordDigest {
 
 function Get-SquadBenchmarkDigest {
     [CmdletBinding()]
-    param([Parameter(Mandatory)][string]$Content)
+    param(
+        [Parameter(Mandatory)][string]$Content,
+        [string]$CatalogPath = (Join-Path $PSScriptRoot '../references/model-catalog.md')
+    )
 
     $policy = Get-SquadBenchmarkPolicy
     $records = [System.Collections.Generic.List[string]]::new()
     $records.Add("$($policy.Version)|$($policy.Schema)|$($policy.MinimumReferenceCount)|$($policy.StaleAfterDays)")
-    $modelSpecs = Get-SquadBenchmarkModelSpec
+    $modelSpecs = Get-SquadBenchmarkModelSpec -CatalogPath $CatalogPath
     foreach ($id in $modelSpecs.Keys) {
         $alias = if ($modelSpecs[$id].Contains('AliasOf')) { $modelSpecs[$id].AliasOf } else { '' }
         $records.Add("model-identity|$id|$($modelSpecs[$id].VersionRegex)|$alias")
@@ -347,11 +350,12 @@ function Get-SquadBenchmarkScore {
     param(
         [Parameter(Mandatory)][AllowEmptyCollection()][object[]]$Rows,
         [Parameter(Mandatory)][datetime]$AsOf,
-        [string[]]$ModelIds = @()
+        [string[]]$ModelIds = @(),
+        [string]$CatalogPath = (Join-Path $PSScriptRoot '../references/model-catalog.md')
     )
 
     $policy = Get-SquadBenchmarkPolicy
-    $modelSpecs = Get-SquadBenchmarkModelSpec
+    $modelSpecs = Get-SquadBenchmarkModelSpec -CatalogPath $CatalogPath
     $unique = [System.Collections.Generic.Dictionary[string, object]]::new([System.StringComparer]::Ordinal)
     $byModel = [System.Collections.Generic.Dictionary[string, object]]::new([System.StringComparer]::Ordinal)
     foreach ($id in $ModelIds) { $byModel[$id] = [System.Collections.Generic.Dictionary[string, object]]::new([System.StringComparer]::Ordinal) }
