@@ -53,6 +53,7 @@ BeforeAll {
     $script:FederationReferenceBody = Get-SquadReferenceBody -Name 'federation.md'
     $script:ConsumptionReferenceBody = Get-SquadReferenceBody -Name 'consumption.md'
     $script:OrdinaryHandoffBody = Get-SquadReferenceBody -Name 'economy-scribe.md'
+    $script:RosterCatalogBody = Get-SquadReferenceBody -Name 'roster-catalog.md'
     $script:DispatchPlanBody = Get-Content -LiteralPath (Join-Path $script:Model.SquadSkillRoot 'scripts/New-SquadDispatchPlan.ps1') -Raw
 }
 
@@ -68,6 +69,11 @@ Describe 'Synchronous ordinary handoffs and cold Scribe pipelining (GATE-22..GAT
             }
             $script:OperatingProcedureBody | Should -Match 'direct ordinary route above runs synchronously and does not use Scribe pipelining'
             $script:GatesAndModesBody | Should -Match 'remaining pipelining predicate applies only when a cold Scribe dispatch is actually needed'
+        }
+
+        It 'seeds the Scribe roster cue as cold-only instead of an ordinary writer' {
+            $script:RosterCatalogBody | Should -Match 'ordinary handoffs run `Write-SquadHandoff\.ps1 -Quiet` directly without dispatching this agent'
+            $script:RosterCatalogBody | Should -Not -Match 'the ordinary state writer after Cost Preflight'
         }
 
         It 'serializes the direct writer with cold Scribe and Cost Preflight, never using a lock as a cold-editor guard' {
