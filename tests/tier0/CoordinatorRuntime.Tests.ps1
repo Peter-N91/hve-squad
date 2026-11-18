@@ -1160,10 +1160,37 @@ Describe 'Universal compact metadata and deterministic scheduling (COORD-04..06)
     It 'requires the planned model to control the native dispatch rather than agent frontmatter' {
         $runtime = Get-Content -LiteralPath (Join-Path $script:References 'coordinator-runtime.md') -Raw
         $coordinator = Get-Content -LiteralPath (Join-Path $SourceRoot 'squad-src/.github/agents/squad/squad-coordinator.agent.md') -Raw
-        $runtime | Should -Match 'Pass non-empty `endpoint\.model` exactly as the native\s+`model`; omit only when empty\.'
+        $runtime | Should -Match 'Use `endpoint\.model`; with `endpoint\.autoTier`, use\s+`model:auto`/`auto_tier`/`reasoning_effort:low`'
         $runtime | Should -Match 'Never use `pricingModel` or frontmatter instead'
-        $coordinator | Should -Match 'Copy every non-empty planned `endpoint\.model` into the native dispatch\s+tool''s `model` argument exactly'
-        $coordinator | Should -Match 'never substitute the pricing model or defer an active route to frontmatter'
+        $coordinator | Should -Match 'Copy planned `endpoint\.model` verbatim'
+        $coordinator | Should -Match 'use `model:auto`, that tier and\s+`reasoning_effort:low`'
+        $coordinator | Should -Match 'never substitute the pricing model or frontmatter'
+    }
+
+    It 'emits an Auto-tier adapter for the <Model> Economy route' -ForEach @(
+        @{ Model = 'hydrafusion' }
+        @{ Model = 'hydrafusion-max' }
+    ) {
+        $repo = New-FixtureRepo
+        $fixture = Initialize-Fixture $repo
+        $path = Join-Path $repo 'fusion-dispatch.json'
+        Write-FixtureJson $path @{
+            squadRoot = $fixture.Root
+            requestedModelRouting = 'economy'
+            sessionModel = 'auto'
+            availableModels = @($Model)
+            economyConsent = @{
+                user = 'fixture-user'
+                tradeAccepted = 'Every routed role uses the cheapest known-price model inside its floor.'
+                neverWeakened = 'Floors and gates remain unchanged.'
+            }
+            units = @(@{ id = 'work'; role = 'developer' })
+        }
+        $result = Invoke-Local 'New-SquadDispatchPlan.ps1' $repo @('-RepoRoot', $repo, '-InputPath', $path)
+        $result.ExitCode | Should -Be 0 -Because $result.Output
+        $endpoint = ($result.Output | ConvertFrom-Json).units[0].endpoint
+        $endpoint.model | Should -BeExactly $Model
+        $endpoint.autoTier | Should -BeExactly $Model
     }
 
     It 'carries requested <Mode> separately from recorded off without mutating discovery' -ForEach @(

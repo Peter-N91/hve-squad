@@ -112,10 +112,11 @@ Before nontrivial work load `Get-SquadProcedure.ps1 -Name progress` alongside ac
 sections. Progress Presentation owns 3-7 outcomes, tracker/chat fallback, phases
 and blockers: coordinator-owned ephemeral UI, not role work or state.
 
-Dispatch each planned endpoint with native `task`/`runSubagent`, the request,
-scoped context, exact output-root argument, read-only inputs, and any admitted
-Decision Ref/round/slot. Pass non-empty `endpoint.model` exactly as the native
-`model`; omit only when empty. Never use `pricingModel` or frontmatter instead.
+Dispatch each planned endpoint with native `task`/`runSubagent`, request,
+scoped context, exact output-root argument, read-only inputs, and admitted Ref/round/slot.
+Use `endpoint.model`; with `endpoint.autoTier`, use
+`model:auto`/`auto_tier`/`reasoning_effort:low`.
+Never use `pricingModel` or frontmatter instead.
 If the native tool cannot accept a model override, stop and disclose it; do not
 drop the route or edit frontmatter.
 Parallelize only an independent wave.

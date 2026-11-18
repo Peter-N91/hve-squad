@@ -64,6 +64,8 @@ test('composeStudioLaunch translates beginner options into displayPrompt and str
     assert.match(res.prompt, /- profile: product/);
     assert.match(res.prompt, /- mode: autopilot/);
     assert.match(res.prompt, /- routing: economy/);
+    assert.match(res.prompt, /Write-SquadHandoff\.ps1 -Quiet directly/);
+    assert.match(res.prompt, /dispatch Scribe only for exit 2 or genuinely cold operations/);
     assert.match(res.prompt, /- cost-ceiling: 5/);
 });
 

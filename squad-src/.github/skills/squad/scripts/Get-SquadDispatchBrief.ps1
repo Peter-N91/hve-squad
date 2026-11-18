@@ -361,7 +361,7 @@ if ($routing -eq 'economy' -and $consent -eq 'recorded') {
             else { 'scope: legacy (dispatch is blocked until the all-roles trade is accepted; no role is kept on Ranked as a compatibility fallback)' }))
 }
 if ($routing -eq 'economy' -and $consent -eq 'missing') {
-    $out.Add('WARN economy consent not recorded: before any dispatch, state the trade once (economy-mode.md Consent) and hand the Scribe the ## Economy Mode Accepted decision with the roster refresh.')
+    $out.Add('WARN economy consent not recorded: before any dispatch, state the trade once (economy-mode.md Consent), then pass economyConsent to New-SquadDispatchPlan.ps1 -ApplyModelRouting; its validated writer records the consent and roster refresh directly.')
 }
 if ($routing -eq 'economy') { $out.Add('route markers: every history record needs routingIdentity whose routeRationale starts with Route: economy, or Route: bounded on the Bounded Lane (economy-mode.md Route Markers).') }
 if ($depth -eq 'quick') { $out.Add('depth markers: pass each dispatch plan modelRationale unchanged; it leads with Route: bounded on the Bounded Lane and Depth: quick on quick work roles (quick-depth.md Route Markers).') }
@@ -464,7 +464,7 @@ $out.Add('')
 $out.Add('## Roster')
 $out.Add('')
 $out.Add('Resolve the roster Agent name to the host-advertised custom-agent type; a display name is not necessarily its API id. Use native dispatch, never `general-purpose`, `task`, or another built-in substitute.')
-if ($hasModel) { $out.Add('Pass each role''s Model cell as the dispatch `model` exactly as written; an empty cell passes no `model`. Scribe exception: omit the parameter so its explicit pin governs. Coordinators keep the selected session model.') }
+if ($hasModel) { $out.Add('Use the dispatch plan: copy `endpoint.model`; when `endpoint.autoTier` is nonempty and `task` exposes `auto_tier`, use `model:auto` with that tier and `reasoning_effort:low`. Scribe exception: omit the parameter so its explicit pin governs. Coordinators keep the selected session model.') }
 $out.Add('')
 if ($hasModel) {
     $out.Add('| Role | Agent | Dispatchable | Pin | Model | Priced as (tier) | Deliverable root |')

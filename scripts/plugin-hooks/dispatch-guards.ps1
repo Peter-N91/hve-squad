@@ -13,6 +13,22 @@ function Deny-Dispatch {
     exit 0
 }
 
+function ConvertTo-FusionRoute {
+    param([AllowNull()][AllowEmptyString()][string]$Value)
+
+    $id = ([string]$Value).Trim().ToLowerInvariant()
+    if ($id -in @('fusion', 'copilot-fusion', 'fusion-standard', 'copilot-fusion-standard', 'hydrafusion-standard', 'hydrafusion-efficiency')) {
+        return 'fusion-standard'
+    }
+    if ($id -in @('hydrafusion', 'fusion-high', 'copilot-fusion-high', 'hydrafusion-high', 'hydrafusion-balance')) {
+        return 'hydrafusion'
+    }
+    if ($id -in @('hydrafusion-max', 'fusion-max', 'copilot-fusion-max')) {
+        return 'hydrafusion-max'
+    }
+    return ''
+}
+
 try {
     $inputText = [Console]::In.ReadToEnd()
     $hook = $inputText | ConvertFrom-Json -AsHashtable
@@ -81,8 +97,18 @@ try {
         if (-not $allowed.Count) {
             Deny-Dispatch "Routed-model guard: $agentName has no resolved Model cell in $teamPath. Run New-SquadDispatchPlan.ps1 -ApplyModelRouting before dispatch."
         }
-        if ([string]$dispatch['model'] -cnotin $allowed) {
-            Deny-Dispatch "Routed-model guard: $teamPath routes $agentName to $($allowed -join ' or '). Copy the planned endpoint.model into the native model argument."
+        $nativeModel = [string]$dispatch['model']
+        $autoTier = if ($dispatch.ContainsKey('auto_tier')) { [string]$dispatch['auto_tier'] }
+        elseif ($dispatch.ContainsKey('autoTier')) { [string]$dispatch['autoTier'] } else { '' }
+        $matchesAllowed = @($allowed | Where-Object { $nativeModel -ceq $_ }).Count -gt 0
+        if ($nativeModel -ceq 'auto' -and $autoTier) {
+            $routedAutoTier = ConvertTo-FusionRoute $autoTier
+            $matchesAllowed = $routedAutoTier -and @($allowed | Where-Object {
+                    (ConvertTo-FusionRoute $_) -ceq $routedAutoTier
+                }).Count -gt 0
+        }
+        if (-not $matchesAllowed) {
+            Deny-Dispatch "Routed-model guard: $teamPath routes $agentName to $($allowed -join ' or '). Copy endpoint.model, or serialize endpoint.autoTier as model=auto plus that auto_tier."
         }
     }
     Write-Output '{"permissionDecision":"allow"}'
