@@ -104,14 +104,17 @@ still use `scribe-init.md` without `-Direct`, recording its own usage separately
 Neither path is a license to fabricate usage or edit an existing tree.
 
 Confirmed additions of catalog roles or packs use `roster-expansion.md` for an
-existing plain squad or selected federation member. Connector setup/additive
-bindings, repeated-role custom members, removal, recasting, existing-root edits,
-and unavailable runtime keep their cold procedure. Supported Federation Expansion
+existing plain squad or selected federation member. New connector `replace` or
+`add` registrations use `Register-SquadConnector.ps1` after direct base Init:
+preview the exact binding first, then require `-Confirmed`. The script creates
+the binding and, for `add`, its member and route without a Scribe or model
+consumption entry. Rebind/removal/identity refresh, repeated-role custom
+members, recasting, existing-root edits, and unavailable runtime keep their
+cold procedure. Supported Federation Expansion
 uses the same sealed Init transaction as a fresh federation; supported promotion
 uses the federation runtime's sealed-plan transaction.
 Read `connector-role-modes.md` when applicable, then the relevant roster/cast
-sections and pass confirmed `connectorBindings`/`customRoutingRows` through cold
-Scribe. Preserve existing bindings, model choices and edited output roots on
+sections. Preserve existing bindings, model choices and edited output roots on
 refresh. Never drop unsupported fields to force the fast path.
 
 Wrong input fails before publication. Correct the named confirmed input and retry

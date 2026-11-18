@@ -3,7 +3,7 @@ title: Squad Skill Security Model
 description: STRIDE model for local squad routing, connector file exchanges, and state persistence.
 author: microsoft/hve-core
 ms.topic: reference
-ms.date: 2026-11-02
+ms.date: 2026-11-18
 keywords: [squad, connectors, security, STRIDE]
 estimated_reading_time: 6
 ---
@@ -24,6 +24,7 @@ The runtime comprises `Resolve-SquadConnectorDispatch.ps1`,
 `SquadPromotion.psm1`,
 `Get-SquadFederationInitPlan.ps1`, `Initialize-SquadFederation.ps1`,
 `Get-SquadRosterExpansionPlan.ps1`, `Expand-SquadRoster.ps1`,
+`Register-SquadConnector.ps1`,
 `Write-SquadHandoff.ps1`, `Write-SquadVerdict.ps1`, `Measure-SquadLedger.ps1`,
 the shared `SquadUsage.psm1`, `Set-SquadCostPreflight.ps1`,
 `Initialize-SquadConsumptionRates.ps1`, the allowlisted maintenance entrypoint
@@ -43,7 +44,7 @@ controls, not a sandbox or a substitute for host filesystem permissions.
 
 | Surface | Current controls | Residual boundary |
 |---|---|---|
-| Routing and registration | Explicit roster bindings, actual-unit model resolution, hash-bound Model-cell and additive roster expansion, manifest role admission, reserved governance roles, fail-closed ambiguity | Configuration and installed scripts must remain operator-controlled. |
+| Routing and registration | Explicit roster bindings, actual-unit model resolution, hash-bound Model-cell and additive roster expansion, confirmation-gated new-binding registration, manifest role admission, reserved governance roles, fail-closed ambiguity | Configuration and installed scripts must remain operator-controlled. |
 | Offline capability evidence | Exact model/configuration checks, explicit verification dates, common versioned panels, digest validation and visible fallback | Curated verification facts and source hashes are not authenticated measurement signatures. |
 | External file exchange | Closed schemas, request/result identity matching, output allowlists, structural path containment | A matching envelope does not authenticate its author. |
 | Persistence | Closed handoff/verdict payload validation, shared per-root writer locks, hash/CAS routing and preflight transactions, staged federation Init/Expansion/Promotion with verification and rollback, binding-matched provenance, distinct member accounting, cumulative exact-session journal with history-prefix and native-identity deduplication, unique APM/plugin agent-name canonicalization, ledger checks | History, verdicts, lifecycle plans, and exact-session snapshots are local and editable by principals with repository write access; hashes detect changes but do not authenticate authors. |
@@ -158,8 +159,12 @@ Different filesystem permissions or unattended policies change the risk.
   final roster/routing/decision bytes. The apply helper requires that plan hash,
   revalidates under the plain lock or ordered federation/member locks, writes only those three files,
   preserves accounting/state/history byte-for-byte, and checks the ledger
-  read-only. Recasting, removal, duplicate-role members, connectors, and existing
-  root edits remain outside this writer.
+  read-only. The connector registration helper separately accepts only a new
+  binding id, validates the 1.1 manifest and complete final replace/add roster,
+  serializes on the same root/federation locks, writes only roster/routing/one
+  decision, checks the ledger read-only, and restores owned files on failure.
+  Recasting, removal, duplicate-role members, existing binding changes, and
+  existing root edits remain outside these writers.
 
 ### Data Flow
 
@@ -168,6 +173,7 @@ flowchart TD
   subgraph Operator["Operator-controlled host"]
     Config["Roster, manifests, pinned evidence, installed scripts"]
     Shell["Coordinator and resolver helpers"]
+    Register["Confirmed connector registration"]
     Scribe["Handoff, routing refresh, preflight, rates, ledger"]
   end
   subgraph Exchange["Untrusted producer boundary"]
@@ -180,6 +186,8 @@ flowchart TD
     Usage["Local host usage logs"]
   end
   Config -->|"local Markdown/JSON reads"| Shell
+  Config -->|"validated manifest and confirmed binding"| Register
+  Register -->|"locked roster/route/decision writes"| State
   Shell -->|"file JSON request"| Mailbox
   Mailbox -->|"file JSON request"| Endpoint
   Endpoint -->|"file JSON result"| Mailbox
@@ -246,6 +254,11 @@ consistency, not the identity of the process behind a mailbox.
 Closed fields and reserved role targets reject unsupported authority changes.
 Keep roster/manifests and installed helpers writable only by trusted operators;
 an adversary allowed to modify them can change the routing policy itself.
+New registration requires the script's explicit `-Confirmed` execution, then
+checks the unchanged state/hash baselines, manifest hash, final resolver
+membership, globally unique connector member identities, and an unambiguous
+default set. Existing binding ids refuse in-place changes and remain on the
+retirement-evidence path.
 Benchmark checks reject invalid normalized scores/dates, conflicting records,
 wrong model versions, incompatible configurations and mismatched evidence
 digests. Acquisition and genuine verification remain separate from publication
@@ -284,6 +297,9 @@ before publication.
 
 Binding/member ids and Scribe-rendered provenance identify the selected
 configuration. They are not a signed record of who authored that configuration.
+Deterministic registration appends an explicit connector decision with run and
+confirmation references while leaving history and accounting byte-identical;
+the script adds no fictional model/Scribe consumption.
 Pending identity hashes include the external member and owning roster, so a
 rename or cross-squad resume cannot silently relabel a result. Retirement records
 retain historical attribution only while the trusted local record remains intact.
@@ -323,6 +339,7 @@ do not restrict the operating-system privileges of the consumer's runner.
 |---|---|---|---|---|
 | Untrusted prose changes role authority | Medium | High | Low | Closed binding checks and canonical council routing; host configuration remains trusted. |
 | Configuration or pinned model evidence changed by a local writer | Deployment-dependent | High | Medium | Host ACLs and change review required; not authenticated by the skill. |
+| Partial or conflicting new connector registration | Low | High | Low | Explicit `-Confirmed`, shared root lock, manifest/state hash checks, owned-file rollback, and read-only ledger verification. |
 
 ## Bucket B2: File Exchange and Persistence
 
@@ -441,5 +458,6 @@ least-privilege worktrees and isolation outside the prompt layer.
 * [Federation Init transaction](scripts/Initialize-SquadFederation.ps1)
 * [Roster expansion planner](scripts/Get-SquadRosterExpansionPlan.ps1)
 * [Roster expansion transaction](scripts/Expand-SquadRoster.ps1)
+* [Connector registration transaction](scripts/Register-SquadConnector.ps1)
 * [Consumer guide and examples](https://github.com/Peter-N91/hve-squad/blob/main/docs/templates/connector-example/CONSUMER-GUIDE.md)
 * [Repository security policy](https://github.com/Peter-N91/hve-squad/blob/main/SECURITY.md)

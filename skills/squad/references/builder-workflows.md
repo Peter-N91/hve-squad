@@ -5,7 +5,7 @@ license: MIT
 metadata:
   authors: "Peter-N91/hve-squad"
   spec_version: "1.0"
-  last_updated: "2026-10-24"
+  last_updated: "2026-11-18"
 ---
 <!--
 Copyright (c) Microsoft Corporation.
@@ -22,6 +22,7 @@ filesystem work:
 | `scripts/New-SquadConnector.ps1` | Render a 1.1 manifest, mailbox guidance, examples, removable runner, and connector runbook |
 | `scripts/New-SquadExternalEndpoint.ps1` | Create endpoint/worker charters and a skill, or preserve an existing implementation and add only integration artifacts |
 | `scripts/Test-SquadConnectorManifest.ps1` | Reuse the connector validator and reject placeholders or inconsistent builder values |
+| `scripts/Register-SquadConnector.ps1` | Preview and confirm a new replace/add binding in an initialized squad without dispatching the Scribe |
 
 Resolve scripts relative to the installed `squad` skill. Typical roots are
 `.agents/skills/squad/` for APM and `skills/squad/` for a plugin. Do not copy
@@ -82,6 +83,36 @@ Report all four placeholders:
 * `REPLACE_CONTACT`
 
 Validation must remain red until they are resolved.
+
+### Deterministic registration
+
+After the manifest validates and the squad exists, register one new binding with
+the confirmed values:
+
+```powershell
+pwsh -NoProfile -File "<skill-root>/scripts/Register-SquadConnector.ps1" `
+  -RepoRoot "<repository-root>" `
+  -ManifestPath "connectors/org-research.json" `
+  -BindingId "research-org" `
+  -RoleMode replace `
+  -TargetRole researcher `
+  -MemberName "Org Researcher" `
+  -DefaultExecution connector `
+  -RunId "research-connector-registration"
+```
+
+The first command is a read-only preview. Inspect its binding, target, member,
+manifest, and `aiCost: none` receipt; after human confirmation, rerun it with
+`-Confirmed`. The apply transaction writes only `team.md`, `routing.md`, and an
+append-only registration decision, checks the ledger read-only, and leaves
+history, consumption, notifications, and `state.json` byte-identical. An exact
+rerun returns `unchanged`.
+
+For `-RoleMode add`, supply `-AlignedRole`, `-DeliverableRoot`, `-RoutePattern`,
+`-AutonomyTier`, and the intended `-ParallelEligible` flag. These values add the
+distinct `Squad Connector` member and explicit route. The script intentionally
+supports only new registrations: change/removal of an identity-bearing binding
+keeps the Scribe-owned retirement-evidence path in `connector-role-modes.md`.
 
 ### Output and runner
 
@@ -169,6 +200,6 @@ Before completion:
 3. Name generated paths, unchanged paths, conflicts, and placeholders.
 4. Give the exact `-Once` runner command and prerequisites.
 5. Explain direct endpoint testing, trusted adapter mapping, connector
-   registration, first dispatch (`awaiting`), same-task resume, and human review
-   of external results.
+   registration through `Register-SquadConnector.ps1`, first dispatch
+   (`awaiting`), same-task resume, and human review of external results.
 6. Remind the user that no credential was generated or requested.

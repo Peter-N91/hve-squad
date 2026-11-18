@@ -1,6 +1,6 @@
 {
   "name": "hve-squad",
-  "version": "0.21.0-pre.run.15",
+  "version": "0.21.0-pre.run.16",
   "description": "HVE Squad and its pinned HVE Core cast in one GitHub Copilot plugin: 36 Squad agents, 59 HVE Core agent entries, and 10 Squad invocation skills.",
   "author": {
     "name": "Peter-N91",
