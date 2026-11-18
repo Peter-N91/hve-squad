@@ -401,10 +401,16 @@ try {
                 -AllowedOutputs @(if ($unit.Contains('allowedOutputs')) { $unit.allowedOutputs }) `
                 -AdmissionApproved:($inputData.Contains('admissionApproved') -and $inputData.admissionApproved)
             if ($selection.Status -ne 'ok') { throw "Endpoint resolution $($selection.Status): $($selection.Reason). Follow references/connector-role-modes.md; do not substitute." }
+            # Replacement changes the dispatch identity, not the Members row that owns the model.
+            $connectorDispatch = $selection.Choice -clike 'connector:*'
+            $rosterMemberName = if ($connectorDispatch) { [string]$selection.RosterMemberName } else { [string]$selection.MemberName }
             $rows = @($roster | Where-Object { $_.Role -ceq $unit.role -and (-not $owner -or $_['Member Name'] -ceq $owner) })
-            $selectedRows = @($rows | Where-Object { $_['Member Name'] -ceq $selection.MemberName -and $_['Agent Name (Primary)'] -ceq $selection.Agent })
+            $selectedRows = @($rows | Where-Object {
+                    [string]$_['Member Name'] -ceq $rosterMemberName -and
+                    ($connectorDispatch -or $_['Agent Name (Primary)'] -ceq $selection.Agent)
+                })
             if ($selectedRows.Count -eq 1) { $row = $selectedRows[0] }
-            elseif ($rows.Count -eq 1) { $row = $rows[0] }
+            elseif (-not $connectorDispatch -and $rows.Count -eq 1) { $row = $rows[0] }
             else { throw 'Selected roster member is ambiguous; supply owner.' }
             $agent = $selection.Agent
             if ($unit.Contains('agent') -and $unit.agent -cne $agent) {
@@ -442,7 +448,7 @@ try {
             $tier = if ('escalate' -in $tiers -or -not $tiers.Count) { 'escalate' } elseif ($council -or 'confirm' -in $tiers) { 'confirm' } else { 'auto' }
             $persistedModel = if ($modelRouting -ne 'off' -and $row.ContainsKey('Model')) { [string]$row.Model } else { '' }
             if ($persistedModel -in @('-', [string][char]0x2014)) { $persistedModel = '' }
-            $routeKey = [string]$unit.role + "`n" + [string]$selection.MemberName
+            $routeKey = [string]$unit.role + "`n" + $rosterMemberName
             $route = if ($routeByIdentity.ContainsKey($routeKey)) { $routeByIdentity[$routeKey] } else { $null }
             $assignmentClass = if ($null -ne $route) { [string]$route.class }
             elseif ($roleClasses.ContainsKey([string]$unit.role)) { [string]$roleClasses[[string]$unit.role] }
@@ -460,10 +466,12 @@ try {
                     $candidates = @($route.candidates | ForEach-Object { $_.id }) -join ', '
                     throw "Role '$($unit.role)' has no admissible $modelRouting model. Cell status: $cellStatus. Candidates: $candidates"
                 }
-                if ($persistedModel -cne $model) {
+                # The writer clears unassigned cells on entry to Manual, even if a prior automatic pick matches.
+                $manualAssignment = $routingModeChanged -and $modelRouting -ceq 'manual' -and $routeManualModels.Contains($unit.role)
+                if ($persistedModel -cne $model -or $manualAssignment) {
                     $nodeRoutingChange = [ordered]@{
                         role = [string]$unit.role
-                        memberName = [string]$selection.MemberName
+                        memberName = $rosterMemberName
                         from = $persistedModel
                         to = $model
                         rationale = $routeRationale
@@ -474,6 +482,7 @@ try {
             $pricingModel = if ($model) { $model } elseif ($pin) { $pin } else { $sessionModel }
             $endpoint = [ordered]@{
                 role = $unit.role; memberName = $selection.MemberName; agent = $agent
+                rosterMemberName = $rosterMemberName
                 execution = $selection.Choice; connectorSelection = $selection
                 squadRoot = $root; deliverableRoot = $row['Deliverable Root']
                 model = $model; persistedModel = $persistedModel; pricingModel = $pricingModel

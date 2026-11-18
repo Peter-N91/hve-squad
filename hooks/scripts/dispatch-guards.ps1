@@ -71,9 +71,20 @@ try {
         if ($agentName -eq 'Squad Scribe' -or -not (Test-Path -LiteralPath $teamPath -PathType Leaf)) { continue }
         $team = [IO.File]::ReadAllText($teamPath)
         if ($team -notmatch '(?m)^Model routing:\s*`?(ranked|economy|manual)`?\s*$') { continue }
-        $rows = @(Get-SquadRoster $root | Where-Object {
+        $roster = @(Get-SquadRoster $root)
+        $rows = @($roster | Where-Object {
                 $_['Agent Name (Primary)'] -ceq $agentName -or $agentName -cin @($_['Alternate Agents'] -split ',\s*')
             })
+        if ($agentName -ceq 'Squad Connector') {
+            # The native hook has an agent type, not a binding ID. Compare against
+            # its possible roster targets; the planner still validates the selected binding.
+            foreach ($target in @(Get-SquadConnectorReplacementTarget -TeamPath $teamPath)) {
+                $rows += @($roster | Where-Object {
+                        $_.Role -ceq $target.Role -and [string]$_['Member Name'] -ceq $target.MemberName -and
+                        $_['Agent Name (Primary)'] -ceq $target.Agent
+                    })
+            }
+        }
         if (-not $rows.Count) { continue }
         $allowed = @($rows | ForEach-Object {
                 if ($_.ContainsKey('Model')) { [string]$_.Model }

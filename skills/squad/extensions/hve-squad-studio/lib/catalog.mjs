@@ -756,6 +756,7 @@ export function composeStudioLaunch(input) {
         `- profile: ${profile}`,
         `- discovery: ${discovery}`,
         `- routing: ${budget.routing}`,
+        '- persistence: run Write-SquadHandoff.ps1 -Quiet directly for ordinary handoffs; dispatch Scribe only for exit 2 or genuinely cold operations.',
     ];
     if (packs.length > 0) parameterLines.push(`- pack: ${packs.join(',')}`);
     if (style.squadMode) parameterLines.push(`- mode: ${style.squadMode}`);
