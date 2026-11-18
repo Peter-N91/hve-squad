@@ -834,7 +834,7 @@ if ($effectiveMode -eq 'economy') {
     $decisionsText = if (Test-Path -LiteralPath $decisionsPath -PathType Leaf) { [string](Get-Content -LiteralPath $decisionsPath -Raw) } else { '' }
     $consent = if ($decisionsText -match '(?m)^## Economy Mode Accepted\b') { 'recorded' } else { 'missing' }
     if ($consent -eq 'missing') {
-        $warnings.Add('economy consent not recorded: decisions.md has no ## Economy Mode Accepted entry; state the trade, then pass economyConsent to New-SquadDispatchPlan.ps1 -ApplyModelRouting so its validated writer records the decision directly before dispatch (economy-mode.md Consent).')
+        $warnings.Add('economy consent not recorded: decisions.md has no ## Economy Mode Accepted entry; state the trade and hand the Scribe that decision before the next dispatch (economy-mode.md Consent).')
     }
     $economyScope = 'legacy'
     foreach ($section in ($decisionsText -split '(?m)^(?=## )')) {

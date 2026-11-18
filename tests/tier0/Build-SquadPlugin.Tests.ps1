@@ -481,7 +481,6 @@ Describe 'PKG-14 Plugin host discovery and hook commands' -Tag 'Unit' {
                     [string]$Mode = 'ranked',
                     [string]$Agent = 'hve-squad:squad-lead',
                     [string]$Model = '',
-                    [string]$AutoTier = '',
                     [string]$Cell = 'gpt-5.6-sol',
                     [string]$Shape = 'camel',
                     [switch]$Member,
@@ -502,7 +501,6 @@ Describe 'PKG-14 Plugin host discovery and hook commands' -Tag 'Unit' {
                 [IO.File]::WriteAllText((Join-Path $root 'team.md'), $teamText)
                 $dispatch = @{ agent_type = $Agent; prompt = "$Prompt at $root" }
                 if ($Model) { $dispatch.model = $Model }
-                if ($AutoTier) { $dispatch.auto_tier = $AutoTier }
                 $inputData = switch ($Shape) {
                     'camel' { @{ cwd = $repo; toolName = 'task'; toolArgs = $dispatch } }
                     'encoded' { @{ cwd = $repo; toolName = 'task'; toolArgs = ($dispatch | ConvertTo-Json -Compress) } }
@@ -540,23 +538,6 @@ Describe 'PKG-14 Plugin host discovery and hook commands' -Tag 'Unit' {
             $result.ExitCode | Should -Be 0 -Because $result.Output
             ($result.Output | ConvertFrom-Json).permissionDecision | Should -Be 'deny'
             ($result.Output | ConvertFrom-Json).permissionDecisionReason | Should -Match '-ApplyModelRouting'
-        }
-
-        It 'accepts Copilot Fusion Auto-tier serialization without changing the route cell' {
-            foreach ($route in @(
-                    @{ Cell = 'hydrafusion'; Tier = 'hydrafusion' }
-                    @{ Cell = 'hydrafusion-max'; Tier = 'fusion-max' }
-                )) {
-                $result = Invoke-DispatchGuard -Model auto -AutoTier $route.Tier -Cell $route.Cell -Mode economy
-                $result.ExitCode | Should -Be 0 -Because $result.Output
-                ($result.Output | ConvertFrom-Json).permissionDecision | Should -Be 'allow'
-            }
-
-            $mismatch = Invoke-DispatchGuard -Model auto -AutoTier hydrafusion -Cell hydrafusion-max -Mode economy
-            ($mismatch.Output | ConvertFrom-Json).permissionDecision | Should -Be 'deny'
-
-            $notFusion = Invoke-DispatchGuard -Model auto -AutoTier gpt-6.1-terra -Cell gpt-6.1-terra -Mode economy
-            ($notFusion.Output | ConvertFrom-Json).permissionDecision | Should -Be 'deny'
         }
 
         It 'supports display names and native Alternate agent IDs' {

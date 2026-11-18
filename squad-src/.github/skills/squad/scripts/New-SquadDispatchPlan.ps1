@@ -39,9 +39,7 @@
     a depth plan (stages run, shrunk, or skipped with criterion and evidence), per-endpoint
     depth clauses and the quick-depth parallel eligibility. Omitted, the plan is unchanged.
     Native dispatch, semantic gates and exact input forwarding remain with the
-    coordinator. Copilot Fusion endpoints retain their canonical Model cell and
-    also carry autoTier for task hosts that serialize it as model=auto.
-    Dependencies always override parallel eligibility.
+    coordinator. Dependencies always override parallel eligibility.
     Unproven write independence serializes; declared overlapping parallel writes,
     invalid endpoints, unknown dependencies and cycles fail before a wave is returned.
 .PARAMETER ApplyModelRouting
@@ -82,22 +80,6 @@ function Get-SquadRegisteredAgentInstallCommand {
     $command = [string]$registeredRows[0]['Install or Entry']
     if ([string]::IsNullOrWhiteSpace($command)) { return $null }
     $command
-}
-
-function Get-SquadAutoTierLocal {
-    param([AllowNull()][AllowEmptyString()][string]$Model)
-
-    $id = ([string]$Model).Trim().ToLowerInvariant()
-    if ($id -in @('fusion', 'copilot-fusion', 'fusion-standard', 'copilot-fusion-standard', 'hydrafusion-standard', 'hydrafusion-efficiency')) {
-        return 'fusion-standard'
-    }
-    if ($id -in @('hydrafusion', 'fusion-high', 'copilot-fusion-high', 'hydrafusion-high', 'hydrafusion-balance')) {
-        return 'hydrafusion'
-    }
-    if ($id -in @('hydrafusion-max', 'fusion-max', 'copilot-fusion-max')) {
-        return 'hydrafusion-max'
-    }
-    return ''
 }
 
 try {
@@ -490,13 +472,11 @@ try {
             }
             $pin = [string]$agents[$agent].model
             $pricingModel = if ($model) { $model } elseif ($pin) { $pin } else { $sessionModel }
-            $autoTier = Get-SquadAutoTierLocal -Model $model
             $endpoint = [ordered]@{
                 role = $unit.role; memberName = $selection.MemberName; agent = $agent
                 execution = $selection.Choice; connectorSelection = $selection
                 squadRoot = $root; deliverableRoot = $row['Deliverable Root']
-                model = $model; autoTier = $autoTier
-                persistedModel = $persistedModel; pricingModel = $pricingModel
+                model = $model; persistedModel = $persistedModel; pricingModel = $pricingModel
                 modelRouting = $modelRouting; modelCellStatus = $cellStatus
                 modelRationale = $routeRationale; assignmentClass = $assignmentClass
                 autonomyTier = $tier
