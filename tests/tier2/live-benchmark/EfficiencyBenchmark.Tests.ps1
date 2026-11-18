@@ -584,7 +584,8 @@ if($Kind -eq 'init') {
         Role=$_.role;'Member Name'='';'Agent Name (Primary)'=$_.agent;'Alternate Agents'=$_.alternate
         'Selection Cue'='input document';Invocation='runSubagent / task';'Model Tier'=$(if($_.role -eq 'scribe'){'fast'}else{'default'});'Deliverable Root'=$_.path
     }}
-    $Payload=Join-Path $PWD 'init-payload.json'
+    $Payload=Join-Path $PWD '.copilot-tracking/benchmark-evidence/init/init-payload.json'
+    New-Item -ItemType Directory -Path (Split-Path -Parent $Payload) -Force|Out-Null
     @{squadRoot='.copilot-tracking/squad';runId='recovery-fixture';roster=@($Roster);provenance='product';sessionModel='Claude Haiku 4.5'}|ConvertTo-Json -Depth 20|Set-Content $Payload
     Invoke-FakeWriter 'Initialize-Squad.ps1' @('-RepoRoot',$PWD.Path,'-PayloadPath',$Payload,'-Direct')
 } elseif($Kind -eq 'requirements' -or ($Kind -eq 'continuation' -and '__OUTCOME__' -eq 'still-fails')) {
@@ -601,7 +602,8 @@ if($Kind -eq 'init') {
             internal_turns=0;input_tokens=0;cached_tokens=0;cache_write_tokens=0;output_tokens=0;basis='estimated'
         }}
         if($Agent -in @('BRD Builder','BRD Quality Reviewer')){$Record.selectionCue='input document'}
-        $Payload=Join-Path $PWD "$Agent-handoff.json"
+        $Payload=Join-Path $PWD ".copilot-tracking/benchmark-evidence/requirements/$Agent-handoff.json"
+        New-Item -ItemType Directory -Path (Split-Path -Parent $Payload) -Force|Out-Null
         @{runId='recovery-fixture';historyRecords=@($Record);stateAdvance=@{activeRoles=@($Agent)}}|ConvertTo-Json -Depth 20|Set-Content $Payload
         Invoke-FakeWriter 'Write-SquadHandoff.ps1' @('-SquadRoot',(Join-Path $PWD '.copilot-tracking/squad'),'-PayloadPath',$Payload,'-Quiet')
     }
@@ -1085,7 +1087,8 @@ Describe 'Efficiency actual direct bookkeeping proof' -Tag 'Unit' {
                     'Deliverable Root' = $_.path
                 }
             }
-            $payloadPath = Join-Path $root 'init-payload.json'
+            $payloadPath = Join-Path $root '.copilot-tracking/benchmark-evidence/init/init-payload.json'
+            $null = New-Item -ItemType Directory -Path (Split-Path -Parent $payloadPath) -Force
             @{ squadRoot = '.copilot-tracking/squad'; runId = 'proof-run'; roster = @($roster); provenance = 'product'; sessionModel = 'Claude Sonnet 4.6' } |
                 ConvertTo-Json -Depth 20 | Set-Content $payloadPath
             $events = Join-Path $root 'events.jsonl'
@@ -1142,7 +1145,8 @@ Describe 'Efficiency actual direct bookkeeping proof' -Tag 'Unit' {
                         }
                     }
                     if ($agent -in @('BRD Builder', 'BRD Quality Reviewer')) { $record.selectionCue = 'input document' }
-                    $handoff = Join-Path $root "handoff-$turn.json"
+                    $handoff = Join-Path $root ".copilot-tracking/benchmark-evidence/requirements/handoff-$turn.json"
+                    $null = New-Item -ItemType Directory -Path (Split-Path -Parent $handoff) -Force
                     @{ runId = 'proof-run'; turn = $turn; historyRecords = @($record); stateAdvance = @{ activeRoles = @($agent) } } |
                         ConvertTo-Json -Depth 20 | Set-Content $handoff
                     if ($agent -eq 'Squad Reviewer') {
@@ -1207,6 +1211,7 @@ Describe 'Efficiency actual direct bookkeeping proof' -Tag 'Unit' {
         @{ Stage = 'requirements'; Mutation = 'failed-receipt'; Pass = $false }
         @{ Stage = 'requirements'; Mutation = 'ledger-only'; Pass = $false }
         @{ Stage = 'requirements'; Mutation = 'wrong-root'; Pass = $false }
+        @{ Stage = 'requirements'; Mutation = 'outside-payload'; Pass = $false }
     ) {
         $fixture = $script:ActualProofFixtures[$(if ($Stage -eq 'init' -and $Mutation -like 'cold-*') { 'cold' } else { $Stage })]
         foreach ($path in $script:PreparedOriginal.Keys) { [IO.File]::WriteAllText($path, $script:PreparedOriginal[$path]) }
@@ -1311,8 +1316,15 @@ Describe 'Efficiency actual direct bookkeeping proof' -Tag 'Unit' {
             }
             cleaned-payload-expandable {
                 $start = @($lines | Where-Object { $_.type -eq 'tool.execution_start' })[-1]
-                $start.data.arguments.command = "`$r='$($fixture.root)'; `$s=`"`$r\.agents\skills\squad\scripts`"; pwsh -NoProfile -File `"`$s\Initialize-Squad.ps1`" -RepoRoot `$r -PayloadPath `"`$r\init-payload.json`" -Direct | Out-String; `"exit `$LASTEXITCODE`""
-                Remove-Item -LiteralPath (Join-Path $fixture.root 'init-payload.json') -Force
+                $start.data.arguments.command = "`$r='$($fixture.root)'; `$s=`"`$r\.agents\skills\squad\scripts`"; pwsh -NoProfile -File `"`$s\Initialize-Squad.ps1`" -RepoRoot `$r -PayloadPath `"`$r\.copilot-tracking\benchmark-evidence\init\init-payload.json`" -Direct | Out-String; `"exit `$LASTEXITCODE`""
+                Remove-Item -LiteralPath (Join-Path $fixture.root '.copilot-tracking/benchmark-evidence/init/init-payload.json') -Force
+            }
+            outside-payload {
+                $start = @($lines | Where-Object { $_.type -eq 'tool.execution_start' -and $_.data.arguments.command -match 'handoff-\d+\.json' })[-1]
+                $inside = [regex]::Match($start.data.arguments.command, '[''"](?<path>[^''"]*handoff-\d+\.json)[''"]').Groups['path'].Value
+                $outside = Join-Path $TestDrive 'outside-handoff.json'
+                Copy-Item -LiteralPath $inside -Destination $outside -Force
+                $start.data.arguments.command = $start.data.arguments.command.Replace($inside, $outside)
             }
             background-shell-progressive-runs {
                 $runIdx = 1
@@ -1395,7 +1407,8 @@ Describe 'Efficiency actual direct bookkeeping proof' -Tag 'Unit' {
         $fixture = $script:ActualProofFixtures.requirements
         foreach ($path in $fixture.original.Keys) { [IO.File]::WriteAllText($path, $fixture.original[$path]) }
         $lines = @(Get-Content -LiteralPath $fixture.events | ForEach-Object { $_ | ConvertFrom-Json -AsHashtable })
-        $payloadPath = Join-Path $fixture.root 'handoff-out-of-stage.json'
+        $payloadPath = Join-Path $fixture.root '.copilot-tracking/benchmark-evidence/requirements/handoff-out-of-stage.json'
+        $null = New-Item -ItemType Directory -Path (Split-Path -Parent $payloadPath) -Force
         @{
             runId = 'proof-run'; turn = 7
             historyRecords = @(@{ agent = 'Squad Implementor'; request = 'Build'; deliverable = 'src/task.ps1'; outcome = 'Done.' })
@@ -1693,9 +1706,9 @@ exit 37
         $Captured.arguments | Should -Not -Contain '--allow-all-paths'
         $Captured.arguments | Should -Not -Contain '--allow-all-urls'
         $Captured.arguments | Should -Contain 'shell(git push)'
-        $Captured.arguments[1] | Should -Match 'split large reference reads into explicit ranges'
-        $Captured.arguments[1] | Should -Match 'Persist one verified handoff in order after each dispatch'
-        $Captured.arguments[1] | Should -Match 'standalone powershell process'
+        $Captured.arguments[1] | Should -Match 'explicit read ranges'
+        $Captured.arguments[1] | Should -Match 'Persist one verified handoff per dispatch'
+        $Captured.arguments[1] | Should -Match 'Init/Complete-SquadHandoff standalone'
         $Captured.arguments[1] | Should -Match 'every dispatched role and Scribe prompt, outside any schema payload'
         $Captured.arguments[1] | Should -Match ([regex]::Escape("absolute workspace '$(Join-Path $Trial 'workspace')'; absolute skill root '$(Join-Path $Trial 'workspace')/.agents/skills'"))
         $Captured.repoHooks | Should -Be 'true'
@@ -1745,13 +1758,42 @@ exit 37
 
     It 'requires standalone bookkeeping processes and one bounded requirements correction batch' {
         $script = Get-Content -LiteralPath (Join-Path $PSScriptRoot 'Invoke-EfficiencyExercise.ps1') -Raw
-        $script | Should -Match 'standalone powershell process'
-        $script | Should -Match 'contains no setup, reads, hashes, cleanup'
+        $script | Should -Match 'Init/Complete-SquadHandoff standalone'
+        $script | Should -Match 'no setup, reads, hashes, cleanup'
         $script | Should -Not -Match 'Send one complete Scribe handoff per completed dispatch'
-        $script | Should -Match 'Apply one consolidated author correction batch'
-        $script | Should -Match 'one bounded correction batch'
+        $script | Should -Match 'Apply one source-supported correction batch'
+        $script | Should -Match 'one bounded source-supported correction batch'
         $script | Should -Match 'Final outcome: Pass'
         $script | Should -Match 'Human-only KPI, baseline, date and approval gaps stay unavailable'
+        $script | Should -Match '\.copilot-tracking/benchmark-evidence/<stage>/'
+        $script | Should -Match 'model never deletes'
+        $script | Should -Match 'Remove-EfficiencyStagePayloadEvidence'
+    }
+
+    It 'cleans only the verified stage payload evidence directory' {
+        $workspace = Join-Path $TestDrive 'payload-evidence-workspace'
+        $requirements = Join-Path $workspace '.copilot-tracking/benchmark-evidence/requirements'
+        $build = Join-Path $workspace '.copilot-tracking/benchmark-evidence/build'
+        New-Item -ItemType Directory -Path $requirements, $build -Force | Out-Null
+        'requirements proof' | Set-Content -LiteralPath (Join-Path $requirements 'handoff-1.json')
+        'build proof' | Set-Content -LiteralPath (Join-Path $build 'handoff-1.json')
+
+        Remove-EfficiencyStagePayloadEvidence -Workspace $workspace -Stage requirements
+
+        Test-Path -LiteralPath $requirements | Should -BeFalse
+        Test-Path -LiteralPath $build | Should -BeTrue
+        (Get-Content -LiteralPath (Join-Path $build 'handoff-1.json') -Raw) | Should -Match 'build proof'
+    }
+
+    It 'rejects oversized stage payload evidence before cleanup' {
+        $workspace = Join-Path $TestDrive 'large-payload-evidence'
+        $requirements = Join-Path $workspace '.copilot-tracking/benchmark-evidence/requirements'
+        New-Item -ItemType Directory -Path $requirements -Force | Out-Null
+        1..1025 | ForEach-Object { 'x' | Set-Content -LiteralPath (Join-Path $requirements "$_.json") }
+
+        { Remove-EfficiencyStagePayloadEvidence -Workspace $workspace -Stage requirements } |
+            Should -Throw '*exceeds cleanup limits*'
+        Test-Path -LiteralPath $requirements | Should -BeTrue
     }
 }
 

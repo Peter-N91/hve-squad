@@ -817,6 +817,34 @@ function Resolve-EfficiencyPlainPath {
     $Full.TrimEnd([IO.Path]::DirectorySeparatorChar)
 }
 
+function Remove-EfficiencyStagePayloadEvidence {
+    <#
+    .SYNOPSIS
+    Removes one verified stage's model-owned frozen payload directory after readiness passes.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][string]$Workspace,
+        [Parameter(Mandatory)][ValidateSet('init', 'requirements', 'build')][string]$Stage
+    )
+    $Root = Resolve-EfficiencyPlainPath $Workspace
+    $Path = Resolve-EfficiencyPlainPath (Join-Path $Root ".copilot-tracking\benchmark-evidence\$Stage")
+    if (-not (Test-Path -LiteralPath $Path)) { return }
+    if (-not (Test-EfficiencyPathWithin $Path $Root)) { throw 'Stage payload evidence leaves the workspace.' }
+    $Entries = 0
+    $Bytes = [long]0
+    foreach ($Item in Get-ChildItem -LiteralPath $Path -Recurse -Force) {
+        if ($Item.Attributes -band [IO.FileAttributes]::ReparsePoint) { throw 'Linked stage payload evidence refused.' }
+        $Entries++
+        if (-not $Item.PSIsContainer) { $Bytes += $Item.Length }
+        $Depth = ([IO.Path]::GetRelativePath($Path, $Item.FullName) -split '[\\/]').Count
+        if ($Entries -gt 1024 -or $Bytes -gt 67108864 -or $Depth -gt 8) {
+            throw 'Stage payload evidence exceeds cleanup limits.'
+        }
+    }
+    Remove-Item -LiteralPath $Path -Recurse -Force
+}
+
 function Resolve-EfficiencySourceRoot {
     <# .SYNOPSIS
     Resolves the caller-selected checkout alias, not links within its helper tree.
@@ -1581,8 +1609,11 @@ function Test-EfficiencyBookkeeping {
                 $Receipt.turn -lt 1 -or $Receipt.turn -gt $State.turn) { continue }
             $Payload = $null
             if ($Bound.ContainsKey('PayloadPath')) {
-                $PayloadCandidate = [IO.Path]::GetFullPath($Bound.PayloadPath, $Root)
+                $StagePayloadRoot = Resolve-EfficiencyPlainPath -Path (Join-Path $Root ".copilot-tracking\benchmark-evidence\$Stage") -Base $Root
+                $PayloadCandidate = Resolve-EfficiencyPlainPath -Path $Bound.PayloadPath -Base $Root
+                if (-not (Test-EfficiencyPathWithin $PayloadCandidate $StagePayloadRoot)) { continue }
                 if (Test-Path -LiteralPath $PayloadCandidate -PathType Leaf) {
+                    if ((Get-Item -LiteralPath $PayloadCandidate).Length -gt 1048576) { continue }
                     $Payload = Get-Content -LiteralPath $PayloadCandidate -Raw | ConvertFrom-Json -AsHashtable
                 }
                 elseif ($Execution.script -ne 'Initialize-Squad.ps1') { continue }
@@ -2317,4 +2348,4 @@ function Invoke-EfficiencySeries {
     [pscustomobject]@{ report = $Report; controls = $Controls; runs = @($Runs); exitCode = if ($Outcome -in @('passed', 'baseline-established', 'baseline-recorded')) { 0 } else { 2 } }
 }
 
-Export-ModuleMember -Function Copy-EfficiencySnapshot, Measure-EfficiencyEvents, Resolve-EfficiencySquadScript, Get-EfficiencyBookkeepingEvidence, Get-EfficiencyRecoveryPolicy, Get-EfficiencyRecoveryDecision, Invoke-EfficiencyCompaction, Save-EfficiencyAttemptEvidence, Write-EfficiencyProgress, Invoke-EfficiencyProcess, Get-EfficiencyTreeHash, Test-EfficiencyWorkflow, Test-EfficiencyJudge, Invoke-EfficiencyJudge, Compare-EfficiencyRuns, Save-EfficiencyBaseline, Get-EfficiencyCompatibility, Test-EfficiencyRun, Test-EfficiencyObservation, Invoke-EfficiencySeries
+Export-ModuleMember -Function Copy-EfficiencySnapshot, Measure-EfficiencyEvents, Resolve-EfficiencySquadScript, Get-EfficiencyBookkeepingEvidence, Get-EfficiencyRecoveryPolicy, Get-EfficiencyRecoveryDecision, Invoke-EfficiencyCompaction, Save-EfficiencyAttemptEvidence, Remove-EfficiencyStagePayloadEvidence, Write-EfficiencyProgress, Invoke-EfficiencyProcess, Get-EfficiencyTreeHash, Test-EfficiencyWorkflow, Test-EfficiencyJudge, Invoke-EfficiencyJudge, Compare-EfficiencyRuns, Save-EfficiencyBaseline, Get-EfficiencyCompatibility, Test-EfficiencyRun, Test-EfficiencyObservation, Invoke-EfficiencySeries
