@@ -30,8 +30,9 @@
     When cost is supplied, complete native usage records are authoritative consumed
     spend and only the actual next wave plus one coordinator lookup is reserved.
     The returned Cost Preflight object must be persisted before dispatch.
-    rejectedModels removes native host rejections from availability and replans in
-    the current mode; it never invokes Economy's quality-failure escalation.
+    rejectedModels requires the confirmed host availableModels list and excludes
+    rejections before replanning in the current mode, never through Economy's
+    quality-failure escalation.
     requestedDepth is the trusted per-turn depth= input and depthSource proves whether it came
     from the current prompt, a federation parent, or (workflow, unattended Watch Mode runs only)
     the committed workflow configuration or a collaborator's manual dispatch. Omission is explicitly standard. It never changes a model: it returns
@@ -289,12 +290,14 @@ try {
     $routingChangeRoles = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
     $teamHash = if ($federation) { '' } else { (Get-FileHash -LiteralPath (Join-Path $root 'team.md') -Algorithm SHA256).Hash }
     if (-not $federation -and $modelRouting -ne 'off' -and $selectedRoles.Count -gt 0) {
-        if ($availableModels.Count -eq 0 -and -not $sessionModel) {
-            throw 'Active model routing requires the host availableModels enum or the literal sessionModel.'
-        }
-        $sessionModelKey = ($sessionModel.Trim().ToLowerInvariant() -replace '\s*\((?:copilot|github|anthropic|openai)\)\s*$', '' -replace '[\s_]+', '-')
-        if ($availableModels.Count -eq 0 -and $sessionModelKey -in @('', 'auto', 'unknown', 'fast', 'default', 'extended')) {
-            throw "Active model routing requires the host availableModels enum. sessionModel '$sessionModel' is routing metadata, not an availability inventory; pass the task tool's advertised model enum, or a concrete priced session model only on a host that advertises no model list."
+        if ($availableModels.Count -eq 0 -and $rejectedModels.Count -eq 0) {
+            if (-not $sessionModel) {
+                throw 'Active model routing requires the host availableModels enum or the literal sessionModel.'
+            }
+            $sessionModelKey = ($sessionModel.Trim().ToLowerInvariant() -replace '\s*\((?:copilot|github|anthropic|openai)\)\s*$', '' -replace '[\s_]+', '-')
+            if ($sessionModelKey -in @('', 'auto', 'unknown', 'fast', 'default', 'extended')) {
+                throw "Active model routing requires the host availableModels enum. sessionModel '$sessionModel' is routing metadata, not an availability inventory; pass the task tool's advertised model enum, or a concrete priced session model only on a host that advertises no model list."
+            }
         }
         $routeArguments = @{
             SquadRoot = $root

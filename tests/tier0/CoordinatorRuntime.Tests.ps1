@@ -1097,14 +1097,13 @@ Describe 'Universal compact metadata and deterministic scheduling (COORD-04..06)
         $plan.routingRefresh.changes[0].to | Should -BeExactly 'gpt-5.6-sol'
     }
 
-    It 'replans Lead and Tester in Economy after a host rejects the first cost-first model' {
+    It 'replans Lead and Tester in Economy only when the retry has confirmed host inventory' {
         $repo = New-FixtureRepo
         $fixture = Initialize-Fixture $repo -ModelRouting economy
         $path = Join-Path $repo 'economy-rejection-plan.json'
-        Write-FixtureJson $path @{
+        $planInput = @{
             squadRoot = $fixture.Root
             sessionModel = 'gpt-6.1-sol'
-            availableModels = @('hydrafusion', 'gpt-6.1-terra', 'gemini-4-argon')
             rejectedModels = @('Copilot Fusion High')
             economyConsent = @{
                 user = 'fixture-user'
@@ -1116,6 +1115,15 @@ Describe 'Universal compact metadata and deterministic scheduling (COORD-04..06)
                 @{ id = 'review'; role = 'tester'; readOnly = $true }
             )
         }
+        $before = Get-FixtureHash $fixture.Root
+        Write-FixtureJson $path $planInput
+        $refusal = Invoke-Local 'New-SquadDispatchPlan.ps1' $repo @('-RepoRoot', $repo, '-InputPath', $path, '-ApplyModelRouting')
+        $refusal.ExitCode | Should -Be 1
+        $refusal.Output | Should -Match 'native rejection without host model inventory'
+        Get-FixtureHash $fixture.Root | Should -BeExactly $before
+
+        $planInput['availableModels'] = @('hydrafusion', 'gpt-6.1-terra', 'gemini-4-argon')
+        Write-FixtureJson $path $planInput
         $result = Invoke-Local 'New-SquadDispatchPlan.ps1' $repo @('-RepoRoot', $repo, '-InputPath', $path, '-ApplyModelRouting')
         $result.ExitCode | Should -Be 0 -Because $result.Output
         $plan = $result.Output | ConvertFrom-Json

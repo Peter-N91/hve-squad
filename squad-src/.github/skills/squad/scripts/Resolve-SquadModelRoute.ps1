@@ -53,9 +53,10 @@
     app, pass the `task` tool's advertised `model` enum. Ids absent from the catalog
     are reported as `unevaluated` and never ranked.
 .PARAMETER RejectedModels
-    Model ids rejected by a native dispatch in this run. They are removed from the
-    advertised or derived availability set before the same routing mode is resolved
-    again. A rejection never selects the Economy escalation target.
+    Model ids rejected by a native dispatch in this run. A retry requires the
+    host's confirmed availability list and removes the rejected ids before
+    resolving the same mode again. A rejection never selects the Economy
+    escalation target.
 .PARAMETER SessionModel
     The session model id (VS Code's Local agent advertises no model list). Used only
     when -AvailableModels is omitted: catalog ids whose Input rate exceeds the session
@@ -798,15 +799,16 @@ if ($AvailableModels.Count -gt 0) {
     $availabilityResolved = $true
     $unevaluated = @($acceptedRawIds | Where-Object { -not $catalog.Capability.ContainsKey((ConvertTo-CanonicalModelIdLocal -Value $_)) } | Sort-Object -Unique)
 }
+elseif ($RejectedModels.Count -gt 0) {
+    $available = [System.Collections.Generic.HashSet[string]]::new()
+    $availability = 'unresolved (native rejection without host model inventory)'
+    $warnings.Add('A model rejection retry requires the host availableModels list; a priced session model is not a confirmed inventory.')
+}
 elseif ($SessionModel) {
     $canonicalSessionModel = ConvertTo-CanonicalModelIdLocal -Value $SessionModel
     if ($canonicalSessionModel -notin @('auto', 'unknown', 'fast', 'default', 'extended') -and $catalog.InputRate.ContainsKey($canonicalSessionModel)) {
         $ceiling = $catalog.InputRate[$canonicalSessionModel]
-        $ids = @($catalog.Fit | Where-Object {
-                $catalog.InputRate.ContainsKey($_.Id) -and
-                $catalog.InputRate[$_.Id] -le $ceiling -and
-                -not $rejectedCanonical.Contains($_.Id)
-            } | ForEach-Object { $_.Id })
+        $ids = @($catalog.Fit | Where-Object { $catalog.InputRate.ContainsKey($_.Id) -and $catalog.InputRate[$_.Id] -le $ceiling } | ForEach-Object { $_.Id })
         $available = [System.Collections.Generic.HashSet[string]]::new([string[]]$ids)
         $availability = "unverified (priced at or below session model $canonicalSessionModel)"
         $availabilityResolved = $true
@@ -921,7 +923,8 @@ $results = foreach ($row in $roster.Rows) {
             $suggestedCatalogId = $economy[0].Id
             $combined = [Collections.Generic.List[object]]::new()
             $combinedIds = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
-            foreach ($candidate in @($economy) + @($economyFloor)) {
+            $unpriced = @($offered | Where-Object { $null -eq $_.Blended -or $_.Blended -lt 0 })
+            foreach ($candidate in @($economy) + @($economyFloor) + $unpriced) {
                 if ($combinedIds.Add([string]$candidate.Id)) { $combined.Add($candidate) }
             }
             $offered = $combined.ToArray()
@@ -972,6 +975,7 @@ $results = foreach ($row in $roster.Rows) {
     $cellStatus = 'empty'
     if ($cell) {
         if ($cell -match $MetacharacterPattern) { $cellStatus = 'refused: metacharacter' }
+        elseif ($rejectedCanonical.Contains($canonicalCell)) { $cellStatus = 'refused: not available on this host' }
         elseif (-not $availabilityResolved) { $cellStatus = 'refused: host availability unresolved' }
         elseif (-not $catalog.Capability.ContainsKey($canonicalCell) -and ($null -eq $advertised -or -not $advertised.Contains($cellId))) { $cellStatus = 'refused: unknown id' }
         elseif ($null -ne $advertised -and -not $advertised.Contains($cellId)) { $cellStatus = 'refused: not available on this host' }

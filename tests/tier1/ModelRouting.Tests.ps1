@@ -2029,7 +2029,7 @@ Describe 'Capability-first Ranked and qualified cost-first Economy (SQ-33b..d, S
             param($Fixture, [string]$Mode = 'ranked', [datetime]$AsOf = [datetime]'2026-10-19', [string[]]$Available, [string[]]$RejectedModels = @(), [switch]$Unattended)
             $parameters = @{
                 SquadRoot = $Fixture.Root
-                AvailableModels = if ($Available) { $Available } else { $Fixture.Available }
+                AvailableModels = @(if ($Available) { $Available } else { $Fixture.Available })
                 BenchmarksPath = $Fixture.Benchmarks
                 CatalogPath = $Fixture.CatalogPath
                 AsOf = $AsOf
@@ -2142,6 +2142,21 @@ Describe 'Capability-first Ranked and qualified cost-first Economy (SQ-33b..d, S
         $manual.cellStatus | Should -Be 'refused: not available on this host'
         $manual.resolved | Should -BeNullOrEmpty
         $manual.suggested | Should -Be 'gpt-5.6-terra'
+    }
+
+    It 'stops <Mode> retries without a confirmed host list but allows initial session-based routing' -ForEach @(
+        @{ Mode = 'economy' }, @{ Mode = 'ranked' }, @{ Mode = 'manual' }
+    ) {
+        $fixture = New-PolicyRoster -Mode $Mode -Cell gpt-5.6-sol -Available @()
+        $initial = Invoke-PolicyRoute $fixture -Mode $Mode
+        $initial.availabilityResolved | Should -BeTrue
+        $initial.roles[0].resolved | Should -Not -BeNullOrEmpty
+
+        $retry = Invoke-PolicyRoute $fixture -Mode $Mode -RejectedModels @('GPT 5.6 Sol (Copilot)')
+        $retry.availabilityResolved | Should -BeFalse
+        $retry.roles[0].suggested | Should -BeNullOrEmpty
+        $retry.roles[0].requestedDispatchModel | Should -BeNullOrEmpty
+        if ($Mode -eq 'manual') { $retry.roles[0].cellStatus | Should -Be 'refused: not available on this host' }
     }
 
     It 'excludes a cheap model that fails even one primary minimum' {
@@ -2291,7 +2306,8 @@ Describe 'Capability-first Ranked and qualified cost-first Economy (SQ-33b..d, S
         Set-Content -LiteralPath $catalog -Value $raw -Encoding utf8NoBOM
         $role = (Invoke-PolicyRoute $fixture -Mode economy).roles[0]
         $role.suggested | Should -Be 'gpt-5.6-sol'
-        $unpriced = @($role.candidates | Where-Object id -eq 'gpt-5.6-terra')[0]
+        $unpriced = $role.candidates[-1]
+        $unpriced.id | Should -Be 'gpt-5.6-terra'
         $unpriced.blended | Should -BeNullOrEmpty
         $unpriced.economyQualified | Should -BeFalse
     }
