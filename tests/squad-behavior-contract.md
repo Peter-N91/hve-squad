@@ -380,7 +380,7 @@ These native CLI observations do not establish execution in VS Code or App engin
 | BUILDER-02 | Configured connector scaffolding creates and validates a closed 1.1 manifest, mailbox guidance, request/result examples, removable runner, and runbook | `builder-workflows.md`, Connector builder |
 | BUILDER-03 | Editable-template mode identifies every `REPLACE_*` value and validation remains red until placeholders are resolved | `builder-workflows.md`, Editable-template invocation |
 | BUILDER-04 | A byte-identical rerun is a no-op; any customized-file conflict aborts the complete write plan before writing | `builder-workflows.md`, Safe reruns and completion |
-| BUILDER-05 | The default removable runner processes a request into a contract-valid result and never overwrites an existing result or artifact | `builder-workflows.md`, Output and runner |
+| BUILDER-05 | The default removable runner processes a request into a contract-valid result and never overwrites an existing result or artifact. It honors the request deadline as an absolute instant and returns a failed result without invoking the endpoint for invalid or expired deadlines | `builder-workflows.md`, Output and runner; `templates/builders/connector-runbook.template.md`, Exercise the removable runner |
 | BUILDER-06 | Create mode supports a standalone agent or a multi-agent orchestrator and generates actionable skill guidance | `builder-workflows.md`, Create invocation |
 | BUILDER-07 | Adapt mode preserves the existing implementation and creates only connector/integration artifacts and mapping guidance | `builder-workflows.md`, Adapt invocation |
 | BUILDER-08 | Generated manifests contain no execution, agent-path, URL, or credential fields | `builder-workflows.md`, Connector builder |

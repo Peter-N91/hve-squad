@@ -180,6 +180,42 @@ Describe 'BUILDER-05 removable runner' {
             -WorkspaceRoot $workspace -Once
         (Get-FileHash -LiteralPath $resultPath).Hash | Should -BeExactly $hash
     }
+
+    It 'handles a <DeadlineCase> deadline in the generated <Kind> runner' -ForEach @(
+        @{ DeadlineCase = 'future-utc'; Kind = 'agent'; ExpectedStatus = 'completed' }
+        @{ DeadlineCase = 'future-offset'; Kind = 'agent'; ExpectedStatus = 'completed' }
+        @{ DeadlineCase = 'expired'; Kind = 'orchestrator'; ExpectedStatus = 'failed' }
+        @{ DeadlineCase = 'missing-offset'; Kind = 'agent'; ExpectedStatus = 'failed' }
+        @{ DeadlineCase = 'malformed'; Kind = 'agent'; ExpectedStatus = 'failed' }
+    ) {
+        $workspace = New-BuilderWorkspace -Name "runner-$DeadlineCase"
+        $null = New-TestConnector -Workspace $workspace -EndpointKind $Kind
+        $request = Get-Content -LiteralPath (Join-Path $workspace 'connectors\examples\org-research.request.example.json') -Raw | ConvertFrom-Json
+        $now = [DateTimeOffset]::UtcNow
+        $request.deadline = switch ($DeadlineCase) {
+            'future-utc' { $now.AddMinutes(5).UtcDateTime.ToString('o') }
+            'future-offset' { $now.AddMinutes(5).ToOffset([TimeSpan]::FromHours(-7)).ToString('o') }
+            'expired' { $now.AddMinutes(-5).ToOffset([TimeSpan]::FromHours(9)).ToString('o') }
+            'missing-offset' { $now.AddMinutes(5).UtcDateTime.ToString("yyyy-MM-dd'T'HH:mm:ss", [Globalization.CultureInfo]::InvariantCulture) }
+            'malformed' { 'not-a-timestampZ' }
+        }
+        $drop = Join-Path $workspace '.connector-drops\org-research'
+        $request | ConvertTo-Json -Depth 12 | Set-Content -LiteralPath (Join-Path $drop "$($request.taskId).request.json") -Encoding utf8NoBOM
+
+        & (Join-Path $workspace 'scripts\Run-org-research-Connector.ps1') -WorkspaceRoot $workspace -Once
+
+        $result = Get-Content -LiteralPath (Join-Path $drop "$($request.taskId).result.json") -Raw | ConvertFrom-Json
+        $shape = Test-SquadConnectorResultShape -Result $result -SchemaVersion '1.1' -EndpointKind $Kind
+        $shape.Status | Should -BeExactly 'ok' -Because ($shape.Issues -join ', ')
+        $result.status | Should -BeExactly $ExpectedStatus
+        if ($ExpectedStatus -eq 'failed') {
+            $pattern = if ($DeadlineCase -eq 'expired') { 'has expired' } else { 'explicit UTC offset' }
+            $result.narrative | Should -Match $pattern
+            $result.artifacts.Count | Should -Be 0
+            if ($Kind -eq 'orchestrator') { $result.outputs.Count | Should -Be 0 }
+            Test-Path -LiteralPath (Join-Path $workspace 'connector-output') | Should -BeFalse
+        }
+    }
 }
 
 Describe 'BUILDER-06 external endpoint creation' {
