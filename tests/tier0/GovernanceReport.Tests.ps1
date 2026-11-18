@@ -784,7 +784,7 @@ Describe 'GOV-10 ROI is computed from the ledger and labeled by basis' {
         $project = New-GovProject
         New-GovRichRoot -Root $project.State -Ledger $ledger
         $report = Get-GovReport -Project $project
-        $report.Model.Economics.Rollup.SavingsUsd | Should -Be (-0.2)
+        $report.Model.Economics.Rollup.SavingsUsd | Should -Be ([decimal]::Parse('-0.2', [Globalization.CultureInfo]::InvariantCulture))
         $report.Text | Should -Match 'In this run HVE Squad''s spend was \$0.2000 \(25.0%\) higher than the modeled single-model baseline'
         $report.Html | Should -Match '(?s)<div class="roi-chip rc-bad"><div class="rc-label">Run ROI</div><div class="rc-value">-20%</div>'
         $report.Model.Justifications.Cost[0].State | Should -Be 'not-shown'
@@ -907,7 +907,7 @@ Describe 'GOV-12 an estimate-only ledger renders with a clear unavailable state 
 
     It 'labels every figure as estimated and keeps the totals the ledger prints' {
         $script:EstReport.Model.Economics.Spend.Basis | Should -Be 'estimated'
-        $script:EstReport.Model.Economics.Spend.Usd | Should -Be 0.3171
+        $script:EstReport.Model.Economics.Spend.Usd | Should -Be ([decimal]::Parse('0.3171', [Globalization.CultureInfo]::InvariantCulture))
         $script:EstReport.Text | Should -Match 'Est. Cost \(estimated\) ~'
         (Find-GovRow $script:EstReport.Tables '^Role\|Turns\|In Tokens' 'Total') | Should -Be @('Total', '16', '12,600', '50,400', '9,250', '18,200', '0.3171', '31.71', '')
     }
@@ -1045,7 +1045,7 @@ Describe 'GOV-13 unknown and unresolved models, fallback pricing and stale summa
         New-GovRichRoot -Root $project.State -Ledger $ledger
         $report = Get-GovReport -Project $project
         @($report.Model.Economics.ByRole | ForEach-Object Role) | Should -Contain $Role
-        $report.Model.Economics.Spend.Usd | Should -Be 1.7 -Because 'a role is never dropped on the strength of a coincidence'
+        $report.Model.Economics.Spend.Usd | Should -Be ([decimal]::Parse('1.7', [Globalization.CultureInfo]::InvariantCulture)) -Because 'a role is never dropped on the strength of a coincidence'
         $codes = @($report.Model.Quality | ForEach-Object Code)
         $codes | Should -Contain 'total-row-missing'
         $codes | Should -Not -Contain 'total-row-inferred'
@@ -1152,10 +1152,10 @@ Describe 'GOV-15 the report follows the ledger: nothing is enumerated, nothing i
         $ledger | Should -Match 'exact-native'
         $report = Get-GovReport -Project $project
         $report.Model.Economics.Spend.Basis | Should -Be 'exact-native'
-        $report.Model.Economics.Spend.Usd | Should -Be 0.5255
+        $report.Model.Economics.Spend.Usd | Should -Be ([decimal]::Parse('0.5255', [Globalization.CultureInfo]::InvariantCulture))
         $report.Model.Economics.Rollup.Kind | Should -Be 'exact-native'
-        $report.Model.Economics.Rollup.SquadUsd | Should -Be 0.5255
-        $report.Model.Economics.Rollup.BaselineUsd | Should -Be 0.4740
+        $report.Model.Economics.Rollup.SquadUsd | Should -Be ([decimal]::Parse('0.5255', [Globalization.CultureInfo]::InvariantCulture))
+        $report.Model.Economics.Rollup.BaselineUsd | Should -Be ([decimal]::Parse('0.4740', [Globalization.CultureInfo]::InvariantCulture))
         @($report.Model.Quality | ForEach-Object Code) | Should -Contain 'basis-note-conflict' -Because 'the writer leaves its Basis note unchanged, which the report must call out rather than repair'
         $report.Text | Should -Match 'Cost Comparison \(exact native actual\)'
         Get-GovMissingLedgerTokens -LedgerText $ledger -Text $report.Text | Should -BeNullOrEmpty
@@ -1188,11 +1188,11 @@ Describe 'GOV-16 federation reports keep provenance and never double count share
         $script:FedReport.Model.Meta.Mode | Should -Be 'federation'
         $script:FedReport.Model.Meta.Units | Should -Be @('alpha', 'bravo', 'charlie')
         $script:FedReport.Model.Header.Dispatches | Should -Be 21
-        $script:FedReport.Model.Economics.Spend.Usd | Should -Be 2.6
+        $script:FedReport.Model.Economics.Spend.Usd | Should -Be ([decimal]::Parse('2.6', [Globalization.CultureInfo]::InvariantCulture))
         $script:FedReport.Model.Economics.Spend.Basis | Should -Be 'mixed'
         $subtotals = @($script:FedReport.Model.Economics.Spend.ByBasis)
-        ($subtotals | Where-Object Basis -eq 'exact-native').Usd | Should -Be 1.0
-        ($subtotals | Where-Object Basis -eq 'estimated').Usd | Should -Be 1.6
+        ($subtotals | Where-Object Basis -eq 'exact-native').Usd | Should -Be ([decimal]::Parse('1.0', [Globalization.CultureInfo]::InvariantCulture))
+        ($subtotals | Where-Object Basis -eq 'estimated').Usd | Should -Be ([decimal]::Parse('1.6', [Globalization.CultureInfo]::InvariantCulture))
         $script:FedReport.Html | Should -Match 'Cost \(mixed basis\)'
         $script:FedReport.Html | Should -Match 'estimated \$1.6000 · exact-native \$1.0000'
         @($script:FedReport.Model.Quality | ForEach-Object Code) | Should -Contain 'mixed-scope-basis'
@@ -1230,8 +1230,8 @@ Describe 'GOV-16 federation reports keep provenance and never double count share
     It 'rolls the comparison up only over ledgers that state both figures and says how many that is' {
         $roll = $script:FedReport.Model.Economics.Rollup
         $roll.Covered | Should -Be 3
-        $roll.SquadUsd | Should -Be 2.6
-        $roll.BaselineUsd | Should -Be 6.5
+        $roll.SquadUsd | Should -Be ([decimal]::Parse('2.6', [Globalization.CultureInfo]::InvariantCulture))
+        $roll.BaselineUsd | Should -Be ([decimal]::Parse('6.5', [Globalization.CultureInfo]::InvariantCulture))
         $roll.Kind | Should -Be 'mixed'
     }
 

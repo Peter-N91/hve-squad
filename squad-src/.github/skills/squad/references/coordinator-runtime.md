@@ -108,20 +108,21 @@ Admit settled slots before children; at/above ceiling starts nothing.
 
 ## 4. Native Work and Persistence
 
-For nontrivial work load `Get-SquadProcedure.ps1 -Name progress`.
+Before nontrivial work load `Get-SquadProcedure.ps1 -Name progress`.
 Progress UI: coordinator-owned, never role work or state.
 
 Dispatch native `task`/`runSubagent` endpoints with the request, scoped context,
 exact output root, read-only inputs and admitted refs. Forward the brief's
 `responsibleUsePath` for one worker-local policy read and `sourceDataRule`
-verbatim to every isolated worker; enforce both. Pass non-empty `endpoint.model`
-exactly; omit only when empty. Never use `pricingModel`/frontmatter. An unsupported
-override stops/discloses; never drop or edit the route. Parallelize only independent
+verbatim to every isolated worker; enforce both. Pass non-empty `endpoint.model` exactly as the native
+`model`; omit only when empty. Never use `pricingModel` or frontmatter instead.
+If the native tool cannot accept a model override, stop and disclose it; never
+drop or edit the route. Parallelize only independent
 waves; require final identity/tool count/paths/outcome/open questions, then verify writes.
 
-Run `Complete-SquadHandoff.ps1 -RepoRoot <repo> -SquadRoot <root> -PayloadPath
+Use `Complete-SquadHandoff.ps1 -RepoRoot <repo> -SquadRoot <root> -PayloadPath
 <actual handoff JSON>` synchronously per `economy-scribe.md`; it writes then proves.
-Require exit 0/`verified: true` before progress/next task; exit 2 is cold. Supply
+Require exit 0 and `verified: true` before progress/next task; exit 2 is cold. Supply
 actual usage. `activeRoles` lists workers, not Scribe. Gate verdicts use
 `Write-SquadVerdict.ps1 -Quiet` at that root per
 `verdict-writer.md`; validate its Decision Ref first.

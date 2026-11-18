@@ -67,7 +67,7 @@ Describe 'SquadUsage exact native accounting' {
         $snapshot.duplicates | Should -Be 1
         $snapshot.totalNanoAiu | Should -Be 3000000000
         $snapshot.credits | Should -Be 3
-        $snapshot.usd | Should -Be 0.03
+        $snapshot.usd | Should -Be ([decimal]::Parse('0.03', [Globalization.CultureInfo]::InvariantCulture))
         $snapshot.checkpointNanoAiu | Should -Be 1000000000
     }
 
@@ -79,7 +79,7 @@ Describe 'SquadUsage exact native accounting' {
         $snapshot = Get-SquadUsageSnapshot -EventsPath $path -BaselineNanoAiu 1250000000
         $snapshot.consumedNanoAiu | Should -Be 1750000000
         $snapshot.credits | Should -Be 1.75
-        $snapshot.usd | Should -Be 0.0175
+        $snapshot.usd | Should -Be ([decimal]::Parse('0.0175', [Globalization.CultureInfo]::InvariantCulture))
     }
 
     It 'fails metering closed for incomplete credit status or missing accounting identity' {
