@@ -164,11 +164,27 @@ Show the proposed configuration and wait for my confirmation.</code></pre></div>
         For unattended autopilot, settle that choice during setup: keep exactly one applicable
         non-<code>ask</code> default. When several members share a role, confirm which member is targeted.
       </p>
+      <p data-release-change="20261118-deterministic-connector-registration">
+        Preview the confirmed research registration with the installed squad script:
+      </p>
+      <div class="code-block"><div class="code-heading">Preview deterministic registration</div>
+      <pre><code class="language-powershell">pwsh -NoProfile -File "&lt;skill-root&gt;/scripts/Register-SquadConnector.ps1" `
+  -RepoRoot "&lt;repository-root&gt;" `
+  -ManifestPath "connectors/research-agent.json" `
+  -BindingId "research-org" `
+  -RoleMode replace `
+  -TargetRole researcher `
+  -MemberName "Org Researcher" `
+  -DefaultExecution connector `
+  -RunId "research-connector-registration"</code></pre></div>
       <p>
-        Confirm the proposal. The Scribe writes the bindings into the owning squad's
-        <code>team.md</code>, preserving the internal originals and their deliverable roots.
-        Existing research/developer routes remain in place. Do not overwrite the roster with a
-        sample or change its Primary to your external agent's name.
+        Inspect the <code>planned</code> receipt, then rerun the same command with
+        <code>-Confirmed</code>. The deterministic transaction writes the binding into the
+        owning squad's <code>team.md</code> without dispatching a model or Scribe. Existing
+        research/developer routes and internal deliverable roots remain in place. Repeat the
+        preview/apply pair for the delivery binding. Do not overwrite the roster with a sample
+        or change its Primary to your external agent's name. New binding IDs use this script;
+        identity changes or removals retain the confirmed Scribe retirement-evidence path.
       </p>
       <table><thead><tr><th>Binding ID</th><th>Role Mode</th><th>Target</th><th>Default Execution</th></tr></thead><tbody>
         <tr><td><code>research-org</code></td><td><code>replace</code></td><td>Researcher member</td><td><code>connector</code></td></tr>
@@ -210,7 +226,7 @@ Keep the existing tester, Coordinator, Scribe, and council unchanged.
 Show the proposed member, binding, route, and root before writing.</code></pre></div>
       <p>
         This time choose <code>add</code>. Confirm the new member, alignment, root, route, and default.
-        The Scribe creates a separate member whose Primary is <code>Squad Connector</code>; it does
+        <code>Register-SquadConnector.ps1</code> creates a separate member whose Primary is <code>Squad Connector</code>; it does
         not replace <code>tester</code> or create another council lens. For GCP, use these parallel choices:
       </p>
       <table><thead><tr><th>Field</th><th>.NET example</th><th>GCP example</th></tr></thead><tbody>
@@ -398,7 +414,8 @@ Show the proposed member, binding, route, and root before writing.</code></pre><
       <p>
         Ask the Squad Coordinator to register or refresh a connector, supplying your manifest path.
         It asks for missing choices one at a time, validates complete manual configuration without
-        repeating answered questions, and confirms the proposed changes before the Scribe writes them.
+        repeating answered questions, and uses the deterministic registration writer after confirmation
+        for a new binding. Existing identity changes or removals retain the Scribe-owned audit path.
         Choose <code>replace</code> with default <code>connector</code> to use your endpoint by default,
         or with <code>ask</code> to keep it as a request-time alternative. Choose <code>add</code>
         for an extra member. Do not put connector ids in <code>Alternate Agents</code>.
