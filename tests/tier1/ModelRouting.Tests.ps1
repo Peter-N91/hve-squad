@@ -2026,7 +2026,7 @@ Describe 'Capability-first Ranked and qualified cost-first Economy (SQ-33b..d, S
         }
 
         function Invoke-PolicyRoute {
-            param($Fixture, [string]$Mode = 'ranked', [datetime]$AsOf = [datetime]'2026-10-19', [string[]]$Available, [switch]$Unattended)
+            param($Fixture, [string]$Mode = 'ranked', [datetime]$AsOf = [datetime]'2026-10-19', [string[]]$Available, [string[]]$RejectedModels = @(), [switch]$Unattended)
             $parameters = @{
                 SquadRoot = $Fixture.Root
                 AvailableModels = if ($Available) { $Available } else { $Fixture.Available }
@@ -2036,6 +2036,7 @@ Describe 'Capability-first Ranked and qualified cost-first Economy (SQ-33b..d, S
                 SessionModel = 'gpt-6.1-sol'
             }
             if ($Mode -ne 'off') { $parameters.Mode = $Mode }
+            if ($RejectedModels.Count) { $parameters.RejectedModels = $RejectedModels }
             if ($Unattended) { $parameters.Unattended = $true }
             & $Fixture.Resolver @parameters | ConvertFrom-Json
         }
@@ -2075,6 +2076,72 @@ Describe 'Capability-first Ranked and qualified cost-first Economy (SQ-33b..d, S
         @($economy.candidates | Where-Object economyQualified).Count | Should -Be 2
         $economy.escalation | Should -Be $ranked.suggested
         $economy.escalationReason | Should -Match 'persist Model cell.*Cost Preflight'
+    }
+
+    It 'replans <Role> cost-first after a native Economy model rejection without using the Ranked escalation' -ForEach @(
+        @{ Role = 'lead'; Tier = 'default' }
+        @{ Role = 'tester'; Tier = 'fast' }
+    ) {
+        $fixture = New-PolicyRoster -Role $Role -Tier $Tier -Mode economy `
+            -Available @('gpt-6.1-sol', 'gpt-5.6-terra', 'gpt-5.6-sol') `
+            -Scores ([ordered]@{
+                'gpt-6.1-sol' = '0.600'
+                'gpt-5.6-terra' = '0.600'
+                'gpt-5.6-sol' = '0.700'
+                'gpt-5.3-codex' = '0.100'
+            })
+        $initial = (Invoke-PolicyRoute $fixture -Mode economy).roles[0]
+        $initial.suggested | Should -Be 'gpt-6.1-sol'
+        $initial.candidates[0].id | Should -Be 'gpt-6.1-sol'
+        $initial.escalation | Should -Be 'gpt-5.6-sol'
+
+        $retry = Invoke-PolicyRoute $fixture -Mode economy -RejectedModels @('gpt-6.1-sol')
+        $retry.rejectedModels | Should -Be @('gpt-6.1-sol')
+        $retry.roles[0].suggested | Should -Be 'gpt-5.6-terra'
+        $retry.roles[0].candidates[0].id | Should -Be 'gpt-5.6-terra'
+        $retry.roles[0].selectionObjective | Should -Be 'cost-first'
+        $retry.roles[0].suggested | Should -Not -Be $retry.roles[0].escalation
+        $retry.roles[0].escalationReason | Should -Match 'post-quality-failure only'
+        $retry.warnings -join "`n" | Should -Match 'Host-rejected model ids excluded'
+    }
+
+    It 'replans every non-exception assignment class after a native rejection' -ForEach @(
+        @{ Role = 'researcher'; Class = 'research' }
+        @{ Role = 'lead'; Class = 'planning' }
+        @{ Role = 'developer'; Class = 'implementation' }
+        @{ Role = 'tester'; Class = 'review' }
+        @{ Role = 'architect'; Class = 'council' }
+        @{ Role = 'intake-validator'; Class = 'intake' }
+    ) {
+        $fixture = New-PolicyRoster -Role $Role -Tier default -Mode economy `
+            -Available @('gpt-5.6-terra', 'gpt-5.6-sol') `
+            -Scores ([ordered]@{
+                'gpt-5.6-terra' = '0.600'
+                'gpt-5.6-sol' = '0.700'
+            })
+        $initial = (Invoke-PolicyRoute $fixture -Mode economy).roles[0]
+        $initial.class | Should -Be $Class
+        $initial.suggested | Should -Not -BeNullOrEmpty
+
+        $retry = (Invoke-PolicyRoute $fixture -Mode economy -RejectedModels @($initial.suggested)).roles[0]
+        $retry.suggested | Should -Not -BeNullOrEmpty
+        $retry.suggested | Should -Not -Be $initial.suggested
+        $retry.class | Should -Be $Class
+        $retry.selectionObjective | Should -Be 'cost-first'
+    }
+
+    It 'keeps Ranked capability-first and Manual explicit after a native rejection' {
+        $rankedFixture = New-PolicyRoster -Available @('gpt-5.6-terra', 'gpt-5.6-sol')
+        $ranked = (Invoke-PolicyRoute $rankedFixture -RejectedModels @('gpt-5.6-sol')).roles[0]
+        $ranked.suggested | Should -Be 'gpt-5.6-terra'
+        $ranked.selectionObjective | Should -Be 'capability-first'
+        $ranked.rationale | Should -Match 'Ranked: selected gpt-5.6-terra'
+
+        $manualFixture = New-PolicyRoster -Mode manual -Cell gpt-5.6-sol -Available @('gpt-5.6-terra', 'gpt-5.6-sol')
+        $manual = (Invoke-PolicyRoute $manualFixture -Mode manual -RejectedModels @('gpt-5.6-sol')).roles[0]
+        $manual.cellStatus | Should -Be 'refused: not available on this host'
+        $manual.resolved | Should -BeNullOrEmpty
+        $manual.suggested | Should -Be 'gpt-5.6-terra'
     }
 
     It 'excludes a cheap model that fails even one primary minimum' {

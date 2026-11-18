@@ -13,6 +13,7 @@
       execution?, dependsOn?: [], parallel?: bool, readOnly?: bool,
       writePaths?: [], allowedOutputs?: [] }], council?: bool, planPath?: string,
       admissionApproved?: bool, agentTypes?: [], availableModels?: [],
+      rejectedModels?: [],
       sessionModel?: string, asOf?: date, requestedModelRouting?: ranked|economy|manual,
       manualModels?: {role:model}, economyConsent?: {user,tradeAccepted,neverWeakened,timestamp?},
       requestedDepth?: quick|standard, depthSource?: input|federation|workflow,
@@ -29,6 +30,8 @@
     When cost is supplied, complete native usage records are authoritative consumed
     spend and only the actual next wave plus one coordinator lookup is reserved.
     The returned Cost Preflight object must be persisted before dispatch.
+    rejectedModels removes native host rejections from availability and replans in
+    the current mode; it never invokes Economy's quality-failure escalation.
     requestedDepth is the trusted per-turn depth= input and depthSource proves whether it came
     from the current prompt, a federation parent, or (workflow, unattended Watch Mode runs only)
     the committed workflow configuration or a collaborator's manual dispatch. Omission is explicitly standard. It never changes a model: it returns
@@ -86,7 +89,7 @@ try {
         if (-not $inputData.Contains($key)) { throw "Missing dispatch-plan field: $key" }
     }
     foreach ($key in $inputData.Keys) {
-        if ($key -notin @('squadRoot', 'units', 'council', 'planPath', 'admissionApproved', 'agentTypes', 'availableModels', 'sessionModel', 'asOf', 'requestedModelRouting', 'manualModels', 'economyConsent', 'requestedDepth', 'depthSource', 'depthEvidence', 'reasoningEfforts', 'cost')) { throw "Unsupported dispatch-plan field: $key" }
+        if ($key -notin @('squadRoot', 'units', 'council', 'planPath', 'admissionApproved', 'agentTypes', 'availableModels', 'rejectedModels', 'sessionModel', 'asOf', 'requestedModelRouting', 'manualModels', 'economyConsent', 'requestedDepth', 'depthSource', 'depthEvidence', 'reasoningEfforts', 'cost')) { throw "Unsupported dispatch-plan field: $key" }
     }
     if ($inputData.units -isnot [array] -or $inputData.units.Count -eq 0) { throw 'units must be a nonempty array.' }
     foreach ($key in @('council', 'admissionApproved')) {
@@ -101,6 +104,14 @@ try {
     if ($inputData.Contains('availableModels')) {
         if ($inputData.availableModels -isnot [array] -or @($inputData.availableModels | Where-Object { $_ -isnot [string] }).Count) { throw 'availableModels must be the host string array.' }
         $availableModels = @($inputData.availableModels)
+    }
+    $rejectedModels = @()
+    if ($inputData.Contains('rejectedModels')) {
+        if ($inputData.rejectedModels -isnot [array] -or @($inputData.rejectedModels | Where-Object { $_ -isnot [string] }).Count) { throw 'rejectedModels must be the host-rejected string array.' }
+        $rejectedModels = @($inputData.rejectedModels | ForEach-Object { $_.Trim() })
+        if (@($rejectedModels | Where-Object { -not $_ -or $_ -match '[\x00-\x1F\x7F\u0085\u2028\u2029]' }).Count) {
+            throw 'rejectedModels entries must be nonempty single-line model ids.'
+        }
     }
     $sessionModel = if ($inputData.Contains('sessionModel')) { [string]$inputData.sessionModel } else { '' }
     $asOf = if ($inputData.Contains('asOf')) {
@@ -187,6 +198,12 @@ try {
     $recordedModelRouting = if ($modeMatch.Success) { $modeMatch.Groups['mode'].Value } else { 'off' }
     $modelRouting = if ($requestedModelRouting) { $requestedModelRouting } else { $recordedModelRouting }
     $routingModeChanged = $modelRouting -cne $recordedModelRouting
+    if ($rejectedModels.Count -gt 0 -and $modelRouting -eq 'off') {
+        throw 'rejectedModels requires active ranked, economy, or manual routing; off cannot replan a model.'
+    }
+    if ($federation -and $rejectedModels.Count -gt 0) {
+        throw 'rejectedModels is member-local; replan the affected member role after a native model rejection.'
+    }
     if ($manualModels.Count -gt 0 -and $modelRouting -ne 'manual') { throw 'manualModels requires Model routing: manual.' }
     if ($null -ne $economyConsent -and $modelRouting -ne 'economy') {
         throw 'economyConsent is allowed only for routing=economy.'
@@ -282,6 +299,7 @@ try {
         $routeArguments = @{
             SquadRoot = $root
             AvailableModels = $availableModels
+            RejectedModels = $rejectedModels
             SessionModel = $sessionModel
             Mode = $modelRouting
             Role = $selectedRoles
@@ -789,6 +807,7 @@ try {
         modelPolicy = $(if ($routeReport) { $routeReport.scoringPolicy } else { 'off' })
         modelSnapshot = $(if ($routeReport) { $routeReport.snapshotIdentity } else { 'not-evaluated' })
         modelAvailability = $(if ($routeReport) { $routeReport.availability } else { 'not-evaluated' })
+        modelRejections = @(if ($routeReport) { $routeReport.rejectedModels })
         modelWarnings = @(if ($routeReport) { $routeReport.warnings })
         routingRefresh = $routingRefresh
         routingReady = -not $federation -and -not $routingRefresh.required

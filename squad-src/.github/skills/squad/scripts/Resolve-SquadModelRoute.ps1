@@ -52,6 +52,10 @@
     The model ids this host can dispatch. On the Copilot CLI and the GitHub Copilot
     app, pass the `task` tool's advertised `model` enum. Ids absent from the catalog
     are reported as `unevaluated` and never ranked.
+.PARAMETER RejectedModels
+    Model ids rejected by a native dispatch in this run. They are removed from the
+    advertised or derived availability set before the same routing mode is resolved
+    again. A rejection never selects the Economy escalation target.
 .PARAMETER SessionModel
     The session model id (VS Code's Local agent advertises no model list). Used only
     when -AvailableModels is omitted: catalog ids whose Input rate exceeds the session
@@ -89,6 +93,8 @@ param(
     [string]$SquadRoot,
 
     [string[]]$AvailableModels = @(),
+
+    [string[]]$RejectedModels = @(),
 
     [string]$SessionModel,
 
@@ -752,6 +758,20 @@ $advertisedIdByCanonical = @{}
 $availability = 'unverified'
 $availabilityResolved = $false
 $unevaluated = @()
+$rejectedCanonical = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::Ordinal)
+foreach ($rejectedId in @(
+        $RejectedModels |
+            ForEach-Object { $_ -split ',' } |
+            ForEach-Object { $_.Trim().ToLowerInvariant() } |
+            Where-Object { $_ } |
+            Sort-Object -Unique
+    )) {
+    $canonicalRejectedId = ConvertTo-CanonicalModelIdLocal -Value $rejectedId
+    if ($canonicalRejectedId) { [void]$rejectedCanonical.Add($canonicalRejectedId) }
+}
+if ($rejectedCanonical.Count -gt 0) {
+    $warnings.Add("Host-rejected model ids excluded from this retry: $(@($rejectedCanonical | Sort-Object) -join ', '). Replan in the current routing mode; a native rejection is not an Economy quality escalation.")
+}
 if ($AvailableModels.Count -gt 0) {
     $rawIds = @(
         $AvailableModels |
@@ -760,10 +780,10 @@ if ($AvailableModels.Count -gt 0) {
             Where-Object { $_ } |
             Sort-Object -Unique
     )
-    $advertised = [System.Collections.Generic.HashSet[string]]::new([string[]]$rawIds)
     $canonicalIds = [System.Collections.Generic.List[string]]::new()
     foreach ($rawId in $rawIds) {
         $canonicalId = ConvertTo-CanonicalModelIdLocal -Value $rawId
+        if ($rejectedCanonical.Contains($canonicalId)) { continue }
         if (-not $advertisedIdByCanonical.ContainsKey($canonicalId) -or $rawId -eq $canonicalId) {
             $advertisedIdByCanonical[$canonicalId] = $rawId
         }
@@ -771,16 +791,22 @@ if ($AvailableModels.Count -gt 0) {
             $canonicalIds.Add($canonicalId)
         }
     }
+    $acceptedRawIds = @($rawIds | Where-Object { -not $rejectedCanonical.Contains((ConvertTo-CanonicalModelIdLocal -Value $_)) })
+    $advertised = [System.Collections.Generic.HashSet[string]]::new([string[]]$acceptedRawIds)
     $available = [System.Collections.Generic.HashSet[string]]::new([string[]]$canonicalIds)
     $availability = 'host-advertised'
     $availabilityResolved = $true
-    $unevaluated = @($rawIds | Where-Object { -not $catalog.Capability.ContainsKey((ConvertTo-CanonicalModelIdLocal -Value $_)) } | Sort-Object -Unique)
+    $unevaluated = @($acceptedRawIds | Where-Object { -not $catalog.Capability.ContainsKey((ConvertTo-CanonicalModelIdLocal -Value $_)) } | Sort-Object -Unique)
 }
 elseif ($SessionModel) {
     $canonicalSessionModel = ConvertTo-CanonicalModelIdLocal -Value $SessionModel
     if ($canonicalSessionModel -notin @('auto', 'unknown', 'fast', 'default', 'extended') -and $catalog.InputRate.ContainsKey($canonicalSessionModel)) {
         $ceiling = $catalog.InputRate[$canonicalSessionModel]
-        $ids = @($catalog.Fit | Where-Object { $catalog.InputRate.ContainsKey($_.Id) -and $catalog.InputRate[$_.Id] -le $ceiling } | ForEach-Object { $_.Id })
+        $ids = @($catalog.Fit | Where-Object {
+                $catalog.InputRate.ContainsKey($_.Id) -and
+                $catalog.InputRate[$_.Id] -le $ceiling -and
+                -not $rejectedCanonical.Contains($_.Id)
+            } | ForEach-Object { $_.Id })
         $available = [System.Collections.Generic.HashSet[string]]::new([string[]]$ids)
         $availability = "unverified (priced at or below session model $canonicalSessionModel)"
         $availabilityResolved = $true
@@ -884,21 +910,22 @@ $results = foreach ($row in $roster.Rows) {
         $hasEvidence = [bool]$classHasEvidence[$class]
         $economyQualification = if ($hasEvidence) { 'evidence' } else { 'declared-fit' }
         $economy = @(Get-RankedCandidatesLocal -Catalog $catalog -Class $class -Admitted $rankedAdmitted -Available $available -Order cost -ClassHasEvidence $hasEvidence)
+        $economyFloor = @(Get-RankedCandidatesLocal -Catalog $catalog -Class $class -Admitted $rankedAdmitted -Available $available -Order cost -ClassHasEvidence $hasEvidence -AllowUnqualifiedEconomy)
         if ($economy.Count -eq 0) {
             $economyQualification = 'floor-only'
-            $economy = @(Get-RankedCandidatesLocal -Catalog $catalog -Class $class -Admitted $rankedAdmitted -Available $available -Order cost -ClassHasEvidence $hasEvidence -AllowUnqualifiedEconomy)
+            $economy = $economyFloor
         }
         if ($economy.Count -gt 0) {
             $objective = 'cost-first'
             $selectedEntry = $economy[0]
             $suggestedCatalogId = $economy[0].Id
+            $combined = [Collections.Generic.List[object]]::new()
+            $combinedIds = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+            foreach ($candidate in @($economy) + @($economyFloor)) {
+                if ($combinedIds.Add([string]$candidate.Id)) { $combined.Add($candidate) }
+            }
+            $offered = $combined.ToArray()
             if ($economyQualification -eq 'floor-only') {
-                $combined = [Collections.Generic.List[object]]::new()
-                $combinedIds = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
-                foreach ($candidate in @($economy) + @($offered)) {
-                    if ($combinedIds.Add([string]$candidate.Id)) { $combined.Add($candidate) }
-                }
-                $offered = $combined.ToArray()
                 $qualification = Get-EconomyQualificationLocal -Entry $selectedEntry -Class $class -ClassHasEvidence $hasEvidence
                 $rationale = "economy pick: selected $suggestedCatalogId under $EconomyFloorOnlyRule; no candidate met $(if ($hasEvidence) { $selectedEntry.Capabilities[$class].panel.qualificationRule } else { $EconomyDeclaredRule }), so Economy used the cheapest known-price host model inside the $tier floor instead of falling back to Ranked; selected candidate qualification: $($qualification.Reason)"
                 if ($economy.Count -gt 1) {
@@ -1118,7 +1145,7 @@ $results = foreach ($row in $roster.Rows) {
         }
         else { $null }
         $entry['escalation'] = if ($target -and $target -ne $suggested) { $target } else { $null }
-        $entry['escalationReason'] = if ($entry['escalation']) { 'one retry on capability-first Ranked; persist Model cell and rerun required Cost Preflight before redispatch' }
+        $entry['escalationReason'] = if ($entry['escalation']) { 'post-quality-failure only: one retry on capability-first Ranked; host rejection instead replans the current mode with rejectedModels; persist Model cell and rerun required Cost Preflight before redispatch' }
         elseif ($applied) { 'no higher-ranked escalation target exists' }
         else { $EconomyHoldReason[$economyHold] }
         $entry['economyQualification'] = if ($exception) { $null } else { $economyQualification }
@@ -1144,6 +1171,7 @@ $report = [pscustomobject][ordered]@{
     unattended          = [bool]$Unattended
     availability        = $availability
     availabilityResolved = $availabilityResolved
+    rejectedModels      = @($rejectedCanonical | Sort-Object)
     unevaluated         = $unevaluated
     warnings            = @($warnings)
     roles               = @($results)
