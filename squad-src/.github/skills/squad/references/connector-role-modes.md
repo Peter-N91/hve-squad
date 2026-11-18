@@ -52,6 +52,11 @@ No silent upgrade is allowed. A 1.0 envelope using 1.1-only features is rejected
 
 * Replacement is an execution overlay applied **after** ordinary role/member classification.
 * The original internal roster row is retained for explicit `execution=original` and audit.
+* Under Ranked, Economy, or Manual routing, the targeted Members row owns the model
+  for both original execution and the native `Squad Connector` agent. The plan
+  records that row as `endpoint.rosterMemberName` while keeping the connector's
+  own `endpoint.memberName` for dispatch and audit. The model override does not
+  set the external endpoint's model or change the file-drop contract.
 * Target form: `targetKind=role` with `role:<role>` or
   `role:<role>/<member-name>`.
 

@@ -484,6 +484,7 @@ Describe 'PKG-14 Plugin host discovery and hook commands' -Tag 'Unit' {
                     [string]$Cell = 'gpt-5.6-sol',
                     [string]$Shape = 'camel',
                     [switch]$Member,
+                    [switch]$Replacement,
                     [string]$Prompt = 'Quick planning'
                 )
                 $repo = Join-Path $TestDrive ("guard-" + [guid]::NewGuid().ToString('N'))
@@ -496,9 +497,28 @@ Describe 'PKG-14 Plugin host discovery and hook commands' -Tag 'Unit' {
                     $policy
                     '| Role | Member Name | Agent Name (Primary) | Alternate Agents | Model |'
                     '| ---- | ----------- | -------------------- | ---------------- | ----- |'
-                    "| lead | Beta | Squad Lead | Squad Challenger | $Cell |"
+                    if ($Replacement) {
+                        "| developer | Internal Developer | Squad Implementor | - | $Cell |"
+                        '| developer | Other Developer | Squad Implementor | - | claude-sonnet-5.5 |'
+                        ''
+                        '## Connector Bindings'
+                        ''
+                        '| Binding ID | Connector ID | Manifest | Endpoint Kind | Role Mode | Target Kind | Target | Member Name | Added Role | Aligned Role | Default Execution |'
+                        '| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |'
+                        '| fixture-developer | fixture | connector.json | agent | replace | role | role:developer/Internal Developer | External Developer | | | connector |'
+                    }
+                    else { "| lead | Beta | Squad Lead | Squad Challenger | $Cell |" }
                 ) -join "`n"
                 [IO.File]::WriteAllText((Join-Path $root 'team.md'), $teamText)
+                if ($Replacement) {
+                    $manifest = @{
+                        schemaVersion = '1.1'; connectorId = 'fixture'; endpointKind = 'agent'; transport = 'file'
+                        capabilities = @('Performs approved local implementation'); roles = @('developer')
+                        dropPath = '.connector-drops/fixture'; deadlineMinutesDefault = 60; retryCapDefault = 2
+                        contact = 'fixture@example.invalid'; version = '1.0.0'
+                    }
+                    [IO.File]::WriteAllText((Join-Path $repo 'connector.json'), ($manifest | ConvertTo-Json -Depth 3))
+                }
                 $dispatch = @{ agent_type = $Agent; prompt = "$Prompt at $root" }
                 if ($Model) { $dispatch.model = $Model }
                 $inputData = switch ($Shape) {
@@ -529,6 +549,18 @@ Describe 'PKG-14 Plugin host discovery and hook commands' -Tag 'Unit' {
             $wrong.ExitCode | Should -Be 0 -Because $wrong.Output
             ($wrong.Output | ConvertFrom-Json).permissionDecision | Should -Be 'deny'
             $correct = Invoke-DispatchGuard -Mode $Mode -Model 'gpt-5.6-sol'
+            $correct.ExitCode | Should -Be 0 -Because $correct.Output
+            ($correct.Output | ConvertFrom-Json).permissionDecision | Should -Be 'allow'
+        }
+
+        It 'enforces the target Model cell for the native replacement Connector under <Mode>' -ForEach @(
+            @{ Mode = 'ranked' }, @{ Mode = 'manual' }, @{ Mode = 'economy' }
+        ) {
+            $options = @{ Agent = 'hve-squad:squad-connector'; Replacement = $true; Mode = $Mode }
+            $wrong = Invoke-DispatchGuard @options -Model 'claude-sonnet-5.5'
+            $wrong.ExitCode | Should -Be 0 -Because $wrong.Output
+            ($wrong.Output | ConvertFrom-Json).permissionDecision | Should -Be 'deny'
+            $correct = Invoke-DispatchGuard @options -Model 'gpt-5.6-sol'
             $correct.ExitCode | Should -Be 0 -Because $correct.Output
             ($correct.Output | ConvertFrom-Json).permissionDecision | Should -Be 'allow'
         }
