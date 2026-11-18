@@ -75,6 +75,9 @@
     objective for every role; untrusted trigger text is filtered before this resolver.
 .PARAMETER AsOf
     The date the catalog's staleness is measured against. Defaults to today.
+.PARAMETER CatalogPath
+    Optional catalog path for offline contract fixtures. Defaults to the shipped
+    `model-catalog.md`; normal dispatch never supplies an override.
 .PARAMETER Format
     `json` (default) or `markdown` (a compact table a manual-selection question can show).
 .EXAMPLE
@@ -105,6 +108,8 @@ param(
 
     [string]$BenchmarksPath,
 
+    [string]$CatalogPath,
+
     [ValidateSet('json', 'markdown')]
     [string]$Format = 'json'
 )
@@ -117,6 +122,9 @@ Set-StrictMode -Version Latest
 $ScoringPolicy = Get-SquadBenchmarkPolicy
 
 $ReferencesRoot = Join-Path -Path $PSScriptRoot -ChildPath '..' -AdditionalChildPath 'references'
+if (-not $CatalogPath) {
+    $CatalogPath = Join-Path -Path $ReferencesRoot -ChildPath 'model-catalog.md'
+}
 if (-not $BenchmarksPath) {
     $BenchmarksPath = Join-Path -Path $ReferencesRoot -ChildPath 'model-benchmarks.md'
 }
@@ -318,7 +326,8 @@ function Get-BenchmarksLocal {
     param(
         [Parameter(Mandatory)][string]$Path,
         [Parameter(Mandatory)][datetime]$AsOf,
-        [Parameter(Mandatory)][string[]]$ModelIds
+        [Parameter(Mandatory)][string[]]$ModelIds,
+        [Parameter(Mandatory)][string]$CatalogPath
     )
 
     $result = [pscustomobject]@{
@@ -367,11 +376,11 @@ function Get-BenchmarksLocal {
                 $row.VerificationReason = 'legacy v2 policy: explicit re-verification and v3 regeneration required; ambiguous dates never establish verification'
             }
         }
-        $scoring = Get-SquadBenchmarkScore -Rows $rows -AsOf $AsOf -ModelIds $ModelIds
+        $scoring = Get-SquadBenchmarkScore -Rows $rows -AsOf $AsOf -ModelIds $ModelIds -CatalogPath $CatalogPath
         if ($result.PolicyVersion -ne $ScoringPolicy.Version -and -not $result.Legacy) {
             throw "Missing or unsupported scoring policy '$($result.PolicyVersion)'; expected '$($ScoringPolicy.Version)'."
         }
-        $result.Digest = Get-SquadBenchmarkDigest -Content $raw
+        $result.Digest = Get-SquadBenchmarkDigest -Content $raw -CatalogPath $CatalogPath
         $storedDigest = [regex]::Match($raw, '\*\*Content Digest:\s*(?<digest>sha256:[0-9a-f]{64})\*\*').Groups['digest'].Value
         if (-not $result.Legacy -and $storedDigest -and $storedDigest -cne $result.Digest) {
             throw 'Benchmark evidence content digest does not match its source and verification records.'
@@ -672,7 +681,7 @@ function Get-EscalationTarget {
 $teamPath = Join-Path -Path $SquadRoot -ChildPath 'team.md'
 if (-not (Test-Path -LiteralPath $teamPath -PathType Leaf)) { throw "team.md not found under $SquadRoot." }
 
-$catalog = Get-CatalogLocal -Path (Join-Path -Path $ReferencesRoot -ChildPath 'model-catalog.md')
+$catalog = Get-CatalogLocal -Path $CatalogPath
 $classMap = Get-RoleClassMapLocal -Path (Join-Path -Path $ReferencesRoot -ChildPath 'model-routing.md')
 $roster = Get-RosterLocal -Path $teamPath
 $effectiveMode = if ($Mode) { $Mode } else { $roster.Mode }
@@ -691,8 +700,8 @@ foreach ($key in $manualSelections.Keys) {
 $usesBenchmarkRanking = $effectiveMode -in @('ranked', 'economy', 'manual')
 $logsBenchmarkWarnings = $effectiveMode -in @('ranked', 'economy')
 $modelIds = @($catalog.Fit | ForEach-Object Id)
-$benchmarks = Get-BenchmarksLocal -Path $BenchmarksPath -AsOf $AsOf -ModelIds $modelIds
-$emptyScores = Get-SquadBenchmarkScore -Rows @() -AsOf $AsOf -ModelIds $modelIds
+$benchmarks = Get-BenchmarksLocal -Path $BenchmarksPath -AsOf $AsOf -ModelIds $modelIds -CatalogPath $CatalogPath
+$emptyScores = Get-SquadBenchmarkScore -Rows @() -AsOf $AsOf -ModelIds $modelIds -CatalogPath $CatalogPath
 
 $warnings = [System.Collections.Generic.List[string]]::new()
 $stale = $false
