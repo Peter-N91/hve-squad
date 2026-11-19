@@ -66,18 +66,13 @@ event-scoped member (not the meta-pipeline), and report failure to the source.
 Registered `squad=<name>` wins; otherwise prefer the most specific meta-pattern/direct
 owner. Clarify unknown, ambiguous or equally specific conflicts; never guess.
 
-Put selected squads, explicit producer dependencies and proven write sets into
-`New-SquadDispatchPlan.ps1` input. Its waves are scheduling data, not admission.
-Dependencies override generic `Parallel-Eligible`. Members, not user-invocable
-coordinators, are native worker targets at their own roots.
-Forward `endpoint.requestedModelRouting` into each member's actual-role plan with
-`-ApplyModelRouting`; require `routingReady: true` before workers, including quick
-single-role/targeted-autopilot work. Root plans do not activate member models.
-
-Start each native member task prompt with `Squad root: .copilot-tracking/squad/members/<name>`
-when the plugin dispatch hook is active. The hook uses that exact scope rather
-than paths mentioned later in the prompt to check the member's intake verdict.
-If any member is `Not-Ready`, the hook refuses an unscoped dispatch.
+Pass selected squads, explicit dependencies and proven write sets to
+`New-SquadDispatchPlan.ps1`. Dependencies override `Parallel-Eligible`; waves
+schedule, not admit. Dispatch workers, not coordinators. Start each native
+member prompt with `Squad root: .copilot-tracking/squad/members/<name>`.
+Forward `endpoint.requestedModelRouting` to the member's actual-role plan with
+`-ApplyModelRouting`; require `routingReady: true` before each dispatch, including
+quick and targeted-autopilot work. Root plans never activate member models.
 
 Before child dispatch take the script snapshot with
 `Get-SquadDispatchBrief.ps1 ... -AsJson -SnapshotPath <transport>`. Keep it
