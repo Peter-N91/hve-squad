@@ -130,7 +130,7 @@ Describe 'PKG-09 Entrypoint prompts are delivered' {
     }
 }
 
-Describe 'Requirements document quality source contracts (RQ-01..15)' -Tag 'RequirementsQuality' {
+Describe 'Requirements document quality source contracts (RQ-01..16)' -Tag 'RequirementsQuality' {
     BeforeAll {
         $script:RequirementsGuide = Join-Path $script:Model.SquadSkillRoot 'references/requirements-quality.md'
         $script:RequirementsCoordinator = @($script:Model.SquadAgents | Where-Object Name -eq 'squad-coordinator.agent.md')[0].Body
@@ -354,6 +354,19 @@ Describe 'Requirements document quality source contracts (RQ-01..15)' -Tag 'Requ
         $reviewer | Should -Match 'Never leave a readable required document only partially read and then downgrade a defect-free review to `Verdict: Fail`'
         $reviewer | Should -Match 'required promotion.+blocked'
         $reviewer | Should -Match 'Preserve real findings, unavailable required runtime evidence and failed canonical gates'
+    }
+
+    It 'RQ-16 keeps the requirements set proportionate, the correction batch bounded and drafts mechanically consistent' {
+        $guide = Get-Content -LiteralPath $script:RequirementsGuide -Raw
+        $guide | Should -Match 'create the dated `research`, `plans` and `reviews` folders and the `brd-sessions` and `prd-sessions` folders'
+        $guide | Should -Match 'name no candidate decision topics in the Researcher.s or Lead.s brief'
+        $guide | Should -Match 'as lists and never as a computed prose count, sum or ratio'
+        $guide | Should -Match 'Split a compound requirement only where its clauses can fail independently'
+        $guide | Should -Match 'Scale to the brief'
+        $guide | Should -Match 'plain-text workspace-relative paths, not Markdown links with relative destinations'
+        $guide | Should -Match 'take timestamps from `Get-Date -Format o`'
+        $guide | Should -Match 'fix every RISK finding, and any other finding only when it corrects a contradiction'
+        $guide | Should -Match 'disposition for every finding once, as one line in the builder state'
     }
 }
 

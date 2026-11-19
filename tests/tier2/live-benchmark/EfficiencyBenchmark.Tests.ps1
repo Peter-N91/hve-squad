@@ -1928,7 +1928,7 @@ exit 37
         $script | Should -Match 'one bounded source-supported correction batch'
         $script | Should -Match 'Final outcome: Pass'
         $script | Should -Match 'Human-only KPI, baseline, date and approval gaps stay unavailable'
-        ([regex]::Matches($script, 'Keep the BRD and the PRD each under 80,000 bytes and research and plan artifacts concise\.')).Count | Should -Be 2
+        $script | Should -Not -Match 'under 80,000 bytes'
         $script | Should -Not -Match 'EX-\*'
         $script | Should -Not -Match 'owner roles'
         $script | Should -Match '\.copilot-tracking/benchmark-evidence/'
