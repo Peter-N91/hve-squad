@@ -71,10 +71,12 @@ validation in the build request. Observation changes how failures are reported,
 not which product invariants the builder and closing reviewer must verify.
 
 Observational workflows have no request-count cap, allow up to 1,000 native autopilot
-continuations, and use a 180-minute hung-run watchdog. They reserve 30 credits for
-the independently metered judge and the remainder for the shared workflow: 970/30
-at a 1,000-credit trial ceiling. At least 60 total credits are required because both
-native sessions need a 30-credit minimum. Credit exhaustion, invalid metering,
+continuations, and use a 180-minute hung-run watchdog that does not count time the
+computer spends suspended (a gap of more than 120 seconds between two watchdog polls;
+the total is recorded as `suspendedSeconds` in each stage's `process` record). They
+reserve 30 credits for the independently metered judge and the remainder for the shared
+workflow: 970/30 at a 1,000-credit trial ceiling. At least 60 total credits are required
+because both native sessions need a 30-credit minimum. Credit exhaustion, invalid metering,
 credential/setup failures, actual safety boundaries and evidence-identity changes
 still stop affected work. Native context-window limits remain unchanged.
 The independently tool-denied judge retains its ten-request allowance.
@@ -170,7 +172,12 @@ session and its descendants, independently of CLI invocation counters. It counts
 unique usage accounting IDs and native compaction attempts, including earlier
 stages, and stops active work or prevents the next launch at the workflow ceiling.
 Missing or invalid credit evidence stops with `incomplete-credit-metering`;
-exhaustion stops with `credit-limit`. Final records are checked even on fast exits.
+exhaustion stops with `credit-limit`. Stage and continuation processes also stop with
+`credit-limit` when the CLI announces, at about 90% of the session limit, that the
+session's next model call is final (a `session.info` event of type `session_limits`;
+only events after the attempt's start line count): the process may finish on its own
+and is killed if it is still running after 120 seconds, later stages are skipped, and
+the stage keeps its events and output as evidence. Final records are checked even on fast exits.
 Actual AI credits are recorded in `*-metrics.json` under `credits.used` and in
 attempt process results separately from the configured ceiling. The judge is
 metered against its own allowance, never borrowed by workflow recovery.
@@ -322,8 +329,9 @@ No outer stage/trial retries are performed.
 
 With `-ObservationOnly` (used by `Invoke-Benchmark.ps1`), the judge reserves a fixed 30
 credits and the workflow receives `MaxCredits - 30`; the minimum is **60 credits
-per trial**. The workflow and judge share a 180-minute watchdog, with the judge
-still limited to five minutes within the remaining time. Observational collection
+per trial**. The workflow and judge share a 180-minute watchdog (suspended computer
+time excluded), with the judge still limited to five minutes within the remaining time.
+Observational collection
 uses up to 1000 host continuations, disables the workflow observed request-count
 ceiling and benchmark recovery, and retains failed checks instead of stopping for quality
 gates. It does not disable spending, timeout, isolation or unexpected-question guards.

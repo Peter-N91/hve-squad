@@ -23,21 +23,32 @@ same and takes the same options (for example `-Runs 1` or `-WhatIf`). It first c
 PowerShell 7.4 or later (`pwsh`) is installed; if not, it prints Ubuntu installation commands
 and stops without installing anything.
 
-**It spends Copilot credits.** One run takes about 20 minutes and uses about 300
-credits (the recorded runs used 261 to 301 credits and took 19 to 21 minutes).
+**It spends Copilot credits.** One run takes about 40 minutes and uses about 550 to 900
+credits. Runs on Copilot CLI 1.0.107 used 541 to 723 credits and took 32 to 45 minutes; on
+CLI 1.0.114 the requirements stage alone used 800 to 870 credits, so three runs used 902 to
+916 credits in total and took 37 to 41 minutes.
 Choose how many runs with `-Runs`, from 1 to 3 (default 3):
 
 | Command | Runs | Time | Copilot credits |
 | --- | --- | --- | --- |
-| `Invoke-Benchmark.ps1 -Runs 1` | 1 | about 20 min | about 300 |
-| `Invoke-Benchmark.ps1 -Runs 2` | 2 | about 40 min | about 600 |
-| `Invoke-Benchmark.ps1` | 3 | about 1 h | about 900 |
+| `Invoke-Benchmark.ps1 -Runs 1` | 1 | about 40 min | about 550 to 900 |
+| `Invoke-Benchmark.ps1 -Runs 2` | 2 | about 80 min | about 1,100 to 1,800 |
+| `Invoke-Benchmark.ps1` | 3 | about 2 h | about 1,650 to 2,700 |
 
-Runs happen one after another, after a short setup that installs the squad. Each run
-stops at 1,000 credits (a soft limit, because usage is reported asynchronously) and a
-hung run is stopped after 3 hours. One run is a quick check: the judge is an AI model,
-so a single run varies more than the median of three. Add `-WhatIf` to see what would
-run without spending anything.
+Runs happen one after another, after a setup of a few minutes that installs the squad.
+Each run stops at 1,000 credits (a soft limit, because usage is reported asynchronously).
+At about 90% of a session's credit limit the Copilot CLI announces that the next model
+call is the last; the benchmark then records `credit-limit`, skips the steps that cannot
+run on an exhausted session and says so in the run note, instead of continuing. On CLI
+1.0.114 the requirements stage can reach that point before the build starts: the run is
+then still scored on the documents, its functional and workflow results fail, and the note
+names the stage that ended early. A hung
+run is stopped after 3 hours of awake time: time the computer spends suspended does not
+count. On Windows the benchmark asks the computer to stay awake, with the display on,
+while it runs; a closed lid still suspends it, and `-AllowSleep` skips the request (for
+example to spare a battery). One run is a quick check: the judge is an AI model, so a
+single run varies more than the median of three. Add `-WhatIf` to see what would run
+without spending anything.
 
 ### Progress output
 
@@ -52,7 +63,8 @@ heartbeat with elapsed run time and the last timestamped step update. Progress i
 forwarded through a dedicated `run-N-progress.log` in the retained evidence folder;
 model output and raw diagnostics remain in their existing logs, not streamed to
 the console. Context recovery stays inside its current step, skipped work is
-marked explicitly, and a finished step means execution finished, not that its
+marked explicitly, a judging step whose documents could not be read is marked
+`failed`, and a finished step means execution finished, not that its
 quality or workflow checks passed. Remaining steps are a plan, not an ETA.
 
 Before you run it:

@@ -1117,6 +1117,14 @@ Describe 'Universal compact metadata and deterministic scheduling (COORD-04..06)
         $requirements | Should -Match 'every required reviewer.s verified history entry'
     }
 
+    It 'keeps observation copies out of the handoff deliverable and drops the PRD-revision anchor demand' {
+        $requirements = [IO.File]::ReadAllText((Join-Path $script:References 'requirements-quality.md'))
+        $requirements | Should -Match 'name them in its return'
+        $requirements | Should -Match 'handoff `deliverable` stays the draft under its roster Deliverable Root'
+        $requirements | Should -Not -Match 'include them in its actual handoff'
+        $requirements | Should -Not -Match 'In that dependent PRD revision'
+    }
+
     It 'completes one ordinary handoff without replay for <Case>' -ForEach @(
         @{ Case = 'valid'; ExitCode = 0; Turn = 2 }
         @{ Case = 'missing artifact'; ExitCode = 1; Turn = 1 }

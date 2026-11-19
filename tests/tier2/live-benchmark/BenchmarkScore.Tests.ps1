@@ -103,6 +103,34 @@ Describe 'ConvertTo-BenchmarkRunSummary' {
         $summary.note | Should -Be 'the judge result is missing or invalid'
     }
 
+    It 'names the stage that ended early when a run could not be scored' {
+        $result = New-RunResult -JudgeValid $false
+        $result.stages[1].process.stopCause = 'credit-limit'
+        $summary = ConvertTo-BenchmarkRunSummary -Run 2 -Result $result
+        $summary.scored | Should -BeFalse
+        $summary.note | Should -Be 'requirements stage ended with credit-limit'
+    }
+
+    It 'names the stage that ended early when a scored run fails its workflow' {
+        $result = New-RunResult -WorkflowPassed $false -PassedStages @('init', 'requirements')
+        $result.stages[2].process.stopCause = 'credit-limit'
+        $summary = ConvertTo-BenchmarkRunSummary -Run 1 -Result $result
+        $summary.scored | Should -BeTrue
+        $summary.workflow | Should -BeFalse
+        $summary.note | Should -Be 'build stage ended with credit-limit'
+        (ConvertTo-BenchmarkRunSummary -Run 1 -Result (New-RunResult -WorkflowPassed $false)).note | Should -BeNullOrEmpty
+    }
+
+    It 'names the judge detail, or its reason, when the documents could not be judged' {
+        $result = New-RunResult -JudgeValid $false
+        $result.stages[1].process.stopCause = 'credit-limit'
+        $result.judge = @{ valid = $false; reason = 'missing-or-oversized-document'; detail = 'prd.md 110149 bytes over the 100000 limit' }
+        (ConvertTo-BenchmarkRunSummary -Run 2 -Result $result).note | Should -Be 'requirements stage ended with credit-limit; prd.md 110149 bytes over the 100000 limit'
+        $result = New-RunResult -JudgeValid $false
+        $result.judge = @{ valid = $false; reason = 'missing-or-oversized-document' }
+        (ConvertTo-BenchmarkRunSummary -Run 2 -Result $result).note | Should -Be 'missing-or-oversized-document'
+    }
+
     It 'does not score a run with an out-of-range dimension' {
         (ConvertTo-BenchmarkRunSummary -Run 1 -Result (New-RunResult -Dimensions @(18, 17, 16, 17, 25))).scored | Should -BeFalse
     }

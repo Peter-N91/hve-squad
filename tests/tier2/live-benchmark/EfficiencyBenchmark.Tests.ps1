@@ -5,8 +5,8 @@
 #Requires -Version 7.4
 
 param(
-    [ValidateSet('recovered', 'still-fails', 'credit-limit', 'observe-readiness', 'observe-credit-limit')]
-    [string[]]$RecoveryOutcomes = @('recovered', 'still-fails', 'credit-limit', 'observe-readiness', 'observe-credit-limit')
+    [ValidateSet('recovered', 'still-fails', 'credit-limit', 'observe-readiness', 'observe-credit-limit', 'observe-limit-notice')]
+    [string[]]$RecoveryOutcomes = @('recovered', 'still-fails', 'credit-limit', 'observe-readiness', 'observe-credit-limit', 'observe-limit-notice')
 )
 
 BeforeAll {
@@ -515,6 +515,7 @@ Describe 'Efficiency recovery end to end' -Tag 'Unit' {
         @{ Outcome = 'credit-limit' }
         @{ Outcome = 'observe-readiness' }
         @{ Outcome = 'observe-credit-limit' }
+        @{ Outcome = 'observe-limit-notice' }
     ) | Where-Object { $_.Outcome -in $RecoveryOutcomes }) {
         $Install = Join-Path $TestDrive "$Outcome-install"; $Trial = Join-Path $TestDrive "$Outcome-run"
         New-Item -ItemType Directory -Path (Join-Path $Install '.github/agents') -Force | Out-Null
@@ -574,6 +575,7 @@ if(-not (Test-Path -LiteralPath $Events)){Write-FakeEvent 'session.start' @{sess
 $env:COPILOT_HOME=Join-Path $PWD 'offline-copilot-home'
 New-Item -ItemType Directory -Path $env:COPILOT_HOME -Force|Out-Null
 Write-FakeEvent 'session.usage_record' @{usage=@{inputTokens=10;outputTokens=1;aiCreditsStatus='complete';copilotUsage=@{totalNanoAiu=$(if($Kind -eq 'requirements' -and '__OUTCOME__' -eq 'credit-limit'){751000000000}elseif($Kind -eq 'requirements' -and '__OUTCOME__' -eq 'observe-credit-limit'){971000000000}else{1000000})};accounting=@{sourceSessionId=$Session;usageId="$Kind-usage"}}}
+if($Kind -eq 'requirements' -and '__OUTCOME__' -eq 'observe-limit-notice'){Write-FakeEvent 'session.info' @{infoType='session_limits';message='Session limits: 873.85/970 AI credits used. If this session continues, the next model call is final; tools will be disabled.'}}
 if($Kind -eq 'init') {
     $Roster=@(
         @{role='scribe';agent='Squad Scribe';alternate='';path='(squad state)'}
@@ -625,7 +627,7 @@ exit 0
             $Progress | Should -Match 'Step 3/7: Writing requirements - started; 4 steps remaining'
             $Progress | Should -Match 'Step 5/7: Checking acceptance and workflow - started; 2 steps remaining'
             $Progress | Should -Match 'Step 7/7: Saving run evidence - finished; 0 steps remaining'
-            if ($Outcome -in @('credit-limit', 'observe-credit-limit')) {
+            if ($Outcome -in @('credit-limit', 'observe-credit-limit', 'observe-limit-notice')) {
                 $Progress | Should -Match 'Step 4/7: Building product - skipped; 3 steps remaining'
             }
             if ($Outcome -eq 'credit-limit') { $Progress | Should -Match 'Step 6/7: Judging documents - skipped; 1 step remaining' }
@@ -636,10 +638,14 @@ exit 0
                 $Run.stages[1].passed | Should -BeFalse
                 $Calls = @(Get-Content (Join-Path $Trial 'workspace/stage-calls.jsonl') | ForEach-Object { $_ | ConvertFrom-Json })
                 @($Calls.ceiling | Sort-Object -Unique) | Should -Be @(970)
-                if ($Outcome -eq 'observe-credit-limit') {
+                if ($Outcome -in @('observe-credit-limit', 'observe-limit-notice')) {
                     $Run.stages.Count | Should -Be 2
                     $Run.stages[1].process.stopCause | Should -Be 'credit-limit'
                     $Calls.Count | Should -Be 2
+                    if ($Outcome -eq 'observe-limit-notice') {
+                        foreach ($Evidence in @('requirements-events.jsonl', 'requirements-stdout.jsonl')) { Test-Path (Join-Path $Trial "out/$Evidence") | Should -BeTrue }
+                        Get-Content (Join-Path $Trial 'out/requirements-stdout.jsonl') -Raw | Should -Match 'next model call is final'
+                    }
                 }
                 else {
                     $Run.stages.name -join ',' | Should -Be 'init,requirements,build'
@@ -652,6 +658,7 @@ exit 0
                 }
                 $Run.judge.valid | Should -BeFalse
                 $Run.judge.reason | Should -Be 'missing-or-oversized-document'
+                $Progress | Should -Match 'Step 6/7: Judging documents - failed; 1 step remaining'
                 return
             }
             $Execution.exitCode | Should -Be 2
@@ -820,6 +827,54 @@ Start-Sleep -Milliseconds ([int]$Delay)
         }
         if ($Delay -gt 0) { $Result.seconds | Should -BeLessThan 3 }
     }
+    It 'ends a session at its final-call notice only when asked and bounds the wait for it to stop' {
+        $Final = New-TestEvent 'session.info' @{ infoType = 'session_limits'; message = 'Session limits: 873.85/970 AI credits used. If this session continues, the next model call is final; tools will be disabled.' }
+        $Plain = New-TestEvent 'session.info' @{ infoType = 'session_limits'; message = 'Session limits: 487.78/970 AI credits used.' }
+        $Cli = Join-Path $TestDrive 'limit-notice-cli.ps1'
+        @'
+param($Events, $Encoded, $Seconds)
+Add-Content -LiteralPath $Events -Value ([Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($Encoded)))
+Start-Sleep -Seconds ([int]$Seconds)
+'@ | Set-Content -LiteralPath $Cli
+        $Invoke = {
+            param([string]$Case, [string]$Line, [string]$Seconds, [string]$Prior, [hashtable]$Options)
+            $Events = Join-Path $TestDrive "$Case-notice-events.jsonl"
+            if ($Prior) { Set-Content -LiteralPath $Events -Value $Prior } else { Set-Content -LiteralPath $Events -Value '' -NoNewline }
+            $Encoded = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($Line))
+            Invoke-EfficiencyProcess -FilePath (Get-Command pwsh).Source -Arguments @('-NoProfile', '-File', $Cli, $Events, $Encoded, $Seconds) -WorkingDirectory $TestDrive -OutputPath (Join-Path $TestDrive "$Case-notice-output.txt") -EventsPath $Events -StartLine $(if ($Prior) { 1 } else { 0 }) -TimeoutSeconds 25 @Options
+        }
+
+        $Ignored = & $Invoke 'no-switch' $Final '0' '' @{}
+        $Ignored.stopCause | Should -Be 'none'
+
+        $Older = & $Invoke 'older-line' $Plain '0' $Final @{ StopAtLimitNotice = $true }
+        $Older.stopCause | Should -Be 'none'
+
+        $Prompt = & $Invoke 'prompt-exit' $Final '0' '' @{ StopAtLimitNotice = $true }
+        $Prompt.stopCause | Should -Be 'credit-limit'
+        $Prompt.exitCode | Should -Be 0
+
+        $Lingering = & $Invoke 'lingering' $Final '30' '' @{ StopAtLimitNotice = $true; LimitNoticeGraceSeconds = 1 }
+        $Lingering.stopCause | Should -Be 'credit-limit'
+        $Lingering.seconds | Should -BeLessThan 15
+    }
+    It 'names the document and its size when the judge cannot read it' {
+        $Workspace = Join-Path $TestDrive 'oversized-judge-workspace'; $Out = Join-Path $TestDrive 'oversized-judge-out'
+        New-Item -ItemType Directory -Path (Join-Path $Workspace 'docs/requirements'), $Out -Force | Out-Null
+        $Cli = Join-Path $TestDrive 'unused-judge-cli.ps1'
+        $Brd = Join-Path $Workspace 'docs/requirements/brd.md'
+        $Missing = Invoke-EfficiencyJudge -Workspace $Workspace -Out $Out -CliPath $Cli -Model fake -MaxCredits 30 -ReviewPath '' -ObservationOnly
+        $Missing.valid | Should -BeFalse
+        $Missing.reason | Should -Be 'missing-or-oversized-document'
+        $Missing.detail | Should -Be 'brd.md missing'
+
+        Set-Content -LiteralPath $Brd -Value 'synthetic brd'
+        [IO.File]::WriteAllBytes((Join-Path $Workspace 'docs/requirements/prd.md'), [byte[]]::new(100001))
+        $Oversized = Invoke-EfficiencyJudge -Workspace $Workspace -Out $Out -CliPath $Cli -Model fake -MaxCredits 30 -ReviewPath '' -ObservationOnly
+        $Oversized.valid | Should -BeFalse
+        $Oversized.reason | Should -Be 'missing-or-oversized-document'
+        $Oversized.detail | Should -Be 'prd.md 100001 bytes over the 100000 limit'
+    }
     It 'keeps judge credit accounting separate from the workflow' {
         $Workspace = Join-Path $TestDrive 'judge-workspace'; $Out = Join-Path $TestDrive 'judge-out'
         New-Item -ItemType Directory -Path (Join-Path $Workspace 'docs/requirements'),$Out -Force | Out-Null
@@ -898,7 +953,24 @@ $Response=@{scores=$Scores;evidence=$Evidence;criticalHighFindings=0;documentHas
         $Result = Invoke-EfficiencyProcess -FilePath (Get-Command pwsh).Source -Arguments @('-NoProfile', '-Command', 'Write-Output "a b"') -WorkingDirectory $TestDrive -OutputPath (Join-Path $TestDrive 'stdout.txt') -TimeoutSeconds 10
         $Result.exitCode | Should -Be 0
         $Result.stopCause | Should -Be 'none'
+        $Result.suspendedSeconds | Should -Be 0
         (Get-Content (Join-Path $TestDrive 'stdout.txt') -Raw).Trim() | Should -Be 'a b'
+    }
+    It 'excludes host suspension from the watchdog without discounting normal polling' {
+        $Context = @{ last = 0.0; seconds = 0.0 }
+        Update-EfficiencySuspendMonitor -Context $Context -ElapsedSeconds 0.25 -GapSeconds 120
+        Update-EfficiencySuspendMonitor -Context $Context -ElapsedSeconds 3.5 -GapSeconds 120
+        $Context.seconds | Should -Be 0
+        Update-EfficiencySuspendMonitor -Context $Context -ElapsedSeconds 123.5 -GapSeconds 120
+        $Context.seconds | Should -Be 0
+        Update-EfficiencySuspendMonitor -Context $Context -ElapsedSeconds 7743.5 -GapSeconds 120
+        $Context.seconds | Should -Be 7620
+        Update-EfficiencySuspendMonitor -Context $Context -ElapsedSeconds 7743.75 -GapSeconds 120
+        $Context.seconds | Should -Be 7620
+    }
+    It 'asks Windows to stay awake only on Windows and releases the request' {
+        try { Start-EfficiencyKeepAwake | Should -Be $IsWindows }
+        finally { Stop-EfficiencyKeepAwake | Should -Be $IsWindows }
     }
     It 'times out a runaway subprocess' {
         $Result = Invoke-EfficiencyProcess -FilePath (Get-Command pwsh).Source -Arguments @('-NoProfile', '-Command', 'while ($true) {}') -WorkingDirectory $TestDrive -OutputPath (Join-Path $TestDrive 'timeout.txt') -TimeoutSeconds 1
@@ -1847,6 +1919,9 @@ exit 37
         $script | Should -Match 'one bounded source-supported correction batch'
         $script | Should -Match 'Final outcome: Pass'
         $script | Should -Match 'Human-only KPI, baseline, date and approval gaps stay unavailable'
+        ([regex]::Matches($script, 'Keep the BRD and the PRD each under 80,000 bytes and research and plan artifacts concise\.')).Count | Should -Be 2
+        $script | Should -Not -Match 'EX-\*'
+        $script | Should -Not -Match 'owner roles'
         $script | Should -Match '\.copilot-tracking/benchmark-evidence/'
         $script | Should -Match 'model never deletes'
         $script | Should -Match 'Remove-EfficiencyStagePayloadEvidence'

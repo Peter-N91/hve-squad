@@ -580,6 +580,7 @@ function Update-EfficiencyProcessMonitor {
         try { $LogEvent = ConvertFrom-Json -InputObject $Line -AsHashtable -ErrorAction Stop } catch { continue }
         Update-EfficiencyCreditMonitor -Context $Context.credits -LogEvent $LogEvent
         if ($Context.lines -le $StartLine) { continue }
+        if ($LogEvent['type'] -eq 'session.info' -and $LogEvent['data'] -is [Collections.IDictionary] -and $LogEvent['data']['infoType'] -eq 'session_limits' -and [string]$LogEvent['data']['message'] -match 'next model call is final') { $Context.limitNotice = $true }
         if ($LogEvent['type'] -eq 'session.usage_record') {
             $Accounting = $LogEvent['data']['usage']['accounting']
             if ($Accounting) { $null = $Context.requestIds.Add([string]$Accounting['sourceSessionId'] + ':' + [string]$Accounting['usageId']) }
@@ -643,9 +644,57 @@ function Update-EfficiencyProgress {
     }
 }
 
+function Update-EfficiencySuspendMonitor {
+    <# .SYNOPSIS
+    Counts a polling gap far above the poll interval as host suspension so the watchdog can exclude it.
+    #>
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseShouldProcessForStateChangingFunctions', '', Justification = 'Updates an in-memory counter only; does not mutate system state.')]
+    [CmdletBinding()]
+    param([Parameter(Mandatory)][hashtable]$Context, [Parameter(Mandatory)][double]$ElapsedSeconds, [ValidateRange(1, 86400)][int]$GapSeconds = 120)
+    $Gap = $ElapsedSeconds - $Context.last
+    $Context.last = $ElapsedSeconds
+    if ($Gap -gt $GapSeconds) { $Context.seconds += $Gap }
+}
+
+function Start-EfficiencyKeepAwake {
+    <# .SYNOPSIS
+    Asks Windows to keep the system and the display awake for the calling thread until Stop-EfficiencyKeepAwake.
+    .DESCRIPTION
+    Returns whether a request was made; does nothing on other platforms. A closed lid or a manual sleep still
+    suspends the computer. The display is included because Windows pauses desktop apps after the display turns
+    off once a system-only request has held standby back for five minutes on battery power.
+    #>
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseShouldProcessForStateChangingFunctions', '', Justification = 'Requests host wakefulness for the calling thread only; it changes no persistent system state and ends with the thread.')]
+    [CmdletBinding()]
+    param()
+    if (-not $IsWindows) { return $false }
+    if (-not ('EfficiencyBenchmark.HostPower' -as [type])) {
+        Add-Type -Namespace EfficiencyBenchmark -Name HostPower -MemberDefinition '[System.Runtime.InteropServices.DllImport("kernel32.dll")] public static extern uint SetThreadExecutionState(uint esFlags);'
+    }
+    # ES_CONTINUOUS 0x80000000 + ES_SYSTEM_REQUIRED 0x1 + ES_DISPLAY_REQUIRED 0x2; the call returns the previous state, 0 on failure.
+    [EfficiencyBenchmark.HostPower]::SetThreadExecutionState([uint32]2147483651) -ne 0
+}
+
+function Stop-EfficiencyKeepAwake {
+    <# .SYNOPSIS
+    Releases the wakefulness request made by Start-EfficiencyKeepAwake; does nothing on other platforms.
+    #>
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseShouldProcessForStateChangingFunctions', '', Justification = 'Releases a wakefulness request for the calling thread only; it changes no persistent system state.')]
+    [CmdletBinding()]
+    param()
+    if (-not $IsWindows) { return $false }
+    if (-not ('EfficiencyBenchmark.HostPower' -as [type])) { return $false }
+    [EfficiencyBenchmark.HostPower]::SetThreadExecutionState([uint32]2147483648) -ne 0
+}
+
 function Invoke-EfficiencyProcess {
     <# .SYNOPSIS
     Runs a subprocess with redirected streams and a watchdog; optionally watches CLI usage limits.
+    .DESCRIPTION
+    With -StopAtLimitNotice, the CLI's notice that the session's next model call is final ends the process as
+    credit-limit: it may finish on its own, and is killed when it is still running after -LimitNoticeGraceSeconds.
+    Only notices after -StartLine count. A gap above -SuspendGapSeconds between two watchdog polls is host
+    suspension: it is excluded from the timeout and from the reported seconds and returned as suspendedSeconds.
     #>
     [CmdletBinding()]
     param(
@@ -661,7 +710,10 @@ function Invoke-EfficiencyProcess {
         [AllowEmptyString()][string]$InputText,
         [hashtable]$EnvironmentVariables = @{},
         [string]$ProgressPath = '',
-        [ValidateRange(1, 3600)][int]$ProgressIntervalSeconds = 30
+        [ValidateRange(1, 3600)][int]$ProgressIntervalSeconds = 30,
+        [switch]$StopAtLimitNotice,
+        [ValidateRange(1, 3600)][int]$LimitNoticeGraceSeconds = 120,
+        [ValidateRange(1, 86400)][int]$SuspendGapSeconds = 120
     )
     if ($MaxCredits -gt 0 -and -not $EventsPath) { throw 'A credit-guarded process requires an events path.' }
     $Info = [Diagnostics.ProcessStartInfo]::new()
@@ -675,15 +727,16 @@ function Invoke-EfficiencyProcess {
     $Info.Environment['GIT_TERMINAL_PROMPT'] = '0'
     $Process = [Diagnostics.Process]::new(); $Process.StartInfo = $Info
     $Watch = [Diagnostics.Stopwatch]::StartNew()
-    $StopCause = 'none'; $Started = $false
-    $Monitor = @{ reader = $null; lines = 0; pending = ''; reason = 'none'; requestIds = [Collections.Generic.HashSet[string]]::new(); questions = 0; credits = (New-EfficiencyCreditMonitor -MaxCredits $MaxCredits) }
+    $StopCause = 'none'; $Started = $false; $NoticeSeen = $null
+    $Suspend = @{ last = 0.0; seconds = 0.0 }
+    $Monitor = @{ reader = $null; lines = 0; pending = ''; reason = 'none'; limitNotice = $false; requestIds = [Collections.Generic.HashSet[string]]::new(); questions = 0; credits = (New-EfficiencyCreditMonitor -MaxCredits $MaxCredits) }
     $Progress = @{ reader = $null; pending = ''; last = 'Waiting for run setup (step 1/7).'; reportedAt = 0.0 }
     $OutputStream = [IO.File]::Create($OutputPath)
     $ErrorStream = [IO.File]::Create($OutputPath + '.stderr')
     try {
         Update-EfficiencyProcessMonitor -Context $Monitor -EventsPath $EventsPath -StartLine $StartLine -MaxRequests $MaxRequests
         if ($Monitor.reason -ne 'none') {
-            return [pscustomobject]@{ exitCode = -1; stopCause = $Monitor.reason; seconds = 0; observedRequests = 0; creditsUsed = $Monitor.credits.nanoAiu / 1e9; creditCeiling = $MaxCredits }
+            return [pscustomobject]@{ exitCode = -1; stopCause = $Monitor.reason; seconds = 0; suspendedSeconds = 0; observedRequests = 0; creditsUsed = $Monitor.credits.nanoAiu / 1e9; creditCeiling = $MaxCredits }
         }
         $PriorCreditRecords = $Monitor.credits.usageIds.Count
         if (-not $Process.Start()) { throw 'Subprocess failed to start.' }
@@ -707,12 +760,19 @@ function Invoke-EfficiencyProcess {
                 try { $Process.StandardInput.Close() } catch { }
                 $InputClosed = $true
             }
-            if ($ProgressPath) { Update-EfficiencyProgress -Context $Progress -Path $ProgressPath -ElapsedSeconds $Watch.Elapsed.TotalSeconds -IntervalSeconds $ProgressIntervalSeconds }
-            if ($Watch.Elapsed.TotalSeconds -gt $TimeoutSeconds) {
+            $Elapsed = $Watch.Elapsed.TotalSeconds
+            Update-EfficiencySuspendMonitor -Context $Suspend -ElapsedSeconds $Elapsed -GapSeconds $SuspendGapSeconds
+            $Awake = $Elapsed - $Suspend.seconds
+            if ($ProgressPath) { Update-EfficiencyProgress -Context $Progress -Path $ProgressPath -ElapsedSeconds $Awake -IntervalSeconds $ProgressIntervalSeconds }
+            if ($Awake -gt $TimeoutSeconds) {
                 $StopCause = if ($null -ne $InputCopy -and -not $InputCopy.IsCompleted) { 'stdin-timeout' } else { 'timeout' }
             }
             Update-EfficiencyProcessMonitor -Context $Monitor -EventsPath $EventsPath -StartLine $StartLine -MaxRequests $MaxRequests
             if ($Monitor.reason -ne 'none') { $StopCause = $Monitor.reason }
+            if ($StopAtLimitNotice -and $Monitor.limitNotice) {
+                if ($null -eq $NoticeSeen) { $NoticeSeen = $Awake }
+                elseif ($StopCause -eq 'none' -and $Awake - $NoticeSeen -gt $LimitNoticeGraceSeconds) { $StopCause = 'credit-limit' }
+            }
             if ($StopCause -ne 'none') { $Process.Kill($true); $Process.WaitForExit(); break }
         }
         if ($null -ne $InputCopy -and -not $InputClosed) {
@@ -723,11 +783,12 @@ function Invoke-EfficiencyProcess {
             try { $Process.StandardInput.Close() } catch { }
         }
         $null = $OutputCopy.GetAwaiter().GetResult(); $null = $ErrorCopy.GetAwaiter().GetResult()
-        if ($ProgressPath) { Update-EfficiencyProgress -Context $Progress -Path $ProgressPath -ElapsedSeconds $Watch.Elapsed.TotalSeconds -IntervalSeconds $ProgressIntervalSeconds -Final }
+        if ($ProgressPath) { Update-EfficiencyProgress -Context $Progress -Path $ProgressPath -ElapsedSeconds ($Watch.Elapsed.TotalSeconds - $Suspend.seconds) -IntervalSeconds $ProgressIntervalSeconds -Final }
         Update-EfficiencyProcessMonitor -Context $Monitor -EventsPath $EventsPath -StartLine $StartLine -MaxRequests $MaxRequests
         if ($Monitor.reason -ne 'none') { $StopCause = $Monitor.reason }
+        if ($StopAtLimitNotice -and $Monitor.limitNotice -and $StopCause -eq 'none') { $StopCause = 'credit-limit' }
         if ($StopCause -eq 'none' -and $MaxCredits -gt 0 -and ($Monitor.credits.usageIds.Count -le $PriorCreditRecords -or $Monitor.pending.Trim())) { $StopCause = 'incomplete-credit-metering' }
-        [pscustomobject]@{ exitCode = $Process.ExitCode; stopCause = $StopCause; seconds = [Math]::Round($Watch.Elapsed.TotalSeconds, 3); observedRequests = $Monitor.requestIds.Count; creditsUsed = if ($MaxCredits -gt 0) { $Monitor.credits.nanoAiu / 1e9 } else { $null }; creditCeiling = if ($MaxCredits -gt 0) { $MaxCredits } else { $null } }
+        [pscustomobject]@{ exitCode = $Process.ExitCode; stopCause = $StopCause; seconds = [Math]::Round($Watch.Elapsed.TotalSeconds - $Suspend.seconds, 3); suspendedSeconds = [Math]::Round($Suspend.seconds, 3); observedRequests = $Monitor.requestIds.Count; creditsUsed = if ($MaxCredits -gt 0) { $Monitor.credits.nanoAiu / 1e9 } else { $null }; creditCeiling = if ($MaxCredits -gt 0) { $MaxCredits } else { $null } }
     }
     finally {
         if ($Monitor.reader) { $Monitor.reader.Dispose() }
@@ -1939,14 +2000,17 @@ function Invoke-EfficiencyJudge {
     $Documents = [ordered]@{}; $Hashes = [ordered]@{}
     foreach ($Name in @('brd', 'prd')) {
         $Path = Join-Path $Workspace "docs/requirements/$Name.md"
-        if (-not (Test-Path -LiteralPath $Path) -or (Get-Item -LiteralPath $Path).Length -gt 100000) { return @{ valid = $false; reason = 'missing-or-oversized-document' } }
+        if (-not (Test-Path -LiteralPath $Path)) { return @{ valid = $false; reason = 'missing-or-oversized-document'; detail = "$Name.md missing" } }
+        $Size = (Get-Item -LiteralPath $Path).Length
+        if ($Size -gt 100000) { return @{ valid = $false; reason = 'missing-or-oversized-document'; detail = "$Name.md $Size bytes over the 100000 limit" } }
         $Documents[$Name] = Get-Content -LiteralPath $Path -Raw
         $Hashes[$Name] = (Get-FileHash -LiteralPath $Path).Hash
     }
     $Review = if ($ReviewPath) { Join-Path $Workspace $ReviewPath } else { $null }
     $MissingReview = -not $Review -or -not (Test-Path -LiteralPath $Review -PathType Leaf)
-    if ($MissingReview -and -not $ObservationOnly) { return @{ valid = $false; reason = 'missing-or-oversized-review' } }
-    if (-not $MissingReview -and (Get-Item -LiteralPath $Review).Length -gt 100000) { return @{ valid = $false; reason = 'missing-or-oversized-review' } }
+    if ($MissingReview -and -not $ObservationOnly) { return @{ valid = $false; reason = 'missing-or-oversized-review'; detail = 'closing review missing' } }
+    $ReviewSize = if ($MissingReview) { 0 } else { (Get-Item -LiteralPath $Review).Length }
+    if ($ReviewSize -gt 100000) { return @{ valid = $false; reason = 'missing-or-oversized-review'; detail = "closing review $ReviewSize bytes over the 100000 limit" } }
     $Documents['closingReview'] = if ($MissingReview) { '' } else { Get-Content -LiteralPath $Review -Raw }
     $Hashes['closingReview'] = if ($MissingReview) { [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData([byte[]]@())) } else { (Get-FileHash -LiteralPath $Review).Hash }
     $Scenario = Get-Content -LiteralPath (Join-Path $PSScriptRoot 'efficiency-scenario.json') -Raw | ConvertFrom-Json -AsHashtable
@@ -2387,4 +2451,4 @@ function Invoke-EfficiencySeries {
     [pscustomobject]@{ report = $Report; controls = $Controls; runs = @($Runs); exitCode = if ($Outcome -in @('passed', 'baseline-established', 'baseline-recorded')) { 0 } else { 2 } }
 }
 
-Export-ModuleMember -Function Copy-EfficiencySnapshot, Measure-EfficiencyEvents, Resolve-EfficiencySquadScript, Get-EfficiencyBookkeepingEvidence, Get-EfficiencyRecoveryPolicy, Get-EfficiencyRecoveryDecision, Invoke-EfficiencyCompaction, Save-EfficiencyAttemptEvidence, Remove-EfficiencyStagePayloadEvidence, Write-EfficiencyProgress, Invoke-EfficiencyProcess, Get-EfficiencyTreeHash, Test-EfficiencyWorkflow, Test-EfficiencyJudge, Invoke-EfficiencyJudge, Compare-EfficiencyRuns, Save-EfficiencyBaseline, Get-EfficiencyCompatibility, Test-EfficiencyRun, Test-EfficiencyObservation, Invoke-EfficiencySeries
+Export-ModuleMember -Function Copy-EfficiencySnapshot, Measure-EfficiencyEvents, Resolve-EfficiencySquadScript, Get-EfficiencyBookkeepingEvidence, Get-EfficiencyRecoveryPolicy, Get-EfficiencyRecoveryDecision, Invoke-EfficiencyCompaction, Save-EfficiencyAttemptEvidence, Remove-EfficiencyStagePayloadEvidence, Write-EfficiencyProgress, Update-EfficiencySuspendMonitor, Start-EfficiencyKeepAwake, Stop-EfficiencyKeepAwake, Invoke-EfficiencyProcess, Get-EfficiencyTreeHash, Test-EfficiencyWorkflow, Test-EfficiencyJudge, Invoke-EfficiencyJudge, Compare-EfficiencyRuns, Save-EfficiencyBaseline, Get-EfficiencyCompatibility, Test-EfficiencyRun, Test-EfficiencyObservation, Invoke-EfficiencySeries

@@ -241,11 +241,22 @@ function ConvertTo-BenchmarkRunSummary {
         if ($valid -and ((Test-Number $value) -and $value -ge 0 -and $value -le 20)) { $dimensions[$name] = [double]$value; $total += $value }
         else { $valid = $false }
     }
+    # Name the first stage that ended early; an unscored run adds the judge's own explanation, and the generic sentence stays only when neither exists.
+    $cause = foreach ($stage in $stages) {
+        $stop = Get-ScoreField $stage 'process', 'stopCause'
+        if ($stop -is [string] -and $stop -and $stop -ne 'none') { "$($stage['name']) stage ended with $stop"; break }
+    }
     if ($valid) {
         $trial['scored'] = $true; $trial['quality'] = $total; $trial['dimensions'] = $dimensions
         $trial['criticalHighFindings'] = [int]$findings
+        if (-not $trial['workflow'] -and -not $trial['note'] -and $cause) { $trial['note'] = Format-SafeText $cause 120 }
     }
-    elseif (-not $trial['note']) { $trial['note'] = 'the judge result is missing or invalid' }
+    elseif (-not $trial['note']) {
+        $judgeText = Get-ScoreField $Result 'judge', 'detail'
+        if ($judgeText -isnot [string] -or -not $judgeText) { $judgeText = Get-ScoreField $Result 'judge', 'reason' }
+        $parts = @($cause, $(if ($judgeText -is [string]) { $judgeText })) | Where-Object { $_ }
+        $trial['note'] = if (@($parts).Count) { Format-SafeText (@($parts) -join '; ') 120 } else { 'the judge result is missing or invalid' }
+    }
 
     $failed = [Collections.Generic.List[string]]::new()
     foreach ($check in @(Get-ScoreList $Result 'acceptance', 'checks')) {
