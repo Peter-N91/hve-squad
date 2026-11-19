@@ -5,6 +5,116 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.21.0] - 2026-11-19
+
+### Added
+
+- **Squad Doctor is a dedicated post-upgrade and runtime-recovery agent.** Both plugin and APM entrypoints use deterministic checks, explicit repair approval, shared writer locks, backups, and verification through `Invoke-SquadDoctor.ps1`. Missing or invalid rate tables have a scripted repair; unsupported faults remain explicit blockers. Coordinators can invoke Doctor without relying on a healthy roster.
+
+- **Opt-in `.NET` pack (`pack=dotnet`).** Reuses `modernizer`, `tester`, `performance`, and `developer` with twenty pinned official `dotnet/skills` directory entries across upgrades, NuGet Central Package Management, VSTest-to-MTP migration, `.NET` test and public-API review, hot-path performance and BenchmarkDotNet/trace planning, EF Core, ASP.NET Core Web API, Blazor, C# refactoring, and MSBuild authoring through the shared approval, installation, reload, host-availability, and Watch Mode lifecycle.
+- **Separately approved `.NET` preview jobs and setup guides.** Gates `migrate-dotnet10-to-dotnet11` and `exp-mock-usage-analysis` behind explicit preview approval, verifies packaged support files, blocklists all sixteen upstream `.agent.md` workers/orchestrators, and adds English and French `#dotnet-setup` guides while leaving other packs and unpacked squads unchanged.
+
+- **Opt-in `aks` and `azure-functions` packs (`pack=aks`, `pack=azure-functions`).** Reuses existing local charters with seven pinned official AKS directory skills from `microsoft/azure-skills` (`azure-architect`, `developer`, `modernizer`, `azure-diagnose`, `cost-manager`) and ten pinned official Azure Functions directory skills from `Azure/azure-functions-skills` (`developer`, `deployer`, `tester`, `azure-diagnose`, `modernizer`) through the shared approval, selected-subset installation, reload, host-availability, and Watch Mode lifecycle.
+- **Separately approved Azure Functions preview jobs, blocklist updates, and setup guides.** Gates `azure-functions-update` and `azure-functions-hosted-skills` behind explicit preview approval, blocklists archived `Azure/AKS-Skills` (`aks`) and multi-role `platform-sre-kubernetes`, verifies packaged support files, and adds English and French `#aks-setup` and `#azure-functions-setup` guides while leaving other packs and unpacked squads unchanged.
+
+- **Non-technical users and first-time AI users needed chat commands, manual agent selection, and multi-step setup answers to start building with HVE Squad.** Add the opt-in **HVE Squad Studio** (`hve-squad-studio`) canvas extension with predefined single-squad initialization (`naming=skip`, `in-chat` notifications), a plain-language Goal Launcher, a 3-click guided idea helper, document upload with automatic Intake Gate readiness checkups, auto-detected platform specialist add-on packs (with preview helpers gated off by default), plain-English Council safety/budget checkup cards and waivers, host permission cues, tangible deliverable cards, 1-click refinements, and chat-first coexistence preferences, bundled in the `hve-squad` plugin (`scripts/Build-SquadPlugin.ps1`, `squad-src/.github/skills/squad/extensions/hve-squad-studio/extension.mjs`) with deterministic APM materialization via `Install-SquadStudioExtension.ps1` (`squad-src/.github/skills/squad/scripts/Install-SquadStudioExtension.ps1`).
+
+- **Official evaluation, observability, safety, and governance skills and pinned setup parity for `foundry` (`pack=foundry`).** Pins all existing Foundry skills as self-contained APM skill directories (`microsoft-foundry`, `use-ai-gateway`, `azure-aigateway`, `caira`, `appinsights-instrumentation`, and separately approved preview `foundry-iq`), adds seven gated official skills across `Azure/agentops`, `microsoft/eval-guide`, and `microsoft/agent-governance-toolkit` (`agentops-config`, `agentops-eval`, `agentops-report`, and `eval-faq` on `prompt-engineer`; `agentops-agent` on `observability`; separately approved preview `agentops-governance` on `rai`; and `agt-policy-authoring` on `security`), blocklists colliding/hook-bound candidates, wires the owning charters, and adds English and French `#foundry-setup` guides.
+- **Official Power BI and Microsoft Fabric consolidation and setup parity for `fabric` (`pack=fabric`).** Verifies content parity and pins fifteen official `microsoft/skills-for-fabric` directory skills on `data-scientist` (`semantic-model-authoring`, `powerbi-report-cli`, `e2e-medallion-architecture`, `sqldw-cli`, `sqldb-cli`, `eventhouse-cli`, `eventstream-cli`, `activator-cli`, `spark-cli`, `dataflows-cli`, `onelake-catalog-cli`, `databricks-migration`, `synapse-migration`, `hdinsight-migration`, and `pipeline-migration`), blocklists the six superseded community Power BI/`fabric-lakehouse` rows plus five upstream Fabric agents and four gate-failing skills, discloses `.github/mcp.json` skill-manifest MCP entries and shared `common/` support roots before installation, and adds English and French `#fabric-setup` guides while leaving all other packs and unpacked squads unchanged.
+
+- **Opt-in `azure-cloud` pack (`pack=azure-cloud`) for official Azure FinOps, diagnostics, compliance, reliability, Azure Local, and migration skills (`#237`, `#231`).** Reuses existing local charters (`cost-manager`, `azure-diagnose`, `asbuilt-author`, `azure-architect`, `modernizer`, plus read-only cross-reads on `developer` and `deployer`) with fourteen SHA-pinned official directory skills from `microsoft/azure-skills@65922d293cba61a40d5edf61a9eb4b6b0e799788` (`cost-estimation`, `cost-optimization`, `cost-analysis`, `cost-governance`, `azure-diagnostics`, `azure-compliance`, `azure-resource-lookup`, `azure-resource-visualizer`, `azure-reliability`, `azure-quotas`, `azure-local`, separately approved preview `azure-local-multi-rack`, `azure-cloud-migrate`, and `azure-upgrade`) through the shared approval, selected-subset installation, reload, host-availability, and Watch Mode lifecycle while keeping bundled `azure-pricing` unchanged.
+- **Verification-gate blocklist dispositions and bilingual setup guides.** Supersedes and blocklists community `az-cost-optimize`, blocklists `microsoft/finops-toolkit` (`finops-toolkit` and its five agents), `.github/plugins/azure-advisor` (`azure-advisor*`), and the coupled/multi-role `azure-prepare`, `azure-validate`, `azure-deploy`, and `azure-enterprise-infra-planner` pipeline skills while preserving `azure-deployment-preflight` on `deployer` for unpacked squads, and adds English and French `#azure-cloud-setup` guides.
+
+- **Connector bindings can now be registered without a Scribe model dispatch.** `Register-SquadConnector.ps1` validates and previews confirmed 1.1 replace/add registrations, then applies them transactionally with replay protection, rollback, preserved accounting/history, and bilingual registration guidance.
+
+### Changed
+
+- **Watch run controls:** the Watch workflow and consumer template gain optional depth (default standard), routing (default off) and economy consent inputs, settable as committed defaults or per manual run; event text still cannot change them.
+- **Faster, publishable runs:** Watch no longer runs the full Tier 0 suite, requires specialists from a canonical profile, and pins Copilot CLI 1.0.106.
+- **Fixed Watch profile:** a new `profile` run control (default `default`, or `auto` or any catalog profile) makes Watch use exactly that profile with no packs and no added roles, which is what the publication gate accepts.
+- **Watch publication:** protect PowerShell environment references from Bash expansion in both the publication-branch check and issue-closing label lookup, so a validated handoff can reach commit, push, and draft-PR publication.
+- **Watch handoff preflight:** separate completion statuses from narrative notes, validate profile, questions, and lifecycle before removing the agent runtime, and allow one same-session record-only repair. Final staging reruns the same hash-protected workflow validator; failed work still blocks publication.
+
+- **squad roster** drops PowerPoint Builder/Subagent and the powerpoint skill, which hve-core removed at f425e94; pin moved accordingly.
+
+<!--
+Copyright (c) Microsoft Corporation.
+Licensed under the MIT license.
+-->
+
+- **Prepare hve-squad for a Microsoft MIT release.** Align first-party copyright headers and community guidance, preserve notices when regenerating model catalogs, rates and benchmark snapshots, preserve third-party notices, and package the canonical `LICENSE.TXT` separately from upstream licenses.
+- **Serve documentation fonts through Google Fonts.** Preserve Manrope, Source Sans 3 and JetBrains Mono styling with `display=swap` and system-font fallbacks, remove the five bundled WOFF2 files, and retain the font license notices and demo recordings.
+- **Publish Mermaid runtime dependency notices.** Retain complete versioned legal text for all 66 embedded dependency identities, bind the unchanged runtime and build-only source map to an offline-validated inventory, and reject missing or altered published notices. Supplier license alternatives and unverified source commits remain explicit; this is not legal clearance.
+
+- Power Platform pack setup now offers its registered skills through the shared approval, installation, reload, and availability checks. Corrected the six official APM install paths and pinned their verified sources.
+- Added separately approved preview Copilot Studio knowledge authoring and skill import to the existing PP roles, with complete-bundle disclosure, support-file checks, and detailed English and French setup and recovery steps. Other packs and squads without the Power Platform pack are unchanged.
+
+- Updated hve-core dependency pin to `299c0b6` (299c0b68741d9bc08106b132043724c23166e2a4).
+
+- Microsoft 365 Copilot pack setup now offers all fourteen registered M365 skills through the shared approval, installation, reload, and host-availability lifecycle. Corrected and pinned the official `microsoft/Agents` directory installs, added `teams-app-manifest`, `agents-sdk-typescript-otel`, and `agents-sdk-python-otel`, and pinned the re-verified community supplements and Alternates.
+- Added separately approved local-authoring preview jobs from `microsoft/work-iq` (`m365-agent-evaluator` and `ui-widget-developer`) to the existing M365 roles with packaged support-file checks, explicit preview and execution boundaries, and detailed English and French setup and recovery guides. Other packs and squads without `m365-copilot` are unchanged.
+
+- Refreshed `model-catalog.md`, `consumption-rates-template.md`, and `model-benchmarks.md` (34 catalog models; 358 score rows across 29 benchmarked models; digest `sha256:838ec80bde4567ec3c220b018656a306dadf12b1eda2e4ea3aff4b49fb47349e`).
+
+- Updated hve-core dependency pin to `378392c` (378392c56d1c5dd131d05419acbc78fbe897b5e3).
+
+- Refreshed `model-catalog.md`, `consumption-rates-template.md`, and `model-benchmarks.md` (34 catalog models; 358 score rows across 29 benchmarked models; digest `sha256:976166c5b9c57e76d90ed29c1a5e9dd085d7d6133bbc05e34e7282e6cf978961`).
+
+- **Add root `SUPPORT.md` and clarify `HVE Squad` product naming across documentation.** Add root `SUPPORT.md` documenting community best-effort support expectations, GitHub issue filing guidance, MSRC private vulnerability reporting via `SECURITY.md`, and Microsoft Open Source support policy compliance, linked from `README.md` and `CONTRIBUTING.md`. Update standalone product references from `Squad` to `HVE Squad` across `README.md`, `CONTRIBUTING.md`, `benchmarks/efficiency/README.md`, `docs/templates/connector-example/CONSUMER-GUIDE.md`, `site/host-locales.json`, and English and French documentation pages (`docs/` and `docs/fr/`) while preserving shipped agent and workflow names.
+
+- Updated hve-core dependency pin to `0e5623a` (0e5623a16e06c5b1353bbf77ad4cba49db4c28b1).
+
+- Refreshed `model-catalog.md`, `consumption-rates-template.md`, and `model-benchmarks.md` (35 catalog models; 358 score rows across 29 benchmarked models; digest `sha256:75cda79dac65a5a7df5c426987f378dc7cf9fb5e25b3ab2c38d9b2936fea0846`).
+- Added newly supported Copilot models: `gemini-4-hydrogen`.
+
+- Refreshed `model-catalog.md`, `consumption-rates-template.md`, and `model-benchmarks.md` (35 catalog models; 358 score rows across 29 benchmarked models; digest `sha256:ce462e36dd4f70915595858602b281037564e286c32e063fddc4e04dc602da56`).
+
+- Re-verified all 29 External Cast rows at or past the 90-day backstop (`github/awesome-copilot@dc0083dbe22133bfa7ce3500dee85e187e0cd47a`), migrated SQL Server migration advisory skills from community `fredgis/sql-migration-advisor` (now blocklisted) to official `microsoft/microsoft-sql@eeb1c6867c2d128763516a1aad41671c593cc189` alongside fifteen additional official Azure SQL migration, diagnostics, schema/T-SQL, security, and CI skills (`get-migration-assessment`, `analyze-readiness-at-scale`, `diagnose-slow-query`, `diagnose-blocking-and-deadlocks`, `diagnose-resource-pressure`, `diagnose-connection-errors`, `read-execution-plan`, `design-azure-sql-schema`, `schema-migrations-safely`, `sql-database-projects`, `t-sql-correctness`, `entra-id-auth`, `prevent-sql-injection`, `rls-multi-tenant`, `github-actions-for-sql`), pinned every External Cast `apm install` entry, and added `scripts/Sync-ExternalCast.ps1` plus `.github/workflows/sync-external-cast.yml` for split-mode zero-diff renewals and `squad/auto` drift escalation (#241).
+
+- Updated hve-core dependency pin to `09f6ee1` (09f6ee12f71d6a14695dd70beeff6cba57513f2d).
+
+- Refreshed `model-catalog.md`, `consumption-rates-template.md`, and `model-benchmarks.md` (35 catalog models; 358 score rows across 29 benchmarked models; digest `sha256:44a2e90a214efae6e47a36d1b33ceb64191c9306bbba0d8e7c49f13075b5e4e2`).
+
+- Updated hve-core dependency pin to `4e84aee` (4e84aee97eb0019afcb19bceb63347e096803ed5).
+
+- Refreshed `model-catalog.md`, `consumption-rates-template.md`, and `model-benchmarks.md` (37 catalog models; 328 score rows across 28 benchmarked models; digest `sha256:b4142b45487f32f8295e7124c81d61121bdd2cd4753b49b59047282bfdf586cc`).
+
+### Fixed
+
+- **Automated Copilot model catalog, rates, and Copilot Fusion sync (`scripts/Sync-ModelCatalog.ps1`, `.github/workflows/sync-model-benchmarks.yml`).** Refreshes `model-catalog.md` and `consumption-rates-template.md` from official GitHub Copilot docs alongside `model-benchmarks.md`, adding newly released models (`claude-fable-5.2`, `gemini-4-argon`, `gemini-4-carbon`, `gpt-6.1-terra`), pruning retired models (`gpt-5-mini`, `gpt-5.4`, `gpt-5.4-mini`, `gpt-5.5`, `claude-opus-4.7`, `gemini-3.5-flash`, `gemini-3.6-flash`, `gemini-3.7-flash`, `kimi-k2.7-code`), and separating all three Copilot Fusion effort levels (`fusion-standard`, `hydrafusion` / High, `hydrafusion-max` / Max) across routing and consumption estimation.
+- **Fixed daily `Sync-ModelBenchmarks.ps1` failures.** Added standalone Epoch AI CSV fallbacks (`deepswe_external.csv`, `hle_external.csv`, `swe_bench_verified.csv`, `terminalbench_external.csv`), scoped coverage-continuity checks to active catalog models, dynamically derived benchmark model specs from `model-catalog.md`, and updated Artificial Analysis `SciCode` verification for the v5.0 `<h3 id="scicode">` Legacy Evaluations section.
+
+- **Replacement connectors now dispatch with the target roster row's model in Economy, Ranked, and Manual routing.** The connector keeps its own dispatch identity, and the external endpoint's model is unchanged.
+
+- **Economy retries no longer consume the Ranked escalation after a native model rejection.** Host-rejected ids are excluded through `rejectedModels`, remaining roles are replanned cost-first within their floors, and the refreshed routing transaction and any required Cost Preflight complete before dispatch. Retries stop without a confirmed host model list; Manual never reuses a rejected pick (`squad-src/.github/skills/squad/scripts/Resolve-SquadModelRoute.ps1`, `squad-src/.github/skills/squad/scripts/New-SquadDispatchPlan.ps1`, and `squad-src/.github/skills/squad/references/economy-mode.md`).
+
+- Isolated Init pricing and model-attribution contract tests from live catalog retirement while keeping the sync workflow's rates-consumer validation in the pre-publication gate.
+
+- Frozen synthetic routing-policy catalog data so upstream model additions and retirements cannot invalidate unrelated contract fixtures.
+- Threaded the selected catalog through scoring and digest validation while preserving the shipped catalog as the runtime default.
+
+- **Squad Studio could start a Scribe agent for ordinary handoffs.** Studio launches now direct the coordinator to the validated handoff script and reserve Scribe for unsupported or cold operations (`squad-src/.github/skills/squad/extensions/hve-squad-studio/lib/catalog.mjs`).
+
+- **Generated connector runners now honor the request deadline's UTC offset.** Invalid or expired requests return a failed result before the endpoint starts.
+
+- **Intake recovery now works while the verdict is `Not-Ready`.** The dispatch hook allows validation, scoped remediation, and required intake handoffs without opening downstream work.
+
+### Security
+
+- **Split shipped `squad-watch.workflow.yml` into least-privilege jobs, isolate repo Watch Copilot credentials behind `gh-aw-firewall`, and sanitize diagnostic uploads (#257).** `squad-watch.workflow.yml` now runs `interpret` strictly read-only (`contents/issues/pull-requests: read`) with `persist-credentials: false`, SHA-pinned Actions and Copilot CLI, runtime fail-closed `COPILOT_GITHUB_TOKEN` zero-write verification, `New-SquadWatchBaseline`, and `New-SquadWatchHandoff`, delegating mutations to minimal-scope `apply`, `post-review`, `escalate-unauthorized`, and `escalate-failure` jobs. `.github/workflows/squad-watch.yml` additionally wraps `copilot --allow-all-tools` in SHA- and digest-pinned `github/gh-aw-firewall` (`awf`) so `COPILOT_GITHUB_TOKEN` stays in the isolated `api-proxy` sidecar outside the agent container while Squid enforces outbound domain allowlisting and `.squad-trusted` is mounted read-only; both workflows scrub token patterns and skip symlinks before uploading failure diagnostics. `Assert-SquadWatchTrustedCheckout.ps1`, `Invoke-SquadWatchAppliedPatch.ps1`, and `Invoke-SquadWatchMarkedBody.ps1` resolve consumer skill roots across `.agents/skills/squad`, `.github/skills/squad`, and `squad-src/.github/skills/squad` (or validated `SQUAD_WATCH_SKILL_ROOT`).
+
+- **Pin all shipped `.workflow.yml` templates to commit SHAs, harden `github-approval-watcher.workflow.yml`, enforce blocking template security and copyright header gates, and align automation token governance (#257).** `github-approval-watcher.workflow.yml` and the `azure-scaffold` workflow templates (`deploy-bicep.workflow.yml`, `deploy-terraform.workflow.yml`, `governance-baseline.workflow.yml`) now pin every GitHub Action to a 40-character commit SHA with version comment, set `persist-credentials: false` on every checkout, enforce empty workflow-level permissions with minimal per-job scopes, and pass expressions into `run:` steps exclusively via `env:`. `github-approval-watcher.workflow.yml` additionally restricts its token to `issues: write`, ignores pull-request and self-relayed comments, anchors standalone `Approver: @handle` lines, and sanitizes `/changes:` notes inside single-line inline code spans. CI's Zizmor and Checkov workflows now stage all shipped `squad-src/**/*.workflow.yml` templates with SARIF URI remapping back to `squad-src/...`, enforce a 7-day Dependabot cooldown on GitHub Actions, and block pull requests on unsuppressed Zizmor errors and warnings, while PR validation and Tier 0 now run `scripts/Test-SourceHeaders.ps1` to enforce Microsoft MIT copyright notices across all first-party files. Repository sync and release workflows (`sync-hve-core.yml`, `release-prep.yml`, `release.yml`, `sync-model-benchmarks.yml`) now run in the `automation-governance` environment with `actions/create-github-app-token` support and open reviewed pull requests instead of pushing directly to `main`, while headless Copilot workflows (`squad-watch.yml`, `tier1-behavior.yml`, `tier2-semantic.yml`) bind to the `copilot-headless` environment with `vars.SQUAD_WATCH_ENABLED` guarding automatic Watch triggers.
+
+### Consumer install
+
+Pin to this version:
+
+```powershell
+apm install "Peter-N91/hve-squad#v0.21.0"
+```
+
+[0.21.0]: https://github.com/Peter-N91/hve-squad/releases/tag/v0.21.0
+
 ## [0.20.0] - 2026-11-09
 
 ### Added

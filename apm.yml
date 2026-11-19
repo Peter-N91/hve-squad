@@ -1,7 +1,7 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT license.
 name: hve-squad
-version: 0.20.0
+version: 0.21.0
 description: APM package for hve-core and squad together
 author: Microsoft
 # Which agent platforms to deploy to.
