@@ -1,8 +1,8 @@
 {
   "repository": "microsoft/hve-core",
-  "commit": "4e84aee97eb0019afcb19bceb63347e096803ed5",
+  "commit": "cfbba35a6541a39f446e1f8bde0fea46c055da6b",
   "version": "3.2.2",
-  "pluginManifestHash": "5db3e888c2c8030f09fb8773e5928e87d903770f85567ecce4aa8ef45587c69c",
+  "pluginManifestHash": "049439ca2de55a233d995b39a0b86466acb3e22799791079bb09fe46b9d26664",
   "files": [
     {
       "source": ".github/agents/accessibility/accessibility-planner.agent.md",
@@ -261,12 +261,24 @@
       "target": ".github/extensions/hve-core/rpi-workflow/lib/handle.mjs"
     },
     {
+      "source": ".github/extensions/hve-core/rpi-workflow/lib/inbox.mjs",
+      "target": ".github/extensions/hve-core/rpi-workflow/lib/inbox.mjs"
+    },
+    {
       "source": ".github/extensions/hve-core/rpi-workflow/lib/lifecycle.mjs",
       "target": ".github/extensions/hve-core/rpi-workflow/lib/lifecycle.mjs"
     },
     {
       "source": ".github/extensions/hve-core/rpi-workflow/lib/model.mjs",
       "target": ".github/extensions/hve-core/rpi-workflow/lib/model.mjs"
+    },
+    {
+      "source": ".github/extensions/hve-core/rpi-workflow/lib/open.mjs",
+      "target": ".github/extensions/hve-core/rpi-workflow/lib/open.mjs"
+    },
+    {
+      "source": ".github/extensions/hve-core/rpi-workflow/lib/panels.mjs",
+      "target": ".github/extensions/hve-core/rpi-workflow/lib/panels.mjs"
     },
     {
       "source": ".github/extensions/hve-core/rpi-workflow/lib/pickup.mjs",
@@ -317,6 +329,14 @@
       "target": ".github/extensions/hve-core/rpi-workflow/lib/source/parse.mjs"
     },
     {
+      "source": ".github/extensions/hve-core/rpi-workflow/lib/source/session-list.mjs",
+      "target": ".github/extensions/hve-core/rpi-workflow/lib/source/session-list.mjs"
+    },
+    {
+      "source": ".github/extensions/hve-core/rpi-workflow/lib/source/sessions.mjs",
+      "target": ".github/extensions/hve-core/rpi-workflow/lib/source/sessions.mjs"
+    },
+    {
       "source": ".github/extensions/hve-core/rpi-workflow/lib/source/tree.mjs",
       "target": ".github/extensions/hve-core/rpi-workflow/lib/source/tree.mjs"
     },
@@ -361,6 +381,10 @@
       "target": ".github/extensions/hve-core/rpi-workflow/tests/connect-view.test.mjs"
     },
     {
+      "source": ".github/extensions/hve-core/rpi-workflow/tests/copilot-picker.test.mjs",
+      "target": ".github/extensions/hve-core/rpi-workflow/tests/copilot-picker.test.mjs"
+    },
+    {
       "source": ".github/extensions/hve-core/rpi-workflow/tests/decision-blocks.test.mjs",
       "target": ".github/extensions/hve-core/rpi-workflow/tests/decision-blocks.test.mjs"
     },
@@ -389,6 +413,14 @@
       "target": ".github/extensions/hve-core/rpi-workflow/tests/helpers/fake-dom.mjs"
     },
     {
+      "source": ".github/extensions/hve-core/rpi-workflow/tests/helpers/host-canvas.mjs",
+      "target": ".github/extensions/hve-core/rpi-workflow/tests/helpers/host-canvas.mjs"
+    },
+    {
+      "source": ".github/extensions/hve-core/rpi-workflow/tests/helpers/inbox-check.mjs",
+      "target": ".github/extensions/hve-core/rpi-workflow/tests/helpers/inbox-check.mjs"
+    },
+    {
       "source": ".github/extensions/hve-core/rpi-workflow/tests/helpers/older-map.mjs",
       "target": ".github/extensions/hve-core/rpi-workflow/tests/helpers/older-map.mjs"
     },
@@ -401,8 +433,16 @@
       "target": ".github/extensions/hve-core/rpi-workflow/tests/helpers/rpi-fixture.mjs"
     },
     {
+      "source": ".github/extensions/hve-core/rpi-workflow/tests/helpers/scratch.mjs",
+      "target": ".github/extensions/hve-core/rpi-workflow/tests/helpers/scratch.mjs"
+    },
+    {
       "source": ".github/extensions/hve-core/rpi-workflow/tests/helpers/store-writer.mjs",
       "target": ".github/extensions/hve-core/rpi-workflow/tests/helpers/store-writer.mjs"
+    },
+    {
+      "source": ".github/extensions/hve-core/rpi-workflow/tests/helpers/task-doc.mjs",
+      "target": ".github/extensions/hve-core/rpi-workflow/tests/helpers/task-doc.mjs"
     },
     {
       "source": ".github/extensions/hve-core/rpi-workflow/tests/highlight.test.mjs",
@@ -417,12 +457,28 @@
       "target": ".github/extensions/hve-core/rpi-workflow/tests/ids.test.mjs"
     },
     {
+      "source": ".github/extensions/hve-core/rpi-workflow/tests/inbox-model.test.mjs",
+      "target": ".github/extensions/hve-core/rpi-workflow/tests/inbox-model.test.mjs"
+    },
+    {
+      "source": ".github/extensions/hve-core/rpi-workflow/tests/inbox.test.mjs",
+      "target": ".github/extensions/hve-core/rpi-workflow/tests/inbox.test.mjs"
+    },
+    {
       "source": ".github/extensions/hve-core/rpi-workflow/tests/markdown.test.mjs",
       "target": ".github/extensions/hve-core/rpi-workflow/tests/markdown.test.mjs"
     },
     {
       "source": ".github/extensions/hve-core/rpi-workflow/tests/model.test.mjs",
       "target": ".github/extensions/hve-core/rpi-workflow/tests/model.test.mjs"
+    },
+    {
+      "source": ".github/extensions/hve-core/rpi-workflow/tests/open.test.mjs",
+      "target": ".github/extensions/hve-core/rpi-workflow/tests/open.test.mjs"
+    },
+    {
+      "source": ".github/extensions/hve-core/rpi-workflow/tests/panels.test.mjs",
+      "target": ".github/extensions/hve-core/rpi-workflow/tests/panels.test.mjs"
     },
     {
       "source": ".github/extensions/hve-core/rpi-workflow/tests/pickup.test.mjs",
@@ -439,6 +495,10 @@
     {
       "source": ".github/extensions/hve-core/rpi-workflow/tests/server.test.mjs",
       "target": ".github/extensions/hve-core/rpi-workflow/tests/server.test.mjs"
+    },
+    {
+      "source": ".github/extensions/hve-core/rpi-workflow/tests/session-list.test.mjs",
+      "target": ".github/extensions/hve-core/rpi-workflow/tests/session-list.test.mjs"
     },
     {
       "source": ".github/extensions/hve-core/rpi-workflow/tests/source-assemble.test.mjs",
@@ -469,6 +529,10 @@
       "target": ".github/extensions/hve-core/rpi-workflow/tests/sources.test.mjs"
     },
     {
+      "source": ".github/extensions/hve-core/rpi-workflow/tests/store-inbox.test.mjs",
+      "target": ".github/extensions/hve-core/rpi-workflow/tests/store-inbox.test.mjs"
+    },
+    {
       "source": ".github/extensions/hve-core/rpi-workflow/tests/store.test.mjs",
       "target": ".github/extensions/hve-core/rpi-workflow/tests/store.test.mjs"
     },
@@ -495,6 +559,10 @@
     {
       "source": ".github/extensions/hve-core/rpi-workflow/tests/views-plan.test.mjs",
       "target": ".github/extensions/hve-core/rpi-workflow/tests/views-plan.test.mjs"
+    },
+    {
+      "source": ".github/extensions/hve-core/rpi-workflow/tests/views-route.test.mjs",
+      "target": ".github/extensions/hve-core/rpi-workflow/tests/views-route.test.mjs"
     },
     {
       "source": ".github/extensions/hve-core/rpi-workflow/tests/views-send.test.mjs",
@@ -5731,6 +5799,18 @@
     {
       "source": ".github/skills/rpi/rpi-plan-critique/templates/plan-critique.md",
       "target": ".github/skills/rpi/rpi-plan-critique/templates/plan-critique.md"
+    },
+    {
+      "source": ".github/skills/rpi/rpi-refine/references/refinement.md",
+      "target": ".github/skills/rpi/rpi-refine/references/refinement.md"
+    },
+    {
+      "source": ".github/skills/rpi/rpi-refine/SKILL.md",
+      "target": ".github/skills/rpi/rpi-refine/SKILL.md"
+    },
+    {
+      "source": ".github/skills/rpi/rpi-refine/templates/refinement-log.md",
+      "target": ".github/skills/rpi/rpi-refine/templates/refinement-log.md"
     },
     {
       "source": ".github/skills/rpi/rpi-research/references/research.md",

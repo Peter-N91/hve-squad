@@ -1,6 +1,6 @@
 {
   "name": "hve-squad",
-  "version": "0.21.0-pre.run.19",
+  "version": "0.21.1-pre.run.22",
   "description": "HVE Squad and its pinned HVE Core cast in one GitHub Copilot plugin: 36 Squad agents, 59 HVE Core agent entries, and 10 Squad invocation skills.",
   "author": {
     "name": "Peter-N91",
@@ -189,6 +189,7 @@
     ".github/skills/rpi/rpi-implement",
     ".github/skills/rpi/rpi-plan",
     ".github/skills/rpi/rpi-plan-critique",
+    ".github/skills/rpi/rpi-refine",
     ".github/skills/rpi/rpi-research",
     ".github/skills/rpi/rpi-review",
     ".github/skills/rpi/rpi-walkthrough",
