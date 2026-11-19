@@ -90,6 +90,12 @@ On a `Not-Ready` verdict, the coordinator remediates the inputs before it procee
 
 Each validator dispatch and each remediation dispatch is a Scribe-recorded stage with its own `history/<agent>.md` entry and consumption block, so the loop is auditable after the fact.
 
+Under the plugin hook's `Not-Ready` hold, use agents mapped only to the
+intended intake role. Set the native `name` (or `description`) to
+`intake-remediation-<topic-id>` for scoped `analyst`/`product-owner` work or
+`intake-handoff-<topic-id>` for a required cold intake Scribe. Use the latest
+verdict's topic ID. The task name does not authorize downstream work.
+
 ## Intake Readiness Verdict Schema
 
 `Write-SquadVerdict.ps1` writes the verdict to `<squadRoot>/decisions.md` under a new `## Intake Readiness Verdict` H2. The entry is append-only and uses this shape:
