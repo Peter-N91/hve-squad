@@ -1,15 +1,15 @@
 {
   "schema": "benchmark-score-v1",
   "scenario": "task-cli-cold-start",
-  "measuredAt": "2026-11-15T10:23:58Z",
+  "measuredAt": "2026-11-19T22:55:32Z",
   "source": {
-    "commit": "dfc7ff0e3d8bd3e10b0b03e1e24fc72b74783bb5",
-    "squadSourceHash": "4710cecc9f8af51991f03a20ff88fe87b3c307e72c1d48018d3f58453685fffe",
+    "commit": "773b6e9bf1369d18ca2b2c29cfaaa96ddc3828ca",
+    "squadSourceHash": "4350f43e7b6710f1313c3a80c27eeaa7ff94b3bc417bf13b7839f5a87756d79a",
     "uncommittedChanges": false
   },
   "environment": {
     "model": "claude-sonnet-5.5",
-    "cli": "GitHub Copilot CLI 1.0.106-9. Run copilot update to check for up",
+    "cli": "GitHub Copilot CLI 1.0.114-0. Run copilot update to check for up",
     "powershell": "7.7.0"
   },
   "compatibility": {
@@ -17,18 +17,18 @@
     "rubric": "b56405ace95fba82698b65dbe243c788265e26c0a682b5a5e5a1f6f0f867f703",
     "hostProfile": "d0b5857b0ed4b4b5f4b0d70d7cced697877ba54d346d224406ad5b218664da86",
     "scenarioHash": "56c7b0b6ca58cf0fd601bf3f71159e4b07bb779171ef7430fb1b558bcffb2593",
-    "parserHash": "6ca90423727c5958fc47694526a723d9a07b1bd20a7a2f4f044002bac44ea47a",
-    "exerciseHash": "063918dcfdd4df464e38a35a3f7701c19072b2658c5e5950784ee3cfca559249",
+    "parserHash": "3a6ab87c9b6e5724e9729032b077efcf28fdf1d9ae883903481f8a514049f025",
+    "exerciseHash": "e86e22644ce9082f0f3e10a5310dd6c657c7806b2c9a1928acd2573747b3eae1",
     "preparationHash": "521f36306928b3158fcfc259e13228db9a3e0b31dd452df1d3b446c180299055",
     "graderHash": "5ea4adc4add775e313f5370061e56a371954b953562e1d976cfafbfec62b5720",
     "verifierHash": "f7ad13aa5526bae59660a73aa42e913fc5a702cf599ddbee4bb9325528c0510d",
-    "converterHash": "4eef28e7fff0dbad286a7fbfe74da7e7e624bc2603031dfbe13f1875d086a177",
-    "installHash": "38a8d8715752a983de4ac1fc4dabad8bcd7b8575a51b7125882aabb82d4494f1",
+    "converterHash": "a295626b6a61f1adea7b414ac884aeface38ba89e9d982251488c6eb0a74febd",
+    "installHash": "3bbb4dfef3e9744b765a4005fd6be0d468030fd60ad175728fc225a18c45a2f0",
     "model": "4ae60805f94e4d2e6d4726588a7d7e44572ab35a1d3b4bd5e44b74e0ce9f852b",
-    "cli": "be553eb30c2799d3306ec949d88209f0a980d155d3a6266da1047c5dcad2d3a4",
+    "cli": "d116c8c37a82474c3b4e8c92d044ae414abda36f7f284ba39f64cf538e517c35",
     "powershell": "475c2ccaebf82353b2e7c16de13e8d3b93d08e605365f36430e6a4f2239ca58b",
     "roleModelPolicy": "ee80bd998cafc0d863352fbb64d2ed9cbc90b68758f39f76116ef03c9aafa39d",
-    "disabledMcpServers": "f9f1234558901fde61fe6cc9fbd675ff92b3c90121ae11b331381d2fc827171e",
+    "disabledMcpServers": "c00ba098553463200cb28849b0360bd841da1a15ceb97ddbe9ce401303d00c10",
     "maxCredits": "40510175845988f13f6162ed8526f0b09f73384467fa855e1e79b44a56562a58",
     "continuations": "40510175845988f13f6162ed8526f0b09f73384467fa855e1e79b44a56562a58",
     "recoveryPolicy": "bf8385d4a2b08be069a01ecef790c059241ab6301275ed1ffb094395d26602d1",
@@ -40,60 +40,55 @@
     "failed": 0
   },
   "summary": {
-    "quality": 78.0,
+    "quality": 83.0,
     "dimensions": {
-      "businessClarity": 16.0,
-      "scopeFidelity": 15.0,
-      "acceptanceCriteria": 15.0,
-      "traceability": 17.0,
+      "businessClarity": 17.0,
+      "scopeFidelity": 16.0,
+      "acceptanceCriteria": 17.0,
+      "traceability": 18.0,
       "risksAndDecisions": 15.0
     },
-    "functional": 0,
+    "functional": 1,
     "workflow": 0,
     "criticalHighFindings": 1.0,
-    "averageSeconds": 2317.323,
-    "averageCredits": 589.6898695,
+    "averageSeconds": 3068.645,
+    "averageCredits": 858.3844174999999,
     "activity": {
       "scribeDispatches": 0.0,
       "scribeModelRequests": 0.0,
       "scribeSeconds": 0.0,
       "scribeCredits": 0.0,
-      "coordinatorModelRequests": 51.0,
-      "authorModelRequests": 36.0
+      "coordinatorModelRequests": 70.0,
+      "authorModelRequests": 41.0
     },
     "allRequested": {
       "secondsCovered": 1,
-      "totalSeconds": 2317.323,
-      "averageSeconds": 2317.323,
+      "totalSeconds": 3068.645,
+      "averageSeconds": 3068.645,
       "creditsCovered": 1,
-      "totalCredits": 589.6898695,
-      "averageCredits": 589.6898695
+      "totalCredits": 858.3844174999999,
+      "averageCredits": 858.3844174999999
     }
   },
   "trials": [
     {
       "run": 1,
       "scored": true,
-      "quality": 78.0,
+      "quality": 83.0,
       "dimensions": {
-        "businessClarity": 16.0,
-        "scopeFidelity": 15.0,
-        "acceptanceCriteria": 15.0,
-        "traceability": 17.0,
+        "businessClarity": 17.0,
+        "scopeFidelity": 16.0,
+        "acceptanceCriteria": 17.0,
+        "traceability": 18.0,
         "risksAndDecisions": 15.0
       },
-      "functional": false,
+      "functional": true,
       "workflow": false,
       "criticalHighFindings": 1.0,
-      "seconds": 2317.323,
-      "credits": 589.6898695,
+      "seconds": 3068.645,
+      "credits": 858.3844174999999,
       "failedChecks": [
-        "functional/id-boundary-preserves-store",
-        "init/bookkeepingEvidence",
-        "requirements/bookkeepingEvidence",
-        "requirements/reviewOutcome",
-        "requirements/stateVerifier",
-        "build/stateVerifier"
+        "requirements/reviewOutcome"
       ],
       "note": "",
       "activity": {
@@ -101,18 +96,18 @@
         "scribeModelRequests": 0.0,
         "scribeSeconds": 0.0,
         "scribeCredits": 0.0,
-        "coordinatorModelRequests": 51.0,
-        "authorModelRequests": 36.0
+        "coordinatorModelRequests": 70.0,
+        "authorModelRequests": 41.0
       },
       "sourceReviews": {
         "requirements": {
           "outcome": "failed",
-          "reviewPath": ".copilot-tracking/reviews/task-cli-closing-review.md",
+          "reviewPath": ".copilot-tracking/reviews/task-cli-requirements-closing-review.md",
           "criticalHighFindings": null
         },
         "build": {
           "outcome": "passed",
-          "reviewPath": ".copilot-tracking/reviews/task-cli-implementation-review.md",
+          "reviewPath": ".copilot-tracking/reviews/task-cli-implementation-closing-review.md",
           "criticalHighFindings": null
         }
       }
