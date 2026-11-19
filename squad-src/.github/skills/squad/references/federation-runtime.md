@@ -74,6 +74,11 @@ Forward `endpoint.requestedModelRouting` into each member's actual-role plan wit
 `-ApplyModelRouting`; require `routingReady: true` before workers, including quick
 single-role/targeted-autopilot work. Root plans do not activate member models.
 
+Start each native member task prompt with `Squad root: .copilot-tracking/squad/members/<name>`
+when the plugin dispatch hook is active. The hook uses that exact scope rather
+than paths mentioned later in the prompt to check the member's intake verdict.
+If any member is `Not-Ready`, the hook refuses an unscoped dispatch.
+
 Before child dispatch take the script snapshot with
 `Get-SquadDispatchBrief.ps1 ... -AsJson -SnapshotPath <transport>`. Keep it
 outside state; never author its costs/hashes. It preserves prior root overhead.
