@@ -370,8 +370,11 @@ Describe 'Requirements document quality source contracts (RQ-01..16)' -Tag 'Requ
         $guide | Should -Match 'same-number claims are not ID mappings'
         $guide | Should -Match 'The BRD author also receives the PRD capture and fixes any finding in it that needs a BRD change'
         $guide | Should -Match 'replace stale "report unavailable" text with the actual capture reference and unchanged report status'
-        $guide | Should -Match 'never taking an option that narrows a literal source clause'
-        $guide | Should -Match 'timestamp, status and equivalence claim.+the PRD author reconciles every PRD item that cites a BRD item to the final BRD'
+        $guide | Should -Match 'removing or rewording what departs from it and what derives from it, since a provisional or unresolved label does not make both statements hold'
+        $guide | Should -Match 'one sponsor-owned question, never the coordinator.s, worded the same in both documents'
+        $guide | Should -Match 'gets the requirement and criterion that test it, not a recorded gap; only human-only facts stay open'
+        $guide | Should -Match 'scope claim such as "nothing is added", equivalence claim\).+fixing contradictions the edit introduced, adding a criterion for each case a widened rule now reaches.+the PRD author reconciles every PRD item that cites a BRD item to the final BRD'
+        $guide | Should -Match 'naming that clause and its acceptance criterion \(drop it when a literal reading already makes the clause testable\)'
     }
 }
 
