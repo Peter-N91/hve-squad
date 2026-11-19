@@ -1,5 +1,6 @@
 #!/usr/bin/env pwsh
-# Copyright (c) 2026 Microsoft Corporation. All rights reserved.
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT license.
 # SPDX-License-Identifier: MIT
 #Requires -Version 7.4
 
@@ -10,6 +11,30 @@ function Deny-Dispatch {
     param([string]$Reason)
     @{ permissionDecision = 'deny'; permissionDecisionReason = $Reason } | ConvertTo-Json -Compress
     exit 0
+}
+
+function Get-SquadIntakeHold {
+    param([string]$SquadRoot)
+    $path = Join-Path $SquadRoot 'decisions.md'
+    if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { return }
+    $verdicts = [regex]::Matches([IO.File]::ReadAllText($path),
+        '(?ms)^## Intake Readiness Verdict\b(?<heading>[^\r\n]*)\r?\n(?<body>.*?)(?=^## |\z)')
+    if (-not $verdicts.Count) { return }
+    $latest = $verdicts[-1]
+    $body = $latest.Groups['body'].Value
+    if ($body -notmatch '(?im)^\*[ \t]*Verdict:[ \t]*Not-Ready[ \t]*\r?$') { return }
+    $topic = [regex]::Match($latest.Groups['heading'].Value, '^[ \t]+\S+[ \t]+(?<id>[a-z0-9]+(?:-[a-z0-9]+)*)[ \t]*$')
+    [pscustomobject]@{
+        TopicId = $topic.Groups['id'].Value
+        CanRemediate = ($body -match '(?m)^\*[ \t]*Remediation Cycles:[ \t]*[01][ \t]*\r?$')
+    }
+}
+
+function Get-DispatchRosterRow {
+    param([object[]]$Roster, [string]$AgentName)
+    $Roster | Where-Object {
+        $_['Agent Name (Primary)'] -ceq $AgentName -or $AgentName -cin @($_['Alternate Agents'] -split ',\s*')
+    }
 }
 
 try {
@@ -40,21 +65,67 @@ try {
             if ($nativeMatches.Count -eq 1) { $agentName = $nativeMatches[0].name }
         }
         $raw = $dispatch | ConvertTo-Json -Depth 20 -Compress
-        $root = Join-Path -Path $repo -ChildPath '.copilot-tracking' -AdditionalChildPath 'squad'
-        $member = [regex]::Match($raw, 'members[\\/]+([A-Za-z0-9_-]+)')
-        if ($member.Success) {
-            $name = $member.Groups[1].Value
-            if ($name -cnotmatch '^[a-z0-9][a-z0-9-]*$') { Deny-Dispatch "Federation member '$name' must be lower-kebab-case." }
-            $memberRoot = Join-Path -Path $root -ChildPath 'members' -AdditionalChildPath $name
-            if (Test-Path -LiteralPath (Join-Path $memberRoot 'team.md') -PathType Leaf) { $root = $memberRoot }
+        $squadBase = Join-Path -Path $repo -ChildPath '.copilot-tracking' -AdditionalChildPath 'squad'
+        $root = $squadBase
+        # A mention in task content cannot choose a different squad's intake verdict.
+        $intakeRoot = $squadBase
+        $federationPath = Join-Path $squadBase 'federation.md'
+        if (Test-Path -LiteralPath $federationPath -PathType Leaf) {
+            $scope = [regex]::Match([string]$dispatch['prompt'],
+                '\ASquad root: \.copilot-tracking[\\/]squad[\\/]members[\\/](?<member>[a-z0-9]+(?:-[a-z0-9]+)*)(?:\r?\n|\z)')
+            $members = @(Read-SquadTables $federationPath | Where-Object {
+                    'Sub-squad' -in $_.Header -and 'Location' -in $_.Header -and 'Kind' -in $_.Header
+                } | ForEach-Object Rows | Where-Object {
+                    $_.Kind -ceq 'in-repo' -and $_['Sub-squad'] -cmatch '^[a-z0-9]+(?:-[a-z0-9]+)*$' -and
+                    ($_['Location'] -replace '\\', '/').TrimEnd('/') -ceq "members/$($_['Sub-squad'])"
+                })
+            if ($scope.Success) {
+                $selectedMember = @($members | Where-Object { $_['Sub-squad'] -ceq $scope.Groups['member'].Value })
+                if ($selectedMember.Count -ne 1) { Deny-Dispatch 'Intake Gate: Squad root must identify exactly one registered federation member.' }
+                $intakeRoot = Resolve-SquadRepositoryPath -RepoRoot $repo -Path (Join-Path $squadBase $selectedMember[0].Location)
+                $root = $intakeRoot
+            }
+            else {
+                foreach ($entry in $members) {
+                    $candidate = Join-Path $squadBase $entry.Location
+                    if (Get-SquadIntakeHold -SquadRoot $candidate) {
+                        Deny-Dispatch 'Intake Gate: a federation member is Not-Ready. Specify its dispatch scope in the Squad root field before starting a worker.'
+                    }
+                }
+            }
         }
 
-        $decisionsPath = Join-Path $root 'decisions.md'
-        if ((Test-Path -LiteralPath $decisionsPath) -and $raw -match '(?i)plan|implement|developer|lead') {
-            $decisions = [IO.File]::ReadAllText($decisionsPath)
-            $verdicts = [regex]::Matches($decisions, '(?ms)^## Intake Readiness Verdict\b.*?(?=^## |\z)')
-            if ($verdicts.Count -and $verdicts[-1].Value -match '(?im)^\*\s*Verdict:\s*Not-Ready\b') {
-                Deny-Dispatch 'Intake Gate: the latest Intake Readiness Verdict is Not-Ready. Resolve it before planning or implementation.'
+        $roster = $null
+        $intakeHold = Get-SquadIntakeHold -SquadRoot $intakeRoot
+        if ($intakeHold) {
+            $root = $intakeRoot
+            $roles = @()
+            if ($agents.ContainsKey($agentName) -and $agents[$agentName].dispatchable -and
+                (Test-Path -LiteralPath (Join-Path $root 'team.md') -PathType Leaf)) {
+                $roster = @(Get-SquadRoster $root)
+                $rows = @(Get-DispatchRosterRow -Roster $roster -AgentName $agentName)
+                $roles = @($rows | ForEach-Object Role | Sort-Object -Unique -CaseSensitive)
+            }
+            $taskName = if ($dispatch['name']) { [string]$dispatch['name'] } else { [string]$dispatch['description'] }
+            $topic = $intakeHold.TopicId
+            $role = if ($roles.Count -eq 1) { $roles[0] } else { '' }
+            $validation = $role -ceq 'intake-validator'
+            $canRemediate = $intakeHold.CanRemediate -and $role -cin @('analyst', 'product-owner')
+            $remediation = $topic -and $canRemediate -and $taskName -ceq "intake-remediation-$topic"
+            $isScribe = $role -ceq 'scribe' -and $agentName -ceq 'Squad Scribe'
+            $handoff = $topic -and $isScribe -and $taskName -ceq "intake-handoff-$topic"
+            if (-not ($validation -or $remediation -or $handoff)) {
+                Deny-Dispatch 'Intake Gate: the latest Intake Readiness Verdict is Not-Ready. Only the roster intake validator, scoped intake remediation, and intake bookkeeping can run until a new verdict clears the gate.'
+            }
+        }
+        elseif ($root -eq $squadBase) {
+            # Keep legacy member model routing for older prompts when no intake hold applies.
+            $member = [regex]::Match($raw, 'members[\\/]+([A-Za-z0-9_-]+)')
+            if ($member.Success) {
+                $name = $member.Groups[1].Value
+                if ($name -cnotmatch '^[a-z0-9][a-z0-9-]*$') { Deny-Dispatch "Federation member '$name' must be lower-kebab-case." }
+                $memberRoot = Join-Path -Path $squadBase -ChildPath 'members' -AdditionalChildPath $name
+                if (Test-Path -LiteralPath (Join-Path $memberRoot 'team.md') -PathType Leaf) { $root = $memberRoot }
             }
         }
 
@@ -70,9 +141,20 @@ try {
         if ($agentName -eq 'Squad Scribe' -or -not (Test-Path -LiteralPath $teamPath -PathType Leaf)) { continue }
         $team = [IO.File]::ReadAllText($teamPath)
         if ($team -notmatch '(?m)^Model routing:\s*`?(ranked|economy|manual)`?\s*$') { continue }
-        $rows = @(Get-SquadRoster $root | Where-Object {
-                $_['Agent Name (Primary)'] -ceq $agentName -or $agentName -cin @($_['Alternate Agents'] -split ',\s*')
-            })
+        if ($null -eq $roster) {
+            $roster = @(Get-SquadRoster $root)
+            $rows = @(Get-DispatchRosterRow -Roster $roster -AgentName $agentName)
+        }
+        if ($agentName -ceq 'Squad Connector') {
+            # The native hook has an agent type, not a binding ID. Compare against
+            # its possible roster targets; the planner still validates the selected binding.
+            foreach ($target in @(Get-SquadConnectorReplacementTarget -TeamPath $teamPath)) {
+                $rows += @($roster | Where-Object {
+                        $_.Role -ceq $target.Role -and [string]$_['Member Name'] -ceq $target.MemberName -and
+                        $_['Agent Name (Primary)'] -ceq $target.Agent
+                    })
+            }
+        }
         if (-not $rows.Count) { continue }
         $allowed = @($rows | ForEach-Object {
                 if ($_.ContainsKey('Model')) { [string]$_.Model }

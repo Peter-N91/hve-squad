@@ -1,3 +1,7 @@
+<!--
+Copyright (c) Microsoft Corporation.
+Licensed under the MIT license.
+-->
 # `{{CONNECTOR_ID}}` mailbox
 
 The manifest at `{{MANIFEST_PATH}}` points here. The removable example runner

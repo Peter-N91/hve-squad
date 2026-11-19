@@ -6,6 +6,10 @@ model: Claude Haiku 5.5 (copilot)
 agents:
   - Squad Researcher
 ---
+<!--
+Copyright (c) Microsoft Corporation.
+Licensed under the MIT license.
+-->
 
 # Squad Cost Manager
 
@@ -27,6 +31,10 @@ This subagent never quotes firm prices and never commits to a budget on the user
 When deciding whether to issue a direct REST call or fall back to documentation lookups, follow the MCP-vs-fallback guidance in `skills/squad/references/rules/squad-mcp-capability.md`. When no Azure Cost MCP is present in the consumer's `.vscode/mcp.json`, default to the Squad Researcher delegation pattern mirrored from `apm_modules/microsoft/hve-core-standards-mapping/.apm/instructions/standards-mapping.instructions.md` (its researcher-delegation section). Never embed retail price tables, regional rate cards, commitment schedules, or verbatim upstream CO checklist text in this charter; resolve those at runtime through the subagent so the data stays current.
 
 Scope of the charter is pre-implementation for Azure workloads. The FinOps Framework capabilities most relevant here are Planning and Estimating, Forecasting, Budgeting, Rate Optimization, and Architecting and Workload Placement; treat `.copilot-tracking/research/subagents/2026-06-11/cost-budget-manager-research.md` as the source of truth for the full mapping and only mirror the labels here. Post-deployment FinOps work (Anomaly Management, Allocation, Usage Optimization for in-flight workloads) is out of scope and should be handed off to dedicated FinOps tooling rather than handled in this charter. The one exception is the squad's own AI spend (Step 5), where Unit Economics, Allocation, Anomaly Management, and Usage Optimization apply to the squad's ledger rather than to a workload.
+
+When the resolved root's `team.md` `Packs:` line includes `aks`, read `references/aks-platform-options.md` and reach `aks-cost-optimization` only while this pack is active and its resource decision is not `declined`. Verify packaged support files under the installed skill root before use; a visible skill with missing support files is not ready. Analyze NAP readiness, node-pool bin-packing, node-scaling bottlenecks, Kubernetes storage optimization, and commitment-demand evidence read-only, returning indicative findings and `confirm`-tier recommendations without modifying node pools, autoscalers, storage classes, or commitments. When the pack is absent, removed, or not yet reapplied, do not select `aks-cost-optimization`; host visibility is not squad selection. Do not write squad state.
+
+When the resolved root's `team.md` `Packs:` line includes `azure-cloud`, read `references/azure-cloud-platform-options.md` and reach `cost-estimation`, `cost-optimization`, `cost-analysis`, or `cost-governance` only while this pack is active and the skill's resource decision is not `declined`. Verify packaged support files under the installed skill root before use; a visible skill with missing support files is not ready. Keep bundled `azure-pricing` as the default for unauthenticated public Retail Prices lookups, and use these official `azure-cost` skills read-only (with their packaged ARM MCP and authenticated `az` / PowerShell / REST fallbacks) for scope spend forecasts and negotiated EA/MCA Price Sheet rate cards (`cost-estimation`), idle/orphaned-resource waste reduction, rightsizing, and Reservation or Savings Plan commitment analysis (`cost-optimization`), historical spend, spike/anomaly, AKS namespace, and AI cost breakdowns (`cost-analysis`), and budget health, `CostCenter` tag coverage, and SKU/region policy guardrails (`cost-governance`). Label every estimate indicative, keep currencies separate, and flag any budget, policy, commitment, or SKU-change recommendation at the `confirm` tier without purchasing, resizing, deleting, or writing live budgets or GitHub issues. When the pack is absent, removed, or not yet reapplied, do not select `azure-cloud` cost skills; host visibility is not squad selection. Do not write squad state.
 
 ## Inputs
 

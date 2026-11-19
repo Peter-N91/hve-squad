@@ -7,6 +7,10 @@ metadata:
   spec_version: "2.0"
   last_updated: "2026-10-24"
 ---
+<!--
+Copyright (c) Microsoft Corporation.
+Licensed under the MIT license.
+-->
 
 # Squad Model Routing
 
@@ -75,7 +79,7 @@ Every role maps to one of the seven fixed assignment classes: `research`, `plann
 |------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | `research`       | `researcher`, `azure-diagnose`, `aws-diagnose`                                                                                                                                                                         |
 | `planning`       | `lead`, `azure-architect`, `aws-architect`, `pp-architect`, `m365-agent-architect`, `designer`, `analyst`, `experimenter`, `modernizer`, `performance`, `observability`                                               |
-| `implementation` | `developer`, `product-owner`, `prompt-engineer`, `technical-writer`, `presenter`, `data-scientist`, `iac-author`, `deployer`, `release-engineer`, `asbuilt-author`, `backlog-executor`, `pp-connector`, `m365-agent-integrator` |
+| `implementation` | `developer`, `product-owner`, `prompt-engineer`, `technical-writer`, `data-scientist`, `iac-author`, `deployer`, `release-engineer`, `asbuilt-author`, `backlog-executor`, `pp-connector`, `m365-agent-integrator` |
 | `review`         | `tester`, `qa-engineer`, `challenger`, `fact-checker`, `supply-chain`, `vuln-manager`, `privacy`, `accessibility`, `risk-manager`                                                                                     |
 | `council`        | `architect`, `security`, `cost-manager`, `rai`, and `product-owner` when dispatched in a Council batch                                                                                                                  |
 | `intake`         | `intake-validator`                                                                                                                                                                                                     |
@@ -94,7 +98,7 @@ Availability precedence is `model-catalog.md`'s own (host-advertised enum ∩ ca
 
 Never offer or rank an id outside the host's available set, and label an unverified set as such in the question the user sees.
 
-On `task` hosts, `sessionModel` is metadata only: the coordinator must pass the tool's actual advertised `model` enum as `availableModels`. `New-SquadDispatchPlan.ps1` fails closed before any Model-cell refresh when that enum is missing and the session model cannot establish the VS Code cost ceiling.
+On `task` hosts, pass the actual `model` enum as `availableModels`; `sessionModel` is metadata only. In every mode using `rejectedModels`, the planner stops before refreshing any Model cell unless it has a confirmed host list. Reuse an already advertised list; the rejection need not return a new one.
 
 ## Ranking Algorithm
 
@@ -124,7 +128,7 @@ Every role's floor is its current `team.md` Model Tier (`fast`, `default`, or `e
 
 Ranked selection never returns an id whose capability class the floor does not admit; a `manual` cell naming such an id is **refused and logged** (a history bullet plus a decision note), never applied, never downgraded-and-warned, and *Manual Model Selection* never offers one. An `unevaluated` id has no capability class to check, so it is admitted only as an explicit `manual` pick and marked `unevaluated`. Raising a role's actual floor is a `team.md` edit, never a routing input.
 
-**Floor exhaustion.** When ranking pre-dispatch, or re-ranking after a host rejection mid-run, leaves no eligible id at or above the role's floor, the coordinator neither dispatches below the floor nor silently picks one. It falls back to precedence level 3/4 (the static tier, or omitting `model` so the host's own default applies) only when that fallback does not itself sit below the floor, records the exhaustion in the dispatch's identity bullets (`Route rationale: floor exhausted`) and a decision note, and escalates to the user when even the fallback would run below the floor — a Risk Gate pause in `mode=autopilot`, or commenting on the source thread and stopping in Watch Mode.
+**Floor exhaustion.** When re-ranking leaves no eligible id inside the role's floor, the coordinator neither dispatches below the floor nor silently picks one. Economy stops. Ranked/manual may use the static tier or omit `model` only when that fallback meets the floor; otherwise record `floor exhausted`, pause or escalate, and make no dispatch.
 
 ## Advertised-but-Uncatalogued IDs
 
@@ -132,9 +136,9 @@ An id the host advertises but `model-catalog.md` does not carry (catalog's `Adve
 
 ## Re-Rank and Substitution
 
-* **Pre-dispatch, `ranked`**: when the host advertises no `model` enum (VS Code's Local agent) and the dispatch call rejects the resolved id, re-run the actual-unit plan from the list the rejection reported, under the same floor and class, then persist its refreshed `Model` cell before retrying.
-* **Pre-dispatch, `manual`**: a rejected user pick is never replaced silently. Re-run *Manual Model Selection* for that role with the list the rejection reported and pass the answer back through the plan and routing writer; on an unattended run, fall back per *Floor exhaustion* and record why.
-* **Mid-run**: a later re-rank that would price higher than the admitted Cost Preflight round requires a **new** Cost Preflight round before it dispatches — never a silent re-price of the admitted one.
+* **Native rejection, automatic modes**: stop the affected wave. Pass the exact rejected id as `rejectedModels` plus the complete host enum, then re-run `New-SquadDispatchPlan.ps1 -ApplyModelRouting` in the same mode for the selected roles. Ranked keeps its capability objective; the cost-first mode keeps its cost objective and never consumes its quality-failure `escalation`. Refresh cells before any retry.
+* **Native rejection, `manual`**: never substitute. Re-run *Manual Model Selection* with the rejected id removed; unattended work stops or uses only the separately documented floor-safe fallback. Scribe pins, coordinator session models and `off` are not rerouted.
+* **Cost**: a retry that changes the model or price requires a new Cost Preflight round. A dispatch-time rejection is availability evidence, not evidence the role work failed.
 
 ## Stale-Catalog Fallback
 

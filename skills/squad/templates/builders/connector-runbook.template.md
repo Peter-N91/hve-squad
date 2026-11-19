@@ -1,3 +1,7 @@
+<!--
+Copyright (c) Microsoft Corporation.
+Licensed under the MIT license.
+-->
 # `{{CONNECTOR_ID}}` connector runbook
 
 ## Generated files
@@ -50,6 +54,13 @@ Markdown receipt rather than invoking an AI service, so it needs no credential.
 Replace `Invoke-ExampleEndpoint` with your trusted host/SDK call, or delete the
 script and implement the same request/result contract yourself. Do not add an
 execution field to the closed manifest schema.
+
+For a new dispatch, omit a deadline override unless a different cutoff was
+explicitly approved. Squad computes the deadline from the dispatch time in UTC
+plus the manifest's `deadlineMinutesDefault`. Keep the runner's deadline check
+when customizing the endpoint: it preserves the wire offset and refuses to start
+work on expired or invalid requests. Do not recalculate a published deadline
+when polling or resuming a task.
 
 ## Register and run
 

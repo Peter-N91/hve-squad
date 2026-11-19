@@ -3,6 +3,10 @@ name: squad-economy-scribe
 description: "Ordinary handoff."
 license: MIT
 ---
+<!--
+Copyright (c) Microsoft Corporation.
+Licensed under the MIT license.
+-->
 
 # Deterministic Ordinary Handoff
 

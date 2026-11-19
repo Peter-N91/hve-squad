@@ -1,6 +1,10 @@
 ---
 description: "Resolve bundled and repository agents from declared plugin membership without depending on host cache paths."
 ---
+<!--
+Copyright (c) Microsoft Corporation.
+Licensed under the MIT license.
+-->
 
 # Plugin Agent Discovery
 

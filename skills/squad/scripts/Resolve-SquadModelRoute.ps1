@@ -1,5 +1,6 @@
 #!/usr/bin/env pwsh
-# Copyright (c) 2026 Microsoft Corporation. All rights reserved.
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT license.
 # SPDX-License-Identifier: MIT
 #Requires -Version 7.0
 
@@ -51,6 +52,11 @@
     The model ids this host can dispatch. On the Copilot CLI and the GitHub Copilot
     app, pass the `task` tool's advertised `model` enum. Ids absent from the catalog
     are reported as `unevaluated` and never ranked.
+.PARAMETER RejectedModels
+    Model ids rejected by a native dispatch in this run. A retry requires the
+    host's confirmed availability list and removes the rejected ids before
+    resolving the same mode again. A rejection never selects the Economy
+    escalation target.
 .PARAMETER SessionModel
     The session model id (VS Code's Local agent advertises no model list). Used only
     when -AvailableModels is omitted: catalog ids whose Input rate exceeds the session
@@ -74,6 +80,9 @@
     objective for every role; untrusted trigger text is filtered before this resolver.
 .PARAMETER AsOf
     The date the catalog's staleness is measured against. Defaults to today.
+.PARAMETER CatalogPath
+    Optional catalog path for offline contract fixtures. Defaults to the shipped
+    `model-catalog.md`; normal dispatch never supplies an override.
 .PARAMETER Format
     `json` (default) or `markdown` (a compact table a manual-selection question can show).
 .EXAMPLE
@@ -85,6 +94,8 @@ param(
     [string]$SquadRoot,
 
     [string[]]$AvailableModels = @(),
+
+    [string[]]$RejectedModels = @(),
 
     [string]$SessionModel,
 
@@ -104,6 +115,8 @@ param(
 
     [string]$BenchmarksPath,
 
+    [string]$CatalogPath,
+
     [ValidateSet('json', 'markdown')]
     [string]$Format = 'json'
 )
@@ -116,6 +129,9 @@ Set-StrictMode -Version Latest
 $ScoringPolicy = Get-SquadBenchmarkPolicy
 
 $ReferencesRoot = Join-Path -Path $PSScriptRoot -ChildPath '..' -AdditionalChildPath 'references'
+if (-not $CatalogPath) {
+    $CatalogPath = Join-Path -Path $ReferencesRoot -ChildPath 'model-catalog.md'
+}
 if (-not $BenchmarksPath) {
     $BenchmarksPath = Join-Path -Path $ReferencesRoot -ChildPath 'model-benchmarks.md'
 }
@@ -195,7 +211,13 @@ function ConvertTo-CanonicalModelIdLocal {
         return ''
     }
     $id = ($Value.Trim().ToLowerInvariant() -replace '\s*\((?:copilot|github|anthropic|openai)\)\s*$', '' -replace '[\s_]+', '-')
-    if ($id -in @('hydrafusion', 'hydrafusion-balance', 'hydrafusion-efficiency')) {
+    if ($id -in @('fusion', 'copilot-fusion', 'fusion-standard', 'copilot-fusion-standard', 'hydrafusion-standard', 'hydrafusion-efficiency')) {
+        return 'fusion-standard'
+    }
+    if ($id -in @('hydrafusion', 'fusion-high', 'copilot-fusion-high', 'hydrafusion-high', 'hydrafusion-balance')) {
+        return 'hydrafusion'
+    }
+    if ($id -in @('hydrafusion-max', 'fusion-max', 'copilot-fusion-max')) {
         return 'hydrafusion-max'
     }
     return $id
@@ -311,7 +333,8 @@ function Get-BenchmarksLocal {
     param(
         [Parameter(Mandatory)][string]$Path,
         [Parameter(Mandatory)][datetime]$AsOf,
-        [Parameter(Mandatory)][string[]]$ModelIds
+        [Parameter(Mandatory)][string[]]$ModelIds,
+        [Parameter(Mandatory)][string]$CatalogPath
     )
 
     $result = [pscustomobject]@{
@@ -360,11 +383,11 @@ function Get-BenchmarksLocal {
                 $row.VerificationReason = 'legacy v2 policy: explicit re-verification and v3 regeneration required; ambiguous dates never establish verification'
             }
         }
-        $scoring = Get-SquadBenchmarkScore -Rows $rows -AsOf $AsOf -ModelIds $ModelIds
+        $scoring = Get-SquadBenchmarkScore -Rows $rows -AsOf $AsOf -ModelIds $ModelIds -CatalogPath $CatalogPath
         if ($result.PolicyVersion -ne $ScoringPolicy.Version -and -not $result.Legacy) {
             throw "Missing or unsupported scoring policy '$($result.PolicyVersion)'; expected '$($ScoringPolicy.Version)'."
         }
-        $result.Digest = Get-SquadBenchmarkDigest -Content $raw
+        $result.Digest = Get-SquadBenchmarkDigest -Content $raw -CatalogPath $CatalogPath
         $storedDigest = [regex]::Match($raw, '\*\*Content Digest:\s*(?<digest>sha256:[0-9a-f]{64})\*\*').Groups['digest'].Value
         if (-not $result.Legacy -and $storedDigest -and $storedDigest -cne $result.Digest) {
             throw 'Benchmark evidence content digest does not match its source and verification records.'
@@ -665,7 +688,7 @@ function Get-EscalationTarget {
 $teamPath = Join-Path -Path $SquadRoot -ChildPath 'team.md'
 if (-not (Test-Path -LiteralPath $teamPath -PathType Leaf)) { throw "team.md not found under $SquadRoot." }
 
-$catalog = Get-CatalogLocal -Path (Join-Path -Path $ReferencesRoot -ChildPath 'model-catalog.md')
+$catalog = Get-CatalogLocal -Path $CatalogPath
 $classMap = Get-RoleClassMapLocal -Path (Join-Path -Path $ReferencesRoot -ChildPath 'model-routing.md')
 $roster = Get-RosterLocal -Path $teamPath
 $effectiveMode = if ($Mode) { $Mode } else { $roster.Mode }
@@ -684,8 +707,8 @@ foreach ($key in $manualSelections.Keys) {
 $usesBenchmarkRanking = $effectiveMode -in @('ranked', 'economy', 'manual')
 $logsBenchmarkWarnings = $effectiveMode -in @('ranked', 'economy')
 $modelIds = @($catalog.Fit | ForEach-Object Id)
-$benchmarks = Get-BenchmarksLocal -Path $BenchmarksPath -AsOf $AsOf -ModelIds $modelIds
-$emptyScores = Get-SquadBenchmarkScore -Rows @() -AsOf $AsOf -ModelIds $modelIds
+$benchmarks = Get-BenchmarksLocal -Path $BenchmarksPath -AsOf $AsOf -ModelIds $modelIds -CatalogPath $CatalogPath
+$emptyScores = Get-SquadBenchmarkScore -Rows @() -AsOf $AsOf -ModelIds $modelIds -CatalogPath $CatalogPath
 
 $warnings = [System.Collections.Generic.List[string]]::new()
 $stale = $false
@@ -736,6 +759,20 @@ $advertisedIdByCanonical = @{}
 $availability = 'unverified'
 $availabilityResolved = $false
 $unevaluated = @()
+$rejectedCanonical = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::Ordinal)
+foreach ($rejectedId in @(
+        $RejectedModels |
+            ForEach-Object { $_ -split ',' } |
+            ForEach-Object { $_.Trim().ToLowerInvariant() } |
+            Where-Object { $_ } |
+            Sort-Object -Unique
+    )) {
+    $canonicalRejectedId = ConvertTo-CanonicalModelIdLocal -Value $rejectedId
+    if ($canonicalRejectedId) { [void]$rejectedCanonical.Add($canonicalRejectedId) }
+}
+if ($rejectedCanonical.Count -gt 0) {
+    $warnings.Add("Host-rejected model ids excluded from this retry: $(@($rejectedCanonical | Sort-Object) -join ', '). Replan in the current routing mode; a native rejection is not an Economy quality escalation.")
+}
 if ($AvailableModels.Count -gt 0) {
     $rawIds = @(
         $AvailableModels |
@@ -744,10 +781,10 @@ if ($AvailableModels.Count -gt 0) {
             Where-Object { $_ } |
             Sort-Object -Unique
     )
-    $advertised = [System.Collections.Generic.HashSet[string]]::new([string[]]$rawIds)
     $canonicalIds = [System.Collections.Generic.List[string]]::new()
     foreach ($rawId in $rawIds) {
         $canonicalId = ConvertTo-CanonicalModelIdLocal -Value $rawId
+        if ($rejectedCanonical.Contains($canonicalId)) { continue }
         if (-not $advertisedIdByCanonical.ContainsKey($canonicalId) -or $rawId -eq $canonicalId) {
             $advertisedIdByCanonical[$canonicalId] = $rawId
         }
@@ -755,10 +792,17 @@ if ($AvailableModels.Count -gt 0) {
             $canonicalIds.Add($canonicalId)
         }
     }
+    $acceptedRawIds = @($rawIds | Where-Object { -not $rejectedCanonical.Contains((ConvertTo-CanonicalModelIdLocal -Value $_)) })
+    $advertised = [System.Collections.Generic.HashSet[string]]::new([string[]]$acceptedRawIds)
     $available = [System.Collections.Generic.HashSet[string]]::new([string[]]$canonicalIds)
     $availability = 'host-advertised'
     $availabilityResolved = $true
-    $unevaluated = @($rawIds | Where-Object { -not $catalog.Capability.ContainsKey((ConvertTo-CanonicalModelIdLocal -Value $_)) } | Sort-Object -Unique)
+    $unevaluated = @($acceptedRawIds | Where-Object { -not $catalog.Capability.ContainsKey((ConvertTo-CanonicalModelIdLocal -Value $_)) } | Sort-Object -Unique)
+}
+elseif ($RejectedModels.Count -gt 0) {
+    $available = [System.Collections.Generic.HashSet[string]]::new()
+    $availability = 'unresolved (native rejection without host model inventory)'
+    $warnings.Add('A model rejection retry requires the host availableModels list; a priced session model is not a confirmed inventory.')
 }
 elseif ($SessionModel) {
     $canonicalSessionModel = ConvertTo-CanonicalModelIdLocal -Value $SessionModel
@@ -868,21 +912,23 @@ $results = foreach ($row in $roster.Rows) {
         $hasEvidence = [bool]$classHasEvidence[$class]
         $economyQualification = if ($hasEvidence) { 'evidence' } else { 'declared-fit' }
         $economy = @(Get-RankedCandidatesLocal -Catalog $catalog -Class $class -Admitted $rankedAdmitted -Available $available -Order cost -ClassHasEvidence $hasEvidence)
+        $economyFloor = @(Get-RankedCandidatesLocal -Catalog $catalog -Class $class -Admitted $rankedAdmitted -Available $available -Order cost -ClassHasEvidence $hasEvidence -AllowUnqualifiedEconomy)
         if ($economy.Count -eq 0) {
             $economyQualification = 'floor-only'
-            $economy = @(Get-RankedCandidatesLocal -Catalog $catalog -Class $class -Admitted $rankedAdmitted -Available $available -Order cost -ClassHasEvidence $hasEvidence -AllowUnqualifiedEconomy)
+            $economy = $economyFloor
         }
         if ($economy.Count -gt 0) {
             $objective = 'cost-first'
             $selectedEntry = $economy[0]
             $suggestedCatalogId = $economy[0].Id
+            $combined = [Collections.Generic.List[object]]::new()
+            $combinedIds = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+            $unpriced = @($offered | Where-Object { $null -eq $_.Blended -or $_.Blended -lt 0 })
+            foreach ($candidate in @($economy) + @($economyFloor) + $unpriced) {
+                if ($combinedIds.Add([string]$candidate.Id)) { $combined.Add($candidate) }
+            }
+            $offered = $combined.ToArray()
             if ($economyQualification -eq 'floor-only') {
-                $combined = [Collections.Generic.List[object]]::new()
-                $combinedIds = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
-                foreach ($candidate in @($economy) + @($offered)) {
-                    if ($combinedIds.Add([string]$candidate.Id)) { $combined.Add($candidate) }
-                }
-                $offered = $combined.ToArray()
                 $qualification = Get-EconomyQualificationLocal -Entry $selectedEntry -Class $class -ClassHasEvidence $hasEvidence
                 $rationale = "economy pick: selected $suggestedCatalogId under $EconomyFloorOnlyRule; no candidate met $(if ($hasEvidence) { $selectedEntry.Capabilities[$class].panel.qualificationRule } else { $EconomyDeclaredRule }), so Economy used the cheapest known-price host model inside the $tier floor instead of falling back to Ranked; selected candidate qualification: $($qualification.Reason)"
                 if ($economy.Count -gt 1) {
@@ -929,6 +975,7 @@ $results = foreach ($row in $roster.Rows) {
     $cellStatus = 'empty'
     if ($cell) {
         if ($cell -match $MetacharacterPattern) { $cellStatus = 'refused: metacharacter' }
+        elseif ($rejectedCanonical.Contains($canonicalCell)) { $cellStatus = 'refused: not available on this host' }
         elseif (-not $availabilityResolved) { $cellStatus = 'refused: host availability unresolved' }
         elseif (-not $catalog.Capability.ContainsKey($canonicalCell) -and ($null -eq $advertised -or -not $advertised.Contains($cellId))) { $cellStatus = 'refused: unknown id' }
         elseif ($null -ne $advertised -and -not $advertised.Contains($cellId)) { $cellStatus = 'refused: not available on this host' }
@@ -1102,7 +1149,7 @@ $results = foreach ($row in $roster.Rows) {
         }
         else { $null }
         $entry['escalation'] = if ($target -and $target -ne $suggested) { $target } else { $null }
-        $entry['escalationReason'] = if ($entry['escalation']) { 'one retry on capability-first Ranked; persist Model cell and rerun required Cost Preflight before redispatch' }
+        $entry['escalationReason'] = if ($entry['escalation']) { 'post-quality-failure only: one retry on capability-first Ranked; host rejection instead replans the current mode with rejectedModels; persist Model cell and rerun required Cost Preflight before redispatch' }
         elseif ($applied) { 'no higher-ranked escalation target exists' }
         else { $EconomyHoldReason[$economyHold] }
         $entry['economyQualification'] = if ($exception) { $null } else { $economyQualification }
@@ -1128,6 +1175,7 @@ $report = [pscustomobject][ordered]@{
     unattended          = [bool]$Unattended
     availability        = $availability
     availabilityResolved = $availabilityResolved
+    rejectedModels      = @($rejectedCanonical | Sort-Object)
     unevaluated         = $unevaluated
     warnings            = @($warnings)
     roles               = @($results)

@@ -1,4 +1,6 @@
 #!/usr/bin/env pwsh
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT license.
 #Requires -Version 7.4
 
 <#
@@ -34,6 +36,27 @@ function Get-RequiredValue {
         throw "Missing required request field '$Name'."
     }
     $property.Value
+}
+
+function Get-RequestDeadlineError {
+    param([Parameter(Mandatory)][string]$RequestJson)
+
+    # Read the original JSON string; ConvertFrom-Json can coerce timestamps to DateTime.
+    $document = [System.Text.Json.JsonDocument]::Parse($RequestJson)
+    try {
+        $value = [System.Text.Json.JsonElement]::new()
+        $deadline = [DateTimeOffset]::MinValue
+        if (-not $document.RootElement.TryGetProperty('deadline', [ref]$value) -or
+            $value.ValueKind -ne [System.Text.Json.JsonValueKind]::String -or
+            $value.GetString() -cnotmatch '(?:Z|[+-][0-9]{2}:[0-9]{2})\z' -or
+            -not $value.TryGetDateTimeOffset([ref]$deadline)) {
+            return 'Request deadline must be an ISO 8601 timestamp with an explicit UTC offset.'
+        }
+        if ([DateTimeOffset]::UtcNow -ge $deadline) {
+            return "Request deadline '$($deadline.UtcDateTime.ToString('o'))' has expired."
+        }
+    }
+    finally { $document.Dispose() }
 }
 
 function Assert-SafeIdentifier {
@@ -184,7 +207,8 @@ function Invoke-PendingRequest {
         [Parameter(Mandatory)][string]$DropDirectory
     )
 
-    $request = Get-Content -LiteralPath $RequestFile.FullName -Raw | ConvertFrom-Json -Depth 32
+    $requestJson = Get-Content -LiteralPath $RequestFile.FullName -Raw
+    $request = ConvertFrom-Json -InputObject $requestJson -Depth 32
     $taskId = [string](Get-RequiredValue -Object $request -Name 'taskId')
     $connectorId = [string](Get-RequiredValue -Object $request -Name 'connectorId')
     $bindingId = [string](Get-RequiredValue -Object $request -Name 'bindingId')
@@ -202,24 +226,30 @@ function Invoke-PendingRequest {
     $resultPath = Join-Path $DropDirectory "$taskId.result.json"
     if (Test-Path -LiteralPath $resultPath) { return }
 
-    $planned = @(Invoke-ExampleEndpoint -Request $request -Manifest $Manifest -Workspace $Workspace)
     $result = [ordered]@{
         taskId     = $taskId
         connectorId = $connectorId
         bindingId  = $bindingId
         role       = $role
-        status     = 'completed'
+        status     = 'failed'
         artifacts  = @()
     }
-    if ($Manifest.endpointKind -eq 'orchestrator') {
-        $result.outputs = @($planned | ForEach-Object {
-                [ordered]@{ outputId = $_.OutputId; artifacts = @($_.Artifact) }
-            })
-    }
+    if ($Manifest.endpointKind -eq 'orchestrator') { $result.outputs = @() }
+    $deadlineError = Get-RequestDeadlineError -RequestJson $requestJson
+    if ($deadlineError) { $result.narrative = $deadlineError }
     else {
-        $result.artifacts = @($planned[0].Artifact)
+        $planned = @(Invoke-ExampleEndpoint -Request $request -Manifest $Manifest -Workspace $Workspace)
+        if ($Manifest.endpointKind -eq 'orchestrator') {
+            $result.outputs = @($planned | ForEach-Object {
+                    [ordered]@{ outputId = $_.OutputId; artifacts = @($_.Artifact) }
+                })
+        }
+        else {
+            $result.artifacts = @($planned[0].Artifact)
+        }
+        $result.status = 'completed'
+        $result.narrative = 'The removable example runner completed a transport demonstration; replace it with source-grounded endpoint work.'
     }
-    $result.narrative = 'The removable example runner completed a transport demonstration; replace it with source-grounded endpoint work.'
     $result.createdAt = [DateTimeOffset]::UtcNow.ToString('o')
 
     Write-AtomicNewFile -Path $resultPath -Content (($result | ConvertTo-Json -Depth 16) + "`n")

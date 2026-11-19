@@ -6,6 +6,10 @@ model: Claude Sonnet 5.5 (copilot)
 agents:
   - RPI Researcher
 ---
+<!--
+Copyright (c) Microsoft Corporation.
+Licensed under the MIT license.
+-->
 
 # Squad Researcher
 

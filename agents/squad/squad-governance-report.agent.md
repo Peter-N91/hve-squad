@@ -5,6 +5,10 @@ user-invocable: true
 disable-model-invocation: false
 argument-hint: "[outputPath=<path>] [squad=<name>] [period={all|30d|7d}]"
 ---
+<!--
+Copyright (c) Microsoft Corporation.
+Licensed under the MIT license.
+-->
 
 # Squad Governance Report
 

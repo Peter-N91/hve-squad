@@ -1,5 +1,6 @@
 #!/usr/bin/env pwsh
-# Copyright (c) 2026 Microsoft Corporation. All rights reserved.
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT license.
 # SPDX-License-Identifier: MIT
 #Requires -Version 7.4
 
@@ -12,9 +13,10 @@
       execution?, dependsOn?: [], parallel?: bool, readOnly?: bool,
       writePaths?: [], allowedOutputs?: [] }], council?: bool, planPath?: string,
       admissionApproved?: bool, agentTypes?: [], availableModels?: [],
+      rejectedModels?: [],
       sessionModel?: string, asOf?: date, requestedModelRouting?: ranked|economy|manual,
       manualModels?: {role:model}, economyConsent?: {user,tradeAccepted,neverWeakened,timestamp?},
-      requestedDepth?: quick|standard, depthSource?: input|federation,
+      requestedDepth?: quick|standard, depthSource?: input|federation|workflow,
       depthEvidence?: {exactTargets?, noOpenQuestions?,
       noCouncilLens?, noGateTrigger?, noCritiqueRequested?, discoveryExplicit?, reuse?: [{stage,path,covers}]},
       reasoningEfforts?: [], cost?: {runId, roundId, ceilingUsd, sessionLog?|usageOutputPath?,
@@ -28,8 +30,12 @@
     When cost is supplied, complete native usage records are authoritative consumed
     spend and only the actual next wave plus one coordinator lookup is reserved.
     The returned Cost Preflight object must be persisted before dispatch.
+    rejectedModels requires the confirmed host availableModels list and excludes
+    rejections before replanning in the current mode, never through Economy's
+    quality-failure escalation.
     requestedDepth is the trusted per-turn depth= input and depthSource proves whether it came
-    from the current prompt or a federation parent. Omission is explicitly standard. It never changes a model: it returns
+    from the current prompt, a federation parent, or (workflow, unattended Watch Mode runs only)
+    the committed workflow configuration or a collaborator's manual dispatch. Omission is explicitly standard. It never changes a model: it returns
     a depth plan (stages run, shrunk, or skipped with criterion and evidence), per-endpoint
     depth clauses and the quick-depth parallel eligibility. Omitted, the plan is unchanged.
     Native dispatch, semantic gates and exact input forwarding remain with the
@@ -84,7 +90,7 @@ try {
         if (-not $inputData.Contains($key)) { throw "Missing dispatch-plan field: $key" }
     }
     foreach ($key in $inputData.Keys) {
-        if ($key -notin @('squadRoot', 'units', 'council', 'planPath', 'admissionApproved', 'agentTypes', 'availableModels', 'sessionModel', 'asOf', 'requestedModelRouting', 'manualModels', 'economyConsent', 'requestedDepth', 'depthSource', 'depthEvidence', 'reasoningEfforts', 'cost')) { throw "Unsupported dispatch-plan field: $key" }
+        if ($key -notin @('squadRoot', 'units', 'council', 'planPath', 'admissionApproved', 'agentTypes', 'availableModels', 'rejectedModels', 'sessionModel', 'asOf', 'requestedModelRouting', 'manualModels', 'economyConsent', 'requestedDepth', 'depthSource', 'depthEvidence', 'reasoningEfforts', 'cost')) { throw "Unsupported dispatch-plan field: $key" }
     }
     if ($inputData.units -isnot [array] -or $inputData.units.Count -eq 0) { throw 'units must be a nonempty array.' }
     foreach ($key in @('council', 'admissionApproved')) {
@@ -99,6 +105,14 @@ try {
     if ($inputData.Contains('availableModels')) {
         if ($inputData.availableModels -isnot [array] -or @($inputData.availableModels | Where-Object { $_ -isnot [string] }).Count) { throw 'availableModels must be the host string array.' }
         $availableModels = @($inputData.availableModels)
+    }
+    $rejectedModels = @()
+    if ($inputData.Contains('rejectedModels')) {
+        if ($inputData.rejectedModels -isnot [array] -or @($inputData.rejectedModels | Where-Object { $_ -isnot [string] }).Count) { throw 'rejectedModels must be the host-rejected string array.' }
+        $rejectedModels = @($inputData.rejectedModels | ForEach-Object { $_.Trim() })
+        if (@($rejectedModels | Where-Object { -not $_ -or $_ -match '[\x00-\x1F\x7F\u0085\u2028\u2029]' }).Count) {
+            throw 'rejectedModels entries must be nonempty single-line model ids.'
+        }
     }
     $sessionModel = if ($inputData.Contains('sessionModel')) { [string]$inputData.sessionModel } else { '' }
     $asOf = if ($inputData.Contains('asOf')) {
@@ -119,10 +133,10 @@ try {
     $requestedDepth = if ($hasRequestedDepth) { [string]$inputData.requestedDepth } else { 'standard' }
     if ($requestedDepth -cnotin @('quick', 'standard')) { throw 'requestedDepth must be quick or standard.' }
     $depthSource = if ($inputData.Contains('depthSource')) { [string]$inputData.depthSource } else { 'default' }
-    if ($depthSource -cnotin @('default', 'input', 'federation')) { throw 'depthSource must be default, input, or federation.' }
+    if ($depthSource -cnotin @('default', 'input', 'federation', 'workflow')) { throw 'depthSource must be default, input, federation, or workflow.' }
     if (-not $hasRequestedDepth -and $depthSource -cne 'default') { throw 'depthSource requires requestedDepth.' }
-    if ($requestedDepth -ceq 'quick' -and $depthSource -cnotin @('input', 'federation')) {
-        throw 'requestedDepth quick requires trusted depthSource input or federation; omission is standard and quick is never inferred.'
+    if ($requestedDepth -ceq 'quick' -and $depthSource -cnotin @('input', 'federation', 'workflow')) {
+        throw 'requestedDepth quick requires trusted depthSource input, federation, or workflow; omission is standard and quick is never inferred.'
     }
     $depthEvidence = if ($inputData.Contains('depthEvidence')) { $inputData.depthEvidence } else { [ordered]@{} }
     if ($depthEvidence -isnot [Collections.IDictionary]) { throw 'depthEvidence must be an object.' }
@@ -165,6 +179,7 @@ try {
     $planFanOut = $requestedDepth -ceq 'quick' -and (Test-SquadDeliverableFanOutPlan -PlanPath $planPath -RepoRoot $RepoRoot)
     $state = Get-Content -LiteralPath (Join-Path $root 'state.json') -Raw | ConvertFrom-Json -AsHashtable
     $unattendedRun = $state.Contains('trigger') -and $state['trigger'] -is [Collections.IDictionary]
+    if ($depthSource -ceq 'workflow' -and -not $unattendedRun) { throw 'depthSource workflow is valid only on an unattended Watch Mode run.' }
     $depthQuick = $requestedDepth -ceq 'quick' -and -not $unattendedRun
     $agents = Get-SquadAgentIndex $RepoRoot
     $roster = @()
@@ -184,6 +199,12 @@ try {
     $recordedModelRouting = if ($modeMatch.Success) { $modeMatch.Groups['mode'].Value } else { 'off' }
     $modelRouting = if ($requestedModelRouting) { $requestedModelRouting } else { $recordedModelRouting }
     $routingModeChanged = $modelRouting -cne $recordedModelRouting
+    if ($rejectedModels.Count -gt 0 -and $modelRouting -eq 'off') {
+        throw 'rejectedModels requires active ranked, economy, or manual routing; off cannot replan a model.'
+    }
+    if ($federation -and $rejectedModels.Count -gt 0) {
+        throw 'rejectedModels is member-local; replan the affected member role after a native model rejection.'
+    }
     if ($manualModels.Count -gt 0 -and $modelRouting -ne 'manual') { throw 'manualModels requires Model routing: manual.' }
     if ($null -ne $economyConsent -and $modelRouting -ne 'economy') {
         throw 'economyConsent is allowed only for routing=economy.'
@@ -269,16 +290,19 @@ try {
     $routingChangeRoles = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
     $teamHash = if ($federation) { '' } else { (Get-FileHash -LiteralPath (Join-Path $root 'team.md') -Algorithm SHA256).Hash }
     if (-not $federation -and $modelRouting -ne 'off' -and $selectedRoles.Count -gt 0) {
-        if ($availableModels.Count -eq 0 -and -not $sessionModel) {
-            throw 'Active model routing requires the host availableModels enum or the literal sessionModel.'
-        }
-        $sessionModelKey = ($sessionModel.Trim().ToLowerInvariant() -replace '\s*\((?:copilot|github|anthropic|openai)\)\s*$', '' -replace '[\s_]+', '-')
-        if ($availableModels.Count -eq 0 -and $sessionModelKey -in @('', 'auto', 'unknown', 'fast', 'default', 'extended')) {
-            throw "Active model routing requires the host availableModels enum. sessionModel '$sessionModel' is routing metadata, not an availability inventory; pass the task tool's advertised model enum, or a concrete priced session model only on a host that advertises no model list."
+        if ($availableModels.Count -eq 0 -and $rejectedModels.Count -eq 0) {
+            if (-not $sessionModel) {
+                throw 'Active model routing requires the host availableModels enum or the literal sessionModel.'
+            }
+            $sessionModelKey = ($sessionModel.Trim().ToLowerInvariant() -replace '\s*\((?:copilot|github|anthropic|openai)\)\s*$', '' -replace '[\s_]+', '-')
+            if ($sessionModelKey -in @('', 'auto', 'unknown', 'fast', 'default', 'extended')) {
+                throw "Active model routing requires the host availableModels enum. sessionModel '$sessionModel' is routing metadata, not an availability inventory; pass the task tool's advertised model enum, or a concrete priced session model only on a host that advertises no model list."
+            }
         }
         $routeArguments = @{
             SquadRoot = $root
             AvailableModels = $availableModels
+            RejectedModels = $rejectedModels
             SessionModel = $sessionModel
             Mode = $modelRouting
             Role = $selectedRoles
@@ -377,10 +401,16 @@ try {
                 -AllowedOutputs @(if ($unit.Contains('allowedOutputs')) { $unit.allowedOutputs }) `
                 -AdmissionApproved:($inputData.Contains('admissionApproved') -and $inputData.admissionApproved)
             if ($selection.Status -ne 'ok') { throw "Endpoint resolution $($selection.Status): $($selection.Reason). Follow references/connector-role-modes.md; do not substitute." }
+            # Replacement changes the dispatch identity, not the Members row that owns the model.
+            $connectorDispatch = $selection.Choice -clike 'connector:*'
+            $rosterMemberName = if ($connectorDispatch) { [string]$selection.RosterMemberName } else { [string]$selection.MemberName }
             $rows = @($roster | Where-Object { $_.Role -ceq $unit.role -and (-not $owner -or $_['Member Name'] -ceq $owner) })
-            $selectedRows = @($rows | Where-Object { $_['Member Name'] -ceq $selection.MemberName -and $_['Agent Name (Primary)'] -ceq $selection.Agent })
+            $selectedRows = @($rows | Where-Object {
+                    [string]$_['Member Name'] -ceq $rosterMemberName -and
+                    ($connectorDispatch -or $_['Agent Name (Primary)'] -ceq $selection.Agent)
+                })
             if ($selectedRows.Count -eq 1) { $row = $selectedRows[0] }
-            elseif ($rows.Count -eq 1) { $row = $rows[0] }
+            elseif (-not $connectorDispatch -and $rows.Count -eq 1) { $row = $rows[0] }
             else { throw 'Selected roster member is ambiguous; supply owner.' }
             $agent = $selection.Agent
             if ($unit.Contains('agent') -and $unit.agent -cne $agent) {
@@ -418,7 +448,7 @@ try {
             $tier = if ('escalate' -in $tiers -or -not $tiers.Count) { 'escalate' } elseif ($council -or 'confirm' -in $tiers) { 'confirm' } else { 'auto' }
             $persistedModel = if ($modelRouting -ne 'off' -and $row.ContainsKey('Model')) { [string]$row.Model } else { '' }
             if ($persistedModel -in @('-', [string][char]0x2014)) { $persistedModel = '' }
-            $routeKey = [string]$unit.role + "`n" + [string]$selection.MemberName
+            $routeKey = [string]$unit.role + "`n" + $rosterMemberName
             $route = if ($routeByIdentity.ContainsKey($routeKey)) { $routeByIdentity[$routeKey] } else { $null }
             $assignmentClass = if ($null -ne $route) { [string]$route.class }
             elseif ($roleClasses.ContainsKey([string]$unit.role)) { [string]$roleClasses[[string]$unit.role] }
@@ -436,10 +466,12 @@ try {
                     $candidates = @($route.candidates | ForEach-Object { $_.id }) -join ', '
                     throw "Role '$($unit.role)' has no admissible $modelRouting model. Cell status: $cellStatus. Candidates: $candidates"
                 }
-                if ($persistedModel -cne $model) {
+                # The writer clears unassigned cells on entry to Manual, even if a prior automatic pick matches.
+                $manualAssignment = $routingModeChanged -and $modelRouting -ceq 'manual' -and $routeManualModels.Contains($unit.role)
+                if ($persistedModel -cne $model -or $manualAssignment) {
                     $nodeRoutingChange = [ordered]@{
                         role = [string]$unit.role
-                        memberName = [string]$selection.MemberName
+                        memberName = $rosterMemberName
                         from = $persistedModel
                         to = $model
                         rationale = $routeRationale
@@ -450,6 +482,7 @@ try {
             $pricingModel = if ($model) { $model } elseif ($pin) { $pin } else { $sessionModel }
             $endpoint = [ordered]@{
                 role = $unit.role; memberName = $selection.MemberName; agent = $agent
+                rosterMemberName = $rosterMemberName
                 execution = $selection.Choice; connectorSelection = $selection
                 squadRoot = $root; deliverableRoot = $row['Deliverable Root']
                 model = $model; persistedModel = $persistedModel; pricingModel = $pricingModel
@@ -786,6 +819,7 @@ try {
         modelPolicy = $(if ($routeReport) { $routeReport.scoringPolicy } else { 'off' })
         modelSnapshot = $(if ($routeReport) { $routeReport.snapshotIdentity } else { 'not-evaluated' })
         modelAvailability = $(if ($routeReport) { $routeReport.availability } else { 'not-evaluated' })
+        modelRejections = @(if ($routeReport) { $routeReport.rejectedModels })
         modelWarnings = @(if ($routeReport) { $routeReport.warnings })
         routingRefresh = $routingRefresh
         routingReady = -not $federation -and -not $routingRefresh.required

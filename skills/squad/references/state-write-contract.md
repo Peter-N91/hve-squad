@@ -1,6 +1,10 @@
 ---
 description: "Cold manual-write and no-runtime contract: exact history, consumption, ledger and state semantics."
 ---
+<!--
+Copyright (c) Microsoft Corporation.
+Licensed under the MIT license.
+-->
 
 # Squad Agent Floor
 

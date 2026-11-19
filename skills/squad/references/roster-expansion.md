@@ -7,6 +7,10 @@ metadata:
   spec_version: "1.0"
   last_updated: "2026-11-04"
 ---
+<!--
+Copyright (c) Microsoft Corporation.
+Licensed under the MIT license.
+-->
 
 # Deterministic Roster Expansion
 

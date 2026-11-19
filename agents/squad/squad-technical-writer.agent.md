@@ -4,6 +4,10 @@ description: "Non-user-invocable squad documentation author that runs the docume
 user-invocable: false
 model: Claude Haiku 5.5 (copilot)
 ---
+<!--
+Copyright (c) Microsoft Corporation.
+Licensed under the MIT license.
+-->
 
 # Squad Technical Writer
 

@@ -1,13 +1,19 @@
 ---
-description: "Federation runtime: member scheduling, validated root writes and lifecycle policy."
+description: "Federation mechanics and lifecycle."
 ---
+<!--
+Copyright (c) Microsoft Corporation.
+Licensed under the MIT license.
+-->
 
 # Federation Runtime
 
-Success is isolated member work with dependency ordering and two-level proof.
-Federation is additive; scripts/autopilot grant no approval or specialist result.
+Verify isolated member work, dependencies and two-level proof. Federation is
+additive; scripts/autopilot grant no approval or specialist result.
 
 ## Detect and Load Only Active Policy
+
+Doctor requests/runtime failures: stop work; use `doctor.md` before Init/planning.
 
 Run `Get-SquadDispatchBrief.ps1 -RepoRoot <repo> -SquadRoot <root> -AsJson`.
 Forward trusted `routing=` via `-RequestedModelRouting <mode>`.
@@ -60,13 +66,13 @@ event-scoped member (not the meta-pipeline), and report failure to the source.
 Registered `squad=<name>` wins; otherwise prefer the most specific meta-pattern/direct
 owner. Clarify unknown, ambiguous or equally specific conflicts; never guess.
 
-Put selected squads, explicit producer dependencies and proven write sets into
-`New-SquadDispatchPlan.ps1` input. Its waves are scheduling data, not admission.
-Dependencies override generic `Parallel-Eligible`. Members, not user-invocable
-coordinators, are native worker targets at their own roots.
-Forward `endpoint.requestedModelRouting` into each member's actual-role plan with
-`-ApplyModelRouting`; require `routingReady: true` before workers, including quick
-single-role/targeted-autopilot work. Root plans do not activate member models.
+Pass selected squads, explicit dependencies and proven write sets to
+`New-SquadDispatchPlan.ps1`. Dependencies override `Parallel-Eligible`; waves
+schedule, not admit. Dispatch workers, not coordinators. Start each native
+member prompt with `Squad root: .copilot-tracking/squad/members/<name>`.
+Forward `endpoint.requestedModelRouting` to the member's actual-role plan with
+`-ApplyModelRouting`; require `routingReady: true` before each dispatch, including
+quick and targeted-autopilot work. Root plans never activate member models.
 
 Before child dispatch take the script snapshot with
 `Get-SquadDispatchBrief.ps1 ... -AsJson -SnapshotPath <transport>`. Keep it

@@ -1,5 +1,9 @@
 <!-- Ported from squad-src/.github/instructions/squad/squad-roster.instructions.md by scripts/Build-SquadPlugin.ps1. Source of truth lives in hve-squad; do not hand-edit here. -->
 
+<!--
+Copyright (c) Microsoft Corporation.
+Licensed under the MIT license.
+-->
 
 # Squad Roster Conventions
 
@@ -153,14 +157,13 @@ Each role writes its artifact into a fixed directory so the Artifact Gate in `sk
 | analyst, product-owner, designer, experimenter, modernizer | `.copilot-tracking/plans/`                 |
 | data-scientist                                    | `outputs/`                                          |
 | backlog-executor                                  | `.copilot-tracking/workitems/execution/<date>/` (ADO) or `.copilot-tracking/jira-issues/execution/<date>/` (Jira) |
-| presenter                                         | `.copilot-tracking/ppt/<date>/<deck-slug>/`         |
 | technical-writer                                  | `docs/`                                             |
 | architect, azure-architect, aws-architect, pp-architect, m365-agent-architect | `docs/architecture/`     |
 | scribe                                            | the squad root itself (state, not a deliverable)    |
 
 **The discovery gate writes into an existing root rather than claiming a new one.** A discovery brief is written by `analyst` and therefore lands in the `analyst` root as `<date>-<topic-id>-brief.md`, which keeps the Artifact Gate a path lookup. The gate's other roles (`designer`, `challenger`, `experimenter`) return findings for the Discovery Verdict and write nothing during a discovery session, so one session produces one artifact rather than four.
 
-**Some agents build their own output path, so the root must be passed as an argument rather than as context.** `presenter` is the clearest case: the `powerpoint` skill pipeline derives `<date>/<deck-slug>/` itself and takes the parent as an explicit output argument. Naming the roster cell in the dispatch prose is not enough — pass it as the pipeline's output path, or the agent composes its own and a hand-edited cell is silently ignored. Verify at the roster cell afterwards: an artifact found at the agent's default path instead is a failed dispatch to report, not a location to accept.
+**Some agents build their own output path, so the root must be passed as an argument rather than as context.** Any agent whose tooling derives `<date>/<slug>/` itself is the clearest case: it takes the parent as an explicit output argument. Naming the roster cell in the dispatch prose is not enough — pass it as the pipeline's output path, or the agent composes its own and a hand-edited cell is silently ignored. Verify at the roster cell afterwards: an artifact found at the agent's default path instead is a failed dispatch to report, not a location to accept.
 
 **A role absent from this table returns its findings to the coordinator rather than writing a standalone artifact, and that is the correct shape for it rather than a gap.** `cost-manager`, `deployer`, `fact-checker`, `asbuilt-author`, `azure-diagnose`, and `aws-diagnose` return structured results; their durable record is the Scribe's history entry or the publishing role's artifact. `qa-engineer` writes test code in the project's test tree and its test plan and defect report in the root above.
 
@@ -176,7 +179,7 @@ Each role writes its artifact into a fixed directory so the Artifact Gate in `sk
 
 The mapping deliberately supports three shapes so squad roles can stay human-meaningful while reusing the full HVE Core cast:
 
-* **One-to-one** — a role maps to a single agent with no alternates. Examples: `privacy → Privacy Planner`, `experimenter → Experiment Designer`, `presenter → PowerPoint Subagent`.
+* **One-to-one** — a role maps to a single agent with no alternates. Examples: `privacy → Privacy Planner`, `experimenter → Experiment Designer`.
 * **One-to-many** — a role maps to a Primary plus Alternates, and the coordinator resolves to one agent per the Selection Cue. Examples: `product-owner` resolves across the PRD-to-work-item and single-issue-triage agents by request shape; `tester` resolves across the code-review perspective subagents by review sub-type; `aws-architect` resolves across three external agents by workload shape, which is the first time an *external* role carries Alternates rather than a lone Primary.
 * **Many-to-one** — a single agent fills more than one role. Examples: `Codebase Profiler` serves `researcher` and `security`; `Finding Deep Verifier` serves `fact-checker` and `security`; `Meeting Analyst` serves `researcher` and `analyst`.
 
@@ -220,16 +223,16 @@ Every profile also carries the **methodology spine**: `researcher`, `lead`, `dev
 
 Some roles are **artifact-owning**: their `Deliverable Root` cell in `team.md` names a real path rather than `—` or `(squad state)`, so a dispatch is expected to leave a standalone artifact there. Read this from the roster, never from a list of role names — the cell is an operator declaration and a consumer may edit it. `researcher`, `lead`, and `tester` are artifact-owning too, but they own the Research, Plan, and Review stages rather than Implement, so the Implement stage's candidates are every other artifact-owning role, `developer` among them.
 
-When the plan's deliverable list names **two or more Implement-stage candidates**, the work is a set of distinct artifacts rather than a single build, and autopilot fans its Implement stage out across the owning specialists instead of dispatching a single `developer` (see *Deliverable Fan-Out* in `skills/squad/references/rules/squad-autopilot.md`). `product` is the canonical case — a requirements document, a refined backlog, a design study, an experiment design, a slide deck, written documentation, and a data notebook, owned by `analyst`, `product-owner`, `designer`, `experimenter`, `presenter`, `technical-writer`, and `data-scientist`. It is not the only one: an `azure` roster carries `azure-architect`, `iac-author`, `asbuilt-author`, `modernizer`, and `architect` alongside `developer`, and an architecture document, an IaC scaffold, and a migration sequence are as distinct from one another as a BRD is from a deck. A plan that names one candidate stays a single build, which leaves `default` and every simple run unchanged.
+When the plan's deliverable list names **two or more Implement-stage candidates**, the work is a set of distinct artifacts rather than a single build, and autopilot fans its Implement stage out across the owning specialists instead of dispatching a single `developer` (see *Deliverable Fan-Out* in `skills/squad/references/rules/squad-autopilot.md`). `product` is the canonical case — a requirements document, a refined backlog, a design study, an experiment design, written documentation, and a data notebook, owned by `analyst`, `product-owner`, `designer`, `experimenter`, `technical-writer`, and `data-scientist`. It is not the only one: an `azure` roster carries `azure-architect`, `iac-author`, `asbuilt-author`, `modernizer`, and `architect` alongside `developer`, and an architecture document, an IaC scaffold, and a migration sequence are as distinct from one another as a BRD is from a deck. A plan that names one candidate stays a single build, which leaves `default` and every simple run unchanged.
 
 **Reading eligibility off a fixed list of role names was the defect this replaces.** A live `azure` run carried none of the seven `product` roles, was therefore classified as a single build, produced five specialist artifacts anyway, and improvised a fan-out the pipeline does not define — so none of the per-dispatch recording rules that the fan-out path carries applied to it. It reported ten stages and left no `history/<agent>.md` behind any of them.
 
-The narrower term **deliverable-producing role** — `analyst`, `product-owner`, `designer`, `experimenter`, `presenter`, `technical-writer`, `data-scientist` — survives, and now names one thing only: the roles whose output the *Implementation Gate* treats as the turn's substantive output alongside `developer`. It no longer decides the Implement stage's shape, because a role list cannot see a roster it was not written for.
+The narrower term **deliverable-producing role** — `analyst`, `product-owner`, `designer`, `experimenter`, `technical-writer`, `data-scientist` — survives, and now names one thing only: the roles whose output the *Implementation Gate* treats as the turn's substantive output alongside `developer`. It no longer decides the Implement stage's shape, because a role list cannot see a roster it was not written for.
 
 | Profile         | Members (roles)                                                                                                                                | Choose when the project is…                                              |
 |-----------------|------------------------------------------------------------------------------------------------------------------------------------------------|--------------------------------------------------------------------------|
 | `default`       | researcher, lead, developer, tester, scribe                                                                                                    | General build and delivery work — a balanced team (recommended default)  |
-| `full`          | researcher, lead, developer, tester, challenger, architect, azure-architect, iac-author, deployer, asbuilt-author, azure-diagnose, security, supply-chain, vuln-manager, rai, privacy, accessibility, risk-manager, performance, observability, designer, fact-checker, cost-manager, modernizer, prompt-engineer, analyst, product-owner, presenter, technical-writer, experimenter, data-scientist, intake-validator, scribe | You want every deployed capability available except the opt-in roles     |
+| `full`          | researcher, lead, developer, tester, challenger, architect, azure-architect, iac-author, deployer, asbuilt-author, azure-diagnose, security, supply-chain, vuln-manager, rai, privacy, accessibility, risk-manager, performance, observability, designer, fact-checker, cost-manager, modernizer, prompt-engineer, analyst, product-owner, technical-writer, experimenter, data-scientist, intake-validator, scribe | You want every deployed capability available except the opt-in roles     |
 | `security`      | researcher, lead, developer, tester, security, supply-chain, rai, privacy, fact-checker, scribe                                                | Security-, supply-chain-, threat-, privacy-, or responsible-AI-focused (auth, secrets, ML, LLM, personal data) |
 | `design`        | researcher, lead, developer, tester, designer, accessibility, scribe                                                                           | UX/UI or product-design focused, with accessibility alongside            |
 | `accessibility` | researcher, lead, developer, tester, accessibility, designer, scribe                                                                           | Accessibility conformance is the goal itself — WCAG 2.2, Section 508, or EN 301 549 assessment and remediation |
@@ -238,7 +241,7 @@ The narrower term **deliverable-producing role** — `analyst`, `product-owner`,
 | `modernization` | researcher, lead, developer, tester, modernizer, architect, azure-architect, iac-author, cost-manager, asbuilt-author, scribe                  | Legacy uplift — framework or dependency upgrades, re-platforming, SQL or cloud migration |
 | `compliance`    | researcher, lead, developer, tester, security, supply-chain, vuln-manager, privacy, rai, accessibility, risk-manager, scribe                   | Conformance evidence is the goal — an audit, an attestation, or a customer questionnaire that needs privacy, accessibility, responsible-AI, supply-chain, and vulnerability answers together |
 | `operations`    | researcher, lead, developer, tester, azure-diagnose, performance, observability, asbuilt-author, iac-author, deployer, scribe                  | Running and keeping a deployed system healthy — incident response, reliability targets, instrumentation design, and as-built documentation |
-| `product`       | researcher, lead, developer, tester, analyst, designer, product-owner, presenter, technical-writer, experimenter, data-scientist, intake-validator, scribe                       | Business discovery and delivery — requirements, design thinking, roadmap, and stakeholder deliverables (often non-technical) |
+| `product`       | researcher, lead, developer, tester, analyst, designer, product-owner, technical-writer, experimenter, data-scientist, intake-validator, scribe                       | Business discovery and delivery — requirements, design thinking, roadmap, and stakeholder deliverables (often non-technical) |
 
 ### Profile Selection
 
@@ -300,11 +303,9 @@ A pack and a federation both add capability a single profile does not carry, so 
 > **One piece of work that needs extra expertise is a profile plus a pack.** Those roles must share a plan, a council, and a review.
 > **Two streams of work with separate deliverables and owners is a federation.** Those teams need coordination, not the same room.
 
-The reason is mechanical rather than stylistic. A pack composes *within* one roster: `pp-architect` and `privacy` are dispatched in the same turn against the same request, and both findings land in one Council Verdict, one plan, and one review. A federation coordinates *between* rosters: each `members/<name>/` is a complete squad with its own `team.md`, `decisions.md`, `history/`, and consumption ledger, and meta-routing decides which sub-squad owns a turn. Split one piece of work across two sub-squads and its two halves are decided in two councils that never met.
+A pack composes *within* one roster: `pp-architect` and `privacy` run in the same turn against one request and land in one Council Verdict, plan, and review. A federation coordinates *between* rosters: each `members/<name>/` keeps its own `team.md`, `decisions.md`, `history/`, and ledger, and meta-routing picks the sub-squad. Splitting one piece of work across two sub-squads splits its decision across two councils.
 
-Federation also does not remove the need for a pack — it multiplies it. A sub-squad is seeded from a profile, and a technology vertical reaches that sub-squad the same way it reaches any roster: by applying the pack to it. There is no path from federation to `pp-architect` that does not go through `power-platform`.
-
-A compliance-plus-Power-Platform project is therefore `profile=compliance pack=power-platform`, not two sub-squads, because compliance is a lens on the work rather than a stream of it. Two sub-squads earn their keep when there really are two products — a Power Platform app and an Azure data platform, different owners, shipping separately — and the first of those still carries the pack. See `skills/squad/references/rules/squad-federation.md` for the federation mechanics.
+A sub-squad is seeded from a profile, so a vertical still arrives on it by applying the pack (`power-platform` for `pp-architect`). Compliance on Power Platform is `profile=compliance pack=power-platform`, whereas two separate products with distinct owners earn two sub-squads. See `skills/squad/references/rules/squad-federation.md`.
 
 #### Composition Rules
 
@@ -317,9 +318,7 @@ A compliance-plus-Power-Platform project is therefore `profile=compliance pack=p
 
 #### Removing a Pack
 
-A pack is removable, and removing one is a roster change like any other rather than a special operation. A user who no longer works on a vertical should not carry its roles, its routing rows, or its context.
-
-Removal is safe for the record because of how squad state is already split. `decisions.md` and `history/<agent>.md` are **append-only**: removing a pack appends a new decision and edits nothing, and every dispatch a removed role ever ran stays in its history file. `team.md` and `routing.md` use replace semantics, so their rows come out cleanly. Nothing that happened is unwritten.
+A pack is removable like any other roster change; drop it when the project leaves that vertical. `decisions.md` and `history/<agent>.md` are **append-only**: removal appends one decision and edits no prior dispatch. `team.md` and `routing.md` use replace semantics, so their rows come out cleanly.
 
 Five rules keep a removal honest:
 
@@ -340,8 +339,12 @@ Optional `Guidance` files go only to the accepted pack's roles and the methodolo
 | `power-platform` | pp-architect, pp-connector | `power-platform-official-resources.md` | Built on Power Platform — Power Apps, Power Automate, Dataverse, Power Pages, or Copilot Studio        | Opt-in. Local Primaries; community Alternates stay external |
 | `m365-copilot`   | m365-agent-architect, m365-agent-integrator | `m365-copilot-platform-options.md` | Built on Microsoft 365 Copilot — declarative agents, TypeSpec agent definitions, API plugins, MCP-backed agents, or Microsoft Graph integration | Opt-in. Local Primaries; community Alternates stay external |
 | `aws`            | aws-architect, aws-diagnose |          | Built on AWS — Lambda and serverless, ECS or EKS, CDK, SAM, CloudFormation, Organizations and landing zones, or a live AWS workload to triage | Opt-in. Both roles rest on registered external agents; the install commands are in *Registered External Cast* |
-| `foundry`        | architect, azure-architect, deployer, prompt-engineer, security, rai, observability, cost-manager, data-scientist | `foundry-blueprint.md`; `foundry-platform-options.md` | Designing or delivering a Microsoft Foundry agentic AI project | Opt-in. Reuses existing roles and registered external skills; adds no replacement agent |
-| `fabric` | data-scientist | `fabric-blueprint.md` | Warehouse, Eventhouse, Spark, or Dataflow beyond the primer | Opt-in. No new role |
+| `foundry` | architect, azure-architect, deployer, prompt-engineer, security, rai, observability, cost-manager, data-scientist | `foundry-blueprint.md`; `foundry-platform-options.md` | Designing or delivering a Microsoft Foundry agentic AI project | Opt-in. No new role |
+| `fabric` | data-scientist | `fabric-blueprint.md` | Power BI models/DAX/reports, Medallion Lakehouse, Warehouse, Eventhouse, Spark, Dataflow, or Fabric migrations | Opt-in. No new role |
+| `dotnet` | modernizer, tester, performance, developer | `dotnet-platform-options.md` | .NET upgrades, NuGet CPM, test/API review, perf, or EF Core/ASP.NET | Opt-in. No new role |
+| `aks` | azure-architect, developer, modernizer, azure-diagnose, cost-manager | `aks-platform-options.md` | AKS cluster design, manifests, AKS Automatic, Day-2 triage, or AKS cost | Opt-in. No new role |
+| `azure-functions` | developer, deployer, tester, azure-diagnose, modernizer | `azure-functions-platform-options.md` | Azure Functions apps, triggers/bindings, Function App triage/review, or Hosted Skills | Opt-in. No new role |
+| `azure-cloud` | cost-manager, azure-diagnose, asbuilt-author, azure-architect, modernizer | `azure-cloud-platform-options.md` | Azure FinOps, diagnostics, compliance, reliability, Local, or upgrade | Opt-in. No new role |
 
 **AWS is a pack while `azure` is a profile, and that asymmetry is deliberate.** `azure` predates the pack mechanism and stays a profile by the decision recorded in *Profile or Pack*: this repository's work is intrinsically Azure-shaped, so an Azure squad behaves as the dominant team shape rather than as an addition to one. AWS is new capability, so the three tests govern it, and all three say pack — it carries no methodology spine, it is not incoherent alongside any profile, and it answers "what is it built on". The practical consequence is the one the tests intend: a multi-cloud project takes `profile=azure` plus `pack=aws` and gets both, where two competing profiles would have forced a false choice. An AWS-only project takes whichever profile matches its *work* — usually `architecture` or `default` — plus the pack. Carrying the `aws` pack says the squad can reason about AWS; it does not imply general multi-cloud capability, and it says nothing at all about Google Cloud, which has no coverage anywhere (see the `gcp` row in the *Cast Catalog*).
 
@@ -355,16 +358,19 @@ Optional `Guidance` files go only to the accepted pack's roles and the methodolo
 | One estate spanning Azure and AWS                                | `azure`        | `aws`                         |
 | Planning a Microsoft Foundry support assistant                   | `azure`        | `foundry`                     |
 | Fabric Warehouse work | `azure` | `fabric` |
+| Modernizing and tuning a .NET service | `modernization` | `dotnet` |
+| Operating and rightsizing an AKS cluster | `operations` | `aks` |
+| Building and triaging an Azure Functions app | `azure` | `azure-functions` |
 | On call for a live AWS workload                                  | `operations`   | `aws`                         |
 | A Microsoft 365 Copilot agent that handles personal data         | `security`     | `m365-copilot`                |
 | A Power Platform solution fronted by an M365 Copilot agent       | `default`      | `power-platform`, `m365-copilot` |
 
 The `operations` plus `aws` row is the case a profile could never have served: `operations` already carries `azure-diagnose`, and the pack adds `aws-diagnose` beside it, so one squad triages both clouds. The last row is the case a profile could not have served either, because two verticals apply at once and a profile is single-choice.
 
-Power BI is deliberately absent from the `power-platform` pack. Its upstream agents serve analytics modeling and report performance rather than Power Platform application delivery, so they belong with the data and analytics vertical, which is registered against `data-scientist` rather than as a pack of its own.
+Power BI is deliberately absent from `power-platform`: semantic models, DAX, PBIR/PBIP reports, and Microsoft Fabric workloads belong to `data-scientist` behind the `fabric` pack because upstream Power BI and Fabric agents failed the verification gate.
 
-Data and Power BI remain skills against existing roles: their assessed specialist agents failed the verification gate. General AI application engineering likewise remains with `developer`, not a duplicate `ai-engineer`. Product knowledge comes from verified upstream resources in *Registered External Cast*; pack guidance asks project-specific questions and assigns handoffs instead of restating volatile platform documentation.
+General AI application engineering likewise remains with `developer`, not a duplicate `ai-engineer`. Product knowledge comes from verified upstream resources in *Registered External Cast*; pack guidance asks project-specific questions and assigns handoffs instead of restating volatile platform documentation.
 
-Pack cues: Power Pages ALM planning, model-driven app building, or Dataverse overview → Squad Power Platform Architect; broader Power Platform architecture or Copilot Studio, Power Automate, cloud flow, canvas app, DLP policy, or solution ALM → Power Platform Expert; codeful MCP tool or UI generation, or Dataverse connection → Squad Power Platform Integrator; broader connector or integration work, custom connector, or connector certification → Power Platform MCP Integration Expert; .NET Agents SDK production readiness → Squad M365 Agent Architect; declarative agent, TypeSpec, API plugin, or broader M365 architecture, Microsoft 365 Copilot agent, agent manifest, or Agents Toolkit → Declarative Agents Architect; Agents SDK OpenTelemetry or provisioning → Squad M365 Agent Integrator; broader MCP-backed M365 integration, Microsoft Graph, Graph SDK, Graph permission scope, or MCP-backed Copilot agent → MCP M365 Agent Expert. No match keeps the Primary. A matched Alternate that is absent escalates.
+Pack cues: Power Pages ALM planning, model-driven app building, Dataverse overview, or Copilot Studio knowledge YAML → Squad Power Platform Architect; broader Power Platform architecture or Copilot Studio, Power Automate, cloud flow, canvas app, DLP policy, or solution ALM → Power Platform Expert; codeful MCP tool or UI generation, Dataverse connection, or Copilot Studio skill import → Squad Power Platform Integrator; broader connector or integration work, custom connector, or connector certification → Power Platform MCP Integration Expert; .NET Agents SDK production readiness, Agents SDK Teams manifest, or M365 evaluation suite → Squad M365 Agent Architect; declarative agent, TypeSpec, API plugin, or broader M365 architecture, Microsoft 365 Copilot agent, agent manifest, or Agents Toolkit → Declarative Agents Architect; Agents SDK OpenTelemetry, Agents SDK provisioning, or Copilot MCP widget server → Squad M365 Agent Integrator; broader MCP-backed M365 integration, Microsoft Graph, Graph SDK, Graph permission scope, or MCP-backed Copilot agent → MCP M365 Agent Expert. PP knowledge YAML/skill import are preview: explicit approval and an existing agentic-loop workspace required. M365 eval/widget are preview. No match keeps the Primary. A matched Alternate that is absent escalates.
 
 There is no Power Platform solution-import role. `pp-architect` plans ALM and does not import a solution.

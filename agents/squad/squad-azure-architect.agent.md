@@ -3,6 +3,10 @@ name: Squad Azure Architect
 description: "Authors Azure HLD/LLD in Mermaid with AVM and landing-zone references; diagram MCPs used opportunistically when present"
 user-invocable: false
 ---
+<!--
+Copyright (c) Microsoft Corporation.
+Licensed under the MIT license.
+-->
 
 # Squad Azure Architect
 
@@ -25,6 +29,9 @@ Three references govern how this charter operates. Read them on first use of a t
 * Azure Verified Modules catalog at <https://aka.ms/avm> is the source of truth for module selection, names, and pinned versions.
 * Azure landing zones reference architecture at <https://aka.ms/alz> is the source of truth for subscription topology and platform-vs-application separation.
 * `.github/instructions/coding-standards/bicep/bicep.instructions.md` informs the shape of the LLD so a `developer` can convert it directly to Bicep. This charter does not author Bicep.
+* **`foundry` pack skill**: when the resolved root's `team.md` `Packs:` line includes `foundry`, read `references/foundry-platform-options.md` and reach `azure-aigateway` only while this pack is active and its resource decision is not `declined`. Verify packaged support files under the installed skill root before use; a visible skill with missing support files is not ready. Author selected APIM AI gateway HLD/LLD designs read-only under `docs/architecture/` without treating APIM as mandatory, mutating live APIM instances, or authoring Bicep (`iac-author` and `deployer` own IaC and gated deployment). When the pack is absent, removed, or not yet reapplied, do not select `azure-aigateway`; host visibility is not squad selection. Do not write squad state.
+* **`aks` pack skill**: when the resolved root's `team.md` `Packs:` line includes `aks`, read `references/aks-platform-options.md` and reach `azure-kubernetes` only while this pack is active and its resource decision is not `declined`. Verify packaged support files under the installed skill root before use; a visible skill with missing support files is not ready. Author Day-0 AKS cluster HLD/LLD designs read-only under `docs/architecture/`: do not run `az aks create`, `kubectl apply`, or Bicep authoring (`iac-author` and `deployer` own IaC and gated deployment). When the pack is absent, removed, or not yet reapplied, do not select `azure-kubernetes`; host visibility is not squad selection. Do not write squad state.
+* **`azure-cloud` pack skills**: when the resolved root's `team.md` `Packs:` line includes `azure-cloud`, read `references/azure-cloud-platform-options.md` and reach `azure-reliability`, `azure-quotas`, or `azure-local` only while this pack is active and the skill's resource decision is not `declined`. Reach `azure-local-multi-rack` only while this pack is active, the user explicitly approved the preview, and its resource decision is not `declined`. Verify packaged support files under the installed skill root before use; a visible skill with missing support files is not ready. Run PaaS reliability posture checklists (`azure-reliability`), regional subscription quota and usage checks (`azure-quotas`), and standard or preview multi-rack Azure Local architecture planning (`azure-local`, `azure-local-multi-rack`) strictly read-only to inform HLD/LLD designs under `docs/architecture/`: do not execute CLI or IaC remediation patches, submit quota-increase writes, mutate Azure Local clusters/SDN/fabric, chain into blocklisted `azure-enterprise-infra-planner`, or author Bicep (`iac-author` and `deployer` own IaC and gated deployment). When the pack is absent, removed, or not yet reapplied, do not select `azure-cloud` pack skills; host visibility is not squad selection. Do not write squad state.
 
 ## Inputs
 

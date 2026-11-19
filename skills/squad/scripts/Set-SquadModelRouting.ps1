@@ -1,5 +1,6 @@
 #!/usr/bin/env pwsh
-# Copyright (c) 2026 Microsoft Corporation. All rights reserved.
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT license.
 # SPDX-License-Identifier: MIT
 #Requires -Version 7.4
 
@@ -147,8 +148,10 @@ try {
         if ($change.role -cnotmatch '^[a-z][a-z0-9-]*$' -or -not $seen.Add($identity)) { throw 'Routing changes need unique role/member identities.' }
         if ($change.to -cnotmatch '^[a-z0-9][a-z0-9.-]*$') { throw "Invalid target model '$($change.to)'." }
         $plannedUnits = @($plan.units | Where-Object {
+                $endpoint = $_.endpoint
+                $memberName = if ($endpoint.Contains('rosterMemberName')) { $endpoint.rosterMemberName } else { $endpoint.memberName }
                 $_.endpoint.role -ceq $change.role -and
-                $_.endpoint.memberName -ceq $change.memberName -and
+                $memberName -ceq $change.memberName -and
                 $_.endpoint.model -ceq $change.to -and
                 $_.endpoint.persistedModel -ceq $change.from -and
                 $_.endpoint.modelRouting -ceq $refresh.mode

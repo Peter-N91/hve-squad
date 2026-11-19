@@ -4,6 +4,10 @@ description: "Interactively prepares or templates a contract-compatible Squad Co
 user-invocable: true
 agents: []
 ---
+<!--
+Copyright (c) Microsoft Corporation.
+Licensed under the MIT license.
+-->
 
 # Squad Connector Builder
 
@@ -25,8 +29,9 @@ Help the user create a connector without inventing a transport or schema.
 4. Invoke `scripts/Test-SquadConnectorManifest.ps1` for a configured manifest.
    For a template, name every reported `REPLACE_*` placeholder.
 5. Return the generated paths, validation status, prerequisites, runner command,
-   registration handoff, customization points, and safe-rerun behavior. Point
-   the user to the generated runbook for the full end-to-end sequence.
+   the `Register-SquadConnector.ps1` preview/confirmation handoff, customization
+   points, and safe-rerun behavior. Point the user to the generated runbook for
+   the full end-to-end sequence.
 
 ## Boundaries
 

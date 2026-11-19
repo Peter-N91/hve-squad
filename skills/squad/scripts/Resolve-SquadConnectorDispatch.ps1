@@ -1,4 +1,5 @@
-# Copyright (c) 2026 Microsoft Corporation. All rights reserved.
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT license.
 # SPDX-License-Identifier: MIT
 #Requires -Version 7.4
 
@@ -603,6 +604,17 @@ function Test-BothOutputIndependenceLocal {
     [pscustomobject]@{ Status = 'ok'; Reason = 'both' }
 }
 
+function Get-SquadConnectorReplacementTarget {
+    param([Parameter(Mandatory)][string]$TeamPath)
+
+    $roster = Get-SquadConnectorRosterState -TeamPath $TeamPath
+    $internal = @($roster.Members | Where-Object { $_.Agent -cne 'Squad Connector' -and -not (Test-ConnectorGovernanceRoleLocal -Role $_.Role) })
+    foreach ($binding in @($roster.Bindings | Where-Object RoleMode -eq 'replace')) {
+        $targets = @($internal | Where-Object { @(Get-ApplicableBindingsForMemberRowLocal -Row $_ -Bindings @($binding)).Count -eq 1 })
+        if ($targets.Count -eq 1) { $targets[0] }
+    }
+}
+
 function Resolve-SquadConnectorExecution {
     <#
     .SYNOPSIS
@@ -780,18 +792,19 @@ function Resolve-SquadConnectorExecution {
                 # reusing the internal role-row identity it is replacing/defaulting to. This
                 # keeps the internal and connector units separately attributable and matches
                 # what `Write-SquadHandoff.ps1` requires for a connector history record.
-                Status        = 'ok'
-                Reason        = 'explicit-connector'
-                Choice        = "connector:$bindingId"
-                Role          = $roleKey
-                MemberName    = $match[0].MemberName
-                Agent         = 'Squad Connector'
-                BindingId     = $match[0].BindingId
-                ConnectorId   = $match[0].ConnectorId
-                BindingTarget = $match[0].Target
-                EndpointKind  = $match[0].EndpointKind
-                RoleMode      = $match[0].RoleMode
-                TargetKind    = $match[0].TargetKind
+                Status           = 'ok'
+                Reason           = 'explicit-connector'
+                Choice           = "connector:$bindingId"
+                Role             = $roleKey
+                MemberName       = $match[0].MemberName
+                RosterMemberName = $row.MemberName
+                Agent            = 'Squad Connector'
+                BindingId        = $match[0].BindingId
+                ConnectorId      = $match[0].ConnectorId
+                BindingTarget    = $match[0].Target
+                EndpointKind     = $match[0].EndpointKind
+                RoleMode         = $match[0].RoleMode
+                TargetKind       = $match[0].TargetKind
             }
         }
         return [pscustomobject]@{ Status = 'error'; Reason = 'invalid-execution-choice'; Choice = $Execution }
@@ -837,18 +850,19 @@ function Resolve-SquadConnectorExecution {
             # identity it is replacing/defaulting to (CouncilDispatch is already handled
             # and returned above, so this branch is only reached for non-council routes).
             return [pscustomobject]@{
-                Status        = 'ok'
-                Reason        = 'binding-default-connector'
-                Choice        = "connector:$($defaults[0].BindingId)"
-                Role          = $roleKey
-                MemberName    = $defaults[0].MemberName
-                Agent         = 'Squad Connector'
-                BindingId     = $defaults[0].BindingId
-                ConnectorId   = $defaults[0].ConnectorId
-                EndpointKind  = $defaults[0].EndpointKind
-                BindingTarget = $defaults[0].Target
-                RoleMode      = $defaults[0].RoleMode
-                TargetKind    = $defaults[0].TargetKind
+                Status           = 'ok'
+                Reason           = 'binding-default-connector'
+                Choice           = "connector:$($defaults[0].BindingId)"
+                Role             = $roleKey
+                MemberName       = $defaults[0].MemberName
+                RosterMemberName = $row.MemberName
+                Agent            = 'Squad Connector'
+                BindingId        = $defaults[0].BindingId
+                ConnectorId      = $defaults[0].ConnectorId
+                EndpointKind     = $defaults[0].EndpointKind
+                BindingTarget    = $defaults[0].Target
+                RoleMode         = $defaults[0].RoleMode
+                TargetKind       = $defaults[0].TargetKind
             }
         }
         if ($default -eq 'both') {

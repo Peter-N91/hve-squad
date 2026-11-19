@@ -5,6 +5,10 @@ user-invocable: true
 agents:
 {{AGENTS}}
 ---
+<!--
+Copyright (c) Microsoft Corporation.
+Licensed under the MIT license.
+-->
 
 # {{ENDPOINT_NAME}}
 

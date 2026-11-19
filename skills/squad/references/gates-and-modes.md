@@ -7,6 +7,10 @@ metadata:
   spec_version: "1.1"
   last_updated: "2026-08-19"
 ---
+<!--
+Copyright (c) Microsoft Corporation.
+Licensed under the MIT license.
+-->
 
 # Squad Gates and Modes
 
@@ -34,6 +38,13 @@ The intake gate is the operator's pre-work readiness check on the inputs a turn 
 4. On `Ready` or `Ready-With-Gaps`, downstream planning and implementation proceed (non-blocking gaps carried as recorded assumptions). On `Not-Ready`, the coordinator runs the bounded auto-remediation loop — dispatch `analyst` or `product-owner` to fill the blocking gaps, then re-validate; capped at two cycles — and escalates when a gap needs a human decision, the cap is reached with blocking gaps open, or the blocking-gap set stops shrinking.
 5. The verdict gates downstream dispatch and runs ahead of the Council and Implementation gates, and behind the discovery gate when one ran; a non-stale `Ready` verdict for the same unchanged inputs is reused rather than re-run.
 
+With the plugin hook active and the latest verdict `Not-Ready`, revalidation
+uses the roster's `intake-validator`. Name an `analyst` or `product-owner` task
+`intake-remediation-<topic-id>` for the current verdict, and a necessary cold
+intake-only Scribe task `intake-handoff-<topic-id>`. These are native task names,
+not prompt instructions. Keep downstream work blocked until a fresh verdict
+permits it.
+
 **The label is decided by the blocking-gap count, not by convenience.** `Ready-With-Gaps` means **zero** blocking gaps remain; any blocking gap makes the verdict `Not-Ready`, which owes the remediation loop or an escalation. A verdict that reports outstanding blocking gaps and still permits downstream dispatch has skipped the gate while producing its paperwork, and every artifact built on it inherits an unresolved contradiction.
 
 **Blocking gaps are questions, not assumptions.** Recording a blocking gap as a "riskiest assumption" and proceeding is the failure this gate exists to prevent — a contradiction between two stakeholders is not resolvable by picking one silently. Put the clarifying questions to the user and wait. On a host with no question tool, ask in the response text and stop the turn; on an unattended path, escalate through the approval channel. Never convert an unanswered blocking question into a recorded assumption to keep the pipeline moving.
@@ -54,7 +65,7 @@ The council is the operator's pre-implementation cross-check. The coordinator tr
 
 The Implementation Gate is what makes the squad a methodology instead of a router. It holds in **every** mode — interactive, autonomous, and autopilot — and on every profile, because the methodology spine (`researcher`, `lead`, `developer`, `tester`) is seeded into every roster. The full protocol lives in `skills/squad/references/rules/squad-routing.md`; the operator's view is:
 
-1. The gate fires before dispatching any role that **produces the turn's substantive output** — implementation, a build, a deploy, a merge, or a deliverable owned by a deliverable-producing role (`analyst`, `product-owner`, `designer`, `experimenter`, `presenter`, `technical-writer`, `data-scientist`). A BRD, a roadmap, a journey map, an experiment plan, and a deck are outputs of the methodology, not shortcuts around it.
+1. The gate fires before dispatching any role that **produces the turn's substantive output** — implementation, a build, a deploy, a merge, or a deliverable owned by a deliverable-producing role (`analyst`, `product-owner`, `designer`, `experimenter`, `technical-writer`, `data-scientist`). A BRD, a roadmap, a journey map, an experiment plan, and a deck are outputs of the methodology, not shortcuts around it.
 2. **Implementation may not begin cold.** Confirm all three on disk, by listing the directory and reading the file, before dispatching the producing role:
    * a research artifact under the `researcher` Deliverable Root for the topic — if missing, dispatch `researcher` first;
    * a plan artifact under the `lead` Deliverable Root for the topic — if missing, dispatch `lead` first;

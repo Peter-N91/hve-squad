@@ -5,6 +5,10 @@ user-invocable: false
 model: Claude Haiku 5.5 (copilot)
 tools: ["read", "search", "edit", "execute", "vscode/memory"]
 ---
+<!--
+Copyright (c) Microsoft Corporation.
+Licensed under the MIT license.
+-->
 
 # Squad Scribe
 

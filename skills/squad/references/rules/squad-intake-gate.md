@@ -1,5 +1,9 @@
 <!-- Ported from squad-src/.github/instructions/squad/squad-intake-gate.instructions.md by scripts/Build-SquadPlugin.ps1. Source of truth lives in hve-squad; do not hand-edit here. -->
 
+<!--
+Copyright (c) Microsoft Corporation.
+Licensed under the MIT license.
+-->
 
 # Squad Intake Gate Conventions
 
@@ -85,6 +89,12 @@ On a `Not-Ready` verdict, the coordinator remediates the inputs before it procee
 4. **Escalate on unresolved or human-only gaps.** The coordinator escalates to the user — rather than looping again — the moment a blocking gap requires a human decision the squad cannot make (a business choice, a missing external fact, a stakeholder trade-off), when the cap is reached with blocking gaps still open, or when two consecutive cycles fail to reduce the blocking-gap set (divergence). On escalation it presents the outstanding blocking gaps and the validator's clarifying questions and waits.
 
 Each validator dispatch and each remediation dispatch is a Scribe-recorded stage with its own `history/<agent>.md` entry and consumption block, so the loop is auditable after the fact.
+
+Under the plugin hook's `Not-Ready` hold, use agents mapped only to the
+intended intake role. Set the native `name` (or `description`) to
+`intake-remediation-<topic-id>` for scoped `analyst`/`product-owner` work or
+`intake-handoff-<topic-id>` for a required cold intake Scribe. Use the latest
+verdict's topic ID. The task name does not authorize downstream work.
 
 ## Intake Readiness Verdict Schema
 

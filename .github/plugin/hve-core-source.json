@@ -1,8 +1,8 @@
 {
   "repository": "microsoft/hve-core",
-  "commit": "17072823c75d6e8cdf288d8ed4371f555dcd09bb",
+  "commit": "4e84aee97eb0019afcb19bceb63347e096803ed5",
   "version": "3.2.2",
-  "pluginManifestHash": "5e7cbae5e156dc3a3562e1146ed012fed63c351f4f09a726a4f6c6b71400b699",
+  "pluginManifestHash": "5db3e888c2c8030f09fb8773e5928e87d903770f85567ecce4aa8ef45587c69c",
   "files": [
     {
       "source": ".github/agents/accessibility/accessibility-planner.agent.md",
@@ -95,14 +95,6 @@
     {
       "source": ".github/agents/experimental/hve-demo-material.agent.md",
       "target": ".github/agents/experimental/hve-demo-material.agent.md"
-    },
-    {
-      "source": ".github/agents/experimental/pptx.agent.md",
-      "target": ".github/agents/experimental/pptx.agent.md"
-    },
-    {
-      "source": ".github/agents/experimental/subagents/pptx-subagent.agent.md",
-      "target": ".github/agents/experimental/subagents/pptx-subagent.agent.md"
     },
     {
       "source": ".github/agents/hve-core/documentation.agent.md",
@@ -843,10 +835,6 @@
     {
       "source": ".github/instructions/experimental/experiment-designer.instructions.md",
       "target": ".github/instructions/experimental/experiment-designer.instructions.md"
-    },
-    {
-      "source": ".github/instructions/experimental/pptx.instructions.md",
-      "target": ".github/instructions/experimental/pptx.instructions.md"
     },
     {
       "source": ".github/instructions/hve-core/copilot-tracking-location.instructions.md",
@@ -2833,6 +2821,10 @@
       "target": ".github/skills/experimental/hve-demo-material/references/output-contract.md"
     },
     {
+      "source": ".github/skills/experimental/hve-demo-material/references/slide-content.md",
+      "target": ".github/skills/experimental/hve-demo-material/references/slide-content.md"
+    },
+    {
       "source": ".github/skills/experimental/hve-demo-material/scripts/artifact_lookup.py",
       "target": ".github/skills/experimental/hve-demo-material/scripts/artifact_lookup.py"
     },
@@ -2907,6 +2899,158 @@
     {
       "source": ".github/skills/experimental/hve-demo-material/uv.lock",
       "target": ".github/skills/experimental/hve-demo-material/uv.lock"
+    },
+    {
+      "source": ".github/skills/experimental/hve-slides/references/bundling.md",
+      "target": ".github/skills/experimental/hve-slides/references/bundling.md"
+    },
+    {
+      "source": ".github/skills/experimental/hve-slides/references/design-and-examples.md",
+      "target": ".github/skills/experimental/hve-slides/references/design-and-examples.md"
+    },
+    {
+      "source": ".github/skills/experimental/hve-slides/references/editing-and-delivery.md",
+      "target": ".github/skills/experimental/hve-slides/references/editing-and-delivery.md"
+    },
+    {
+      "source": ".github/skills/experimental/hve-slides/references/research-and-writing.md",
+      "target": ".github/skills/experimental/hve-slides/references/research-and-writing.md"
+    },
+    {
+      "source": ".github/skills/experimental/hve-slides/references/style-guide.md",
+      "target": ".github/skills/experimental/hve-slides/references/style-guide.md"
+    },
+    {
+      "source": ".github/skills/experimental/hve-slides/references/style-recipes.md",
+      "target": ".github/skills/experimental/hve-slides/references/style-recipes.md"
+    },
+    {
+      "source": ".github/skills/experimental/hve-slides/references/templates.md",
+      "target": ".github/skills/experimental/hve-slides/references/templates.md"
+    },
+    {
+      "source": ".github/skills/experimental/hve-slides/references/validation.md",
+      "target": ".github/skills/experimental/hve-slides/references/validation.md"
+    },
+    {
+      "source": ".github/skills/experimental/hve-slides/scripts/build-decks.mjs",
+      "target": ".github/skills/experimental/hve-slides/scripts/build-decks.mjs"
+    },
+    {
+      "source": ".github/skills/experimental/hve-slides/scripts/create-deck.mjs",
+      "target": ".github/skills/experimental/hve-slides/scripts/create-deck.mjs"
+    },
+    {
+      "source": ".github/skills/experimental/hve-slides/scripts/render-deck.mjs",
+      "target": ".github/skills/experimental/hve-slides/scripts/render-deck.mjs"
+    },
+    {
+      "source": ".github/skills/experimental/hve-slides/SECURITY.md",
+      "target": ".github/skills/experimental/hve-slides/SECURITY.md"
+    },
+    {
+      "source": ".github/skills/experimental/hve-slides/SKILL.md",
+      "target": ".github/skills/experimental/hve-slides/SKILL.md"
+    },
+    {
+      "source": ".github/skills/experimental/hve-slides/templates/deck/.gitignore",
+      "target": ".github/skills/experimental/hve-slides/templates/deck/.gitignore"
+    },
+    {
+      "source": ".github/skills/experimental/hve-slides/templates/deck/.npmrc",
+      "target": ".github/skills/experimental/hve-slides/templates/deck/.npmrc"
+    },
+    {
+      "source": ".github/skills/experimental/hve-slides/templates/deck/build.mjs",
+      "target": ".github/skills/experimental/hve-slides/templates/deck/build.mjs"
+    },
+    {
+      "source": ".github/skills/experimental/hve-slides/templates/deck/bundle.mjs",
+      "target": ".github/skills/experimental/hve-slides/templates/deck/bundle.mjs"
+    },
+    {
+      "source": ".github/skills/experimental/hve-slides/templates/deck/components.css",
+      "target": ".github/skills/experimental/hve-slides/templates/deck/components.css"
+    },
+    {
+      "source": ".github/skills/experimental/hve-slides/templates/deck/components.js",
+      "target": ".github/skills/experimental/hve-slides/templates/deck/components.js"
+    },
+    {
+      "source": ".github/skills/experimental/hve-slides/templates/deck/content.js",
+      "target": ".github/skills/experimental/hve-slides/templates/deck/content.js"
+    },
+    {
+      "source": ".github/skills/experimental/hve-slides/templates/deck/deck.js",
+      "target": ".github/skills/experimental/hve-slides/templates/deck/deck.js"
+    },
+    {
+      "source": ".github/skills/experimental/hve-slides/templates/deck/deck.json",
+      "target": ".github/skills/experimental/hve-slides/templates/deck/deck.json"
+    },
+    {
+      "source": ".github/skills/experimental/hve-slides/templates/deck/deck.test.cjs",
+      "target": ".github/skills/experimental/hve-slides/templates/deck/deck.test.cjs"
+    },
+    {
+      "source": ".github/skills/experimental/hve-slides/templates/deck/index.html",
+      "target": ".github/skills/experimental/hve-slides/templates/deck/index.html"
+    },
+    {
+      "source": ".github/skills/experimental/hve-slides/templates/deck/LICENSE",
+      "target": ".github/skills/experimental/hve-slides/templates/deck/LICENSE"
+    },
+    {
+      "source": ".github/skills/experimental/hve-slides/templates/deck/package-lock.json",
+      "target": ".github/skills/experimental/hve-slides/templates/deck/package-lock.json"
+    },
+    {
+      "source": ".github/skills/experimental/hve-slides/templates/deck/package.json",
+      "target": ".github/skills/experimental/hve-slides/templates/deck/package.json"
+    },
+    {
+      "source": ".github/skills/experimental/hve-slides/templates/deck/README.md",
+      "target": ".github/skills/experimental/hve-slides/templates/deck/README.md"
+    },
+    {
+      "source": ".github/skills/experimental/hve-slides/templates/deck/theme.css",
+      "target": ".github/skills/experimental/hve-slides/templates/deck/theme.css"
+    },
+    {
+      "source": ".github/skills/experimental/hve-slides/templates/fragments/copilot-request.html",
+      "target": ".github/skills/experimental/hve-slides/templates/fragments/copilot-request.html"
+    },
+    {
+      "source": ".github/skills/experimental/hve-slides/templates/fragments/implementation-diff.html",
+      "target": ".github/skills/experimental/hve-slides/templates/fragments/implementation-diff.html"
+    },
+    {
+      "source": ".github/skills/experimental/hve-slides/templates/fragments/question-answer.html",
+      "target": ".github/skills/experimental/hve-slides/templates/fragments/question-answer.html"
+    },
+    {
+      "source": ".github/skills/experimental/hve-slides/templates/fragments/split-evidence.html",
+      "target": ".github/skills/experimental/hve-slides/templates/fragments/split-evidence.html"
+    },
+    {
+      "source": ".github/skills/experimental/hve-slides/templates/fragments/walkthrough.html",
+      "target": ".github/skills/experimental/hve-slides/templates/fragments/walkthrough.html"
+    },
+    {
+      "source": ".github/skills/experimental/hve-slides/templates/fragments/workflow.html",
+      "target": ".github/skills/experimental/hve-slides/templates/fragments/workflow.html"
+    },
+    {
+      "source": ".github/skills/experimental/hve-slides/tests/build-decks.test.mjs",
+      "target": ".github/skills/experimental/hve-slides/tests/build-decks.test.mjs"
+    },
+    {
+      "source": ".github/skills/experimental/hve-slides/tests/create-deck.test.mjs",
+      "target": ".github/skills/experimental/hve-slides/tests/create-deck.test.mjs"
+    },
+    {
+      "source": ".github/skills/experimental/hve-slides/tests/render-only-restore.test.mjs",
+      "target": ".github/skills/experimental/hve-slides/tests/render-only-restore.test.mjs"
     },
     {
       "source": ".github/skills/experimental/mural/.env.example",
@@ -3665,346 +3809,6 @@
       "target": ".github/skills/experimental/mural/uv.lock"
     },
     {
-      "source": ".github/skills/experimental/powerpoint/content-extra-py-template.md",
-      "target": ".github/skills/experimental/powerpoint/content-extra-py-template.md"
-    },
-    {
-      "source": ".github/skills/experimental/powerpoint/content-yaml-template.md",
-      "target": ".github/skills/experimental/powerpoint/content-yaml-template.md"
-    },
-    {
-      "source": ".github/skills/experimental/powerpoint/pyproject.toml",
-      "target": ".github/skills/experimental/powerpoint/pyproject.toml"
-    },
-    {
-      "source": ".github/skills/experimental/powerpoint/references/script-reference.md",
-      "target": ".github/skills/experimental/powerpoint/references/script-reference.md"
-    },
-    {
-      "source": ".github/skills/experimental/powerpoint/scripts/build_deck.py",
-      "target": ".github/skills/experimental/powerpoint/scripts/build_deck.py"
-    },
-    {
-      "source": ".github/skills/experimental/powerpoint/scripts/embed_audio.py",
-      "target": ".github/skills/experimental/powerpoint/scripts/embed_audio.py"
-    },
-    {
-      "source": ".github/skills/experimental/powerpoint/scripts/embed-audio.sh",
-      "target": ".github/skills/experimental/powerpoint/scripts/embed-audio.sh"
-    },
-    {
-      "source": ".github/skills/experimental/powerpoint/scripts/export_slides.py",
-      "target": ".github/skills/experimental/powerpoint/scripts/export_slides.py"
-    },
-    {
-      "source": ".github/skills/experimental/powerpoint/scripts/export_svg.py",
-      "target": ".github/skills/experimental/powerpoint/scripts/export_svg.py"
-    },
-    {
-      "source": ".github/skills/experimental/powerpoint/scripts/export-svg.sh",
-      "target": ".github/skills/experimental/powerpoint/scripts/export-svg.sh"
-    },
-    {
-      "source": ".github/skills/experimental/powerpoint/scripts/extract_content.py",
-      "target": ".github/skills/experimental/powerpoint/scripts/extract_content.py"
-    },
-    {
-      "source": ".github/skills/experimental/powerpoint/scripts/generate_themes.py",
-      "target": ".github/skills/experimental/powerpoint/scripts/generate_themes.py"
-    },
-    {
-      "source": ".github/skills/experimental/powerpoint/scripts/generate-themes.sh",
-      "target": ".github/skills/experimental/powerpoint/scripts/generate-themes.sh"
-    },
-    {
-      "source": ".github/skills/experimental/powerpoint/scripts/Invoke-EmbedAudio.ps1",
-      "target": ".github/skills/experimental/powerpoint/scripts/Invoke-EmbedAudio.ps1"
-    },
-    {
-      "source": ".github/skills/experimental/powerpoint/scripts/Invoke-ExportSvg.ps1",
-      "target": ".github/skills/experimental/powerpoint/scripts/Invoke-ExportSvg.ps1"
-    },
-    {
-      "source": ".github/skills/experimental/powerpoint/scripts/Invoke-GenerateThemes.ps1",
-      "target": ".github/skills/experimental/powerpoint/scripts/Invoke-GenerateThemes.ps1"
-    },
-    {
-      "source": ".github/skills/experimental/powerpoint/scripts/invoke-pptx-pipeline.sh",
-      "target": ".github/skills/experimental/powerpoint/scripts/invoke-pptx-pipeline.sh"
-    },
-    {
-      "source": ".github/skills/experimental/powerpoint/scripts/Invoke-PptxPipeline.ps1",
-      "target": ".github/skills/experimental/powerpoint/scripts/Invoke-PptxPipeline.ps1"
-    },
-    {
-      "source": ".github/skills/experimental/powerpoint/scripts/pdf_safety.py",
-      "target": ".github/skills/experimental/powerpoint/scripts/pdf_safety.py"
-    },
-    {
-      "source": ".github/skills/experimental/powerpoint/scripts/pptx_charts.py",
-      "target": ".github/skills/experimental/powerpoint/scripts/pptx_charts.py"
-    },
-    {
-      "source": ".github/skills/experimental/powerpoint/scripts/pptx_colors.py",
-      "target": ".github/skills/experimental/powerpoint/scripts/pptx_colors.py"
-    },
-    {
-      "source": ".github/skills/experimental/powerpoint/scripts/pptx_fills.py",
-      "target": ".github/skills/experimental/powerpoint/scripts/pptx_fills.py"
-    },
-    {
-      "source": ".github/skills/experimental/powerpoint/scripts/pptx_fonts.py",
-      "target": ".github/skills/experimental/powerpoint/scripts/pptx_fonts.py"
-    },
-    {
-      "source": ".github/skills/experimental/powerpoint/scripts/pptx_shapes.py",
-      "target": ".github/skills/experimental/powerpoint/scripts/pptx_shapes.py"
-    },
-    {
-      "source": ".github/skills/experimental/powerpoint/scripts/pptx_tables.py",
-      "target": ".github/skills/experimental/powerpoint/scripts/pptx_tables.py"
-    },
-    {
-      "source": ".github/skills/experimental/powerpoint/scripts/pptx_text.py",
-      "target": ".github/skills/experimental/powerpoint/scripts/pptx_text.py"
-    },
-    {
-      "source": ".github/skills/experimental/powerpoint/scripts/pptx_utils.py",
-      "target": ".github/skills/experimental/powerpoint/scripts/pptx_utils.py"
-    },
-    {
-      "source": ".github/skills/experimental/powerpoint/scripts/render_pdf_images.py",
-      "target": ".github/skills/experimental/powerpoint/scripts/render_pdf_images.py"
-    },
-    {
-      "source": ".github/skills/experimental/powerpoint/scripts/validate_deck.py",
-      "target": ".github/skills/experimental/powerpoint/scripts/validate_deck.py"
-    },
-    {
-      "source": ".github/skills/experimental/powerpoint/scripts/validate_geometry.py",
-      "target": ".github/skills/experimental/powerpoint/scripts/validate_geometry.py"
-    },
-    {
-      "source": ".github/skills/experimental/powerpoint/scripts/validate_slides.py",
-      "target": ".github/skills/experimental/powerpoint/scripts/validate_slides.py"
-    },
-    {
-      "source": ".github/skills/experimental/powerpoint/SECURITY.md",
-      "target": ".github/skills/experimental/powerpoint/SECURITY.md"
-    },
-    {
-      "source": ".github/skills/experimental/powerpoint/SKILL.md",
-      "target": ".github/skills/experimental/powerpoint/SKILL.md"
-    },
-    {
-      "source": ".github/skills/experimental/powerpoint/style-yaml-template.md",
-      "target": ".github/skills/experimental/powerpoint/style-yaml-template.md"
-    },
-    {
-      "source": ".github/skills/experimental/powerpoint/tests/conftest.py",
-      "target": ".github/skills/experimental/powerpoint/tests/conftest.py"
-    },
-    {
-      "source": ".github/skills/experimental/powerpoint/tests/corpus/0_empty",
-      "target": ".github/skills/experimental/powerpoint/tests/corpus/0_empty"
-    },
-    {
-      "source": ".github/skills/experimental/powerpoint/tests/corpus/0_short_hex",
-      "target": ".github/skills/experimental/powerpoint/tests/corpus/0_short_hex"
-    },
-    {
-      "source": ".github/skills/experimental/powerpoint/tests/corpus/0_theme_ref",
-      "target": ".github/skills/experimental/powerpoint/tests/corpus/0_theme_ref"
-    },
-    {
-      "source": ".github/skills/experimental/powerpoint/tests/corpus/0_valid_hex",
-      "target": ".github/skills/experimental/powerpoint/tests/corpus/0_valid_hex"
-    },
-    {
-      "source": ".github/skills/experimental/powerpoint/tests/corpus/1_empty",
-      "target": ".github/skills/experimental/powerpoint/tests/corpus/1_empty"
-    },
-    {
-      "source": ".github/skills/experimental/powerpoint/tests/corpus/1_invalid_hex",
-      "target": ".github/skills/experimental/powerpoint/tests/corpus/1_invalid_hex"
-    },
-    {
-      "source": ".github/skills/experimental/powerpoint/tests/corpus/1_valid_hex",
-      "target": ".github/skills/experimental/powerpoint/tests/corpus/1_valid_hex"
-    },
-    {
-      "source": ".github/skills/experimental/powerpoint/tests/corpus/2_empty_results",
-      "target": ".github/skills/experimental/powerpoint/tests/corpus/2_empty_results"
-    },
-    {
-      "source": ".github/skills/experimental/powerpoint/tests/corpus/2_mixed_severity",
-      "target": ".github/skills/experimental/powerpoint/tests/corpus/2_mixed_severity"
-    },
-    {
-      "source": ".github/skills/experimental/powerpoint/tests/corpus/3_empty",
-      "target": ".github/skills/experimental/powerpoint/tests/corpus/3_empty"
-    },
-    {
-      "source": ".github/skills/experimental/powerpoint/tests/corpus/3_multiple_runs",
-      "target": ".github/skills/experimental/powerpoint/tests/corpus/3_multiple_runs"
-    },
-    {
-      "source": ".github/skills/experimental/powerpoint/tests/corpus/3_single_run",
-      "target": ".github/skills/experimental/powerpoint/tests/corpus/3_single_run"
-    },
-    {
-      "source": ".github/skills/experimental/powerpoint/tests/corpus/generate_seeds.py",
-      "target": ".github/skills/experimental/powerpoint/tests/corpus/generate_seeds.py"
-    },
-    {
-      "source": ".github/skills/experimental/powerpoint/tests/corpus/README.md",
-      "target": ".github/skills/experimental/powerpoint/tests/corpus/README.md"
-    },
-    {
-      "source": ".github/skills/experimental/powerpoint/tests/fixtures/malformed/empty.pdf",
-      "target": ".github/skills/experimental/powerpoint/tests/fixtures/malformed/empty.pdf"
-    },
-    {
-      "source": ".github/skills/experimental/powerpoint/tests/fixtures/malformed/not_a_pdf.bin",
-      "target": ".github/skills/experimental/powerpoint/tests/fixtures/malformed/not_a_pdf.bin"
-    },
-    {
-      "source": ".github/skills/experimental/powerpoint/tests/fixtures/malformed/truncated.pdf",
-      "target": ".github/skills/experimental/powerpoint/tests/fixtures/malformed/truncated.pdf"
-    },
-    {
-      "source": ".github/skills/experimental/powerpoint/tests/fuzz_harness.py",
-      "target": ".github/skills/experimental/powerpoint/tests/fuzz_harness.py"
-    },
-    {
-      "source": ".github/skills/experimental/powerpoint/tests/Invoke-EmbedAudio.Tests.ps1",
-      "target": ".github/skills/experimental/powerpoint/tests/Invoke-EmbedAudio.Tests.ps1"
-    },
-    {
-      "source": ".github/skills/experimental/powerpoint/tests/Invoke-ExportSvg.Tests.ps1",
-      "target": ".github/skills/experimental/powerpoint/tests/Invoke-ExportSvg.Tests.ps1"
-    },
-    {
-      "source": ".github/skills/experimental/powerpoint/tests/Invoke-GenerateThemes.Tests.ps1",
-      "target": ".github/skills/experimental/powerpoint/tests/Invoke-GenerateThemes.Tests.ps1"
-    },
-    {
-      "source": ".github/skills/experimental/powerpoint/tests/Invoke-PptxPipeline.Tests.ps1",
-      "target": ".github/skills/experimental/powerpoint/tests/Invoke-PptxPipeline.Tests.ps1"
-    },
-    {
-      "source": ".github/skills/experimental/powerpoint/tests/strategies.py",
-      "target": ".github/skills/experimental/powerpoint/tests/strategies.py"
-    },
-    {
-      "source": ".github/skills/experimental/powerpoint/tests/test_build_deck.py",
-      "target": ".github/skills/experimental/powerpoint/tests/test_build_deck.py"
-    },
-    {
-      "source": ".github/skills/experimental/powerpoint/tests/test_embed_audio.py",
-      "target": ".github/skills/experimental/powerpoint/tests/test_embed_audio.py"
-    },
-    {
-      "source": ".github/skills/experimental/powerpoint/tests/test_export_slides.py",
-      "target": ".github/skills/experimental/powerpoint/tests/test_export_slides.py"
-    },
-    {
-      "source": ".github/skills/experimental/powerpoint/tests/test_export_svg.py",
-      "target": ".github/skills/experimental/powerpoint/tests/test_export_svg.py"
-    },
-    {
-      "source": ".github/skills/experimental/powerpoint/tests/test_extract_content_integration.py",
-      "target": ".github/skills/experimental/powerpoint/tests/test_extract_content_integration.py"
-    },
-    {
-      "source": ".github/skills/experimental/powerpoint/tests/test_extract_content.py",
-      "target": ".github/skills/experimental/powerpoint/tests/test_extract_content.py"
-    },
-    {
-      "source": ".github/skills/experimental/powerpoint/tests/test_fixture_generation.py",
-      "target": ".github/skills/experimental/powerpoint/tests/test_fixture_generation.py"
-    },
-    {
-      "source": ".github/skills/experimental/powerpoint/tests/test_fuzz_build_deck.py",
-      "target": ".github/skills/experimental/powerpoint/tests/test_fuzz_build_deck.py"
-    },
-    {
-      "source": ".github/skills/experimental/powerpoint/tests/test_fuzz_pdf_safety.py",
-      "target": ".github/skills/experimental/powerpoint/tests/test_fuzz_pdf_safety.py"
-    },
-    {
-      "source": ".github/skills/experimental/powerpoint/tests/test_fuzz_pptx_colors.py",
-      "target": ".github/skills/experimental/powerpoint/tests/test_fuzz_pptx_colors.py"
-    },
-    {
-      "source": ".github/skills/experimental/powerpoint/tests/test_fuzz_pptx_tables.py",
-      "target": ".github/skills/experimental/powerpoint/tests/test_fuzz_pptx_tables.py"
-    },
-    {
-      "source": ".github/skills/experimental/powerpoint/tests/test_fuzz_validate_slides.py",
-      "target": ".github/skills/experimental/powerpoint/tests/test_fuzz_validate_slides.py"
-    },
-    {
-      "source": ".github/skills/experimental/powerpoint/tests/test_generate_themes.py",
-      "target": ".github/skills/experimental/powerpoint/tests/test_generate_themes.py"
-    },
-    {
-      "source": ".github/skills/experimental/powerpoint/tests/test_pdf_safety.py",
-      "target": ".github/skills/experimental/powerpoint/tests/test_pdf_safety.py"
-    },
-    {
-      "source": ".github/skills/experimental/powerpoint/tests/test_pptx_charts.py",
-      "target": ".github/skills/experimental/powerpoint/tests/test_pptx_charts.py"
-    },
-    {
-      "source": ".github/skills/experimental/powerpoint/tests/test_pptx_colors.py",
-      "target": ".github/skills/experimental/powerpoint/tests/test_pptx_colors.py"
-    },
-    {
-      "source": ".github/skills/experimental/powerpoint/tests/test_pptx_fills.py",
-      "target": ".github/skills/experimental/powerpoint/tests/test_pptx_fills.py"
-    },
-    {
-      "source": ".github/skills/experimental/powerpoint/tests/test_pptx_fonts.py",
-      "target": ".github/skills/experimental/powerpoint/tests/test_pptx_fonts.py"
-    },
-    {
-      "source": ".github/skills/experimental/powerpoint/tests/test_pptx_shapes.py",
-      "target": ".github/skills/experimental/powerpoint/tests/test_pptx_shapes.py"
-    },
-    {
-      "source": ".github/skills/experimental/powerpoint/tests/test_pptx_tables.py",
-      "target": ".github/skills/experimental/powerpoint/tests/test_pptx_tables.py"
-    },
-    {
-      "source": ".github/skills/experimental/powerpoint/tests/test_pptx_text.py",
-      "target": ".github/skills/experimental/powerpoint/tests/test_pptx_text.py"
-    },
-    {
-      "source": ".github/skills/experimental/powerpoint/tests/test_pptx_utils.py",
-      "target": ".github/skills/experimental/powerpoint/tests/test_pptx_utils.py"
-    },
-    {
-      "source": ".github/skills/experimental/powerpoint/tests/test_render_pdf_images.py",
-      "target": ".github/skills/experimental/powerpoint/tests/test_render_pdf_images.py"
-    },
-    {
-      "source": ".github/skills/experimental/powerpoint/tests/test_validate_deck.py",
-      "target": ".github/skills/experimental/powerpoint/tests/test_validate_deck.py"
-    },
-    {
-      "source": ".github/skills/experimental/powerpoint/tests/test_validate_geometry.py",
-      "target": ".github/skills/experimental/powerpoint/tests/test_validate_geometry.py"
-    },
-    {
-      "source": ".github/skills/experimental/powerpoint/tests/test_validate_slides.py",
-      "target": ".github/skills/experimental/powerpoint/tests/test_validate_slides.py"
-    },
-    {
-      "source": ".github/skills/experimental/powerpoint/uv.lock",
-      "target": ".github/skills/experimental/powerpoint/uv.lock"
-    },
-    {
       "source": ".github/skills/experimental/tts-voiceover/pip-audit-known-vulnerabilities.txt",
       "target": ".github/skills/experimental/tts-voiceover/pip-audit-known-vulnerabilities.txt"
     },
@@ -4013,24 +3817,12 @@
       "target": ".github/skills/experimental/tts-voiceover/pyproject.toml"
     },
     {
-      "source": ".github/skills/experimental/tts-voiceover/scripts/embed_audio.py",
-      "target": ".github/skills/experimental/tts-voiceover/scripts/embed_audio.py"
-    },
-    {
-      "source": ".github/skills/experimental/tts-voiceover/scripts/embed-audio.sh",
-      "target": ".github/skills/experimental/tts-voiceover/scripts/embed-audio.sh"
-    },
-    {
       "source": ".github/skills/experimental/tts-voiceover/scripts/generate_voiceover.py",
       "target": ".github/skills/experimental/tts-voiceover/scripts/generate_voiceover.py"
     },
     {
       "source": ".github/skills/experimental/tts-voiceover/scripts/generate-voiceover.sh",
       "target": ".github/skills/experimental/tts-voiceover/scripts/generate-voiceover.sh"
-    },
-    {
-      "source": ".github/skills/experimental/tts-voiceover/scripts/Invoke-EmbedAudio.ps1",
-      "target": ".github/skills/experimental/tts-voiceover/scripts/Invoke-EmbedAudio.ps1"
     },
     {
       "source": ".github/skills/experimental/tts-voiceover/scripts/Invoke-GenerateVoiceover.ps1",
@@ -4075,14 +3867,6 @@
     {
       "source": ".github/skills/experimental/tts-voiceover/tests/Invoke-GenerateVoiceover.Tests.ps1",
       "target": ".github/skills/experimental/tts-voiceover/tests/Invoke-GenerateVoiceover.Tests.ps1"
-    },
-    {
-      "source": ".github/skills/experimental/tts-voiceover/tests/test_embed_audio_integrity.py",
-      "target": ".github/skills/experimental/tts-voiceover/tests/test_embed_audio_integrity.py"
-    },
-    {
-      "source": ".github/skills/experimental/tts-voiceover/tests/test_embed_audio.py",
-      "target": ".github/skills/experimental/tts-voiceover/tests/test_embed_audio.py"
     },
     {
       "source": ".github/skills/experimental/tts-voiceover/tests/test_generate_voiceover_boundaries.py",
@@ -5005,32 +4789,32 @@
       "target": ".github/skills/project-planning/gitlab/tests/corpus/4_zero"
     },
     {
-      "source": ".github/skills/project-planning/gitlab/tests/corpus/5_empty",
-      "target": ".github/skills/project-planning/gitlab/tests/corpus/5_empty"
+      "source": ".github/skills/project-planning/gitlab/tests/corpus/7_empty",
+      "target": ".github/skills/project-planning/gitlab/tests/corpus/7_empty"
     },
     {
-      "source": ".github/skills/project-planning/gitlab/tests/corpus/5_field_flag",
-      "target": ".github/skills/project-planning/gitlab/tests/corpus/5_field_flag"
+      "source": ".github/skills/project-planning/gitlab/tests/corpus/7_field_flag",
+      "target": ".github/skills/project-planning/gitlab/tests/corpus/7_field_flag"
     },
     {
-      "source": ".github/skills/project-planning/gitlab/tests/corpus/5_large",
-      "target": ".github/skills/project-planning/gitlab/tests/corpus/5_large"
+      "source": ".github/skills/project-planning/gitlab/tests/corpus/7_large",
+      "target": ".github/skills/project-planning/gitlab/tests/corpus/7_large"
     },
     {
-      "source": ".github/skills/project-planning/gitlab/tests/corpus/5_mr_list",
-      "target": ".github/skills/project-planning/gitlab/tests/corpus/5_mr_list"
+      "source": ".github/skills/project-planning/gitlab/tests/corpus/7_mr_list",
+      "target": ".github/skills/project-planning/gitlab/tests/corpus/7_mr_list"
     },
     {
-      "source": ".github/skills/project-planning/gitlab/tests/corpus/5_multi_field",
-      "target": ".github/skills/project-planning/gitlab/tests/corpus/5_multi_field"
+      "source": ".github/skills/project-planning/gitlab/tests/corpus/7_multi_field",
+      "target": ".github/skills/project-planning/gitlab/tests/corpus/7_multi_field"
     },
     {
-      "source": ".github/skills/project-planning/gitlab/tests/corpus/5_single_field",
-      "target": ".github/skills/project-planning/gitlab/tests/corpus/5_single_field"
+      "source": ".github/skills/project-planning/gitlab/tests/corpus/7_single_field",
+      "target": ".github/skills/project-planning/gitlab/tests/corpus/7_single_field"
     },
     {
-      "source": ".github/skills/project-planning/gitlab/tests/corpus/5_unicode",
-      "target": ".github/skills/project-planning/gitlab/tests/corpus/5_unicode"
+      "source": ".github/skills/project-planning/gitlab/tests/corpus/7_unicode",
+      "target": ".github/skills/project-planning/gitlab/tests/corpus/7_unicode"
     },
     {
       "source": ".github/skills/project-planning/gitlab/tests/corpus/ee123d57ee4d24cece23066fb721013d717824f2",
@@ -5875,6 +5659,30 @@
     {
       "source": ".github/skills/rai/rai-standards/SKILL.md",
       "target": ".github/skills/rai/rai-standards/SKILL.md"
+    },
+    {
+      "source": ".github/skills/root-cause-analysis/causal-evidence-likelihood/SKILL.md",
+      "target": ".github/skills/root-cause-analysis/causal-evidence-likelihood/SKILL.md"
+    },
+    {
+      "source": ".github/skills/root-cause-analysis/root-cause-analysis/references/azure-sre-tools.md",
+      "target": ".github/skills/root-cause-analysis/root-cause-analysis/references/azure-sre-tools.md"
+    },
+    {
+      "source": ".github/skills/root-cause-analysis/root-cause-analysis/references/setup-and-governance.md",
+      "target": ".github/skills/root-cause-analysis/root-cause-analysis/references/setup-and-governance.md"
+    },
+    {
+      "source": ".github/skills/root-cause-analysis/root-cause-analysis/SKILL.md",
+      "target": ".github/skills/root-cause-analysis/root-cause-analysis/SKILL.md"
+    },
+    {
+      "source": ".github/skills/root-cause-analysis/statistical-hypothesis-testing/SKILL.md",
+      "target": ".github/skills/root-cause-analysis/statistical-hypothesis-testing/SKILL.md"
+    },
+    {
+      "source": ".github/skills/rpi/rpi/SKILL.md",
+      "target": ".github/skills/rpi/rpi/SKILL.md"
     },
     {
       "source": ".github/skills/rpi/rpi-challenger/references/challenge.md",
