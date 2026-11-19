@@ -367,6 +367,11 @@ Describe 'Requirements document quality source contracts (RQ-01..16)' -Tag 'Requ
         $guide | Should -Match 'take timestamps from `Get-Date -Format o`'
         $guide | Should -Match 'fix every RISK finding, and any other finding only when it corrects a contradiction'
         $guide | Should -Match 'disposition for every finding once, as one line in the builder state'
+        $guide | Should -Match 'same-number claims are not ID mappings'
+        $guide | Should -Match 'The BRD author also receives the PRD capture and fixes any finding in it that needs a BRD change'
+        $guide | Should -Match 'replace stale "report unavailable" text with the actual capture reference and unchanged report status'
+        $guide | Should -Match 'never taking an option that narrows a literal source clause'
+        $guide | Should -Match 'timestamp, status and equivalence claim.+the PRD author reconciles every PRD item that cites a BRD item to the final BRD'
     }
 }
 
