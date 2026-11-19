@@ -5,7 +5,7 @@ license: MIT
 metadata:
   authors: "Peter-N91/hve-squad"
   spec_version: "1.0"
-  last_updated: "2026-11-18"
+  last_updated: "2026-11-19"
 ---
 <!--
 Copyright (c) Microsoft Corporation.
@@ -26,10 +26,10 @@ description: "Per-model token rates, dispatch-size estimator, and calibration fa
 # Consumption Rates (verify against the current GitHub Copilot "Models and pricing" docs)
 
 * Billing model: usage-based billing (UBB), token-metered, effective 2026-06-01.
-* Observed-on: 2026-11-18. Source: <https://docs.github.com/en/copilot/reference/copilot-billing/models-and-pricing>
+* Observed-on: 2026-11-19. Source: <https://docs.github.com/en/copilot/reference/copilot-billing/models-and-pricing>
 * Credit conversion: 1 AI credit = $0.01 USD (fixed).
 * All rates are USD per 1M tokens. Anthropic and GPT-5.6+/GPT-6+ models bill a separate cache-write rate on top of cached input; models without one leave the column at 0.
-* `Observed-on:` above must equal `model-catalog.md`'s `Retrieved:` date exactly, not merely "close" — both are `2026-11-18` as of this snapshot; a future re-verification that updates one must update the other in the same change.
+* `Observed-on:` above must equal `model-catalog.md`'s `Retrieved:` date exactly, not merely "close" — both are `2026-11-19` as of this snapshot; a future re-verification that updates one must update the other in the same change.
 
 ## Per-model token rates in USD per 1M tokens (volatile, verify before commit)
 
@@ -54,6 +54,7 @@ description: "Per-model token rates, dispatch-size estimator, and calibration fa
 | Gemini 4 Argon | `gemini-4-argon` | default | 2.00 | 0.10 | 0 | 10.00 | none (flat rate) | n/a | n/a | n/a | n/a | frontier reasoning; promo rate to 2026-12-01 |
 | Gemini 4 Carbon | `gemini-4-carbon` | default | 2.00 | 0.10 | 0 | 10.00 | none (flat rate) | n/a | n/a | n/a | n/a | frontier reasoning; promo rate to 2026-12-01 |
 | Gemini 4 Hydrogen | `gemini-4-hydrogen` | default | 1.50 | 0.075 | 0 | 7.50 | none (flat rate) | n/a | n/a | n/a | n/a | frontier reasoning; promo rate to 2026-12-01 |
+| Gemini 4 Neon | `gemini-4-neon` | default | 3.00 | 0.15 | 0 | 15.00 | none (flat rate) | n/a | n/a | n/a | n/a | frontier reasoning; promo rate to 2026-12-01 |
 | MAI-Code-1.1-Flash | `mai-code-1.1-flash` | fast | 0.20 | 0.02 | 0 | 1.20 | none (flat rate) | n/a | n/a | n/a | n/a | lightweight; continuously improving |
 | MAI Code 2 | `mai-code-2` | fast | 0.50 | 0.025 | 0 | 2.50 | none (flat rate) | n/a | n/a | n/a | n/a | lightweight; continuously improving |
 | MAI Code 2 Flash | `mai-code-2-flash` | fast | 0.05 | 0.005 | 0 | 0.25 | none (flat rate) | n/a | n/a | n/a | n/a | lightweight; continuously improving |
