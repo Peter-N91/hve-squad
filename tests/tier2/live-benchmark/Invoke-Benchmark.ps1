@@ -17,8 +17,10 @@
     see what would run without spending anything.
 
     On Windows the script asks the computer to stay awake, with the display on, while the runs
-    execute, so a standby cannot stall them. A closed lid or a manual sleep still suspends the
-    computer, and keeping the display on drains a battery; pass -AllowSleep to skip the request.
+    execute, which lowers the chance that a standby stalls them (time the computer spends
+    suspended also does not count toward a run's time limit). A closed lid or a manual sleep
+    still suspends the computer, and keeping the display on drains a battery; pass -AllowSleep
+    to skip the request.
 
     The benchmark runs an autonomous Copilot agent with tool filters, not an OS sandbox.
     Run it on a throwaway machine, container or VM.

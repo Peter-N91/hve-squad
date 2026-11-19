@@ -754,6 +754,7 @@ function Invoke-EfficiencyProcess {
                 $InputClosed = $true
             }
         }
+        $Suspend.last = $Watch.Elapsed.TotalSeconds
         while (-not $Process.WaitForExit(250)) {
             if ($null -ne $InputCopy -and -not $InputClosed -and $InputCopy.IsCompleted) {
                 try { $null = $InputCopy.GetAwaiter().GetResult() } catch { }

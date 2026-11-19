@@ -25,8 +25,8 @@ and stops without installing anything.
 
 **It spends Copilot credits.** One run takes about 40 minutes and uses about 550 to 900
 credits. Runs on Copilot CLI 1.0.107 used 541 to 723 credits and took 32 to 45 minutes; on
-CLI 1.0.114 the requirements stage alone used 800 to 870 credits, so three runs used 902 to
-916 credits in total and took 37 to 41 minutes.
+CLI 1.0.114 the requirements stage alone used 800 to 870 credits, so each of the three
+runs used 901 to 916 credits and took 37 to 41 minutes.
 Choose how many runs with `-Runs`, from 1 to 3 (default 3):
 
 | Command | Runs | Time | Copilot credits |

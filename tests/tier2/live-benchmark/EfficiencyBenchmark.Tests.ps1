@@ -968,6 +968,15 @@ $Response=@{scores=$Scores;evidence=$Evidence;criticalHighFindings=0;documentHas
         Update-EfficiencySuspendMonitor -Context $Context -ElapsedSeconds 7743.75 -GapSeconds 120
         $Context.seconds | Should -Be 7620
     }
+    It 'does not book the work before the first poll as host suspension' {
+        Mock Update-EfficiencyProcessMonitor -ModuleName EfficiencyBenchmark {
+            if (-not $Context.ContainsKey('slowFirstRead')) { $Context['slowFirstRead'] = $true; Start-Sleep -Seconds 3 }
+        }
+        $Result = Invoke-EfficiencyProcess -FilePath (Get-Command pwsh).Source -Arguments @('-NoProfile', '-Command', 'Start-Sleep -Seconds 1') -WorkingDirectory $TestDrive -OutputPath (Join-Path $TestDrive 'slow-first-read.txt') -SuspendGapSeconds 2
+        $Result.exitCode | Should -Be 0
+        $Result.suspendedSeconds | Should -Be 0
+        $Result.seconds | Should -BeGreaterThan 3
+    }
     It 'asks Windows to stay awake only on Windows and releases the request' {
         try { Start-EfficiencyKeepAwake | Should -Be $IsWindows }
         finally { Stop-EfficiencyKeepAwake | Should -Be $IsWindows }
