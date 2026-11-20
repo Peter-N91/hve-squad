@@ -70,9 +70,10 @@ Pass selected squads, explicit dependencies and proven write sets to
 `New-SquadDispatchPlan.ps1`. Dependencies override `Parallel-Eligible`; waves
 schedule, not admit. Dispatch workers, not coordinators. Start each native
 member prompt with `Squad root: .copilot-tracking/squad/members/<name>`.
-Forward `endpoint.requestedModelRouting` to the member's actual-role plan with
-`-ApplyModelRouting`; require `routingReady: true` before each dispatch, including
-quick and targeted-autopilot work. Root plans never activate member models.
+Member plans pass `endpoint.requestedModelRouting` to `-ApplyModelRouting`;
+require `routingReady: true` before each dispatch. Root models stay off. Forward
+brief `responsibleUsePath`/`sourceDataRule` verbatim to isolated contexts;
+read policy once.
 
 Before child dispatch take the script snapshot with
 `Get-SquadDispatchBrief.ps1 ... -AsJson -SnapshotPath <transport>`. Keep it

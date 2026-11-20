@@ -12,19 +12,29 @@
     writes score.json, badge.svg and report.md into benchmarks/efficiency/. Commit those
     files with your branch. The score is not compared with any other branch.
 
-    This SPENDS Copilot credits: about 300 credits and 20 minutes per run. Use -WhatIf
-    to see what would run without spending anything.
+    This SPENDS Copilot credits: about 550 to 900 credits and 35 to 45 minutes per run (runs on
+    Copilot CLI 1.0.107 used 541 to 723 credits; on 1.0.114 they used about 900). Use -WhatIf to
+    see what would run without spending anything.
+
+    On Windows the script asks the computer to stay awake, with the display on, while the runs
+    execute, which lowers the chance that a standby stalls them (time the computer spends
+    suspended also does not count toward a run's time limit). A closed lid or a manual sleep
+    still suspends the computer, and keeping the display on drains a battery; pass -AllowSleep
+    to skip the request.
 
     The benchmark runs an autonomous Copilot agent with tool filters, not an OS sandbox.
     Run it on a throwaway machine, container or VM.
 .PARAMETER Runs
     How many times to run the benchmark, from 1 to 3 (default 3). One run is a quick check.
+.PARAMETER AllowSleep
+    Do not ask Windows to stay awake while the runs execute.
 .EXAMPLE
     pwsh -NoProfile -File ./tests/tier2/live-benchmark/Invoke-Benchmark.ps1 -Runs 1
 #>
 [CmdletBinding(SupportsShouldProcess)]
 param(
-    [ValidateRange(1, 3)][int]$Runs = 3
+    [ValidateRange(1, 3)][int]$Runs = 3,
+    [switch]$AllowSleep
 )
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
@@ -57,8 +67,9 @@ $Uncommitted = @(Get-GitOutput @('status', '--porcelain', '--', 'squad-src')).Co
 Write-Host @"
 Benchmarking '$Branch' at $($Commit.Substring(0, 7))$(if ($Uncommitted) { ', including uncommitted changes in squad-src/' }).
   Runs:          $Runs
-  Expected cost: about $($Runs * 300) Copilot credits and $($Runs * 20) minutes$(if ($Runs -gt 1) { ' (about 300 credits and 20 minutes per run)' })
+  Expected cost: about $($Runs * 550) to $($Runs * 900) Copilot credits and $($Runs * 35) to $($Runs * 45) minutes$(if ($Runs -gt 1) { ' (about 550 to 900 credits and 35 to 45 minutes per run)' })
   Stops a run:   at $CreditCeilingPerRun credits
+  Stays awake:   $(if ($IsWindows -and -not $AllowSleep) { 'yes, with the display on (pass -AllowSleep to let the computer sleep)' } else { 'no' })
   Saves to:      benchmarks/efficiency/ (score.json, badge.svg, report.md)
 
 WARNING: this runs an autonomous Copilot agent with tool filters, not an OS sandbox.
@@ -86,34 +97,40 @@ $Ceiling = $CreditCeilingPerRun.ToString('R', [Globalization.CultureInfo]::Invar
 $Summaries = [Collections.Generic.List[object]]::new()
 $Identity = @{}
 
-for ($Run = 1; $Run -le $Runs; $Run++) {
-    Write-Host "[$([datetimeoffset]::Now.ToString('yyyy-MM-dd HH:mm:sszzz'))] Run $Run of $Runs started; 7 planned steps, $($Runs - $Run) later runs, then report generation. It takes about 20 minutes..."
-    $TrialPath = Join-Path $Trials "run-$Run"
-    $Log = Join-Path $Work "run-$Run.log"
-    $ProgressLog = Join-Path $Work "run-$Run-progress.log"
-    $Result = $null
-    $Note = ''
-    try {
-        $Arguments = @('-NoProfile', '-File', $Engine, '-Mode', 'Run', '-TrialRoot', $TrialPath, '-SourceRoot', $RepoRoot, '-InstallRoot', $Install.Root, '-Arm', 'baseline', '-Pair', [string]$Run, '-MaxCredits', $Ceiling, '-ProgressPath', $ProgressLog, '-Live', '-IsolatedEnvironment', '-ObservationOnly')
-        $Process = Invoke-EfficiencyProcess -FilePath (Get-Process -Id $PID).Path -Arguments $Arguments -WorkingDirectory $Trials -OutputPath $Log -TimeoutSeconds $TimeoutSeconds -EnvironmentVariables @{ COPILOT_AUTO_UPDATE = 'false' } -ProgressPath $ProgressLog
-        $RunJson = Join-Path $TrialPath 'out/run.json'
-        if (Test-Path -LiteralPath $RunJson -PathType Leaf) { $Result = Get-Content -LiteralPath $RunJson -Raw | ConvertFrom-Json -AsHashtable }
-        else { $Note = "the run produced no result (exit code $($Process.exitCode), stop cause $($Process.stopCause))" }
-    }
-    catch {
-        $Note = "the run could not be completed: $($_.Exception.Message)"
-    }
+$KeepAwake = -not $AllowSleep -and (Start-EfficiencyKeepAwake)
+try {
+    for ($Run = 1; $Run -le $Runs; $Run++) {
+        Write-Host "[$([datetimeoffset]::Now.ToString('yyyy-MM-dd HH:mm:sszzz'))] Run $Run of $Runs started; 7 planned steps, $($Runs - $Run) later runs, then report generation. It takes about 40 minutes..."
+        $TrialPath = Join-Path $Trials "run-$Run"
+        $Log = Join-Path $Work "run-$Run.log"
+        $ProgressLog = Join-Path $Work "run-$Run-progress.log"
+        $Result = $null
+        $Note = ''
+        try {
+            $Arguments = @('-NoProfile', '-File', $Engine, '-Mode', 'Run', '-TrialRoot', $TrialPath, '-SourceRoot', $RepoRoot, '-InstallRoot', $Install.Root, '-Arm', 'baseline', '-Pair', [string]$Run, '-MaxCredits', $Ceiling, '-ProgressPath', $ProgressLog, '-Live', '-IsolatedEnvironment', '-ObservationOnly')
+            $Process = Invoke-EfficiencyProcess -FilePath (Get-Process -Id $PID).Path -Arguments $Arguments -WorkingDirectory $Trials -OutputPath $Log -TimeoutSeconds $TimeoutSeconds -EnvironmentVariables @{ COPILOT_AUTO_UPDATE = 'false' } -ProgressPath $ProgressLog
+            $RunJson = Join-Path $TrialPath 'out/run.json'
+            if (Test-Path -LiteralPath $RunJson -PathType Leaf) { $Result = Get-Content -LiteralPath $RunJson -Raw | ConvertFrom-Json -AsHashtable }
+            else { $Note = "the run produced no result (exit code $($Process.exitCode), stop cause $($Process.stopCause))" }
+        }
+        catch {
+            $Note = "the run could not be completed: $($_.Exception.Message)"
+        }
 
-    $Summary = ConvertTo-BenchmarkRunSummary -Run $Run -Result $Result -Note $Note
-    $Summaries.Add($Summary)
-    if ($Summary['scored']) {
-        if (-not $Identity.Count -and $null -ne $Result) { $Identity = Get-BenchmarkRunIdentity -Result $Result }
-        Write-Host "[$([datetimeoffset]::Now.ToString('yyyy-MM-dd HH:mm:sszzz'))] Run $Run scored: quality $($Summary['quality'])/100, functional $(if ($Summary['functional']) { 'passed' } else { 'failed' }), workflow $(if ($Summary['workflow']) { 'passed' } else { 'failed' })."
+        $Summary = ConvertTo-BenchmarkRunSummary -Run $Run -Result $Result -Note $Note
+        $Summaries.Add($Summary)
+        if ($Summary['scored']) {
+            if (-not $Identity.Count -and $null -ne $Result) { $Identity = Get-BenchmarkRunIdentity -Result $Result }
+            Write-Host "[$([datetimeoffset]::Now.ToString('yyyy-MM-dd HH:mm:sszzz'))] Run $Run scored: quality $($Summary['quality'])/100, functional $(if ($Summary['functional']) { 'passed' } else { 'failed' }), workflow $(if ($Summary['workflow']) { 'passed' } else { 'failed' })$(if ($Summary['note']) { ' (' + $Summary['note'] + ')' })."
+        }
+        else {
+            Write-Host "[$([datetimeoffset]::Now.ToString('yyyy-MM-dd HH:mm:sszzz'))] Run $Run did not produce a score: $($Summary['note'])"
+            if (Test-Path -LiteralPath "$Log.stderr") { Get-Content -LiteralPath "$Log.stderr" -Tail 8 | ForEach-Object { Write-Host "  $_" } }
+        }
     }
-    else {
-        Write-Host "[$([datetimeoffset]::Now.ToString('yyyy-MM-dd HH:mm:sszzz'))] Run $Run did not produce a score: $($Summary['note'])"
-        if (Test-Path -LiteralPath "$Log.stderr") { Get-Content -LiteralPath "$Log.stderr" -Tail 8 | ForEach-Object { Write-Host "  $_" } }
-    }
+}
+finally {
+    if ($KeepAwake) { $null = Stop-EfficiencyKeepAwake }
 }
 
 $Scored = @($Summaries | Where-Object { $_['scored'] }).Count

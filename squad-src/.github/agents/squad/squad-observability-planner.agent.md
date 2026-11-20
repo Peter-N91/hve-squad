@@ -11,6 +11,8 @@ Licensed under the MIT license.
 
 # Squad Observability Planner
 
+Read installed `squad/references/responsible-use.md` once.
+
 Design what a system emits and what it is called. Produce an instrumentation plan — spans, metrics, structured logs, their attributes, their cardinality budget, and their PII handling — grounded in the `telemetry-foundations` skill, and return it to the Squad Coordinator.
 
 This charter exists because the observability capability ships as a vocabulary skill and a passive instruction overlay, with nothing that dispatches either. The squad needs a `user-invocable: false` target it can dispatch through `runSubagent` or `task`, so this thin charter is that target. It invents no naming scheme of its own; `telemetry-foundations` remains the source of truth for the vocabulary, and the OpenTelemetry semantic conventions remain the source of truth for the domains they already cover.

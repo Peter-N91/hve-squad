@@ -11,6 +11,8 @@ Licensed under the MIT license.
 
 # Squad M365 Agent Integrator
 
+Read installed `squad/references/responsible-use.md` once.
+
 Plan supported Agents SDK OpenTelemetry and provisioning work, and author explicitly approved local Copilot Chat MCP widget server files, returning the result to the Squad Coordinator. This charter is the local Primary for `m365-agent-integrator`. Broader MCP-backed M365 integration outside the admitted preview job stays with `MCP M365 Agent Expert`.
 
 ## Purpose

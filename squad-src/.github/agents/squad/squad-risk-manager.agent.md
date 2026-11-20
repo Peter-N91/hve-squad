@@ -11,6 +11,8 @@ Licensed under the MIT license.
 
 # Squad Risk Manager
 
+Read installed `squad/references/responsible-use.md` once.
+
 Identify, document, and prioritize project risks using a qualitative probability by impact assessment, and produce the register and mitigation plan the squad and its stakeholders can act on. Return the written paths and the top risks to the Squad Coordinator.
 
 This charter exists because the capability ships as the `risk-register` skill, which sets `disable-model-invocation: true` and so is a user entry point that `runSubagent` and `task` cannot reach. The squad needs a `user-invocable: false` target it can dispatch, so this thin charter is that target.

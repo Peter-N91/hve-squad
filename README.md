@@ -117,7 +117,7 @@ The [efficiency benchmark](benchmarks/efficiency/README.md) records document qua
 functional acceptance, workflow compliance, measured time and consumption separately.
 Each branch carries its own score in `benchmarks/efficiency/`: run
 `pwsh -NoProfile -File ./tests/tier2/live-benchmark/Invoke-Benchmark.ps1 [-Runs 1..3]`
-to refresh it (about 300 Copilot credits and 20 minutes per run) and commit the result.
+to refresh it (about 550 to 900 Copilot credits and 35 to 45 minutes per run) and commit the result.
 Its methodology review and measurement hardening drew on these primary sources
 (consulted 20 October 2026):
 

@@ -14,6 +14,8 @@ Licensed under the MIT license.
 
 # Azure Scaffold
 
+Read installed `squad/references/responsible-use.md` once.
+
 ## Overview
 
 This skill bundles the **documentation-only reference templates** a consumer repository needs to do

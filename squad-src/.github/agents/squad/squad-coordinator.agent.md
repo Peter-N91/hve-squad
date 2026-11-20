@@ -88,10 +88,11 @@ Licensed under the MIT license.
 
 # Squad Coordinator
 
-Classify, dispatch, collect, synthesize and escalate. Success means the mapped
-agents did the work, gates held, and actual artifact/history/consumption/state
-proof was persisted. Scripts own deterministic metadata and bookkeeping; they
-never replace a specialist or grant approval.
+Read installed `squad/references/responsible-use.md` once.
+
+Map, dispatch, collect, synthesize and escalate. Scripts own metadata/bookkeeping,
+never specialist work or approval; success requires mapped work, gates and
+artifact/history/consumption/state proof.
 
 ## Skill Reference Contract
 
@@ -124,8 +125,11 @@ all gate procedures, or unrelated instruction files.
 * Capture host-reported model identity before pin/session inference, plus each
   agent's model and internal tool-call count. Keep `auto` literal session
   metadata; unreported actual usage is `unknown`, never a guessed model.
-* Run `Write-SquadHandoff.ps1 -Quiet` directly and synchronously with minimal
-  JSON for ordinary writes. After its handoff, run
+* Use `Complete-SquadHandoff.ps1 -RepoRoot <repo> -SquadRoot <root>
+  -PayloadPath <actual handoff JSON>` for ordinary writes. It runs
+  `Write-SquadHandoff.ps1 -Quiet` and turn-completion proof synchronously from
+  minimal structured JSON.
+  After its handoff, run
   `Write-SquadVerdict.ps1 -Quiet` directly for Council, Intake Readiness, and
   Discovery Verdicts and use the returned Decision Ref. Confirmed fresh Init may
   also run its validated helper directly. Unsupported operations use the cold
@@ -145,10 +149,8 @@ Use the runtime's mechanical completion call, not a narrative or repeated manual
 file audits. A script failure, missing proof or unadmitted cost slot stops
 completion. Never overlap handoff writer, verdict writer, cold Scribe, or Cost
 Preflight at one root.
-For cold Scribe dispatches only, pipeline per references/gates-and-modes.md.
 Ordinary handoffs run synchronously through the validated writer.
-Supported verdicts run synchronously through the verdict writer.
+For cold Scribe dispatches only, pipeline per references/gates-and-modes.md.
 
-Return the matched pattern, actual agents and tiers, their synthesized findings,
-verified paths/state receipt, and unresolved approvals or blockers. No model pin:
-the user's selected session model remains in force.
+Return pattern, agents/tiers, findings, verified paths/receipt and unresolved
+approvals/blockers. Without a pin, the selected session model remains in force.

@@ -23,21 +23,32 @@ same and takes the same options (for example `-Runs 1` or `-WhatIf`). It first c
 PowerShell 7.4 or later (`pwsh`) is installed; if not, it prints Ubuntu installation commands
 and stops without installing anything.
 
-**It spends Copilot credits.** One run takes about 20 minutes and uses about 300
-credits (the recorded runs used 261 to 301 credits and took 19 to 21 minutes).
+**It spends Copilot credits.** One run takes about 40 minutes and uses about 550 to 900
+credits. Runs on Copilot CLI 1.0.107 used 541 to 723 credits and took 32 to 45 minutes; on
+CLI 1.0.114 the requirements stage alone used 800 to 870 credits, so each of the three
+runs used 901 to 916 credits and took 37 to 41 minutes.
 Choose how many runs with `-Runs`, from 1 to 3 (default 3):
 
 | Command | Runs | Time | Copilot credits |
 | --- | --- | --- | --- |
-| `Invoke-Benchmark.ps1 -Runs 1` | 1 | about 20 min | about 300 |
-| `Invoke-Benchmark.ps1 -Runs 2` | 2 | about 40 min | about 600 |
-| `Invoke-Benchmark.ps1` | 3 | about 1 h | about 900 |
+| `Invoke-Benchmark.ps1 -Runs 1` | 1 | about 40 min | about 550 to 900 |
+| `Invoke-Benchmark.ps1 -Runs 2` | 2 | about 80 min | about 1,100 to 1,800 |
+| `Invoke-Benchmark.ps1` | 3 | about 2 h | about 1,650 to 2,700 |
 
-Runs happen one after another, after a short setup that installs the squad. Each run
-stops at 1,000 credits (a soft limit, because usage is reported asynchronously) and a
-hung run is stopped after 3 hours. One run is a quick check: the judge is an AI model,
-so a single run varies more than the median of three. Add `-WhatIf` to see what would
-run without spending anything.
+Runs happen one after another, after a setup of a few minutes that installs the squad.
+Each run stops at 1,000 credits (a soft limit, because usage is reported asynchronously).
+At about 90% of a session's credit limit the Copilot CLI announces that the next model
+call is the last; the benchmark then records `credit-limit`, skips the steps that cannot
+run on an exhausted session and says so in the run note, instead of continuing. On CLI
+1.0.114 the requirements stage can reach that point before the build starts: the run is
+then still scored on the documents, its functional and workflow results fail, and the note
+names the stage that ended early. A hung
+run is stopped after 3 hours of awake time: time the computer spends suspended does not
+count. On Windows the benchmark asks the computer to stay awake, with the display on,
+while it runs; a closed lid still suspends it, and `-AllowSleep` skips the request (for
+example to spare a battery). One run is a quick check: the judge is an AI model, so a
+single run varies more than the median of three. Add `-WhatIf` to see what would run
+without spending anything.
 
 ### Progress output
 
@@ -52,7 +63,8 @@ heartbeat with elapsed run time and the last timestamped step update. Progress i
 forwarded through a dedicated `run-N-progress.log` in the retained evidence folder;
 model output and raw diagnostics remain in their existing logs, not streamed to
 the console. Context recovery stays inside its current step, skipped work is
-marked explicitly, and a finished step means execution finished, not that its
+marked explicitly, a judging step whose documents could not be read is marked
+`failed`, and a finished step means execution finished, not that its
 quality or workflow checks passed. Remaining steps are a plan, not an ETA.
 
 Before you run it:
@@ -123,6 +135,14 @@ material omissions; 0–13 means major gaps. The score is the median over the ru
 Critical or high-severity findings (missing mandatory requirements, unresolved
 production-safety claims) are counted separately.
 
+That count is **judge-only**: the judge sees the BRD, PRD and final implementation
+closing review, not every requirements/domain review. New results separately retain
+Requirements and Build review outcomes and artifact paths under each trial's
+`sourceReviews`. A failed stage review remains visible even when the judge reports
+zero findings. Missing or unparseable severity coverage is **unavailable**, never zero.
+Optional structured `readiness.findingCounts` (`critical` and `high`) supplies counts;
+the runner does not infer them from arbitrary Markdown or sum overlapping reviews.
+
 ### Functional: does the product work?
 
 After each run the benchmark executes the delivered CLI and tries specific behaviours:
@@ -140,6 +160,18 @@ and decision files, cost logs, proof that the expected roles (researcher, develo
 tester, lead, BRD/PRD builders) were dispatched, a recorded review outcome, and a state
 verifier confirming the recorded state matches reality. A run passes only if every check
 passes.
+
+Supported script-backed Init and handoffs are bookkeeping, not fictional Scribe
+dispatches: their actual execution receipts must match persisted state and history.
+Cold Scribe work still requires its real dispatch evidence. Exact native usage and
+fallback token estimates are checked on their own bases, never priced as if they were
+the same observations.
+
+Validation helpers come from the reviewed source or prepared installation, not the
+agent-writable trial workspace. Evaluated helper copies must match reviewed code;
+path names or printed receipts alone are not proof. Cold work needs its actual actor
+and equivalent completion evidence. Missing identity or native coverage stays failed
+or unavailable, not an assurance of arbitrary model behavior.
 
 ## Reading a score
 
@@ -174,13 +206,24 @@ speed improvement. Older saved scores remain readable and are not backfilled.
 
 ### Score interpretation
 
+* New scores retain fingerprints of allowlisted executing identities: scenarioHash,
+  rubric, parser, exercise, preparation, grader, verifier, converter, installation,
+  role-model policy and evaluation/recovery configuration. Comparisons explicitly
+  report compatible, incompatible or unknown coverage; older scores remain readable
+  with unknown identity. Matching model labels alone do not establish comparability.
+  Fingerprints record equality, not approval or a causal performance experiment.
 * The badge shows the quality median, the functional and workflow pass counts and the
   **average benchmark time per run**. It is green only when every run was scored and
   passed both checks, amber otherwise and grey when no run was scored. It is not a claim
   that every check passed: `report.md` lists the ones that did not.
-* The time is the mean of each run's workflow stages plus the judge. Stage clocks include
+* The existing time and credit means cover **scored runs only**. Time sums each scored
+  run's workflow stages plus the judge. Stage clocks include
   some harness checks; setup and report generation are excluded. It is neither pure
   agent latency nor total command duration. Credits count the workflow and the judge.
+  New `summary.allRequested` observations also include measured unscored trials and
+  display each metric's covered/requested count. A partial-coverage mean describes
+  only those measured slots, not the missing runs. Do not compare scored-only and
+  all-requested means as though they had the same denominator.
 * The quality score grades the BRD and PRD, not the delivered software. The judge is an
   AI model, so treat a difference of a few points as noise and prefer three runs.
 * Scores measured with a different model or Copilot CLI version are not directly

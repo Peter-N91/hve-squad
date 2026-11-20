@@ -66,12 +66,17 @@ functional, review and quality failures are measured, not prerequisites for scor
 Feasible later stages and remaining runs still happen; missing grades remain
 unavailable, never zero or invented success. Reports retain individual checks,
 independent scores, timing, requests, credits and reliability counts.
+Both collection modes retain separate-process producer-consumer ID-boundary
+validation in the build request. Observation changes how failures are reported,
+not which product invariants the builder and closing reviewer must verify.
 
 Observational workflows have no request-count cap, allow up to 1,000 native autopilot
-continuations, and use a 180-minute hung-run watchdog. They reserve 30 credits for
-the independently metered judge and the remainder for the shared workflow: 970/30
-at a 1,000-credit trial ceiling. At least 60 total credits are required because both
-native sessions need a 30-credit minimum. Credit exhaustion, invalid metering,
+continuations, and use a 180-minute hung-run watchdog that does not count time the
+computer spends suspended (a gap of more than 120 seconds between two watchdog polls;
+the total is recorded as `suspendedSeconds` in each stage's `process` record). They
+reserve 30 credits for the independently metered judge and the remainder for the shared
+workflow: 970/30 at a 1,000-credit trial ceiling. At least 60 total credits are required
+because both native sessions need a 30-credit minimum. Credit exhaustion, invalid metering,
 credential/setup failures, actual safety boundaries and evidence-identity changes
 still stop affected work. Native context-window limits remain unchanged.
 The independently tool-denied judge retains its ten-request allowance.
@@ -88,7 +93,23 @@ are unchanged; observational collection records their failures separately.
 
 In strict mode, each stage must pass both process/telemetry checks and stage-readiness checks
 before the next stage launches. Initialization requires nonempty shared state,
-Scribe dispatch/history evidence and the existing state verifier. Requirements
+canonical history, verified script-backed execution or a real cold-Scribe dispatch,
+and the state verifier. Script receipts must match the run, turn and persisted
+artifacts; narrative receipts and zero Scribe dispatches alone prove nothing.
+The proof parser permits a single literal or previously bound `cd`, `chdir` or
+`Set-Location` to the exact workspace before the writer. Other roots, subdirectories,
+dynamic or post-writer locations remain rejected. Run writers separately from
+capture, copy, cleanup and probes. The ordinary `Complete-SquadHandoff.ps1` helper
+freezes the actual payload, runs the existing writer and turn checker, and emits
+one verified receipt. Legacy direct writers still require separate turn completion
+with their actual payload and expected turn. A bounded output prefix is
+usable only when the complete receipt survives; truncated JSON is not proof.
+An explicitly selected source checkout may be reached through a directory alias
+(including a Windows mounted-volume path). The resolver canonicalizes that root
+before checking helpers; linked helper trees and model-workspace escapes remain
+refused. Saved scores are not reclassified after a resolver change.
+Exact-native ledgers are checked against native coverage, not repriced history
+estimates; fallback estimates retain their independent rate checks. Requirements
 also require the published BRD/PRD and dispatch-backed history pointing to nonempty
 artifacts for both builders and both quality reviewers. Artifact presence does
 not replace workflow approval or final independent quality judging. Build retains
@@ -96,6 +117,19 @@ the closing-review and role-evidence checks; functional acceptance and judging
 remain mandatory. A zero-exit blocked stage is not treated as successful merely
 because the CLI returned normally. Eligible context-budget failures may use the
 bounded same-stage recovery below; other failures stop dependent work.
+
+Score summaries keep the existing judge-only finding count separate from per-stage
+review outcomes. Structured severity counts are optional; unknown counts are not zero
+and review findings are never summed across potentially overlapping records. Reports
+also distinguish scored-only timing/credit means from all-requested observations and
+their actual coverage. Compatibility fingerprints identify differing executing inputs;
+historical scores are descriptive evidence, not reusable controls after evaluator changes.
+
+Raw local `run.json` readiness includes `diagnostics` for failed bookkeeping,
+closing-review and native-state predicates. Checker JSON, exit/stop cause and stderr
+are retained there before disposable probes are cleaned. These diagnostics may
+contain private data; portable series summaries and published score artifacts do
+not include them. An exit-zero checker without its structured passing result fails.
 
 ### Bounded context recovery
 
@@ -138,7 +172,12 @@ session and its descendants, independently of CLI invocation counters. It counts
 unique usage accounting IDs and native compaction attempts, including earlier
 stages, and stops active work or prevents the next launch at the workflow ceiling.
 Missing or invalid credit evidence stops with `incomplete-credit-metering`;
-exhaustion stops with `credit-limit`. Final records are checked even on fast exits.
+exhaustion stops with `credit-limit`. Stage and continuation processes also stop with
+`credit-limit` when the CLI announces, at about 90% of the session limit, that the
+session's next model call is final (a `session.info` event of type `session_limits`;
+only events after the attempt's start line count): the process may finish on its own
+and is killed if it is still running after 120 seconds, later stages are skipped, and
+the stage keeps its events and output as evidence. Final records are checked even on fast exits.
 Actual AI credits are recorded in `*-metrics.json` under `credits.used` and in
 attempt process results separately from the configured ceiling. The judge is
 metered against its own allowance, never borrowed by workflow recovery.
@@ -290,8 +329,9 @@ No outer stage/trial retries are performed.
 
 With `-ObservationOnly` (used by `Invoke-Benchmark.ps1`), the judge reserves a fixed 30
 credits and the workflow receives `MaxCredits - 30`; the minimum is **60 credits
-per trial**. The workflow and judge share a 180-minute watchdog, with the judge
-still limited to five minutes within the remaining time. Observational collection
+per trial**. The workflow and judge share a 180-minute watchdog (suspended computer
+time excluded), with the judge still limited to five minutes within the remaining time.
+Observational collection
 uses up to 1000 host continuations, disables the workflow observed request-count
 ceiling and benchmark recovery, and retains failed checks instead of stopping for quality
 gates. It does not disable spending, timeout, isolation or unexpected-question guards.

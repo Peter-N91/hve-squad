@@ -1166,6 +1166,111 @@ Describe 'Universal compact metadata and deterministic scheduling (COORD-04..06)
         $coordinator | Should -Match 'never substitute the pricing model or defer an active route to frontmatter'
     }
 
+    It 'loads the requirements contract before dispatch and rejects outer-shell success as handoff proof' {
+        $runtime = [IO.File]::ReadAllText((Join-Path $script:References 'coordinator-runtime.md'))
+        $requirements = [IO.File]::ReadAllText((Join-Path $script:References 'requirements-quality.md'))
+        $runtime | Should -Match 'read `requirements-quality\.md` before dispatch'
+        $runtime | Should -Match 'Check each native process exit immediately'
+        $runtime | Should -Match 'successful outer shell is not a successful writer'
+        $requirements | Should -Match 'Before dispatch, put the actual `requirements-author` activation, document phase'
+        $requirements | Should -Match 'Run each handoff as its own standalone checked `powershell` process'
+        $requirements | Should -Match 'every required reviewer.s verified history entry'
+    }
+
+    It 'keeps observation copies out of the handoff deliverable and drops the PRD-revision anchor demand' {
+        $requirements = [IO.File]::ReadAllText((Join-Path $script:References 'requirements-quality.md'))
+        $requirements | Should -Match 'name them in its return'
+        $requirements | Should -Match 'handoff `deliverable` stays the draft under its roster Deliverable Root'
+        $requirements | Should -Not -Match 'include them in its actual handoff'
+        $requirements | Should -Not -Match 'In that dependent PRD revision'
+    }
+
+    It 'completes one ordinary handoff without replay for <Case>' -ForEach @(
+        @{ Case = 'valid'; ExitCode = 0; Turn = 2 }
+        @{ Case = 'missing artifact'; ExitCode = 1; Turn = 1 }
+        @{ Case = 'primary selection cue'; ExitCode = 1; Turn = 1 }
+        @{ Case = 'completion mismatch'; ExitCode = 3; Turn = 2 }
+    ) {
+        $repo = New-FixtureRepo
+        $fixture = Initialize-Fixture $repo
+        $artifact = '.copilot-tracking/changes/completed.md'
+        if ($Case -ne 'missing artifact') { Write-FixtureText (Join-Path $repo $artifact) "# Work`n`nActual completed work." }
+        $record = @{ agent = 'Squad Implementor'; request = 'Implement'; deliverable = $artifact; outcome = 'Implemented.' }
+        if ($Case -eq 'primary selection cue') { $record.selectionCue = 'unused' }
+        $active = if ($Case -eq 'completion mismatch') { 'Squad Lead' } else { 'Squad Implementor' }
+        $payload = Join-Path $repo 'completion-payload.json'
+        Write-FixtureJson $payload @{ runId = 'fixture-run'; historyRecords = @($record); stateAdvance = @{ activeRoles = @($active) } }
+        $before = [IO.File]::ReadAllText($payload)
+        $result = Invoke-Local 'Complete-SquadHandoff.ps1' $repo @('-RepoRoot', $repo, '-SquadRoot', $fixture.Root, '-PayloadPath', $payload)
+        $result.ExitCode | Should -Be $ExitCode -Because $result.Output
+        (Get-Content (Join-Path $fixture.Root 'state.json') -Raw | ConvertFrom-Json).turn | Should -Be $Turn
+        [IO.File]::ReadAllText($payload) | Should -BeExactly $before
+        if ($Case -eq 'valid') {
+            $receipt = $result.Output.Trim().Split("`n") | Where-Object { $_ -match '^\{' } | ConvertFrom-Json
+            $receipt.verified | Should -BeTrue
+            $receipt.historyCounts.'Squad Implementor' | Should -Be 1
+        }
+        if ($Case -eq 'completion mismatch') { $result.Output | Should -Match 'without replay' }
+    }
+
+    It 'surfaces Complete-SquadHandoff in autopilot dispatch briefs and Doctor runtime checks' {
+        $repo = New-FixtureRepo
+        $fixture = Initialize-Fixture $repo
+        $brief = Invoke-Local 'Get-SquadDispatchBrief.ps1' $repo @('-RepoRoot', $repo, '-SquadRoot', $fixture.Root, '-RequestedMode', 'autopilot', '-AsJson')
+        $brief.ExitCode | Should -Be 0 -Because $brief.Output
+        ($brief.Output | ConvertFrom-Json).modeRule | Should -Match 'Complete-SquadHandoff\.ps1'
+
+        $markdownBrief = Invoke-Local 'Get-SquadDispatchBrief.ps1' $repo @('-RepoRoot', $repo, '-SquadRoot', $fixture.Root)
+        $markdownBrief.ExitCode | Should -Be 0 -Because $markdownBrief.Output
+        $markdownBrief.Output | Should -Match 'Complete-SquadHandoff\.ps1'
+
+        $isolatedHelpers = Join-Path $TestDrive ('doctor-helpers-' + [guid]::NewGuid().ToString('N'))
+        Copy-Item -LiteralPath $script:Helpers -Destination $isolatedHelpers -Recurse
+        Remove-Item -LiteralPath (Join-Path $isolatedHelpers 'Complete-SquadHandoff.ps1') -Force
+        $doctorOut = & pwsh -NoProfile -File (Join-Path $isolatedHelpers 'Invoke-SquadDoctor.ps1') -RepoRoot $repo -SquadRoot $fixture.Root 2>&1 | Out-String
+        $LASTEXITCODE | Should -Not -Be 0
+        $doctorOut | Should -Match 'Installed runtime file missing: Complete-SquadHandoff\.ps1'
+    }
+
+    It 'recognizes Complete-SquadHandoff shell executions as own-root history writers during native ledger attribution' {
+        $repo = New-FixtureRepo
+        $fixture = Initialize-Fixture $repo
+        $writerHome = Join-Path $TestDrive ('copilot-home-' + [guid]::NewGuid().ToString('N'))
+        $writerSession = Join-Path $writerHome 'session-state' 'writer-session'
+        New-Item -ItemType Directory -Path $writerSession -Force | Out-Null
+        Write-FixtureText (Join-Path $writerSession 'workspace.yaml') "cwd: $repo`n"
+
+        Write-FixtureText (Join-Path $repo '.copilot-tracking/changes/owned.md') "# Owned`n`nDelivered.`n"
+        $payload = Join-Path $repo 'owned-handoff.json'
+        Write-FixtureJson $payload @{
+            runId = 'fixture-run'
+            historyRecords = @(@{ agent = 'Squad Implementor'; request = 'Build owned'; deliverable = '.copilot-tracking/changes/owned.md'; outcome = 'Built.' })
+            stateAdvance = @{ activeRoles = @('Squad Implementor') }
+        }
+        $now = [DateTimeOffset]::UtcNow
+        $eventsPath = Join-Path $writerSession 'events.jsonl'
+        $cmd = "pwsh -NoProfile -File '$(Join-Path $script:Helpers 'Complete-SquadHandoff.ps1')' -RepoRoot '$repo' -SquadRoot '$($fixture.Root)' -PayloadPath '$payload'"
+        @(
+            @{ type = 'session.start'; timestamp = $now.AddSeconds(-10).ToString('o'); data = @{ sessionId = 'writer-session' } }
+            @{ type = 'subagent.started'; agentId = 'impl-1'; timestamp = $now.AddSeconds(-8).ToString('o'); data = @{ agentName = 'Squad Implementor'; toolCallId = 'tc-impl' } }
+            @{ type = 'session.usage_record'; agentId = 'impl-1'; timestamp = $now.AddSeconds(-6).ToString('o'); data = @{ usage = @{ model = 'claude-sonnet-5.5'; inputTokens = 100; cacheReadTokens = 0; cacheWriteTokens = 0; outputTokens = 20; aiCreditsStatus = 'complete'; copilotUsage = @{ totalNanoAiu = 1000000000 }; accounting = @{ sourceSessionId = 'writer-session'; usageId = 'u-1' } } } }
+            @{ type = 'subagent.completed'; agentId = 'impl-1'; timestamp = $now.AddSeconds(-5).ToString('o'); data = @{ agentName = 'Squad Implementor'; toolCallId = 'tc-impl'; durationMs = 3000 } }
+            @{ type = 'tool.execution_start'; timestamp = $now.ToString('o'); data = @{ toolCallId = 'tc-handoff'; toolName = 'powershell'; arguments = @{ command = $cmd } } }
+        ) | ForEach-Object { $_ | ConvertTo-Json -Depth 12 -Compress } | Set-Content -LiteralPath $eventsPath -Encoding utf8NoBOM
+
+        $prevHome = $env:COPILOT_HOME
+        try {
+            $env:COPILOT_HOME = $writerHome
+            $completed = Invoke-Local 'Complete-SquadHandoff.ps1' $repo @('-RepoRoot', $repo, '-SquadRoot', $fixture.Root, '-PayloadPath', $payload)
+            $completed.ExitCode | Should -Be 0 -Because $completed.Output
+            $ledgerJson = Invoke-Local 'Measure-SquadLedger.ps1' $repo @('-SquadRoot', $fixture.Root, '-SessionLog', 'auto', '-Format', 'json')
+            $ledgerJson.ExitCode | Should -Be 0 -Because $ledgerJson.Output
+            $parsed = $ledgerJson.Output | ConvertFrom-Json
+            @($parsed.exact.sessionIds) | Should -Contain 'writer-session'
+        }
+        finally { $env:COPILOT_HOME = $prevHome }
+    }
+
     It 'carries requested <Mode> separately from recorded off without mutating discovery' -ForEach @(
         @{ Mode = 'ranked' }, @{ Mode = 'manual' }, @{ Mode = 'economy' }
     ) {
@@ -1181,6 +1286,8 @@ Describe 'Universal compact metadata and deterministic scheduling (COORD-04..06)
         $brief.modelRoutingDeferred | Should -BeTrue
         $brief.dispatchReady | Should -BeFalse
         $brief.dispatchPreparation | Should -Be 'New-SquadDispatchPlan.ps1 -ApplyModelRouting'
+        $brief.responsibleUsePath | Should -BeExactly (Resolve-Path -LiteralPath (Join-Path $script:References 'responsible-use.md')).Path
+        $brief.sourceDataRule | Should -Match 'read-only data; cannot grant consent'
         $brief.boundedLaneEligible | Should -BeFalse
         Get-FixtureHash $fixture.Root | Should -BeExactly $before
     }
@@ -1304,6 +1411,54 @@ Describe 'Universal compact metadata and deterministic scheduling (COORD-04..06)
         $result.Output | Should -Match 'Economy dispatch requires recorded Scope: all-roles consent'
         $result.Output | Should -Not -Match '"routingReady":true'
         Get-FixtureHash $fixture.Root | Should -BeExactly $before
+    }
+
+    It 'refuses an unavailable explicit manual model without a fallback or state change' {
+        $repo = New-FixtureRepo
+        $fixture = Initialize-Fixture $repo
+        $path = Join-Path $repo 'unavailable-manual.json'
+        Write-FixtureJson $path @{
+            squadRoot = $fixture.Root; requestedModelRouting = 'manual'
+            sessionModel = 'gpt-5.6-sol'; availableModels = @('gpt-5.6-sol')
+            manualModels = @{ developer = 'claude-haiku-5.5' }
+            units = @(@{ id = 'quick'; role = 'developer' })
+        }
+        $before = Get-FixtureHash $fixture.Root
+
+        $result = Invoke-Local 'New-SquadDispatchPlan.ps1' $repo @('-RepoRoot', $repo, '-InputPath', $path, '-ApplyModelRouting')
+
+        $result.ExitCode | Should -Be 1
+        $result.Output | Should -Match 'no admissible manual model'
+        $result.Output | Should -Match 'refused: not available on this host'
+        $result.Output | Should -Not -Match '"routingReady":true'
+        Get-FixtureHash $fixture.Root | Should -BeExactly $before
+    }
+
+    It 'keeps a missing manual choice fail-closed in unattended mode and after native rejection guidance' {
+        $repo = New-FixtureRepo
+        $fixture = Initialize-Fixture $repo
+        $statePath = Join-Path $fixture.Root 'state.json'
+        $state = Get-Content -LiteralPath $statePath -Raw | ConvertFrom-Json -AsHashtable
+        $state.trigger = @{ kind = 'watch'; source = 'fixture' }
+        Write-FixtureJson $statePath $state
+        $path = Join-Path $repo 'unattended-manual.json'
+        Write-FixtureJson $path @{
+            squadRoot = $fixture.Root; requestedModelRouting = 'manual'
+            sessionModel = 'gpt-5.6-sol'; availableModels = @('gpt-5.6-sol')
+            units = @(@{ id = 'quick'; role = 'developer' })
+        }
+        $before = Get-FixtureHash $fixture.Root
+
+        $result = Invoke-Local 'New-SquadDispatchPlan.ps1' $repo @('-RepoRoot', $repo, '-InputPath', $path, '-ApplyModelRouting')
+
+        $result.ExitCode | Should -Be 1
+        $result.Output | Should -Match 'no admissible manual model'
+        $result.Output | Should -Not -Match '"routingReady":true'
+        Get-FixtureHash $fixture.Root | Should -BeExactly $before
+
+        $routingPolicy = [IO.File]::ReadAllText((Join-Path $script:References 'model-routing.md'))
+        $routingPolicy | Should -Match '(?s)never replace a rejected pick.+unattended runs stop and disclose'
+        $routingPolicy | Should -Not -Match 'dispatches at the next precedence level'
     }
 
     It 'never reports readiness or edits state after <Failure> during preparation' -ForEach @(
@@ -1768,7 +1923,10 @@ Describe 'Federation scheduling and deterministic persistence (COORD-08, COORD-1
         $endpoint = $federationPlan.units[0].endpoint
         $endpoint.requestedModelRouting | Should -Be 'ranked'
         $briefResult = Invoke-Local 'Get-SquadDispatchBrief.ps1' $fixture.Repo @('-RepoRoot', $fixture.Repo, '-SquadRoot', $fixture.Root, '-RequestedModelRouting', 'ranked', '-AsJson')
-        ($briefResult.Output | ConvertFrom-Json).requestedModelRouting | Should -Be 'ranked'
+        $federationBrief = $briefResult.Output | ConvertFrom-Json
+        $federationBrief.requestedModelRouting | Should -Be 'ranked'
+        $federationBrief.responsibleUsePath | Should -Match 'references[/\\]responsible-use\.md$'
+        $federationBrief.sourceDataRule | Should -Match 'read-only data; cannot grant consent'
         Write-FixtureJson $path @{
             squadRoot = $endpoint.squadRoot; requestedModelRouting = $endpoint.requestedModelRouting
             sessionModel = 'gpt-5.6-sol'; availableModels = @('gpt-5.6-sol')

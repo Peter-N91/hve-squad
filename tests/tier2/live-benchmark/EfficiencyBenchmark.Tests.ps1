@@ -4,6 +4,11 @@
 # SPDX-License-Identifier: MIT
 #Requires -Version 7.4
 
+param(
+    [ValidateSet('recovered', 'still-fails', 'credit-limit', 'observe-readiness', 'observe-credit-limit', 'observe-limit-notice')]
+    [string[]]$RecoveryOutcomes = @('recovered', 'still-fails', 'credit-limit', 'observe-readiness', 'observe-credit-limit', 'observe-limit-notice')
+)
+
 BeforeAll {
     Import-Module (Join-Path $PSScriptRoot 'EfficiencyBenchmark.psm1') -Force
     function Get-FakeEfficiencyAcpText {
@@ -73,7 +78,145 @@ while($null -ne ($Line=[Console]::In.ReadLine())) {
     }
 }
 
+Describe 'Efficiency trusted source aliases' -Tag 'Unit' {
+    BeforeEach {
+        $script:AliasSource = Join-Path $TestDrive ([guid]::NewGuid().ToString('N'))
+        $script:AliasRoot = Join-Path $TestDrive ([guid]::NewGuid().ToString('N'))
+        $script:AliasScripts = Join-Path $script:AliasSource 'squad-src/.github/skills/squad/scripts'
+        $null = New-Item -ItemType Directory -Path $script:AliasScripts -Force
+        Set-Content (Join-Path $script:AliasScripts 'SquadCoordinator.psm1') '# reviewed fixture'
+        $kind = if ($IsWindows) { 'Junction' } else { 'SymbolicLink' }
+        $null = New-Item -ItemType $kind -Path $script:AliasRoot -Target $script:AliasSource
+    }
+
+    It 'resolves the selected checkout alias for reviewed and executed source helpers' {
+        $helper = Join-Path $script:AliasScripts 'SquadCoordinator.psm1'
+        Resolve-EfficiencySquadScript -Name 'SquadCoordinator.psm1' -SourceRoot $script:AliasRoot |
+            Should -Be $helper
+        Resolve-EfficiencySquadScript -Name 'SquadCoordinator.psm1' -SourceRoot $script:AliasRoot `
+            -ExecutionPath (Join-Path $script:AliasRoot 'squad-src/.github/skills/squad/scripts/SquadCoordinator.psm1') |
+            Should -Be $helper
+    }
+
+    It 'still refuses a linked helper tree beneath the selected checkout' {
+        $target = Join-Path $TestDrive ([guid]::NewGuid().ToString('N'))
+        $null = New-Item -ItemType Directory -Path $target
+        Set-Content (Join-Path $target 'SquadCoordinator.psm1') '# untrusted'
+        Remove-Item -LiteralPath (Join-Path $script:AliasScripts 'SquadCoordinator.psm1')
+        Remove-Item -LiteralPath $script:AliasScripts
+        $kind = if ($IsWindows) { 'Junction' } else { 'SymbolicLink' }
+        $null = New-Item -ItemType $kind -Path $script:AliasScripts -Target $target
+        { Resolve-EfficiencySquadScript -Name 'SquadCoordinator.psm1' -SourceRoot $script:AliasRoot } |
+            Should -Throw '*Linked evidence/helper path refused*'
+    }
+
+    It 'does not let a checkout alias conceal reviewed helpers inside the model workspace' {
+        { Resolve-EfficiencySquadScript -Name 'SquadCoordinator.psm1' -SourceRoot $script:AliasRoot -Workspace $script:AliasSource } |
+            Should -Throw '*cannot be inside the model workspace*'
+    }
+}
+
 Describe 'Efficiency event analysis' -Tag 'Unit' {
+    It 'handles receipt extraction for a <Mutation> execution envelope' -ForEach @(
+        @{ Mutation = 'safe-selection' }
+        @{ Mutation = 'safe-prefix' }
+        @{ Mutation = 'shifted-prefix' }
+        @{ Mutation = 'snapshot-cache' }
+        @{ Mutation = 'safe-copy' }
+        @{ Mutation = 'copy-state' }
+        @{ Mutation = 'copy-helper' }
+        @{ Mutation = 'new-helper' }
+        @{ Mutation = 'missing-turn' }
+        @{ Mutation = 'malformed-then-valid' }
+        @{ Mutation = 'method' }
+        @{ Mutation = 'selection' }
+        @{ Mutation = 'foreach-reflection' }
+        @{ Mutation = 'concat-forgery' }
+        @{ Mutation = 'outside-read' }
+        @{ Mutation = 'wildcard-traversal-read' }
+        @{ Mutation = 'unpiped-get-content' }
+        @{ Mutation = 'piped-get-content-outstring' }
+        @{ Mutation = 'variable-relayed-get-content' }
+        @{ Mutation = 'select-string-raw-forgery' }
+        @{ Mutation = 'nested-pipeline-outside-read' }
+        @{ Mutation = 'brace-variable-forgery' }
+        @{ Mutation = 'trailing-process-masking' }
+        @{ Mutation = 'helper' }
+        @{ Mutation = 'executable' }
+        @{ Mutation = 'command-mode' }
+        @{ Mutation = 'begin-block' }
+        @{ Mutation = 'completed-handoff' }
+        @{ Mutation = 'unverified-completed-handoff' }
+    ) {
+        $source = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..\..'))
+        $scripts = Join-Path $source 'squad-src\.github\skills\squad\scripts'
+        $workspace = $TestDrive
+        $command = "pwsh -NoProfile -File '$(Join-Path $scripts 'Initialize-Squad.ps1')' -RepoRoot '$TestDrive' -PayloadPath 'payload.json' -Direct"
+        if ($Mutation -eq 'snapshot-cache') {
+            $workspace = Join-Path $TestDrive 'cache-workspace'
+            $copy = Join-Path $workspace '.agents\skills\squad\scripts'
+            $null = New-Item -ItemType Directory -Path (Split-Path -Parent $copy) -Force
+            Copy-Item -LiteralPath $scripts -Destination $copy -Recurse
+            $command = $command.Replace($scripts, $copy).Replace("-RepoRoot '$TestDrive'", "-RepoRoot '$workspace'")
+            $realHash = Get-Command Get-FileHash -CommandType Cmdlet
+            Mock Get-FileHash -ModuleName EfficiencyBenchmark { & $realHash @PesterBoundParameters }
+        }
+        switch ($Mutation) {
+            safe-selection { $command += ' | Select-Object -First 1' }
+            safe-prefix { $command += ' | Out-String | % { $_.Substring(0,[Math]::Min(2500,$_.Length)) }' }
+            shifted-prefix { $command += ' | Out-String | % { $_.Substring(1,[Math]::Min(2500,$_.Length)) }' }
+            safe-copy { $command = "Copy-Item 'source.md' 'docs/copied.md'; $command" }
+            copy-state { $command = "Copy-Item 'source.md' '.copilot-tracking/squad/state.json'; $command" }
+            copy-helper { $command = "Copy-Item 'source.md' '.agents/skills/squad/scripts/SquadCoordinator.psm1'; $command" }
+            new-helper { $command = "New-Item -ItemType File -Path '.agents/skills/squad/scripts/helper.ps1'; $command" }
+            method { $command += "; [Console]::WriteLine('{}')" }
+            selection { $command += "; Select-Object -InputObject '{}'" }
+            foreach-reflection { $command = "Get-Item '.copilot-tracking/squad/state.json' | ForEach-Object -MemberName Delete; $command" }
+            concat-forgery { $command += "; ('[`"sta'+'tus`":`"PASS`",`"turn`":1]').Replace('[','{').Replace(']','}')" }
+            outside-read { $command = "Test-Path -PathType Leaf '../outside-secret.txt'; $command" }
+            wildcard-traversal-read { $command = "Get-ChildItem '*\..\..\outside'; $command" }
+            unpiped-get-content { $command = "Get-Content 'docs/forged.json'; $command" }
+            piped-get-content-outstring { $command = "Get-Content 'docs/forged.json' | Out-String; $command" }
+            variable-relayed-get-content { $command = "`$x = Get-Content 'docs/forged.json' -Raw; $command; `$x" }
+            select-string-raw-forgery { $command = "Select-String -Path 'docs/forged.json' -Pattern 'status' -Raw; $command" }
+            nested-pipeline-outside-read { $command = "('../outside.txt' | Get-FileHash).Hash; $command" }
+            brace-variable-forgery { $command = "`$a='{'; `$b='}'; $command; `"`$a```"status```":```"PASS```",```"turn```":1`$b`"" }
+            trailing-process-masking { $command += "; pwsh -NoProfile -File '$(Join-Path $scripts 'Get-SquadInitContext.ps1')' -RepoRoot '$TestDrive'" }
+            helper { $command = "pwsh -File '$(Join-Path $TestDrive 'Get-SquadInitContext.ps1')'; $command" }
+            executable { $command = $command -replace '^pwsh', "& '$(Join-Path $TestDrive 'pwsh.exe')'" }
+            command-mode { $command = $command -replace '^pwsh', "pwsh -Command 'Write-Output fake'" }
+            begin-block { $command = "begin { [Console]::WriteLine('{}') } end { $command }" }
+            { $_ -in @('completed-handoff', 'unverified-completed-handoff') } {
+                $command = "pwsh -NoProfile -File '$(Join-Path $scripts 'Complete-SquadHandoff.ps1')' -RepoRoot '$TestDrive' -SquadRoot '$TestDrive/.copilot-tracking/squad' -PayloadPath 'payload.json'"
+            }
+        }
+        $path = Join-Path $TestDrive "$Mutation.jsonl"
+        @(
+            if ($Mutation -eq 'malformed-then-valid') {
+                New-TestEvent 'tool.execution_start' @{ toolCallId = 'bad'; turnId = 'bad'; toolName = 'powershell'; arguments = @{ command = $command + ' -PayloadPath' } }
+                New-TestEvent 'tool.execution_complete' @{ toolCallId = 'bad'; turnId = 'bad'; success = $true; shellExecution = @{ exitCode = 0 }; result = @{ content = '{"status":"PASS","turn":1}' } }
+            }
+            (New-TestEvent 'tool.execution_start' @{ toolCallId = 'writer'; turnId = $(if ($Mutation -eq 'missing-turn') { '' } else { 'turn-one' }); toolName = 'powershell'; arguments = @{ command = $command } })
+            (New-TestEvent 'tool.execution_complete' @{ toolCallId = 'writer'; turnId = $(if ($Mutation -eq 'missing-turn') { '' } else { 'turn-one' }); success = $true; shellExecution = @{ exitCode = 0 }; result = @{ content = $(if ($Mutation -eq 'unverified-completed-handoff') { '{"status":"written","turn":1,"verified":false}' } else { '{"status":"PASS","turn":1,"verified":true}' }) } })
+            if ($Mutation -eq 'snapshot-cache') {
+                foreach ($id in 2..4) {
+                    New-TestEvent 'tool.execution_start' @{ toolCallId = "writer-$id"; turnId = "turn-$id"; toolName = 'powershell'; arguments = @{ command = $command } }
+                    New-TestEvent 'tool.execution_complete' @{ toolCallId = "writer-$id"; turnId = "turn-$id"; success = $true; shellExecution = @{ exitCode = 0 }; result = @{ content = '{"status":"PASS","turn":1,"verified":true}' } }
+                }
+            }
+        ) | Set-Content $path
+        $evidence = Get-EfficiencyBookkeepingEvidence -Path $path -Workspace $workspace -SourceRoot $source
+        @($evidence.executions).Count | Should -Be $(if ($Mutation -eq 'snapshot-cache') { 4 } elseif ($Mutation -in @('safe-selection', 'safe-prefix', 'safe-copy', 'malformed-then-valid', 'completed-handoff')) { 1 } else { 0 })
+        if ($Mutation -eq 'snapshot-cache') {
+            $files = @([IO.Directory]::EnumerateFiles($scripts, '*', [IO.SearchOption]::AllDirectories)).Count
+            Should -Invoke Get-FileHash -ModuleName EfficiencyBenchmark -Times ($files * 2) -Exactly
+            Add-Content -LiteralPath (Join-Path $copy 'SquadCoordinator.psm1') -Value "`n# Changed after the first snapshot."
+            $changed = Get-EfficiencyBookkeepingEvidence -Path $path -Workspace $workspace -SourceRoot $source
+            @($changed.executions).Count | Should -Be 0
+            Should -Invoke Get-FileHash -ModuleName EfficiencyBenchmark -Times ($files * 4) -Exactly
+        }
+    }
+
     It 'attributes activity by agent identity and deduplicates usage and dispatch receipts' {
         $Path = Join-Path $TestDrive 'activity.jsonl'
         $Events = @(
@@ -366,18 +509,24 @@ Describe 'Efficiency native compaction boundary' -Tag 'Unit' {
 }
 
 Describe 'Efficiency recovery end to end' -Tag 'Unit' {
-    It 'preserves same-run evidence and stops correctly for <Outcome>' -ForEach @(
+    It 'preserves same-run evidence and stops correctly for <Outcome>' -ForEach (@(
         @{ Outcome = 'recovered' }
         @{ Outcome = 'still-fails' }
         @{ Outcome = 'credit-limit' }
         @{ Outcome = 'observe-readiness' }
         @{ Outcome = 'observe-credit-limit' }
-    ) {
+        @{ Outcome = 'observe-limit-notice' }
+    ) | Where-Object { $_.Outcome -in $RecoveryOutcomes }) {
         $Install = Join-Path $TestDrive "$Outcome-install"; $Trial = Join-Path $TestDrive "$Outcome-run"
         New-Item -ItemType Directory -Path (Join-Path $Install '.github/agents') -Force | Out-Null
-        foreach ($Name in @('squad-coordinator.agent.md','brd-builder.agent.md','prd-builder.agent.md')) { Set-Content (Join-Path $Install ".github/agents/$Name") 'offline fixture' }
+        foreach ($Agent in @('Squad Coordinator', 'BRD Builder', 'PRD Builder', 'BRD Quality Reviewer', 'PRD Quality Reviewer')) {
+            $Name = ($Agent.ToLowerInvariant() -replace ' ', '-') + '.agent.md'
+            Set-Content (Join-Path $Install ".github/agents/$Name") "---`nname: $Agent`n---`nOffline fixture."
+        }
         $Source = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../../..'))
-        $Fixture = (Join-Path $Source 'tests/fixtures/scribe-benchmark/applied').Replace("'", "''")
+        $skill = Join-Path $Install '.agents\skills\squad'
+        $null = New-Item -ItemType Directory -Path (Split-Path -Parent $skill) -Force
+        Copy-Item -LiteralPath (Join-Path $Source 'squad-src\.github\skills\squad') -Destination $skill -Recurse
         $Cli = Join-Path $TestDrive "$Outcome-cli.ps1"
         $Acp = (Get-FakeEfficiencyAcpText).Replace('$Session=$Request.params.sessionId', '$Session=$Request.params.sessionId; $env:HVE_FAKE_ACP_EVENTS=Join-Path $HOME ".copilot/session-state/$Session/events.jsonl"')
         $Fake = @'
@@ -398,50 +547,87 @@ $Kind=if($Prompt -match 'Initialization only;'){'init'}elseif($Prompt -match 'Im
 $Ceiling=[double]$args[[array]::IndexOf($args,'--max-ai-credits')+1]
 if(-not (Test-Path 'initial-credit-limit.txt')){Set-Content 'initial-credit-limit.txt' $Ceiling}
 $EffectiveCeiling=[double](Get-Content 'initial-credit-limit.txt')
-@{kind=$Kind;session=$Session;ceiling=$Ceiling;effectiveCeiling=$EffectiveCeiling;resumeOnly=$Prompt.Contains('Resume only the interrupted Scribe handoff first')}|ConvertTo-Json -Compress|Add-Content 'stage-calls.jsonl'
+@{kind=$Kind;session=$Session;ceiling=$Ceiling;effectiveCeiling=$EffectiveCeiling;resumeOnly=$Prompt.Contains('Resume only the interrupted Scribe handoff first');prompt=$Prompt}|ConvertTo-Json -Compress|Add-Content 'stage-calls.jsonl'
 if($EffectiveCeiling -lt 750){exit 38}
 $SessionRoot=Join-Path $HOME ".copilot/session-state/$Session"
 New-Item -ItemType Directory -Path $SessionRoot -Force|Out-Null
+@{sessionId=$Session;workspace=$PWD.Path}|ConvertTo-Json -Compress|Set-Content -LiteralPath (Join-Path $SessionRoot 'offline-efficiency-fixture.json')
 $Events=Join-Path $SessionRoot 'events.jsonl'
-function Write-FakeEvent([string]$Type,[hashtable]$Data) {
-    $Line=@{id=[guid]::NewGuid().ToString();type=$Type;data=$Data}|ConvertTo-Json -Depth 20 -Compress
+function Write-FakeEvent([string]$Type,[hashtable]$Data,[string]$Actor='') {
+    $Event=@{id=[guid]::NewGuid().ToString();type=$Type;data=$Data;timestamp=[DateTimeOffset]::UtcNow.ToString('o')}
+    if($Actor){$Event.agentId=$Actor}
+    $Line=$Event|ConvertTo-Json -Depth 20 -Compress
     Add-Content -LiteralPath $Events -Value $Line
     Write-Output $Line
 }
+function Invoke-FakeWriter([string]$Script,[string[]]$Arguments) {
+    $Id=[guid]::NewGuid().ToString()
+    $Path=Join-Path $PWD ".agents/skills/squad/scripts/$Script"
+    $Command="pwsh -NoProfile -File '$Path' "+(($Arguments|ForEach-Object{"'$($_.Replace("'","''"))'"}) -join ' ')
+    $Command=$Command -replace "'(-[A-Za-z]+)'",'$1'
+    Write-FakeEvent 'tool.execution_start' @{toolCallId=$Id;toolName='powershell';turnId=$Id;arguments=@{command=$Command}}
+    $Output=& pwsh -NoProfile -File $Path @Arguments 2>&1|Out-String
+    $Code=$LASTEXITCODE
+    Write-FakeEvent 'tool.execution_complete' @{toolCallId=$Id;turnId=$Id;success=$true;shellExecution=@{exitCode=$Code};result=@{content=$Output}}
+    if($Code -ne 0){throw $Output}
+}
+if(-not (Test-Path -LiteralPath $Events)){Write-FakeEvent 'session.start' @{sessionId=$Session}}
+$env:COPILOT_HOME=Join-Path $PWD 'offline-copilot-home'
+New-Item -ItemType Directory -Path $env:COPILOT_HOME -Force|Out-Null
 Write-FakeEvent 'session.usage_record' @{usage=@{inputTokens=10;outputTokens=1;aiCreditsStatus='complete';copilotUsage=@{totalNanoAiu=$(if($Kind -eq 'requirements' -and '__OUTCOME__' -eq 'credit-limit'){751000000000}elseif($Kind -eq 'requirements' -and '__OUTCOME__' -eq 'observe-credit-limit'){971000000000}else{1000000})};accounting=@{sourceSessionId=$Session;usageId="$Kind-usage"}}}
+if($Kind -eq 'requirements' -and '__OUTCOME__' -eq 'observe-limit-notice'){Write-FakeEvent 'session.info' @{infoType='session_limits';message='Session limits: 873.85/970 AI credits used. If this session continues, the next model call is final; tools will be disabled.'}}
 if($Kind -eq 'init') {
-    New-Item -ItemType Directory -Path '.copilot-tracking' -Force|Out-Null
-    foreach($Item in Get-ChildItem -LiteralPath '__FIXTURE__' -Force) { Copy-Item -LiteralPath $Item.FullName -Destination '.copilot-tracking/squad' -Recurse -Force }
-    Write-FakeEvent 'subagent.started' @{agentName='Squad Scribe'}
+    $Roster=@(
+        @{role='scribe';agent='Squad Scribe';alternate='';path='(squad state)'}
+        @{role='analyst';agent='PRD Builder';alternate='BRD Builder';path='docs/requirements/'}
+        @{role='intake-validator';agent='PRD Quality Reviewer';alternate='BRD Quality Reviewer';path='docs/requirements/reviews/'}
+        @{role='tester';agent='Squad Reviewer';alternate='';path='docs/requirements/reviews/'}
+    )|ForEach-Object{[ordered]@{
+        Role=$_.role;'Member Name'='';'Agent Name (Primary)'=$_.agent;'Alternate Agents'=$_.alternate
+        'Selection Cue'='input document';Invocation='runSubagent / task';'Model Tier'=$(if($_.role -eq 'scribe'){'fast'}else{'default'});'Deliverable Root'=$_.path
+    }}
+    $Payload=Join-Path $PWD '.copilot-tracking/benchmark-evidence/init/init-payload.json'
+    New-Item -ItemType Directory -Path (Split-Path -Parent $Payload) -Force|Out-Null
+    @{squadRoot='.copilot-tracking/squad';runId='recovery-fixture';roster=@($Roster);provenance='product';sessionModel='Claude Haiku 4.5'}|ConvertTo-Json -Depth 20|Set-Content $Payload
+    Invoke-FakeWriter 'Initialize-Squad.ps1' @('-RepoRoot',$PWD.Path,'-PayloadPath',$Payload,'-Direct')
 } elseif($Kind -eq 'requirements' -or ($Kind -eq 'continuation' -and '__OUTCOME__' -eq 'still-fails')) {
     Write-FakeEvent 'session.error' @{message="Request exceeds the model's prompt budget after reserving output (127666 tokens; limit 100000)."}
 } elseif($Kind -eq 'continuation') {
     New-Item -ItemType Directory -Path 'docs/requirements/reviews' -Force|Out-Null
     foreach($Name in @('brd.md','prd.md')){Set-Content "docs/requirements/$Name" 'synthetic published requirement'}
-    Add-Content -LiteralPath '.copilot-tracking/squad/team.md' -Value '| tester | Reviewer | Squad Reviewer | — | — | runSubagent / task | default | reviews/ |'
     foreach($Agent in @('BRD Builder','PRD Builder','BRD Quality Reviewer','PRD Quality Reviewer','Squad Reviewer')) {
         $Relative="docs/requirements/reviews/$Agent.md"
         Set-Content -LiteralPath $Relative -Value $(if($Agent -eq 'Squad Reviewer'){'Outcome: Pass'}else{'synthetic reviewer or author artifact'})
-        $Block=[ordered]@{model='Claude Haiku 4.5';model_source='agent-pinned';priced_as='Claude Haiku 4.5';model_tier='fast';internal_turns=0;input_tokens=0;cached_tokens=0;cache_write_tokens=0;output_tokens=0;basis='estimated'}|ConvertTo-Json
-        Set-Content -LiteralPath ".copilot-tracking/squad/history/$Agent.md" -Value ("# History: $Agent`n`n### $([datetime]::UtcNow.ToString('yyyy-MM-ddTHH:mm:ssZ')) Synthetic test dispatch`n* Deliverable: $Relative`n`n#### Consumption`n"+'```json'+"`n$Block`n"+'```')
-        Write-FakeEvent 'subagent.started' @{agentName=$Agent}
+        foreach($Type in @('subagent.started','subagent.completed')){Write-FakeEvent $Type @{agentName=$Agent;toolCallId=$Agent} $Agent}
+        $Record=@{agent=$Agent;request="Produce $Relative";deliverable=$Relative;outcome='Delivered.';consumption=[ordered]@{
+            model='Claude Haiku 4.5';model_source='dispatch-reported';priced_as='Claude Haiku 4.5';model_tier='fast'
+            internal_turns=0;input_tokens=0;cached_tokens=0;cache_write_tokens=0;output_tokens=0;basis='estimated'
+        }}
+        if($Agent -in @('BRD Builder','BRD Quality Reviewer')){$Record.selectionCue='input document'}
+        $Payload=Join-Path $PWD ".copilot-tracking/benchmark-evidence/requirements/$Agent-handoff.json"
+        New-Item -ItemType Directory -Path (Split-Path -Parent $Payload) -Force|Out-Null
+        @{runId='recovery-fixture';historyRecords=@($Record);stateAdvance=@{activeRoles=@($Agent)}}|ConvertTo-Json -Depth 20|Set-Content $Payload
+        Invoke-FakeWriter 'Write-SquadHandoff.ps1' @('-SquadRoot',(Join-Path $PWD '.copilot-tracking/squad'),'-PayloadPath',$Payload,'-Quiet')
     }
 } elseif($Kind -eq 'build') { exit 37 }
 exit 0
 '@
-        Set-Content -LiteralPath $Cli -Value ($Fake.Replace('__ACP__',$Acp).Replace('__FIXTURE__',$Fixture).Replace('__OUTCOME__',$Outcome)) -Encoding utf8NoBOM
+        Set-Content -LiteralPath $Cli -Value ($Fake.Replace('__ACP__',$Acp).Replace('__OUTCOME__',$Outcome)) -Encoding utf8NoBOM
         $Arguments = @('-NoProfile','-File',(Join-Path $PSScriptRoot 'Invoke-EfficiencyExercise.ps1'),'-Mode','Run','-SourceRoot',$Source,'-InstallRoot',$Install,'-CliPath',$Cli,'-TrialRoot',$Trial,'-MaxCredits','1000','-Live','-IsolatedEnvironment')
         if ($Outcome -like 'observe-*') { $Arguments += '-ObservationOnly' }
-        $Execution = Invoke-EfficiencyProcess -FilePath (Get-Command pwsh).Source -Arguments $Arguments -WorkingDirectory $TestDrive -OutputPath (Join-Path $TestDrive "$Outcome-launch.txt") -TimeoutSeconds 90 -InputText ''
-        $Run = Get-Content (Join-Path $Trial 'out/run.json') -Raw | ConvertFrom-Json
+        $OuterCopilotHome = Join-Path $TestDrive ("$Outcome-outer-copilot-home-" + [guid]::NewGuid().ToString('N'))
+        $null = New-Item -ItemType Directory -Path $OuterCopilotHome
+        $Execution = Invoke-EfficiencyProcess -FilePath (Get-Command pwsh).Source -Arguments $Arguments -WorkingDirectory $TestDrive -OutputPath (Join-Path $TestDrive "$Outcome-launch.txt") -TimeoutSeconds 120 -InputText '' -EnvironmentVariables @{ COPILOT_HOME = $OuterCopilotHome }
+        $Run = $null
         try {
+            $Run = Get-Content (Join-Path $Trial 'out/run.json') -Raw -ErrorAction Stop | ConvertFrom-Json
             $Progress = Get-Content (Join-Path $TestDrive "$Outcome-launch.txt") -Raw
             $Progress | Should -Match 'Step 1/7: Preparing workspace - started; 6 steps remaining'
             $Progress | Should -Match 'Step 2/7: Initializing squad - started; 5 steps remaining'
             $Progress | Should -Match 'Step 3/7: Writing requirements - started; 4 steps remaining'
             $Progress | Should -Match 'Step 5/7: Checking acceptance and workflow - started; 2 steps remaining'
             $Progress | Should -Match 'Step 7/7: Saving run evidence - finished; 0 steps remaining'
-            if ($Outcome -in @('credit-limit', 'observe-credit-limit')) {
+            if ($Outcome -in @('credit-limit', 'observe-credit-limit', 'observe-limit-notice')) {
                 $Progress | Should -Match 'Step 4/7: Building product - skipped; 3 steps remaining'
             }
             if ($Outcome -eq 'credit-limit') { $Progress | Should -Match 'Step 6/7: Judging documents - skipped; 1 step remaining' }
@@ -452,18 +638,27 @@ exit 0
                 $Run.stages[1].passed | Should -BeFalse
                 $Calls = @(Get-Content (Join-Path $Trial 'workspace/stage-calls.jsonl') | ForEach-Object { $_ | ConvertFrom-Json })
                 @($Calls.ceiling | Sort-Object -Unique) | Should -Be @(970)
-                if ($Outcome -eq 'observe-credit-limit') {
+                if ($Outcome -in @('observe-credit-limit', 'observe-limit-notice')) {
                     $Run.stages.Count | Should -Be 2
                     $Run.stages[1].process.stopCause | Should -Be 'credit-limit'
                     $Calls.Count | Should -Be 2
+                    if ($Outcome -eq 'observe-limit-notice') {
+                        foreach ($Evidence in @('requirements-events.jsonl', 'requirements-stdout.jsonl')) { Test-Path (Join-Path $Trial "out/$Evidence") | Should -BeTrue }
+                        Get-Content (Join-Path $Trial 'out/requirements-stdout.jsonl') -Raw | Should -Match 'next model call is final'
+                    }
                 }
                 else {
                     $Run.stages.name -join ',' | Should -Be 'init,requirements,build'
                     $Calls.kind -join ',' | Should -Be 'init,requirements,build'
+                    $buildPrompt = ($Calls | Where-Object kind -EQ build).prompt
+                    $buildPrompt | Should -Match 'producer-consumer ID boundary in separate processes'
+                    $buildPrompt | Should -Match 'list and mark the newly returned ID done'
+                    $buildPrompt | Should -Match 'reject the add without modifying stored bytes'
                     $Run.stages[2].process.exitCode | Should -Be 37
                 }
                 $Run.judge.valid | Should -BeFalse
                 $Run.judge.reason | Should -Be 'missing-or-oversized-document'
+                $Progress | Should -Match 'Step 6/7: Judging documents - failed; 1 step remaining'
                 return
             }
             $Execution.exitCode | Should -Be 2
@@ -488,6 +683,9 @@ exit 0
             foreach($Prefix in @('requirements','requirements-compaction','requirements-continuation')) { Test-Path (Join-Path $Trial "out/$Prefix-events.jsonl") | Should -BeTrue }
             Get-Content (Join-Path $Trial 'out/requirements-stdout.jsonl') -Raw | Should -Match '127666'
             $Calls = @(Get-Content (Join-Path $Trial 'workspace/stage-calls.jsonl') | ForEach-Object { $_ | ConvertFrom-Json })
+            if ($Outcome -eq 'recovered') {
+                ($Calls | Where-Object kind -EQ build).prompt | Should -Match 'producer-consumer ID boundary in separate processes'
+            }
             @($Calls.session | Sort-Object -Unique).Count | Should -Be 1
             ($Calls | Where-Object kind -EQ continuation).resumeOnly | Should -BeTrue
             @($Calls.ceiling | Sort-Object -Unique) | Should -Be @(750)
@@ -503,11 +701,49 @@ exit 0
             $Run.completed | Should -BeFalse
             $Run.judge | Should -BeNullOrEmpty
         }
-        finally { Remove-Item (Join-Path $HOME ".copilot/session-state/$($Run.metadata.sessionId)") -Recurse -Force }
+        finally {
+            $metadataPath = Join-Path $Trial 'out/metadata.json'
+            if (Test-Path -LiteralPath $metadataPath -PathType Leaf) {
+                $metadata = Get-Content -LiteralPath $metadataPath -Raw | ConvertFrom-Json
+                $sessionId = [string]$metadata.sessionId
+                if ($sessionId -match '^[a-fA-F0-9]{8}(?:-[a-fA-F0-9]{4}){3}-[a-fA-F0-9]{12}$') {
+                    $sessionRoot = Join-Path $HOME ".copilot/session-state/$sessionId"
+                    $marker = Join-Path $sessionRoot 'offline-efficiency-fixture.json'
+                    if (Test-Path -LiteralPath $marker -PathType Leaf) {
+                        $owner = Get-Content -LiteralPath $marker -Raw | ConvertFrom-Json
+                        if ($owner.sessionId -ceq $sessionId -and $owner.workspace -ieq (Join-Path $Trial 'workspace')) {
+                            Remove-Item -LiteralPath $sessionRoot -Recurse -Force
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 
 Describe 'Efficiency process boundary' -Tag 'Unit' {
+    It 'streams large stdin past slow child startup and preserves stdin-timeout when unread' {
+        $OutputPath = Join-Path $TestDrive 'large-stdin.out'
+        $SlowReader = Join-Path $TestDrive 'slow-reader.ps1'
+        @'
+Start-Sleep -Milliseconds 1500
+$text = [Console]::In.ReadToEnd()
+[Console]::WriteLine("bytes=$($text.Length)")
+'@ | Set-Content -LiteralPath $SlowReader -Encoding utf8NoBOM
+        $LargeInput = 'A' * 100000
+        $Passed = Invoke-EfficiencyProcess -FilePath (Get-Command pwsh).Source -Arguments @('-NoProfile', '-File', $SlowReader) -WorkingDirectory $TestDrive -OutputPath $OutputPath -TimeoutSeconds 15 -InputText $LargeInput
+        $Passed.exitCode | Should -Be 0
+        $Passed.stopCause | Should -Be 'none'
+        (Get-Content -LiteralPath $OutputPath -Raw).Trim() | Should -Be 'bytes=100000'
+
+        $NeverReader = Join-Path $TestDrive 'never-reader.ps1'
+        $EventsPath = Join-Path $TestDrive 'never-events.jsonl'
+        Set-Content -LiteralPath $EventsPath -Value '' -NoNewline
+        'Start-Sleep -Seconds 30' | Set-Content -LiteralPath $NeverReader -Encoding utf8NoBOM
+        $HugeInput = 'B' * 2000000
+        $TimedOut = Invoke-EfficiencyProcess -FilePath (Get-Command pwsh).Source -Arguments @('-NoProfile', '-File', $NeverReader) -WorkingDirectory $TestDrive -OutputPath (Join-Path $TestDrive 'never.out') -TimeoutSeconds 1 -EventsPath $EventsPath -MaxCredits 5 -InputText $HugeInput
+        $TimedOut.stopCause | Should -BeIn @('stdin-timeout', 'timeout')
+    }
     It 'relays dedicated progress without exposing subprocess output for <Case>' -ForEach @(
         @{ Case = 'fast'; Enabled = $true; Delay = 0 }
         @{ Case = 'heartbeat'; Enabled = $true; Delay = 1800 }
@@ -578,7 +814,7 @@ Start-Sleep -Milliseconds ([int]$Delay)
         $Result = Invoke-EfficiencyProcess -FilePath (Get-Command pwsh).Source -Arguments @('-NoProfile','-File',$Cli,$Events,$Encoded,[string]$Delay,$Case) -WorkingDirectory $TestDrive -OutputPath (Join-Path $TestDrive "$Case-credit-output.txt") -EventsPath $Events -StartLine $(if($Prior){1}else{0}) -MaxCredits 2 -TimeoutSeconds 10
         $Result.stopCause | Should -Be $Expected
         if ($Expected -eq 'credit-limit') {
-            $Result.creditsUsed | Should -Be 2.2
+            $Result.creditsUsed | Should -Be ([decimal]::Parse('2.2', [Globalization.CultureInfo]::InvariantCulture))
             $Marker = $Events + '.started'
             Remove-Item -LiteralPath $Marker
             $Blocked = Invoke-EfficiencyProcess -FilePath (Get-Command pwsh).Source -Arguments @('-NoProfile','-File',$Cli,$Events,$Encoded,'0',$Case) -WorkingDirectory $TestDrive -OutputPath (Join-Path $TestDrive "$Case-blocked.txt") -EventsPath $Events -StartLine 100 -MaxCredits 2
@@ -590,6 +826,54 @@ Start-Sleep -Milliseconds ([int]$Delay)
             (Measure-EfficiencyEvents $Events).credits.used | Should -Be 1.5
         }
         if ($Delay -gt 0) { $Result.seconds | Should -BeLessThan 3 }
+    }
+    It 'ends a session at its final-call notice only when asked and bounds the wait for it to stop' {
+        $Final = New-TestEvent 'session.info' @{ infoType = 'session_limits'; message = 'Session limits: 873.85/970 AI credits used. If this session continues, the next model call is final; tools will be disabled.' }
+        $Plain = New-TestEvent 'session.info' @{ infoType = 'session_limits'; message = 'Session limits: 487.78/970 AI credits used.' }
+        $Cli = Join-Path $TestDrive 'limit-notice-cli.ps1'
+        @'
+param($Events, $Encoded, $Seconds)
+Add-Content -LiteralPath $Events -Value ([Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($Encoded)))
+Start-Sleep -Seconds ([int]$Seconds)
+'@ | Set-Content -LiteralPath $Cli
+        $Invoke = {
+            param([string]$Case, [string]$Line, [string]$Seconds, [string]$Prior, [hashtable]$Options)
+            $Events = Join-Path $TestDrive "$Case-notice-events.jsonl"
+            if ($Prior) { Set-Content -LiteralPath $Events -Value $Prior } else { Set-Content -LiteralPath $Events -Value '' -NoNewline }
+            $Encoded = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($Line))
+            Invoke-EfficiencyProcess -FilePath (Get-Command pwsh).Source -Arguments @('-NoProfile', '-File', $Cli, $Events, $Encoded, $Seconds) -WorkingDirectory $TestDrive -OutputPath (Join-Path $TestDrive "$Case-notice-output.txt") -EventsPath $Events -StartLine $(if ($Prior) { 1 } else { 0 }) -TimeoutSeconds 25 @Options
+        }
+
+        $Ignored = & $Invoke 'no-switch' $Final '0' '' @{}
+        $Ignored.stopCause | Should -Be 'none'
+
+        $Older = & $Invoke 'older-line' $Plain '0' $Final @{ StopAtLimitNotice = $true }
+        $Older.stopCause | Should -Be 'none'
+
+        $Prompt = & $Invoke 'prompt-exit' $Final '0' '' @{ StopAtLimitNotice = $true }
+        $Prompt.stopCause | Should -Be 'credit-limit'
+        $Prompt.exitCode | Should -Be 0
+
+        $Lingering = & $Invoke 'lingering' $Final '30' '' @{ StopAtLimitNotice = $true; LimitNoticeGraceSeconds = 1 }
+        $Lingering.stopCause | Should -Be 'credit-limit'
+        $Lingering.seconds | Should -BeLessThan 15
+    }
+    It 'names the document and its size when the judge cannot read it' {
+        $Workspace = Join-Path $TestDrive 'oversized-judge-workspace'; $Out = Join-Path $TestDrive 'oversized-judge-out'
+        New-Item -ItemType Directory -Path (Join-Path $Workspace 'docs/requirements'), $Out -Force | Out-Null
+        $Cli = Join-Path $TestDrive 'unused-judge-cli.ps1'
+        $Brd = Join-Path $Workspace 'docs/requirements/brd.md'
+        $Missing = Invoke-EfficiencyJudge -Workspace $Workspace -Out $Out -CliPath $Cli -Model fake -MaxCredits 30 -ReviewPath '' -ObservationOnly
+        $Missing.valid | Should -BeFalse
+        $Missing.reason | Should -Be 'missing-or-oversized-document'
+        $Missing.detail | Should -Be 'brd.md missing'
+
+        Set-Content -LiteralPath $Brd -Value 'synthetic brd'
+        [IO.File]::WriteAllBytes((Join-Path $Workspace 'docs/requirements/prd.md'), [byte[]]::new(100001))
+        $Oversized = Invoke-EfficiencyJudge -Workspace $Workspace -Out $Out -CliPath $Cli -Model fake -MaxCredits 30 -ReviewPath '' -ObservationOnly
+        $Oversized.valid | Should -BeFalse
+        $Oversized.reason | Should -Be 'missing-or-oversized-document'
+        $Oversized.detail | Should -Be 'prd.md 100001 bytes over the 100000 limit'
     }
     It 'keeps judge credit accounting separate from the workflow' {
         $Workspace = Join-Path $TestDrive 'judge-workspace'; $Out = Join-Path $TestDrive 'judge-out'
@@ -669,7 +953,33 @@ $Response=@{scores=$Scores;evidence=$Evidence;criticalHighFindings=0;documentHas
         $Result = Invoke-EfficiencyProcess -FilePath (Get-Command pwsh).Source -Arguments @('-NoProfile', '-Command', 'Write-Output "a b"') -WorkingDirectory $TestDrive -OutputPath (Join-Path $TestDrive 'stdout.txt') -TimeoutSeconds 10
         $Result.exitCode | Should -Be 0
         $Result.stopCause | Should -Be 'none'
+        $Result.suspendedSeconds | Should -Be 0
         (Get-Content (Join-Path $TestDrive 'stdout.txt') -Raw).Trim() | Should -Be 'a b'
+    }
+    It 'excludes host suspension from the watchdog without discounting normal polling' {
+        $Context = @{ last = 0.0; seconds = 0.0 }
+        Update-EfficiencySuspendMonitor -Context $Context -ElapsedSeconds 0.25 -GapSeconds 120
+        Update-EfficiencySuspendMonitor -Context $Context -ElapsedSeconds 3.5 -GapSeconds 120
+        $Context.seconds | Should -Be 0
+        Update-EfficiencySuspendMonitor -Context $Context -ElapsedSeconds 123.5 -GapSeconds 120
+        $Context.seconds | Should -Be 0
+        Update-EfficiencySuspendMonitor -Context $Context -ElapsedSeconds 7743.5 -GapSeconds 120
+        $Context.seconds | Should -Be 7620
+        Update-EfficiencySuspendMonitor -Context $Context -ElapsedSeconds 7743.75 -GapSeconds 120
+        $Context.seconds | Should -Be 7620
+    }
+    It 'does not book the work before the first poll as host suspension' {
+        Mock Update-EfficiencyProcessMonitor -ModuleName EfficiencyBenchmark {
+            if (-not $Context.ContainsKey('slowFirstRead')) { $Context['slowFirstRead'] = $true; Start-Sleep -Seconds 3 }
+        }
+        $Result = Invoke-EfficiencyProcess -FilePath (Get-Command pwsh).Source -Arguments @('-NoProfile', '-Command', 'Start-Sleep -Seconds 1') -WorkingDirectory $TestDrive -OutputPath (Join-Path $TestDrive 'slow-first-read.txt') -SuspendGapSeconds 2
+        $Result.exitCode | Should -Be 0
+        $Result.suspendedSeconds | Should -Be 0
+        $Result.seconds | Should -BeGreaterThan 3
+    }
+    It 'asks Windows to stay awake only on Windows and releases the request' {
+        try { Start-EfficiencyKeepAwake | Should -Be $IsWindows }
+        finally { Stop-EfficiencyKeepAwake | Should -Be $IsWindows }
     }
     It 'times out a runaway subprocess' {
         $Result = Invoke-EfficiencyProcess -FilePath (Get-Command pwsh).Source -Arguments @('-NoProfile', '-Command', 'while ($true) {}') -WorkingDirectory $TestDrive -OutputPath (Join-Path $TestDrive 'timeout.txt') -TimeoutSeconds 1
@@ -683,33 +993,74 @@ $Response=@{scores=$Scores;evidence=$Evidence;criticalHighFindings=0;documentHas
 
 Describe 'Efficiency stage readiness' -Tag 'Unit' {
     BeforeEach {
+        $null = New-Item -ItemType Directory -Path (Join-Path $TestDrive 'out') -Force
         $script:StageWorkspace = Join-Path $TestDrive ([guid]::NewGuid().ToString())
         $script:StageSquad = Join-Path $script:StageWorkspace '.copilot-tracking/squad'
         New-Item -ItemType Directory -Path (Join-Path $script:StageSquad 'history'), (Join-Path $script:StageWorkspace 'docs/requirements/reviews') -Force | Out-Null
         foreach ($Name in @('team.md', 'routing.md', 'state.json', 'decisions.md', 'consumption.md', 'consumption-rates.md')) {
             Set-Content (Join-Path $script:StageSquad $Name) 'synthetic fixture; external state verification is mocked'
         }
-        Set-Content (Join-Path $script:StageSquad 'history/Squad Scribe.md') '# History: Squad Scribe'
+        $script:StageEvents = Join-Path $script:StageWorkspace 'events.jsonl'
+        Set-Content $script:StageEvents @(
+            (New-TestEvent 'session.start' @{ sessionId = 'stage-fixture' })
+            (@{ type = 'subagent.started'; agentId = 'scribe'; timestamp = '2026-10-18T00:00:00Z'; data = @{ toolCallId = 'scribe'; agentName = 'Squad Scribe' } } | ConvertTo-Json -Compress)
+            (@{ type = 'subagent.completed'; agentId = 'scribe'; timestamp = '2026-10-18T00:00:10Z'; data = @{ toolCallId = 'scribe' } } | ConvertTo-Json -Compress)
+        )
+        Set-Content (Join-Path $script:StageSquad 'state.json') '{"turn":1,"updated":"2026-10-18T00:00:05Z"}'
+        Set-Content (Join-Path $script:StageSquad 'history/Squad Scribe.md') "# History: Squad Scribe`n### 2026-10-18T00:00:05Z Recorded stage`n* Turn: 1`n#### Consumption"
         Set-Content (Join-Path $script:StageSquad 'team.md') '| tester | Closing reviewer | Squad Reviewer | n/a |'
         Set-Content (Join-Path $script:StageWorkspace 'docs/requirements/reviews/closing.md') 'Outcome: Pass'
         Set-Content (Join-Path $script:StageSquad 'history/Squad Reviewer.md') "# History: Squad Reviewer`n* Deliverable: docs/requirements/reviews/closing.md"
         $script:StageMetrics = @{ dispatches = @{ 'Squad Scribe' = 1; 'Squad Reviewer' = 1 } }
+        $PSDefaultParameterValues['Test-EfficiencyWorkflow:EventsPath'] = $script:StageEvents
         foreach ($Agent in @('BRD Builder', 'PRD Builder', 'BRD Quality Reviewer', 'PRD Quality Reviewer')) {
             $script:StageMetrics.dispatches[$Agent] = 1
             $Relative = "docs/requirements/reviews/$Agent.md"
             Set-Content (Join-Path $script:StageWorkspace $Relative) 'synthetic authored artifact'
             Set-Content (Join-Path $script:StageSquad "history/$Agent.md") "# History: $Agent`n* Deliverable: $Relative"
         }
+        AfterEach { $PSDefaultParameterValues.Remove('Test-EfficiencyWorkflow:EventsPath') }
         foreach ($Name in @('brd.md', 'prd.md')) { Set-Content (Join-Path $script:StageWorkspace "docs/requirements/$Name") 'synthetic published requirements' }
-        Mock Invoke-EfficiencyProcess -ModuleName EfficiencyBenchmark { [pscustomobject]@{ exitCode = 0; stopCause = 'none' } }
+        Mock Invoke-EfficiencyProcess -ModuleName EfficiencyBenchmark {
+            $resultPath = $Arguments[[array]::IndexOf($Arguments, '-OutputPath') + 1]
+            @{ passed = $true; failures = @() } | ConvertTo-Json | Set-Content -LiteralPath $resultPath
+            [pscustomobject]@{ exitCode = 0; stopCause = 'none' }
+        }
+        Mock Test-EfficiencyBookkeeping -ModuleName EfficiencyBenchmark {
+            (Get-Content -LiteralPath (Join-Path $Squad 'history\Squad Scribe.md') -Raw) -match '(?m)^# History: Squad Scribe\r?$'
+        }
     }
     It 'accepts initialized state without demanding implementation roles' {
         (Test-EfficiencyWorkflow -Workspace $script:StageWorkspace -Metrics $script:StageMetrics -Stage init).passed | Should -BeTrue
         Set-Content (Join-Path $script:StageSquad 'history/Squad Scribe.md') '# Squad Scribe History'
         $Malformed = Test-EfficiencyWorkflow -Workspace $script:StageWorkspace -Metrics $script:StageMetrics -Stage init
         $Malformed.checks['stateVerifier'] | Should -BeTrue
-        $Malformed.checks['scribeHistory'] | Should -BeFalse
+        $Malformed.checks['bookkeepingEvidence'] | Should -BeFalse
         $Malformed.passed | Should -BeFalse
+    }
+    It 'preserves failed or unavailable state-verifier evidence for <Mode>' -ForEach @(
+        @{ Mode = 'failed'; ExitCode = 1; StopCause = 'none' },
+        @{ Mode = 'invalid'; ExitCode = 0; StopCause = 'none' },
+        @{ Mode = 'missing'; ExitCode = 0; StopCause = 'none' },
+        @{ Mode = 'timeout'; ExitCode = -1; StopCause = 'timeout' }
+    ) {
+        Mock Invoke-EfficiencyProcess -ModuleName EfficiencyBenchmark {
+            if ($Mode -in @('failed', 'invalid')) {
+                $resultPath = $Arguments[[array]::IndexOf($Arguments, '-OutputPath') + 1]
+                @{ passed = $(if ($Mode -eq 'invalid') { 1 } else { $false }); failures = @('native accounting coverage is incomplete') } |
+                    ConvertTo-Json | Set-Content -LiteralPath $resultPath
+            }
+            Set-Content -LiteralPath ($OutputPath + '.stderr') -Value 'local checker diagnostic'
+            [pscustomobject]@{ exitCode = $ExitCode; stopCause = $StopCause }
+        }
+        $result = Test-EfficiencyWorkflow -Workspace $script:StageWorkspace -Metrics $script:StageMetrics -Stage init
+        $result.passed | Should -BeFalse
+        $result.checks.stateVerifier | Should -BeFalse
+        $result.diagnostics.stateVerifier.exitCode | Should -Be $ExitCode
+        $result.diagnostics.stateVerifier.stopCause | Should -Be $StopCause
+        $result.diagnostics.stateVerifier.stderr | Should -Be 'local checker diagnostic'
+        if ($Mode -eq 'failed') { $result.diagnostics.stateVerifier.failures | Should -Contain 'native accounting coverage is incomplete' }
+        @(Get-ChildItem -LiteralPath (Join-Path $TestDrive 'out') -Filter '.efficiency-check-*').Count | Should -Be 0
     }
     It 'accepts requirements with both author and reviewer evidence' {
         (Test-EfficiencyWorkflow -Workspace $script:StageWorkspace -Metrics $script:StageMetrics -Stage requirements).passed | Should -BeTrue
@@ -776,6 +1127,470 @@ Describe 'Efficiency stage readiness' -Tag 'Unit' {
     }
     It 'retains build as the default and requires implementation evidence' {
         (Test-EfficiencyWorkflow -Workspace $script:StageWorkspace -Metrics $script:StageMetrics).passed | Should -BeFalse
+    }
+}
+
+Describe 'Efficiency actual direct bookkeeping proof' -Tag 'Unit' {
+    BeforeAll {
+        $script:ProofHomeBefore = $env:COPILOT_HOME
+        $env:COPILOT_HOME = Join-Path $TestDrive 'empty-proof-home'
+        $script:ProofSource = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..\..'))
+        $script:ProofScripts = Join-Path $script:ProofSource 'squad-src\.github\skills\squad\scripts'
+        $null = New-Item -ItemType Directory -Path (Join-Path $TestDrive 'out') -Force
+        $script:ProofInstall = Join-Path $TestDrive 'prepared-install'
+        $installedScripts = Join-Path $script:ProofInstall '.agents\skills\squad\scripts'
+        $null = New-Item -ItemType Directory -Path (Split-Path -Parent $installedScripts) -Force
+        Copy-Item -LiteralPath $script:ProofScripts -Destination $installedScripts -Recurse
+        $script:PreparedOriginal = @{}
+        foreach ($file in Get-ChildItem -LiteralPath $installedScripts -File -Recurse) { $script:PreparedOriginal[$file.FullName] = [IO.File]::ReadAllText($file.FullName) }
+        $script:ProofArmSource = Join-Path $TestDrive 'selected-arm-source'
+        $null = New-Item -ItemType Directory -Path $script:ProofArmSource -Force
+        Copy-Item -LiteralPath (Join-Path $script:ProofSource 'squad-src') -Destination (Join-Path $script:ProofArmSource 'squad-src') -Recurse
+        Add-Content -LiteralPath (Join-Path $script:ProofArmSource 'squad-src\.github\skills\squad\scripts\SquadCoordinator.psm1') -Value "`n# Reviewed arm-specific fixture revision."
+        function New-BookkeepingFixture {
+            param([string]$Stage)
+            $root = Join-Path $TestDrive "actual-$Stage"
+            $agents = Join-Path $root '.github\agents'
+            $null = New-Item -ItemType Directory -Path $agents -Force
+            foreach ($agent in @('Squad Scribe', 'BRD Builder', 'PRD Builder', 'BRD Quality Reviewer', 'PRD Quality Reviewer', 'Squad Reviewer')) {
+                Set-Content (Join-Path $agents (($agent -replace ' ', '-') + '.agent.md')) "---`nname: $agent`n---`nFixture agent."
+            }
+            $roster = @(
+                @{ role = 'scribe'; agent = 'Squad Scribe'; alternate = ''; path = '(squad state)' }
+                @{ role = 'analyst'; agent = 'PRD Builder'; alternate = 'BRD Builder'; path = 'docs/requirements/' }
+                @{ role = 'intake-validator'; agent = 'PRD Quality Reviewer'; alternate = 'BRD Quality Reviewer'; path = 'docs/requirements/reviews/' }
+                @{ role = 'tester'; agent = 'Squad Reviewer'; alternate = ''; path = 'docs/requirements/reviews/' }
+            ) | ForEach-Object {
+                [ordered]@{
+                    Role = $_.role; 'Member Name' = ''; 'Agent Name (Primary)' = $_.agent
+                    'Alternate Agents' = $_.alternate; 'Selection Cue' = 'input document'
+                    Invocation = 'runSubagent / task'; 'Model Tier' = $(if ($_.role -eq 'scribe') { 'fast' } else { 'default' })
+                    'Deliverable Root' = $_.path
+                }
+            }
+            $payloadPath = Join-Path $root '.copilot-tracking/benchmark-evidence/init/init-payload.json'
+            $null = New-Item -ItemType Directory -Path (Split-Path -Parent $payloadPath) -Force
+            @{ squadRoot = '.copilot-tracking/squad'; runId = 'proof-run'; roster = @($roster); provenance = 'product'; sessionModel = 'Claude Sonnet 4.6' } |
+                ConvertTo-Json -Depth 20 | Set-Content $payloadPath
+            $events = Join-Path $root 'events.jsonl'
+            @{ type = 'session.start'; data = @{ sessionId = "actual-$Stage" } } | ConvertTo-Json -Compress | Set-Content $events
+            function Invoke-RecordedWriter {
+                param([string]$Script, [string[]]$Arguments)
+                $id = [guid]::NewGuid().ToString()
+                $actor = if ($Stage -eq 'cold') { 'cold-scribe' } else { '' }
+                $path = Join-Path $script:ProofScripts $Script
+                $command = "pwsh -NoProfile -File '$path' " + (($Arguments | ForEach-Object { "'$($_.Replace("'", "''"))'" }) -join ' ')
+                # Command parameter tokens remain unquoted, as in an actual CLI tool call.
+                $command = $command -replace "'(-[A-Za-z]+)'", '$1'
+                @{ type = 'tool.execution_start'; agentId = $actor; timestamp = [DateTimeOffset]::UtcNow.ToString('o'); data = @{ toolCallId = $id; toolName = 'powershell'; turnId = $id; arguments = @{ command = $command } } } |
+                    ConvertTo-Json -Depth 15 -Compress | Add-Content $events
+                $output = & pwsh -NoProfile -File $path @Arguments 2>&1 | Out-String
+                $exitCode = $LASTEXITCODE
+                @{ type = 'tool.execution_complete'; agentId = $actor; timestamp = [DateTimeOffset]::UtcNow.ToString('o'); data = @{ toolCallId = $id; turnId = $id; success = $true; shellExecution = @{ exitCode = $exitCode }; result = @{ content = $output } } } |
+                    ConvertTo-Json -Depth 15 -Compress | Add-Content $events
+                if ($exitCode -ne 0) { throw $output }
+            }
+            $initArguments = @('-RepoRoot', $root, '-PayloadPath', $payloadPath)
+            if ($Stage -eq 'cold') {
+                @{ type = 'subagent.started'; agentId = 'cold-scribe'; timestamp = [DateTimeOffset]::UtcNow.ToString('o'); data = @{ toolCallId = 'cold-scribe'; agentName = 'Squad Scribe' } } |
+                    ConvertTo-Json -Compress | Add-Content $events
+            }
+            else { $initArguments += '-Direct' }
+            Invoke-RecordedWriter 'Initialize-Squad.ps1' $initArguments
+            if ($Stage -eq 'cold') {
+                @{ type = 'subagent.completed'; agentId = 'cold-scribe'; timestamp = [DateTimeOffset]::UtcNow.ToString('o'); data = @{ toolCallId = 'cold-scribe'; agentName = 'Squad Scribe' } } |
+                    ConvertTo-Json -Compress | Add-Content $events
+            }
+            $squad = Join-Path $root '.copilot-tracking\squad'
+            if ($Stage -eq 'requirements') {
+                $turn = 1
+                foreach ($agent in @('BRD Builder', 'PRD Builder', 'BRD Quality Reviewer', 'PRD Quality Reviewer', 'Squad Reviewer')) {
+                    $turn++
+                    $relative = switch ($agent) {
+                        'BRD Builder' { 'docs/requirements/brd.md' }
+                        'PRD Builder' { 'docs/requirements/prd.md' }
+                        default { "docs/requirements/reviews/$agent.md" }
+                    }
+                    $path = Join-Path $root $relative
+                    $null = New-Item -ItemType Directory -Path (Split-Path -Parent $path) -Force
+                    Set-Content $path 'Outcome: Pass'
+                    foreach ($type in @('subagent.started', 'subagent.completed')) {
+                        @{ type = $type; agentId = $agent; timestamp = [DateTimeOffset]::UtcNow.ToString('o'); data = @{ agentName = $agent; toolCallId = $agent } } |
+                            ConvertTo-Json -Compress | Add-Content $events
+                    }
+                    $record = @{
+                        agent = $agent; request = "Produce $relative"; deliverable = $relative; outcome = 'Delivered.'
+                        consumption = [ordered]@{
+                            model = 'Claude Sonnet 4.6'; model_source = 'dispatch-reported'; priced_as = 'Claude Sonnet 4.6'; model_tier = 'default'
+                            internal_turns = 1; input_tokens = 100; cached_tokens = 0; cache_write_tokens = 0; output_tokens = 10; basis = 'estimated'
+                        }
+                    }
+                    if ($agent -in @('BRD Builder', 'BRD Quality Reviewer')) { $record.selectionCue = 'input document' }
+                    $handoff = Join-Path $root ".copilot-tracking/benchmark-evidence/requirements/handoff-$turn.json"
+                    $null = New-Item -ItemType Directory -Path (Split-Path -Parent $handoff) -Force
+                    @{ runId = 'proof-run'; turn = $turn; historyRecords = @($record); stateAdvance = @{ activeRoles = @($agent) } } |
+                        ConvertTo-Json -Depth 20 | Set-Content $handoff
+                    if ($agent -eq 'Squad Reviewer') {
+                        Invoke-RecordedWriter 'Write-SquadHandoff.ps1' @('-SquadRoot', $squad, '-RunId', 'proof-run', '-Agent', $agent, '-Request', "Produce $relative", '-Deliverable', $relative, '-Outcome', 'Delivered.', '-Quiet')
+                    }
+                    else { Invoke-RecordedWriter 'Write-SquadHandoff.ps1' @('-SquadRoot', $squad, '-PayloadPath', $handoff, '-Quiet') }
+                }
+            }
+            $original = @{}
+            $workspaceScripts = Join-Path $root '.agents\skills\squad\scripts'
+            $null = New-Item -ItemType Directory -Path (Split-Path -Parent $workspaceScripts) -Force
+            Copy-Item -LiteralPath $script:ProofScripts -Destination $workspaceScripts -Recurse
+            foreach ($file in Get-ChildItem -LiteralPath $root -File -Recurse) { $original[$file.FullName] = [IO.File]::ReadAllText($file.FullName) }
+            @{ root = $root; squad = $squad; events = $events; original = $original }
+        }
+        $script:ActualProofFixtures = @{ init = (New-BookkeepingFixture init); requirements = (New-BookkeepingFixture requirements); cold = (New-BookkeepingFixture cold) }
+    }
+    AfterAll { $env:COPILOT_HOME = $script:ProofHomeBefore }
+    It 'validates actual <Stage> execution with <Mutation> proof, pass=<Pass>' -ForEach @(
+        @{ Stage = 'init'; Mutation = 'none'; Pass = $true }
+        @{ Stage = 'requirements'; Mutation = 'none'; Pass = $true }
+        @{ Stage = 'init'; Mutation = 'cold-native'; Pass = $false }
+        @{ Stage = 'init'; Mutation = 'cold-scripted'; Pass = $true }
+        @{ Stage = 'init'; Mutation = 'cold-unbound'; Pass = $false }
+        @{ Stage = 'init'; Mutation = 'cold-wrong-window'; Pass = $false }
+        @{ Stage = 'requirements'; Mutation = 'cold-writer'; Pass = $true }
+        @{ Stage = 'requirements'; Mutation = 'cold-missing-required'; Pass = $false }
+        @{ Stage = 'init'; Mutation = 'workspace-execution'; Pass = $true }
+        @{ Stage = 'init'; Mutation = 'workspace-tamper-writer'; Pass = $false }
+        @{ Stage = 'init'; Mutation = 'workspace-tamper-module'; Pass = $false }
+        @{ Stage = 'init'; Mutation = 'prepared-tamper'; Pass = $false }
+        @{ Stage = 'init'; Mutation = 'prepared-execution'; Pass = $true }
+        @{ Stage = 'init'; Mutation = 'unused-base-arm-overlay'; Pass = $true }
+        @{ Stage = 'init'; Mutation = 'workspace-install-root'; Pass = $false }
+        @{ Stage = 'init'; Mutation = 'session-mismatch'; Pass = $false }
+        @{ Stage = 'init'; Mutation = 'multisession-unbound'; Pass = $true }
+        @{ Stage = 'init'; Mutation = 'default-root'; Pass = $true }
+        @{ Stage = 'init'; Mutation = 'cold-stale'; Pass = $false }
+        @{ Stage = 'init'; Mutation = 'narrative'; Pass = $false }
+        @{ Stage = 'init'; Mutation = 'forged-output'; Pass = $false }
+        @{ Stage = 'init'; Mutation = 'wrong-root'; Pass = $false }
+        @{ Stage = 'init'; Mutation = 'wrong-turn'; Pass = $false }
+        @{ Stage = 'init'; Mutation = 'stale'; Pass = $false }
+        @{ Stage = 'init'; Mutation = 'wrong-script'; Pass = $false }
+        @{ Stage = 'init'; Mutation = 'missing-history'; Pass = $false }
+        @{ Stage = 'init'; Mutation = 'cleaned-payload-expandable'; Pass = $true }
+        @{ Stage = 'init'; Mutation = 'location-literal'; Pass = $true }
+        @{ Stage = 'requirements'; Mutation = 'location-literal'; Pass = $true }
+        @{ Stage = 'init'; Mutation = 'location-variable'; Pass = $true }
+        @{ Stage = 'init'; Mutation = 'location-prefix'; Pass = $true }
+        @{ Stage = 'requirements'; Mutation = 'location-literalpath'; Pass = $true }
+        @{ Stage = 'init'; Mutation = 'location-relative'; Pass = $true }
+        @{ Stage = 'init'; Mutation = 'location-outside'; Pass = $false }
+        @{ Stage = 'init'; Mutation = 'location-child'; Pass = $false }
+        @{ Stage = 'init'; Mutation = 'location-late'; Pass = $false }
+        @{ Stage = 'init'; Mutation = 'location-repeated'; Pass = $false }
+        @{ Stage = 'init'; Mutation = 'location-dynamic'; Pass = $false }
+        @{ Stage = 'requirements'; Mutation = 'background-shell-progressive-runs'; Pass = $true }
+        @{ Stage = 'requirements'; Mutation = 'missing-history'; Pass = $false }
+        @{ Stage = 'requirements'; Mutation = 'missing-dispatch'; Pass = $false }
+        @{ Stage = 'requirements'; Mutation = 'wrong-turn'; Pass = $false }
+        @{ Stage = 'requirements'; Mutation = 'failed-receipt'; Pass = $false }
+        @{ Stage = 'requirements'; Mutation = 'ledger-only'; Pass = $false }
+        @{ Stage = 'requirements'; Mutation = 'wrong-root'; Pass = $false }
+        @{ Stage = 'requirements'; Mutation = 'outside-payload'; Pass = $false }
+    ) {
+        $fixture = $script:ActualProofFixtures[$(if ($Stage -eq 'init' -and $Mutation -like 'cold-*') { 'cold' } else { $Stage })]
+        foreach ($path in $script:PreparedOriginal.Keys) { [IO.File]::WriteAllText($path, $script:PreparedOriginal[$path]) }
+        foreach ($path in $fixture.original.Keys) { [IO.File]::WriteAllText($path, $fixture.original[$path]) }
+        $lines = @(Get-Content -LiteralPath $fixture.events | ForEach-Object { $_ | ConvertFrom-Json -AsHashtable })
+        $last = @($lines | Where-Object { $_.type -eq 'tool.execution_complete' })[-1]
+        switch ($Mutation) {
+            { $_ -like 'location-*' } {
+                foreach ($line in $lines) {
+                    if ($line.type -ne 'tool.execution_start') { continue }
+                    $command = $line.data.arguments.command
+                    $prefix = switch ($Mutation) {
+                        location-literal { "cd '$($fixture.root)'; " }
+                        location-variable { "`$r='$($fixture.root)'; cd `$r; " }
+                        location-prefix { "cd '$($fixture.root)'; " }
+                        location-literalpath { "Set-Location -LiteralPath '$($fixture.root)'; " }
+                        location-relative { "chdir '.'; " }
+                        location-outside { "cd '..'; " }
+                        location-child { "cd 'docs'; " }
+                        location-repeated { "cd '$($fixture.root)'; cd '$($fixture.root)'; " }
+                        location-dynamic { 'cd $env:TEMP; ' }
+                        default { '' }
+                    }
+                    $line.data.arguments.command = $prefix + $command
+                    if ($Mutation -eq 'location-prefix') { $line.data.arguments.command += ' | Out-String | % { $_.Substring(0,[Math]::Min(2500,$_.Length)) }' }
+                    if ($Mutation -eq 'location-late') { $line.data.arguments.command += "; cd '$($fixture.root)'" }
+                }
+            }
+            cold-unbound { foreach ($line in $lines) { if ($line.type -like 'tool.*') { $line.Remove('agentId') } } }
+            cold-wrong-window { foreach ($line in $lines) { if ($line.type -like 'subagent.*') { $line.timestamp = [DateTimeOffset]::UtcNow.AddDays(-1).ToString('o') } } }
+            { $_ -in @('cold-writer', 'cold-missing-required') } {
+                $extra = @()
+                foreach ($line in $lines) {
+                    if ($line.type -notlike 'tool.*' -or ($line.type -eq 'tool.execution_start' -and $line.data.arguments.command -match 'Initialize-Squad')) { continue }
+                    $pairStart = @($lines | Where-Object { $_.type -eq 'tool.execution_start' -and $_.data.toolCallId -eq $line.data.toolCallId })[0]
+                    if ($pairStart.data.arguments.command -match 'Initialize-Squad') { continue }
+                    $line.agentId = 'scribe-' + $line.data.toolCallId
+                    $extra += @{ type = $(if ($line.type -eq 'tool.execution_start') { 'subagent.started' } else { 'subagent.completed' }); agentId = $line.agentId; timestamp = $line.timestamp; data = @{ toolCallId = $line.agentId; agentName = 'Squad Scribe' } }
+                }
+                $lines = @(@($lines) + $extra | Sort-Object { if ($_['timestamp']) { [DateTimeOffset]$_.timestamp } else { [DateTimeOffset]::MinValue } })
+                if ($Mutation -eq 'cold-missing-required') {
+                    $missing = @($lines | Where-Object { $_.type -eq 'tool.execution_start' -and $_.data.arguments.command -match 'handoff-5.json' })[0].data.toolCallId
+                    $lines = @($lines | Where-Object { $_.type -notlike 'tool.*' -or $_.data.toolCallId -ne $missing })
+                }
+            }
+            { $_ -in @('workspace-execution', 'workspace-tamper-writer', 'workspace-tamper-module') } {
+                foreach ($line in $lines) {
+                    if ($line.type -eq 'tool.execution_start') { $line.data.arguments.command = $line.data.arguments.command.Replace($script:ProofScripts, (Join-Path $fixture.root '.agents\skills\squad\scripts')) }
+                }
+                if ($Mutation -ne 'workspace-execution') {
+                    $name = if ($Mutation -eq 'workspace-tamper-writer') { 'Initialize-Squad.ps1' } else { 'SquadCoordinator.psm1' }
+                    Set-Content -LiteralPath (Join-Path $fixture.root ".agents\skills\squad\scripts\$name") "throw 'UNTRUSTED WORKSPACE CODE'"
+                }
+            }
+            { $_ -in @('prepared-tamper', 'prepared-execution') } {
+                foreach ($line in $lines) {
+                    if ($line.type -eq 'tool.execution_start') { $line.data.arguments.command = $line.data.arguments.command.Replace($script:ProofScripts, (Join-Path $script:ProofInstall '.agents\skills\squad\scripts')) }
+                }
+                if ($Mutation -eq 'prepared-tamper') { Set-Content -LiteralPath (Join-Path $script:ProofInstall '.agents\skills\squad\scripts\SquadCoordinator.psm1') "throw 'UNTRUSTED INSTALL CODE'" }
+            }
+            unused-base-arm-overlay {
+                $armScripts = Join-Path $script:ProofArmSource 'squad-src\.github\skills\squad\scripts'
+                foreach ($file in Get-ChildItem -LiteralPath $armScripts -File) { Copy-Item -LiteralPath $file.FullName -Destination (Join-Path $fixture.root '.agents\skills\squad\scripts') -Force }
+                foreach ($line in $lines) {
+                    if ($line.type -eq 'tool.execution_start') { $line.data.arguments.command = $line.data.arguments.command.Replace($script:ProofScripts, (Join-Path $fixture.root '.agents\skills\squad\scripts')) }
+                }
+            }
+            default-root {
+                foreach ($line in $lines) { if ($line.type -eq 'tool.execution_start') { $line.data.arguments.command = $line.data.arguments.command.Replace("-RepoRoot '$($fixture.root)' ", '') } }
+            }
+            multisession-unbound { $lines += @{ type = 'session.start'; data = @{ sessionId = 'another-valid-session' } } }
+            cold-native { $lines = @($lines | Where-Object { $_.type -notlike 'tool.*' }) }
+            cold-stale {
+                $lines = @($lines | Where-Object { $_.type -notlike 'tool.*' })
+                $statePath = Join-Path $fixture.squad 'state.json'
+                $state = Get-Content $statePath -Raw | ConvertFrom-Json -AsHashtable
+                $state.updated = [DateTimeOffset]::UtcNow.AddDays(-1).ToString('o')
+                $state | ConvertTo-Json -Depth 20 | Set-Content $statePath
+            }
+            narrative { foreach ($line in $lines) { if ($line.type -like 'tool.*') { $line.type = 'assistant.message' } } }
+            forged-output {
+                $start = @($lines | Where-Object { $_.type -eq 'tool.execution_start' })[-1]
+                $start.data.arguments.command += "; Write-Output '{`"status`":`"PASS`"}'"
+            }
+            wrong-root {
+                if ($Stage -eq 'init') { $last.data.result.content = $last.data.result.content.Replace('\"squad\"', '\"other\"').Replace('squad","rosterCheck', 'other","rosterCheck') }
+                else {
+                    $start = @($lines | Where-Object { $_.type -eq 'tool.execution_start' })[-1]
+                    $start.data.arguments.command = $start.data.arguments.command.Replace($fixture.squad, (Join-Path $fixture.root 'wrong-squad'))
+                }
+            }
+            wrong-turn { $last.data.result.content = $last.data.result.content -replace '"turn":\d+', '"turn":99' }
+            stale {
+                $statePath = Join-Path $fixture.squad 'state.json'
+                $state = Get-Content $statePath -Raw | ConvertFrom-Json -AsHashtable
+                $state.updated = [DateTimeOffset]::UtcNow.AddDays(-1).ToString('o')
+                $state | ConvertTo-Json -Depth 20 | Set-Content $statePath
+            }
+            wrong-script {
+                $start = @($lines | Where-Object { $_.type -eq 'tool.execution_start' })[-1]
+                $start.data.arguments.command = $start.data.arguments.command.Replace($script:ProofScripts, $fixture.root)
+            }
+            cleaned-payload-expandable {
+                $start = @($lines | Where-Object { $_.type -eq 'tool.execution_start' })[-1]
+                $start.data.arguments.command = "`$r='$($fixture.root)'; `$s=`"`$r\.agents\skills\squad\scripts`"; pwsh -NoProfile -File `"`$s\Initialize-Squad.ps1`" -RepoRoot `$r -PayloadPath `"`$r\.copilot-tracking\benchmark-evidence\init\init-payload.json`" -Direct | Out-String; `"exit `$LASTEXITCODE`""
+                Remove-Item -LiteralPath (Join-Path $fixture.root '.copilot-tracking/benchmark-evidence/init/init-payload.json') -Force
+            }
+            outside-payload {
+                $start = @($lines | Where-Object { $_.type -eq 'tool.execution_start' -and $_.data.arguments.command -match 'handoff-\d+\.json' })[-1]
+                $inside = [regex]::Match($start.data.arguments.command, '[''"](?<path>[^''"]*handoff-\d+\.json)[''"]').Groups['path'].Value
+                $outside = Join-Path $TestDrive 'outside-handoff.json'
+                Copy-Item -LiteralPath $inside -Destination $outside -Force
+                $start.data.arguments.command = $start.data.arguments.command.Replace($inside, $outside)
+            }
+            background-shell-progressive-runs {
+                $runIdx = 1
+                foreach ($line in $lines) {
+                    if ($line.type -eq 'tool.execution_start' -and $line.data.arguments.command -match 'Write-SquadHandoff') {
+                        $runIdx++
+                        if ($line.data.arguments.command -match 'handoff-\d+\.json') {
+                            $hPath = [regex]::Match($line.data.arguments.command, "'([^']*handoff-\d+\.json)'").Groups[1].Value
+                            $hObj = Get-Content -LiteralPath $hPath -Raw | ConvertFrom-Json -AsHashtable
+                            $hObj.runId = "run-0$runIdx"
+                            $hObj | ConvertTo-Json -Depth 20 | Set-Content -LiteralPath $hPath
+                        }
+                        else {
+                            $line.data.arguments.command = $line.data.arguments.command -replace "-RunId 'proof-run'", "-RunId 'run-0$runIdx'"
+                        }
+                    }
+                }
+                $ledgerPath = Join-Path $fixture.squad 'consumption.md'
+                [IO.File]::WriteAllText($ledgerPath, ([IO.File]::ReadAllText($ledgerPath) -replace '\(Run: proof-run\)', "(Run: run-0$runIdx)"))
+                $lastIdx = [array]::IndexOf($lines, $last)
+                $origContent = [string]$last.data.result.content
+                $last.data.Remove('shellExecution')
+                $last.data.result = @{ content = "True`n<command with shellId: 32 is still running after 30 seconds.>" }
+                $readId = [guid]::NewGuid().ToString()
+                $readTurn = [guid]::NewGuid().ToString()
+                $lines += @(
+                    @{ type = 'tool.execution_start'; agentId = ''; timestamp = [DateTimeOffset]::UtcNow.ToString('o'); data = @{ toolCallId = $readId; toolName = 'read_powershell'; turnId = $readTurn; arguments = @{ shellId = '32'; delay = 20 } } }
+                    @{ type = 'tool.execution_complete'; agentId = ''; timestamp = [DateTimeOffset]::UtcNow.ToString('o'); data = @{ toolCallId = $readId; turnId = $readTurn; success = $true; shellExecution = @{ exitCode = 0 }; result = @{ content = $origContent + "`n<shellId: 32 completed with exit code 0>" } } }
+                )
+            }
+            missing-history { Remove-Item -LiteralPath (Join-Path $fixture.squad "history\$(if ($Stage -eq 'init') { 'Squad Scribe' } else { 'PRD Quality Reviewer' }).md") }
+            missing-dispatch { $lines = @($lines | Where-Object { -not ($_.type -eq 'subagent.started' -and $_['agentId'] -eq 'PRD Quality Reviewer') }) }
+            failed-receipt { $last.data.result.content = 'Write-SquadHandoff: refused; exit 1' }
+            ledger-only { $last.data.result.content = $last.data.result.content.Replace('"ledgerCheck":"PASS"', '"ledgerCheck":"ledger-only"') }
+        }
+        $lines | ForEach-Object { $_ | ConvertTo-Json -Depth 30 -Compress } | Set-Content $fixture.events
+        $metrics = Measure-EfficiencyEvents -Path $fixture.events
+        $install = if ($Mutation -eq 'workspace-install-root') { $fixture.root } else { $script:ProofInstall }
+        $selectedSource = if ($Mutation -eq 'unused-base-arm-overlay') { $script:ProofArmSource } else { $script:ProofSource }
+        $session = if ($Mutation -eq 'session-mismatch') { 'wrong-session' } elseif ($Mutation -eq 'multisession-unbound') { '' } else { "actual-$(if ($fixture -eq $script:ActualProofFixtures.cold) { 'cold' } else { $Stage })" }
+        $evidence = Get-EfficiencyBookkeepingEvidence -Path $fixture.events -Workspace $fixture.root -SourceRoot $selectedSource -InstallRoot $install -ExpectedSessionId $session
+        $result = Test-EfficiencyWorkflow -Workspace $fixture.root -Metrics $metrics -Stage $Stage -BookkeepingEvidence $evidence -SourceRoot $selectedSource -InstallRoot $install -ExpectedSessionId $session
+        $result.passed | Should -Be $Pass -Because ($result.checks | ConvertTo-Json -Compress)
+        $result.checks.bookkeepingEvidence | Should -Be $Pass
+        if ($Mutation -like 'location-*' -and -not $Pass) {
+            $evidence.executions.Count | Should -Be 0
+            $evidence.rejections.Count | Should -BeGreaterThan 0
+            $result.diagnostics.bookkeepingEvidence | Should -Match 'No accepted writer execution'
+        }
+        @(Get-ChildItem -LiteralPath (Join-Path $TestDrive 'out') -Filter '.efficiency-check-*').Count | Should -Be 0
+    }
+
+    It 'validates a completed <Stage> stage after later turns advance state' -ForEach @(
+        @{ Stage = 'init' }
+        @{ Stage = 'requirements' }
+    ) {
+        $fixture = $script:ActualProofFixtures[$Stage]
+        foreach ($path in $fixture.original.Keys) { [IO.File]::WriteAllText($path, $fixture.original[$path]) }
+        $statePath = Join-Path $fixture.squad 'state.json'
+        $original = Get-Content -LiteralPath $statePath -Raw
+        $state = $original | ConvertFrom-Json -AsHashtable
+        $expectedTurn = [int]$state.turn
+        $state.turn = $expectedTurn + 1
+        $state.updated = [DateTimeOffset]::UtcNow.AddMinutes(1).ToString('o')
+        $state | ConvertTo-Json -Depth 20 | Set-Content -LiteralPath $statePath -Encoding utf8NoBOM
+        try {
+            $metrics = Measure-EfficiencyEvents -Path $fixture.events
+            $session = "actual-$Stage"
+            $evidence = Get-EfficiencyBookkeepingEvidence -Path $fixture.events -Workspace $fixture.root -SourceRoot $script:ProofSource -InstallRoot $script:ProofInstall -ExpectedSessionId $session
+            $result = Test-EfficiencyWorkflow -Workspace $fixture.root -Metrics $metrics -Stage $Stage -BookkeepingEvidence $evidence -SourceRoot $script:ProofSource -InstallRoot $script:ProofInstall -ExpectedSessionId $session
+            $result.checks.bookkeepingEvidence | Should -BeTrue -Because ($result.diagnostics.bookkeepingEvidence)
+            $result.passed | Should -BeTrue
+        }
+        finally {
+            $original | Set-Content -LiteralPath $statePath -Encoding utf8NoBOM -NoNewline
+        }
+    }
+
+    It 'rejects an accepted out-of-stage requirements writer receipt' {
+        $fixture = $script:ActualProofFixtures.requirements
+        foreach ($path in $fixture.original.Keys) { [IO.File]::WriteAllText($path, $fixture.original[$path]) }
+        $lines = @(Get-Content -LiteralPath $fixture.events | ForEach-Object { $_ | ConvertFrom-Json -AsHashtable })
+        $payloadPath = Join-Path $fixture.root '.copilot-tracking/benchmark-evidence/requirements/handoff-out-of-stage.json'
+        $null = New-Item -ItemType Directory -Path (Split-Path -Parent $payloadPath) -Force
+        @{
+            runId = 'proof-run'; turn = 7
+            historyRecords = @(@{ agent = 'Squad Implementor'; request = 'Build'; deliverable = 'src/task.ps1'; outcome = 'Done.' })
+            stateAdvance = @{ activeRoles = @('Squad Implementor') }
+        } | ConvertTo-Json -Depth 20 | Set-Content -LiteralPath $payloadPath
+        $turnId = 'out-of-stage'
+        $timestamp = [DateTimeOffset]::UtcNow.ToString('o')
+        $command = "pwsh -NoProfile -File '$(Join-Path $script:ProofScripts 'Complete-SquadHandoff.ps1')' -RepoRoot '$($fixture.root)' -SquadRoot '$($fixture.squad)' -PayloadPath '$payloadPath'"
+        $lines += @(
+            @{ type = 'tool.execution_start'; agentId = ''; timestamp = $timestamp; data = @{ toolCallId = $turnId; toolName = 'powershell'; turnId = $turnId; arguments = @{ command = $command } } }
+            @{ type = 'tool.execution_complete'; agentId = ''; timestamp = ([DateTimeOffset]$timestamp).AddSeconds(1).ToString('o'); data = @{ toolCallId = $turnId; turnId = $turnId; success = $true; shellExecution = @{ exitCode = 0 }; result = @{ content = '{"status":"written","turn":7,"dispatchEntries":1,"historyCounts":{"Squad Implementor":1,"Squad Scribe":7},"ledgerCheck":"PASS","verified":true}' } } }
+        )
+        $lines | ForEach-Object { $_ | ConvertTo-Json -Depth 30 -Compress } | Set-Content -LiteralPath $fixture.events
+        $metrics = Measure-EfficiencyEvents -Path $fixture.events
+        $metrics.dispatches['Squad Implementor'] = 1
+        $evidence = Get-EfficiencyBookkeepingEvidence -Path $fixture.events -Workspace $fixture.root -SourceRoot $script:ProofSource -InstallRoot $script:ProofInstall -ExpectedSessionId 'actual-requirements'
+        $result = Test-EfficiencyWorkflow -Workspace $fixture.root -Metrics $metrics -Stage requirements -BookkeepingEvidence $evidence -SourceRoot $script:ProofSource -InstallRoot $script:ProofInstall -ExpectedSessionId 'actual-requirements'
+        $result.checks.bookkeepingEvidence | Should -BeFalse
+        $result.passed | Should -BeFalse
+    }
+
+    It 'accepts nested substage payloads, recovered mid-stage exit-1 retries, and role-ID activeRoles' {
+        $fixture = $script:ActualProofFixtures.requirements
+        foreach ($path in $fixture.original.Keys) { [IO.File]::WriteAllText($path, $fixture.original[$path]) }
+        $nestedDir = Join-Path $fixture.root '.copilot-tracking/benchmark-evidence/closing'
+        $nestedPayload = Join-Path $nestedDir 'handoff.json'
+        $statePath = Join-Path $fixture.squad 'state.json'
+        try {
+            $null = New-Item -ItemType Directory -Path $nestedDir -Force
+            $lines = @(Get-Content -LiteralPath $fixture.events | ForEach-Object { $_ | ConvertFrom-Json -AsHashtable })
+            $firstHandoffIdx = [array]::FindIndex($lines, [Predicate[object]]{ param($x) $x.type -eq 'tool.execution_start' -and $x.data.arguments.command -match 'handoff-2\.json' })
+            $refusedId = 'recovered-exit1-refusal'
+            $refusedTime = $lines[$firstHandoffIdx].timestamp
+            $refusedCmd = $lines[$firstHandoffIdx].data.arguments.command
+            $refusedPair = @(
+                @{ type = 'tool.execution_start'; agentId = ''; timestamp = $refusedTime; data = @{ toolCallId = $refusedId; toolName = 'powershell'; turnId = $refusedId; arguments = @{ command = $refusedCmd } } }
+                @{ type = 'tool.execution_complete'; agentId = ''; timestamp = $refusedTime; data = @{ toolCallId = $refusedId; turnId = $refusedId; success = $true; shellExecution = @{ exitCode = 1 }; result = @{ content = "Write-SquadHandoff: invalid payload: historyRecords[0].memberName must be a non-empty string.`n<exit code 1>" } } }
+            )
+            $lines = @($lines[0..($firstHandoffIdx - 1)] + $refusedPair + $lines[$firstHandoffIdx..($lines.Count - 1)])
+            $closingStart = @($lines | Where-Object { $_.type -eq 'tool.execution_start' })[-1]
+            @{
+                runId = 'proof-run'; turn = 6
+                historyRecords = @(@{
+                    agent = 'Squad Reviewer'; request = 'Produce docs/requirements/reviews/Squad Reviewer.md'
+                    deliverable = 'docs/requirements/reviews/Squad Reviewer.md'; outcome = 'Delivered.'
+                })
+                stateAdvance = @{ activeRoles = @('tester') }
+            } | ConvertTo-Json -Depth 20 | Set-Content -LiteralPath $nestedPayload -Encoding utf8NoBOM
+            $closingStart.data.arguments.command = "pwsh -NoProfile -File '$(Join-Path $script:ProofScripts 'Complete-SquadHandoff.ps1')' -RepoRoot '$($fixture.root)' -SquadRoot '$($fixture.squad)' -PayloadPath '$nestedPayload'"
+            $closingComplete = @($lines | Where-Object { $_.type -eq 'tool.execution_complete' })[-1]
+            $closingComplete.data.result.content = ($closingComplete.data.result.content.Trim() -replace '\}\s*$', ',"verified":true}')
+            $state = Get-Content -LiteralPath $statePath -Raw | ConvertFrom-Json -AsHashtable
+            $state.activeRoles = @('tester')
+            $state | ConvertTo-Json -Depth 20 | Set-Content -LiteralPath $statePath -Encoding utf8NoBOM
+            $lines | ForEach-Object { $_ | ConvertTo-Json -Depth 30 -Compress } | Set-Content -LiteralPath $fixture.events
+            $metrics = Measure-EfficiencyEvents -Path $fixture.events
+            $evidence = Get-EfficiencyBookkeepingEvidence -Path $fixture.events -Workspace $fixture.root -SourceRoot $script:ProofSource -InstallRoot $script:ProofInstall -ExpectedSessionId 'actual-requirements'
+            $result = Test-EfficiencyWorkflow -Workspace $fixture.root -Metrics $metrics -Stage requirements -BookkeepingEvidence $evidence -SourceRoot $script:ProofSource -InstallRoot $script:ProofInstall -ExpectedSessionId 'actual-requirements'
+            $result.checks.bookkeepingEvidence | Should -BeTrue -Because ($result.diagnostics.bookkeepingEvidence)
+            $result.passed | Should -BeTrue
+        }
+        finally {
+            if (Test-Path -LiteralPath $nestedDir) { Remove-Item -LiteralPath $nestedDir -Recurse -Force }
+            foreach ($path in $fixture.original.Keys) { [IO.File]::WriteAllText($path, $fixture.original[$path]) }
+        }
+    }
+
+    It 'rejects unrecovered trailing exit-1 writer refusals and protected squad-state payload paths' {
+        $fixture = $script:ActualProofFixtures.requirements
+        foreach ($path in $fixture.original.Keys) { [IO.File]::WriteAllText($path, $fixture.original[$path]) }
+        $protectedPayload = Join-Path $fixture.squad 'forged-handoff.json'
+        try {
+            $lines = @(Get-Content -LiteralPath $fixture.events | ForEach-Object { $_ | ConvertFrom-Json -AsHashtable })
+            $trailId = 'trailing-refusal'
+            $trailTime = [DateTimeOffset]::UtcNow.ToString('o')
+            $trailCmd = (@($lines | Where-Object { $_.type -eq 'tool.execution_start' })[-1]).data.arguments.command
+            $withTrailingFailure = @($lines + @(
+                @{ type = 'tool.execution_start'; agentId = ''; timestamp = $trailTime; data = @{ toolCallId = $trailId; toolName = 'powershell'; turnId = $trailId; arguments = @{ command = $trailCmd } } }
+                @{ type = 'tool.execution_complete'; agentId = ''; timestamp = $trailTime; data = @{ toolCallId = $trailId; turnId = $trailId; success = $true; shellExecution = @{ exitCode = 1 }; result = @{ content = 'Write-SquadHandoff: refused; exit 1' } } }
+            ))
+            $withTrailingFailure | ForEach-Object { $_ | ConvertTo-Json -Depth 30 -Compress } | Set-Content -LiteralPath $fixture.events
+            $metrics = Measure-EfficiencyEvents -Path $fixture.events
+            $evidence = Get-EfficiencyBookkeepingEvidence -Path $fixture.events -Workspace $fixture.root -SourceRoot $script:ProofSource -InstallRoot $script:ProofInstall -ExpectedSessionId 'actual-requirements'
+            $trailingResult = Test-EfficiencyWorkflow -Workspace $fixture.root -Metrics $metrics -Stage requirements -BookkeepingEvidence $evidence -SourceRoot $script:ProofSource -InstallRoot $script:ProofInstall -ExpectedSessionId 'actual-requirements'
+            $trailingResult.checks.bookkeepingEvidence | Should -BeFalse
+            $trailingResult.diagnostics.bookkeepingEvidence | Should -Match 'unrecovered writer attempt'
+
+            $protectedLines = @($lines)
+            $targetStart = @($protectedLines | Where-Object { $_.type -eq 'tool.execution_start' -and $_.data.arguments.command -match 'handoff-2\.json' })[0]
+            $origPath = [regex]::Match($targetStart.data.arguments.command, "'([^']*handoff-2\.json)'").Groups[1].Value
+            Copy-Item -LiteralPath $origPath -Destination $protectedPayload -Force
+            $targetStart.data.arguments.command = $targetStart.data.arguments.command.Replace($origPath, $protectedPayload)
+            $protectedLines | ForEach-Object { $_ | ConvertTo-Json -Depth 30 -Compress } | Set-Content -LiteralPath $fixture.events
+            $protectedEvidence = Get-EfficiencyBookkeepingEvidence -Path $fixture.events -Workspace $fixture.root -SourceRoot $script:ProofSource -InstallRoot $script:ProofInstall -ExpectedSessionId 'actual-requirements'
+            $protectedResult = Test-EfficiencyWorkflow -Workspace $fixture.root -Metrics $metrics -Stage requirements -BookkeepingEvidence $protectedEvidence -SourceRoot $script:ProofSource -InstallRoot $script:ProofInstall -ExpectedSessionId 'actual-requirements'
+            $protectedResult.checks.bookkeepingEvidence | Should -BeFalse
+        }
+        finally {
+            if (Test-Path -LiteralPath $protectedPayload) { Remove-Item -LiteralPath $protectedPayload -Force }
+            foreach ($path in $fixture.original.Keys) { [IO.File]::WriteAllText($path, $fixture.original[$path]) }
+        }
     }
 }
 
@@ -1054,8 +1869,9 @@ exit 37
         $Captured.arguments | Should -Not -Contain '--allow-all-paths'
         $Captured.arguments | Should -Not -Contain '--allow-all-urls'
         $Captured.arguments | Should -Contain 'shell(git push)'
-        $Captured.arguments[1] | Should -Match 'split large reference reads into explicit ranges'
-        $Captured.arguments[1] | Should -Match 'one complete Scribe handoff per completed dispatch'
+        $Captured.arguments[1] | Should -Match 'explicit read ranges'
+        $Captured.arguments[1] | Should -Match 'Persist one verified handoff per dispatch'
+        $Captured.arguments[1] | Should -Match 'Init/Complete-SquadHandoff standalone'
         $Captured.arguments[1] | Should -Match 'every dispatched role and Scribe prompt, outside any schema payload'
         $Captured.arguments[1] | Should -Match ([regex]::Escape("absolute workspace '$(Join-Path $Trial 'workspace')'; absolute skill root '$(Join-Path $Trial 'workspace')/.agents/skills'"))
         $Captured.repoHooks | Should -Be 'true'
@@ -1101,6 +1917,65 @@ exit 37
         $script | Should -Match '\$Prompts\[\$StageName\] \+= '' depth=quick'''
         $script | Should -Match 'depth = \$Depth'
         Get-Content -LiteralPath (Join-Path $PSScriptRoot 'README.md') -Raw | Should -Match '-CompareDepth'
+    }
+
+    It 'requires standalone bookkeeping processes and one bounded requirements correction batch' {
+        $script = Get-Content -LiteralPath (Join-Path $PSScriptRoot 'Invoke-EfficiencyExercise.ps1') -Raw
+        $script | Should -Match 'Init/Complete-SquadHandoff standalone'
+        $script | Should -Match 'no setup, reads, hashes, cleanup'
+        $script | Should -Not -Match 'Send one complete Scribe handoff per completed dispatch'
+        $script | Should -Match 'Apply one source-supported correction batch'
+        $script | Should -Match 'one bounded source-supported correction batch'
+        $script | Should -Match 'Final outcome: Pass'
+        $script | Should -Match 'Human-only KPI, baseline, date and approval gaps stay unavailable'
+        $script | Should -Not -Match 'under 80,000 bytes'
+        $script | Should -Not -Match 'EX-\*'
+        $script | Should -Not -Match 'owner roles'
+        $script | Should -Match '\.copilot-tracking/benchmark-evidence/'
+        $script | Should -Match 'model never deletes'
+        $script | Should -Match 'Remove-EfficiencyStagePayloadEvidence'
+    }
+
+    It 'cleans only the verified stage payload evidence directory' {
+        $workspace = Join-Path $TestDrive 'payload-evidence-workspace'
+        $requirements = Join-Path $workspace '.copilot-tracking/benchmark-evidence/requirements'
+        $build = Join-Path $workspace '.copilot-tracking/benchmark-evidence/build'
+        New-Item -ItemType Directory -Path $requirements, $build -Force | Out-Null
+        'requirements proof' | Set-Content -LiteralPath (Join-Path $requirements 'handoff-1.json')
+        'build proof' | Set-Content -LiteralPath (Join-Path $build 'handoff-1.json')
+
+        Remove-EfficiencyStagePayloadEvidence -Workspace $workspace -Stage requirements
+
+        Test-Path -LiteralPath $requirements | Should -BeFalse
+        Test-Path -LiteralPath $build | Should -BeTrue
+        (Get-Content -LiteralPath (Join-Path $build 'handoff-1.json') -Raw) | Should -Match 'build proof'
+    }
+
+    It 'rejects oversized stage payload evidence before cleanup' {
+        $workspace = Join-Path $TestDrive 'large-payload-evidence'
+        $requirements = Join-Path $workspace '.copilot-tracking/benchmark-evidence/requirements'
+        New-Item -ItemType Directory -Path $requirements -Force | Out-Null
+        1..1025 | ForEach-Object { 'x' | Set-Content -LiteralPath (Join-Path $requirements "$_.json") }
+
+        { Remove-EfficiencyStagePayloadEvidence -Workspace $workspace -Stage requirements } |
+            Should -Throw '*exceeds cleanup limits*'
+        Test-Path -LiteralPath $requirements | Should -BeTrue
+    }
+
+    It 'cleans whole-root benchmark payload evidence while enforcing size limits' {
+        $workspace = Join-Path $TestDrive 'whole-root-payload-evidence'
+        $nestedA = Join-Path $workspace '.copilot-tracking/benchmark-evidence/brd'
+        $nestedB = Join-Path $workspace '.copilot-tracking/benchmark-evidence/closing'
+        $preservedReview = Join-Path $workspace '.copilot-tracking/reviews'
+        New-Item -ItemType Directory -Path $nestedA, $nestedB, $preservedReview -Force | Out-Null
+        'brd proof' | Set-Content -LiteralPath (Join-Path $nestedA 'handoff-2.json')
+        'closing proof' | Set-Content -LiteralPath (Join-Path $nestedB 'handoff.json')
+        'review capture' | Set-Content -LiteralPath (Join-Path $preservedReview 'capture.md')
+
+        Remove-EfficiencyStagePayloadEvidence -Workspace $workspace
+
+        Test-Path -LiteralPath (Join-Path $workspace '.copilot-tracking/benchmark-evidence') | Should -BeFalse
+        Test-Path -LiteralPath (Join-Path $preservedReview 'capture.md') | Should -BeTrue
     }
 }
 
@@ -1364,6 +2239,21 @@ Describe 'Unattended series lifecycle' -Tag 'Unit' {
 }
 
 Describe 'Runtime limits and closing review evidence' -Tag 'Unit' {
+    It 'keeps checker diagnostics local in both stage and attempt readiness' {
+        $run = @(New-TestRuns -ObservationOnly)[0]
+        $readiness = @{ passed = $false; checks = @{ stateVerifier = $false }; reviewPath = 'reviews/closing.md';
+            diagnostics = @{ stateVerifier = @{ stderr = 'PRIVATE CHECKER OUTPUT'; failures = @('PRIVATE CHECKER FAILURE') } } }
+        $run.stages[0].readiness = $readiness
+        $run.stages[0].attempts = @(@{ kind = 'stage'; readiness = $readiness })
+        InModuleScope EfficiencyBenchmark -Parameters @{ Run = $run } {
+            param($Run)
+            $summary = ConvertTo-EfficiencyRunSummary $Run
+            ($summary | ConvertTo-Json -Depth 20) | Should -Not -Match 'PRIVATE CHECKER|diagnostics'
+            $summary.stages[0].readiness.checks.stateVerifier | Should -BeFalse
+            $summary.stages[0].attempts[0].readiness.reviewPath | Should -Be 'reviews/closing.md'
+            $Run.stages[0].readiness.diagnostics.stateVerifier.stderr | Should -Be 'PRIVATE CHECKER OUTPUT'
+        }
+    }
     It 'stops a subprocess when the observed request budget is exhausted' {
         $Events = Join-Path $TestDrive 'budget-events.jsonl'
         $Encoded = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes(((New-TestUsage) + "`n")))
@@ -1372,7 +2262,12 @@ Describe 'Runtime limits and closing review evidence' -Tag 'Unit' {
         $Result.stopCause | Should -Be 'request-limit'
     }
     It 'requires a passing outcome in the actual closing review artifact' {
-        Mock Invoke-EfficiencyProcess -ModuleName EfficiencyBenchmark { @{ exitCode = 0; stopCause = 'none' } }
+        $null = New-Item -ItemType Directory -Path (Join-Path $TestDrive 'out') -Force
+        Mock Invoke-EfficiencyProcess -ModuleName EfficiencyBenchmark {
+            $resultPath = $Arguments[[array]::IndexOf($Arguments, '-OutputPath') + 1]
+            @{ passed = $true; failures = @() } | ConvertTo-Json | Set-Content -LiteralPath $resultPath
+            @{ exitCode = 0; stopCause = 'none' }
+        }
         $Root = Join-Path $TestDrive 'workflow'; $Squad = Join-Path $Root '.copilot-tracking/squad'
         New-Item -ItemType Directory -Path (Join-Path $Squad 'history'), (Join-Path $Root 'artifacts') -Force | Out-Null
         foreach ($Name in @('routing.md', 'state.json', 'decisions.md', 'consumption.md', 'consumption-rates.md')) { Set-Content (Join-Path $Squad $Name) 'fixture' }

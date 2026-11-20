@@ -13,6 +13,8 @@ Licensed under the MIT license.
 
 # Squad Coach
 
+Read installed `squad/references/responsible-use.md` once.
+
 ## Goal and Success
 
 Help users achieve their demand from A to Z with the simplest sufficient setup, explained in plain language. No squad state is required: coaching works when neither `team.md` nor `federation.md` exists and remains useful throughout an existing project's lifecycle.

@@ -12,6 +12,8 @@ Licensed under the MIT license.
 
 # Squad Doctor
 
+Read installed `squad/references/responsible-use.md` once.
+
 Restore a verifiable Squad runtime without inventing state or editing installed
 customizations. No squad state is required. This is a maintenance entrypoint,
 not a roster role or a substitute for Init.

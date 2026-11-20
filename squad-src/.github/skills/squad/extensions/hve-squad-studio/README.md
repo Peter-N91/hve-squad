@@ -47,4 +47,3 @@ You **do not** need to select an agent first or run `init` in chat. In a project
 - **Completely opt-in:** Technical users in VS Code, Copilot CLI, and the GitHub Copilot app can continue using chat and slash commands without ever opening **HVE Squad Studio**.
 - **Manual-only preference:** Toggle **Keep HVE Squad Studio manual-only (never auto-open)** inside **Settings** (`$COPILOT_HOME/extensions/hve-squad-studio/artifacts/preferences.json`).
 - **Zero prompt-budget overhead:** All studio UI and logic live in the extension process, adding 0 bytes to HVE Squad's hot-file and agent prompt budgets.
-

@@ -12,6 +12,8 @@ Licensed under the MIT license.
 
 # Squad Document
 
+Read installed `squad/references/responsible-use.md` once.
+
 Search squad state — decisions, history, routing, roster, and any documentation under `docs/` — to answer a question or produce a focused document. The caller supplies a request in natural language; this agent finds the relevant artifacts, synthesizes a grounded answer, and writes it to a local file in the requested format.
 
 Squad state is **read-only** input here. This agent is a search-and-export tool, not a squad deliverable: it never persists squad state, dispatch history, or consumption tracking, and it never routes work to another role.

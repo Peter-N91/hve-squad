@@ -11,6 +11,8 @@ Licensed under the MIT license.
 
 # Squad External Agent Builder
 
+Read installed `squad/references/responsible-use.md` once.
+
 Help the user keep ownership of an external endpoint while making it compatible
 with HVE Squad.
 

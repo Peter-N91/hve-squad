@@ -67,7 +67,7 @@ Describe 'SquadUsage exact native accounting' {
         $snapshot.duplicates | Should -Be 1
         $snapshot.totalNanoAiu | Should -Be 3000000000
         $snapshot.credits | Should -Be 3
-        $snapshot.usd | Should -Be 0.03
+        $snapshot.usd | Should -Be ([decimal]::Parse('0.03', [Globalization.CultureInfo]::InvariantCulture))
         $snapshot.checkpointNanoAiu | Should -Be 1000000000
     }
 
@@ -79,7 +79,7 @@ Describe 'SquadUsage exact native accounting' {
         $snapshot = Get-SquadUsageSnapshot -EventsPath $path -BaselineNanoAiu 1250000000
         $snapshot.consumedNanoAiu | Should -Be 1750000000
         $snapshot.credits | Should -Be 1.75
-        $snapshot.usd | Should -Be 0.0175
+        $snapshot.usd | Should -Be ([decimal]::Parse('0.0175', [Globalization.CultureInfo]::InvariantCulture))
     }
 
     It 'fails metering closed for incomplete credit status or missing accounting identity' {
@@ -255,6 +255,66 @@ Describe 'SquadUsage exact native accounting' {
         $portable.totalNanoAiu | Should -Be $native.totalNanoAiu
         $portable.identityDigest | Should -Be $native.identityDigest
         $portable.lastUsageTimestamp | Should -Be $native.lastUsageTimestamp
+    }
+
+    It 'attributes root coordinator compaction without accounting sub-object to coordinator and fails closed without session.start' {
+        $compactionLine = @{
+            type = 'session.compaction_complete'
+            timestamp = '2026-10-24T10:02:00.000Z'
+            data = @{
+                success = $true
+                outcome = 'applied'
+                compactionAttemptId = 'root-compact-1'
+                compactionTokensUsed = @{
+                    requestCount = 1
+                    aiCreditsStatus = 'complete'
+                    model = 'claude-sonnet-5.5'
+                    inputTokens = 1000
+                    outputTokens = 100
+                    cacheReadTokens = 900
+                    cacheWriteTokens = 50
+                    copilotUsage = @{ totalNanoAiu = [long]500000000 }
+                }
+            }
+        } | ConvertTo-Json -Depth 12 -Compress
+        $withSession = Write-UsageEvents @(
+            (@{ type = 'session.start'; timestamp = '2026-10-24T09:59:59.000Z'; data = @{ sessionId = 'main-session' } } | ConvertTo-Json -Compress)
+            (New-UsageLine -Source 'main-session' -Id 'u1' -NanoAiu 1500000000)
+            $compactionLine
+        )
+        $snapshot = Get-SquadUsageSnapshot -EventsPath $withSession -IncludeAgentRuns
+        $snapshot.status | Should -Be 'complete' -Because ($snapshot.attributionProblems -join '; ')
+        $snapshot.attributionStatus | Should -Be 'complete'
+        $snapshot.records | Should -Be 2
+        $snapshot.totalNanoAiu | Should -Be 2000000000
+        $main = $snapshot.agentRuns | Where-Object agentName -eq 'coordinator'
+        $main.records | Should -Be 2
+        $main.totalNanoAiu | Should -Be 2000000000
+
+        $withoutSession = Write-UsageEvents @(
+            (New-UsageLine -Source 'main-session' -Id 'u1' -NanoAiu 1500000000)
+            $compactionLine
+        )
+        $rejected = Get-SquadUsageSnapshot -EventsPath $withoutSession -IncludeAgentRuns
+        $rejected.attributionStatus | Should -Be 'incomplete'
+        ($rejected.attributionProblems -join ' ') | Should -Match 'compaction:root-compact-1 has no event agentId'
+
+        $subagentStartOnly = Write-UsageEvents @(
+            (@{ type = 'session.start'; agentId = 'sub-1'; timestamp = '2026-10-24T09:59:59.000Z'; data = @{ sessionId = 'sub-session' } } | ConvertTo-Json -Compress)
+            (New-UsageLine -Source 'main-session' -Id 'u1' -NanoAiu 1500000000)
+            $compactionLine
+        )
+        (Get-SquadUsageSnapshot -EventsPath $subagentStartOnly -IncludeAgentRuns).attributionStatus | Should -Be 'incomplete'
+
+        $conflictingRoots = Write-UsageEvents @(
+            (@{ type = 'session.start'; timestamp = '2026-10-24T09:59:58.000Z'; data = @{ sessionId = 'main-session' } } | ConvertTo-Json -Compress)
+            (@{ type = 'session.start'; timestamp = '2026-10-24T09:59:59.000Z'; data = @{ sessionId = 'other-session' } } | ConvertTo-Json -Compress)
+            (New-UsageLine -Source 'main-session' -Id 'u1' -NanoAiu 1500000000)
+            $compactionLine
+        )
+        $conflicted = Get-SquadUsageSnapshot -EventsPath $conflictingRoots -IncludeAgentRuns
+        $conflicted.attributionStatus | Should -Be 'incomplete'
+        ($conflicted.attributionProblems -join ' ') | Should -Match 'Conflicting root session\.start IDs'
     }
 }
 

@@ -397,7 +397,18 @@ function Get-SquadAgentUsageAttribution {
             }
             switch ($type.Groups['type'].Value) {
                 'session.start' {
-                    $rootSessionId = [string]$data['sessionId']
+                    if (-not $logEvent['agentId']) {
+                        $candidateSessionId = [string]$data['sessionId']
+                        if (-not $candidateSessionId) {
+                            $problems.Add('session.start is missing sessionId.')
+                        }
+                        elseif ($rootSessionId -and $rootSessionId -cne $candidateSessionId) {
+                            $problems.Add("Conflicting root session.start IDs '$rootSessionId' and '$candidateSessionId'.")
+                        }
+                        else {
+                            $rootSessionId = $candidateSessionId
+                        }
+                    }
                 }
                 'subagent.started' {
                     $agentId = [string]$logEvent['agentId']
@@ -488,11 +499,17 @@ function Get-SquadAgentUsageAttribution {
                     $breakdown = ConvertTo-SquadNativeTokenBreakdown -Usage $usage -Identity $identity -Problems $problems
                     if ($null -eq $breakdown) { continue }
                     $nanoAiu = [decimal]$usage['copilotUsage']['totalNanoAiu']
+                    $compactionSessionId = if ($usage['accounting'] -is [Collections.IDictionary] -and $usage['accounting']['sourceSessionId']) {
+                        [string]$usage['accounting']['sourceSessionId']
+                    }
+                    else {
+                        $rootSessionId
+                    }
                     $record = [pscustomobject][ordered]@{
                         identity = $identity
                         timestamp = [string]$logEvent['timestamp']
                         agentId = [string]$logEvent['agentId']
-                        sourceSessionId = if ($usage['accounting'] -is [Collections.IDictionary]) { [string]$usage['accounting']['sourceSessionId'] } else { '' }
+                        sourceSessionId = $compactionSessionId
                         model = [string]$usage['model']
                         inputTokens = $breakdown.inputTokens
                         cacheReadTokens = $breakdown.cacheReadTokens
@@ -750,7 +767,7 @@ function Get-SquadUsageSnapshot {
         }
         if ($IncludeAgentRuns) {
             $attribution = Get-SquadAgentUsageAttribution -EventsPath $source -ExpectedNanoAiu $totals.nanoAiu
-            if ($attribution.sessionId) { $sessionId = [string]$attribution.sessionId }
+            if ($attribution.status -eq 'complete' -and $attribution.sessionId) { $sessionId = [string]$attribution.sessionId }
         }
     }
 

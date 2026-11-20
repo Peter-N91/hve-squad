@@ -70,11 +70,15 @@ BeforeAll {
         #>
         param(
             [Parameter(Mandatory)][string]$SquadRootPath,
-            [string]$ExpectationPath
+            [string]$ExpectationPath,
+            [string]$InstallRoot,
+            [string]$ExpectedSessionId
         )
         $resultPath = Join-Path ([System.IO.Path]::GetTempPath()) "scribe-verify-$([guid]::NewGuid().ToString('N')).json"
         $verifierArgs = @('-NoProfile', '-File', $script:VerifyScript, '-SquadRoot', $SquadRootPath, '-OutputPath', $resultPath)
         if ($ExpectationPath) { $verifierArgs += @('-ExpectationPath', $ExpectationPath) }
+        if ($InstallRoot) { $verifierArgs += @('-InstallRoot', $InstallRoot) }
+        if ($ExpectedSessionId) { $verifierArgs += @('-ExpectedSessionId', $ExpectedSessionId) }
         & pwsh @verifierArgs | Out-Null
         $exitCode = $LASTEXITCODE
         $resultObject = if (Test-Path -LiteralPath $resultPath) { Get-Content -LiteralPath $resultPath -Raw | ConvertFrom-Json } else { $null }
@@ -533,6 +537,136 @@ Describe 'The verifier resolves known rate spellings without guessing costs' -Ta
         $Outcome.ExitCode | Should -Not -Be 0
         ($Outcome.Result.failures -join ' | ') | Should -Match 'ledger says 9.3171'
         ($Outcome.Result.failures -join ' | ') | Should -Not -Match 'no rate row for:'
+    }
+}
+
+Describe 'The verifier reconciles native accounting without repricing estimated history' -Tag 'Unit' {
+    BeforeAll {
+        $script:NativeHomeBefore = $env:COPILOT_HOME
+        $script:NativeRepo = Join-Path $TestDrive 'native-repository'
+        $script:NativeRoot = Join-Path $script:NativeRepo '.copilot-tracking\squad'
+        $null = New-Item -ItemType Directory -Path (Split-Path -Parent $script:NativeRoot) -Force
+        $base = Get-CorrectWriteFixture
+        Copy-Item -LiteralPath $base -Destination $script:NativeRoot -Recurse
+        Remove-Item -LiteralPath $base -Recurse -Force
+        $env:COPILOT_HOME = Join-Path $script:NativeRepo '_copilot_home'
+        $session = Join-Path $env:COPILOT_HOME 'session-state\native-fixture'
+        $null = New-Item -ItemType Directory -Path $session -Force
+        Set-Content (Join-Path $session 'workspace.yaml') "id: native-fixture`ncwd: $script:NativeRepo"
+        $lines = @(@{ type = 'session.start'; data = @{ sessionId = 'native-fixture' } } | ConvertTo-Json -Compress)
+        foreach ($actor in @('Squad Researcher', 'Squad Scribe')) {
+            $stamp = [regex]::Match((Get-Content (Join-Path $script:NativeRoot "history\$actor.md") -Raw), '(?m)^### (\S+)').Groups[1].Value
+            $lines += @{ type = 'subagent.started'; agentId = $actor; timestamp = $stamp; data = @{ toolCallId = $actor; agentName = $actor } } | ConvertTo-Json -Compress
+            $lines += @{
+                type = 'session.usage_record'; agentId = $actor; timestamp = $stamp
+                data = @{ usage = @{
+                    model = $(if ($actor -eq 'Squad Scribe') { 'claude-haiku-4.5' } else { 'claude-sonnet-4.6' })
+                    inputTokens = 100000; outputTokens = 10000; cacheReadTokens = 0; cacheWriteTokens = 0
+                    aiCreditsStatus = 'complete'
+                    copilotUsage = @{ totalNanoAiu = 45000000000; tokenDetails = @(
+                        @{ tokenType = 'input'; tokenCount = 100000; batchSize = 1000000; costPerBatch = 300000000000 }
+                        @{ tokenType = 'output'; tokenCount = 10000; batchSize = 1000000; costPerBatch = 1500000000000 }
+                    ) }
+                    accounting = @{ sourceSessionId = $actor; usageId = 'native-request' }
+                } }
+            } | ConvertTo-Json -Depth 15 -Compress
+            $lines += @{ type = 'subagent.completed'; agentId = $actor; timestamp = $stamp; data = @{ toolCallId = $actor; agentName = $actor } } | ConvertTo-Json -Compress
+        }
+        Set-Content (Join-Path $session 'events.jsonl') $lines
+        $script:NativeEventsPath = Join-Path $session 'events.jsonl'
+        $script:NativeEventsText = [IO.File]::ReadAllText($script:NativeEventsPath)
+        $script:NativeInstall = Join-Path $TestDrive 'native-prepared'
+        $installScripts = Join-Path $script:NativeInstall '.agents\skills\squad\scripts'
+        $null = New-Item -ItemType Directory -Path (Split-Path -Parent $installScripts) -Force
+        Copy-Item -LiteralPath (Join-Path $script:SourceRoot 'squad-src\.github\skills\squad\scripts') -Destination $installScripts -Recurse
+        $script:NativeInstallOriginal = @{}
+        foreach ($file in Get-ChildItem -LiteralPath $installScripts -File -Recurse) { $script:NativeInstallOriginal[$file.FullName] = [IO.File]::ReadAllText($file.FullName) }
+        $ledger = Join-Path $script:SourceRoot 'squad-src\.github\skills\squad\scripts\Measure-SquadLedger.ps1'
+        $written = & pwsh -NoProfile -File $ledger -SquadRoot $script:NativeRoot -SessionLog $session -Write 2>&1 | Out-String
+        if ($LASTEXITCODE -ne 0) { throw $written }
+        $script:NativeOriginal = @{}
+        foreach ($file in Get-ChildItem -LiteralPath $script:NativeRoot -Recurse -File) {
+            $script:NativeOriginal[$file.FullName] = @{ text = [IO.File]::ReadAllText($file.FullName); time = $file.LastWriteTimeUtc }
+        }
+    }
+    AfterAll { $env:COPILOT_HOME = $script:NativeHomeBefore }
+    BeforeEach {
+        foreach ($path in $script:NativeInstallOriginal.Keys) { [IO.File]::WriteAllText($path, $script:NativeInstallOriginal[$path]) }
+        [IO.File]::WriteAllText($script:NativeEventsPath, $script:NativeEventsText)
+        foreach ($path in $script:NativeOriginal.Keys) {
+            [IO.File]::WriteAllText($path, $script:NativeOriginal[$path].text)
+            (Get-Item -LiteralPath $path).LastWriteTimeUtc = $script:NativeOriginal[$path].time
+        }
+    }
+    It 'handles native evidence mutation <Mutation> with pass=<Pass>' -ForEach @(
+        @{ Mutation = 'none'; Pass = $true }
+        @{ Mutation = 'tokens'; Pass = $false }
+        @{ Mutation = 'cost'; Pass = $false }
+        @{ Mutation = 'attribution'; Pass = $false }
+        @{ Mutation = 'journal'; Pass = $false }
+        @{ Mutation = 'coverage'; Pass = $false }
+        @{ Mutation = 'history'; Pass = $false }
+        @{ Mutation = 'shape'; Pass = $false }
+        @{ Mutation = 'deliverable'; Pass = $false }
+        @{ Mutation = 'stale'; Pass = $false }
+        @{ Mutation = 'state'; Pass = $false }
+        @{ Mutation = 'downgrade'; Pass = $false }
+        @{ Mutation = 'explicit-estimated'; Pass = $true }
+        @{ Mutation = 'session-mismatch'; Pass = $false }
+        @{ Mutation = 'install-module'; Pass = $true }
+        @{ Mutation = 'install-ledger'; Pass = $true }
+    ) {
+        $ledgerPath = Join-Path $script:NativeRoot 'consumption.md'
+        $historyPath = Join-Path $script:NativeRoot 'history\Squad Researcher.md'
+        $journalPath = Join-Path $script:NativeRoot 'consumption-sessions.json'
+        switch ($Mutation) {
+            { $_ -in @('downgrade', 'explicit-estimated') } {
+                $estimated = Get-CorrectWriteFixture
+                Copy-Item -LiteralPath (Join-Path $estimated 'consumption.md') -Destination $ledgerPath -Force
+                $statePath = Join-Path $script:NativeRoot 'state.json'
+                $state = Get-Content -LiteralPath $statePath -Raw | ConvertFrom-Json -AsHashtable
+                $state.currentRun.estCostUsd = 0.3171
+                $state.currentRun.estCreditsTotal = 31.71
+                $state | ConvertTo-Json -Depth 20 | Set-Content -LiteralPath $statePath
+                Remove-Item -LiteralPath $estimated -Recurse -Force
+                if ($Mutation -eq 'explicit-estimated') { Remove-Item -LiteralPath $journalPath }
+            }
+            install-module { Set-Content -LiteralPath (Join-Path $script:NativeInstall '.agents\skills\squad\scripts\SquadCoordinator.psm1') "throw 'UNTRUSTED INSTALL CODE'" }
+            install-ledger { Set-Content -LiteralPath (Join-Path $script:NativeInstall '.agents\skills\squad\scripts\Measure-SquadLedger.ps1') "throw 'UNTRUSTED INSTALL CODE'" }
+            tokens { [IO.File]::WriteAllText($ledgerPath, ([IO.File]::ReadAllText($ledgerPath).Replace('**200,000**', '**900,000**'))) }
+            cost { [IO.File]::WriteAllText($ledgerPath, ([IO.File]::ReadAllText($ledgerPath).Replace('**0.9000**', '**9.9000**'))) }
+            attribution { [IO.File]::WriteAllText($ledgerPath, ([IO.File]::ReadAllText($ledgerPath).Replace('| native credits |', '| invented credits |'))) }
+            journal {
+                Remove-Item -LiteralPath $journalPath
+                [IO.File]::WriteAllText($script:NativeEventsPath, '')
+            }
+            coverage {
+                $text = [IO.File]::ReadAllText($historyPath)
+                $entry = [regex]::Match($text, '(?ms)^### .*').Value.Replace('Survey fixture-topic conventions', 'Additional uncovered work')
+                $entry = [regex]::Replace($entry, '(?m)^### \S+', ('### ' + [DateTimeOffset]::UtcNow.AddHours(1).ToString('o')))
+                Add-Content -LiteralPath $historyPath -Value $entry
+            }
+            history { [IO.File]::WriteAllText($historyPath, ([IO.File]::ReadAllText($historyPath).Replace('Survey fixture-topic conventions', 'Overwritten entry'))) }
+            shape { [IO.File]::WriteAllText($historyPath, ([IO.File]::ReadAllText($historyPath).Replace('"input_tokens": 9600', '"input_tokens": "unknown"'))) }
+            deliverable { Remove-Item -LiteralPath (Join-Path $script:NativeRoot 'research\fixture-topic.md') }
+            stale { (Get-Item -LiteralPath (Join-Path $script:NativeRoot 'research\fixture-topic.md')).LastWriteTimeUtc = [DateTime]::UtcNow.AddDays(-1) }
+            state {
+                $path = Join-Path $script:NativeRoot 'state.json'
+                [IO.File]::WriteAllText($path, ([IO.File]::ReadAllText($path) -replace '"estCostUsd"\s*:\s*[\d.]+', '"estCostUsd": 99'))
+            }
+        }
+        $before = @{}; foreach ($file in Get-ChildItem -LiteralPath $script:NativeRoot -Recurse -File) { $before[$file.FullName] = (Get-FileHash -LiteralPath $file.FullName).Hash }
+        $outcome = Invoke-Verifier -SquadRootPath $script:NativeRoot -ExpectationPath $script:ExpectedPath -InstallRoot $script:NativeInstall -ExpectedSessionId $(if ($Mutation -eq 'session-mismatch') { 'wrong-session' } else { 'native-fixture' })
+        $outcome.Result.passed | Should -Be $Pass -Because ($outcome.Result.failures -join ' | ')
+        $outcome.ExitCode | Should -Be $(if ($Pass) { 0 } else { 1 })
+        if ($Mutation -in @('install-module', 'install-ledger')) {
+            ($outcome.Result.failures -join ' | ') | Should -Not -Match 'UNTRUSTED INSTALL CODE'
+        }
+        if ($Pass) {
+            $outcome.Result.ledgerBasis | Should -Be $(if ($Mutation -eq 'explicit-estimated') { 'estimated' } else { 'exact-native' })
+            $outcome.Result.ledgerCheck | Should -Be $(if ($Mutation -eq 'explicit-estimated') { 'estimated' } else { 'PASS' })
+        }
+        foreach ($path in $before.Keys) { (Get-FileHash -LiteralPath $path).Hash | Should -Be $before[$path] -Because '-Check must not rewrite evidence' }
     }
 }
 

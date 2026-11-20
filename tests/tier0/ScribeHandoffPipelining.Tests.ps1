@@ -301,9 +301,9 @@ Describe 'Synchronous ordinary handoffs and cold Scribe pipelining (GATE-22..GAT
 
         It 'blocks progress completion and the next worker until ordinary proof succeeds' {
             $script:OrdinaryHandoffBody | Should -Match 'Receipt\+proof gate progress/next worker'
-            $script:CoordinatorRuntimeBody | Should -Match '(?s)Run `Write-SquadHandoff\.ps1 -Quiet` synchronously.+Exit 0 requires Section 5 proof before progress/next task'
-            $script:CoordinatorRuntimeBody | Should -Match 'routing/artifact is\s+no handoff'
-            $script:CoordinatorRuntimeBody | Should -Match 'Exit 2 takes the cold path'
+            $script:CoordinatorRuntimeBody | Should -Match '(?s)Use `Complete-SquadHandoff\.ps1.+Require exit 0 and `verified: true` before progress/next task'
+            $script:OrdinaryHandoffBody | Should -Match 'routing/artifacts do not'
+            $script:CoordinatorRuntimeBody | Should -Match 'Exit 2 is cold'
         }
 
         It 'applies the same per-stage barrier inside targeted federation autopilot' {
@@ -313,6 +313,11 @@ Describe 'Synchronous ordinary handoffs and cold Scribe pipelining (GATE-22..GAT
             $script:FederationRuntimeBody | Should -Match 'Supported member stages use this sequence in ordinary/targeted-autopilot runs'
             $script:FederationRuntimeBody | Should -Match '(?s)Before proof succeeds.+dispatch\s+a later/dependent worker, or run the root handoff'
             $federation.Body | Should -Match 'Exit 2 keeps the existing cold-Scribe pipeline'
+        }
+
+        It 'forwards the responsible-use contract through federation member coordinators' {
+            $script:FederationRuntimeBody | Should -Match '(?s)brief\s+`responsibleUsePath`/`sourceDataRule` verbatim'
+            $script:FederationRuntimeBody | Should -Match 'isolated contexts;\s+read policy\s+once'
         }
 
         It 'removes wording that permits deferring ordinary persistence to a later Scribe pass' {

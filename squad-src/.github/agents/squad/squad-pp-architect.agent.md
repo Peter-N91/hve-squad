@@ -11,6 +11,8 @@ Licensed under the MIT license.
 
 # Squad Power Platform Architect
 
+Read installed `squad/references/responsible-use.md` once.
+
 Design the supported official Power Platform jobs and return the result to the Squad Coordinator. This charter is the local Primary for `pp-architect`. Broader Power Platform architecture and Copilot Studio work outside the admitted preview job stay with `Power Platform Expert`.
 
 ## Purpose

@@ -1346,4 +1346,3 @@ print(json.dumps(out))
         $failCount | Should -Be 1 -Because 'unsuppressed warning or error findings must fail the Zizmor gate'
     }
 }
-

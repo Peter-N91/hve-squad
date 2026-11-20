@@ -272,7 +272,9 @@ if ($MyInvocation.InvocationName -ne '.') {
             if (Test-Path -LiteralPath $From) { Copy-Item -LiteralPath $From -Destination $Workspace -Recurse -Force }
         }
         Copy-SquadSource -From (Join-Path $SourceRoot 'squad-src') -To $Workspace -NativeCli
-        New-Item -ItemType Directory -Path (Join-Path $Workspace '.copilot-tracking/squad/history') -Force | Out-Null
+        foreach ($TrackDir in @('.copilot-tracking/squad/history', '.copilot-tracking/benchmark-evidence', '.copilot-tracking/reviews')) {
+            New-Item -ItemType Directory -Path (Join-Path $Workspace $TrackDir) -Force | Out-Null
+        }
         $ScenarioPath = Join-Path $PSScriptRoot 'efficiency-scenario.json'
         $Scenario = Get-Content -LiteralPath $ScenarioPath -Raw | ConvertFrom-Json -AsHashtable
         Set-Content -LiteralPath (Join-Path $Workspace 'EXERCISE.txt') -Value ($Scenario.brief + "`n" + $Scenario.contract) -Encoding utf8NoBOM
@@ -283,17 +285,18 @@ if ($MyInvocation.InvocationName -ne '.') {
         if ($ObservationOnly) {
             $Common = 'This is a synthetic baseline-measurement exercise in an isolated environment. Make routine decisions from EXERCISE.txt. Run the requested local work and reviews, preserving their real findings, state/history and role Deliverable Roots. Quality scores and bookkeeping failures are observations, not benchmark stop gates: record them and continue feasible local work without repeated remediation merely to reach a benchmark threshold. Do not fabricate missing artifacts, successful tests or human approval. Do not deploy, publish externally, access secrets, use external systems or install packages. Stop for a real safety boundary or required human authorization and record it.'
         }
-        $Common += " The authorized local root is '$Workspace'; resolve installed skills from '$Workspace/.agents/skills' and customization from '$Workspace/.github'. Keep discovery and scripts inside that root, without parent traversal. Prefer native read/list/search tools; split large reference reads into explicit ranges covering all required sections. Send one complete Scribe handoff per completed dispatch, in order; do not merge stages into catch-up payloads or invent missing reviewer outputs."
+        $Common += " Authorized root: '$Workspace'; skills: '$Workspace/.agents/skills'; customization: '$Workspace/.github'. Keep discovery and transport inside the root; no parent access. Prefer native tools and explicit read ranges. Invoke each Init/Complete-SquadHandoff standalone—no setup, reads, hashes, cleanup, `cd`, receipt slicing or trailing echo in that call. Persist one verified handoff per dispatch. Keep frozen payloads directly in existing `.copilot-tracking/benchmark-evidence/` (flat unique filenames; no `New-Item` needed); the model never deletes them; the harness cleans them after workflow checks."
         $Common += " Prepend this context to every dispatched role and Scribe prompt, outside any schema payload: absolute workspace '$Workspace'; absolute skill root '$Workspace/.agents/skills'. Do not assume children inherit the working directory or discover skills from home directories."
         $Prompts = [ordered]@{
             init = "$Common Initialize the squad with profile=product and mode=autopilot. Use the current installed squad implementation. Set up the roster and routing, including BRD and PRD capability. Initialization only; no substantive business deliverables yet."
-            requirements = "$Common Using the initialized squad, create both a BRD and a PRD for EXERCISE.txt. Use mapped requirements agents and the required methodology. Author and review roster-root drafts first. Before requesting review, complete the authors' required self-validation checklists and reconcile cross-document IDs, counts and traceability; keep acceptance-criterion references unambiguous. Assess business clarity, scope fidelity, acceptance criteria, traceability, and risks/decisions. Record evidence-grounded risks with mitigations and owners, assumptions and decisions; distinguish engineering choices from mandatory product requirements. Use BR-nnn and FR-nnn identifiers and explicit measurable acceptance criteria. All scenario facts are synthetic and the fixed brief is authoritative; do not add unsupported requirements or invent deadlines. Resolve required domain-review findings, then dispatch the roster's tester role for a separate independent closing review of the final roster-root drafts. Domain quality reviews do not replace that tester dispatch, its review artifact or its Scribe history. This is a requirements-only stage: no implementation or destination copies are expected during that review. Only after all required reviews pass, copy the reviewed documents byte-for-byte to docs/requirements/brd.md and docs/requirements/prd.md. These are local copies, not external publication or human approval."
+            requirements = "$Common Using initialized authors and methodology, produce BRD and PRD for EXERCISE.txt. Self-check IDs, traceability, acceptance criteria and risks. Apply one source-supported correction batch, BRD before PRD, and verify each handoff. Human-only KPI, baseline, date and approval gaps stay unavailable, disclosed and never invented. Dispatch the tester once and require an evidence-supported `Final outcome: Pass`/`Pass-With-Findings`; preserve Fail otherwise. No implementation. After the closing pass, copy byte-identical drafts to docs/requirements/brd.md and docs/requirements/prd.md as unapproved evidence."
             build = "$Common Implement docs/requirements/prd.md and the frozen EXERCISE.txt CLI contract through a complete Research, Plan, Implement, Review cycle with the mapped roles. Produce src/task.ps1, tests and a short README. Before closing review, test persisted ID boundaries and data preservation: an add must never report success then leave storage unreadable; if an increasing integer cannot be represented, fail without modifying stored bytes. Do not defer known data corruption merely because it needs a seeded boundary case. Run your own tests, preserve independent closing review and state/ledger integrity. Do not invent successful tests; disclose host-only validation limits. Record remaining required findings as blockers."
         }
         if ($ObservationOnly) {
-            $Prompts.requirements = "$Common Using the initialized squad and mapped requirements roles, produce a BRD and PRD for EXERCISE.txt and collect independent domain and closing reviews. Preserve unresolved findings as measured quality results; do not repeatedly rewrite merely to reach a quality threshold. Keep roster-root deliverables and copy available drafts byte-for-byte to docs/requirements/brd.md and docs/requirements/prd.md for independent measurement, clearly identifying them as unapproved baseline artifacts. Missing or failed review is a recorded outcome, not permission to claim approval."
+            $Prompts.requirements = "$Common Using initialized requirements roles, produce BRD and PRD with independent domain and closing reviews. Apply one bounded source-supported correction batch, then stop. Human-only KPI, baseline, date and approval gaps stay unavailable and disclosed, never invented. Require an evidence-supported `Final outcome: Pass`/`Pass-With-Findings`; otherwise preserve Fail. Copy resulting drafts byte-for-byte to docs/requirements/brd.md and docs/requirements/prd.md as unapproved evidence. Failure is not approval."
             $Prompts.build = "$Common Implement the frozen EXERCISE.txt CLI contract using available requirements, mapped roles and a Research, Plan, Implement, Review cycle. Produce src/task.ps1, tests and a short README. Run your own tests and closing review; record actual failures, unresolved findings and missing evidence rather than inventing success. This stage must still attempt feasible work if the preceding stage had quality or bookkeeping failures."
         }
+        $Prompts.build += ' Before closing review, test the producer-consumer ID boundary in separate processes: seed a task at the chosen integer representation boundary, add another task, then list and mark the newly returned ID done. A successful add must leave every stored ID readable and addressable by done; otherwise reject the add without modifying stored bytes. The closing reviewer verifies this round-trip, not only rejection of an arbitrarily large input ID.'
         if ($Depth -eq 'quick') {
             foreach ($StageName in @($Prompts.Keys)) { $Prompts[$StageName] += ' depth=quick' }
         }
@@ -312,7 +315,7 @@ if ($MyInvocation.InvocationName -ne '.') {
         foreach ($Stage in $Prompts.Keys) {
             $ProgressStep++; $ProgressLabel = $StageLabels[$Stage]
             Write-EfficiencyProgress -Step $ProgressStep -Label $ProgressLabel -Path $ProgressPath
-            $StageWatch = [Diagnostics.Stopwatch]::StartNew()
+            $StageWatch = [Diagnostics.Stopwatch]::StartNew(); $StageSuspended = 0.0
             $StageStartLine = $StartLine; $PreviousMetrics = $Metrics
             $PriorRequests = if ($Metrics -and $null -ne $Metrics.modelRequests) { $Metrics.modelRequests } else { 0 }
             $StageRequestCeiling = $WorkflowRequestCeiling - $PriorRequests
@@ -326,11 +329,14 @@ if ($MyInvocation.InvocationName -ne '.') {
             $Executable = $CliPath
             if ($CliPath.EndsWith('.ps1')) { $Executable = (Get-Command pwsh).Source; $CliArgs = @('-NoProfile', '-File', $CliPath) + $CliArgs }
             $InitialSeconds = [Math]::Floor($WorkflowSeconds - $Watch.Elapsed.TotalSeconds)
-            $Result = if (-not $ObservationOnly -and $StageRequestCeiling -lt 1) { [pscustomobject]@{ exitCode = -1; stopCause = 'request-limit'; seconds = 0; observedRequests = 0 } } elseif ($InitialSeconds -ge 1) { Invoke-EfficiencyProcess -FilePath $Executable -Arguments $CliArgs -WorkingDirectory $Workspace -OutputPath (Join-Path $Out "$Stage-stdout.jsonl") -TimeoutSeconds ([int]$InitialSeconds) -EventsPath $SessionEvents -StartLine $StageStartLine -MaxRequests $StageRequestCeiling -MaxCredits $SessionCreditCeiling -EnvironmentVariables @{ GITHUB_COPILOT_PROMPT_MODE_REPO_HOOKS = 'true' } } else { [pscustomobject]@{ exitCode = -1; stopCause = 'timeout'; seconds = 0; observedRequests = 0 } }
+            $Result = if (-not $ObservationOnly -and $StageRequestCeiling -lt 1) { [pscustomobject]@{ exitCode = -1; stopCause = 'request-limit'; seconds = 0; suspendedSeconds = 0; observedRequests = 0 } } elseif ($InitialSeconds -ge 1) { Invoke-EfficiencyProcess -FilePath $Executable -Arguments $CliArgs -WorkingDirectory $Workspace -OutputPath (Join-Path $Out "$Stage-stdout.jsonl") -TimeoutSeconds ([int]$InitialSeconds) -EventsPath $SessionEvents -StartLine $StageStartLine -MaxRequests $StageRequestCeiling -MaxCredits $SessionCreditCeiling -StopAtLimitNotice -EnvironmentVariables @{ GITHUB_COPILOT_PROMPT_MODE_REPO_HOOKS = 'true' } } else { [pscustomobject]@{ exitCode = -1; stopCause = 'timeout'; seconds = 0; suspendedSeconds = 0; observedRequests = 0 } }
+            $StageSuspended += [double]$Result.suspendedSeconds; $WorkflowSeconds += [double]$Result.suspendedSeconds
             $Saved = Save-EfficiencyAttemptEvidence -EventsPath $SessionEvents -Out $Out -Prefix $Stage
             $Metrics = $Saved.metrics; $StartLine = $Saved.lineCount
             $StagePassed = ($Result.exitCode -eq 0 -and $Result.stopCause -eq 'none' -and $null -ne $Metrics -and $Metrics.complete -and $null -ne $Metrics.modelRequests -and $Metrics.modelRequests -le $WorkflowRequestCeiling -and $Metrics.counts.questions -eq 0)
-            $Readiness = if ($StagePassed) { Test-EfficiencyWorkflow -Workspace $Workspace -Metrics $Metrics -Stage $Stage } else { [pscustomobject]@{ passed = $false; checks = @{ processEvidence = $false }; reviewPath = $null } }
+            $Readiness = if ($StagePassed) {
+                Test-EfficiencyWorkflow -Workspace $Workspace -Metrics $Metrics -Stage $Stage -EventsPath (Join-Path $Out "$Stage-events.jsonl") -SourceRoot $SourceRoot -InstallRoot $InstallRoot -ExpectedSessionId $Session -EvidenceRoot $Out
+            } else { [pscustomobject]@{ passed = $false; checks = @{ processEvidence = $false }; reviewPath = $null } }
             $StagePassed = $StagePassed -and $Readiness.passed -and $Watch.Elapsed.TotalSeconds -le $WorkflowSeconds
             $Attempts.Add(@{ kind = 'stage'; process = $Result; readiness = $Readiness; passed = $StagePassed; sessionCreditCeiling = $SessionCreditCeiling; evidence = @(@("out/$Stage-stdout.jsonl", "out/$Stage-events.jsonl", "out/$Stage-metrics.json") | Where-Object { Test-Path -LiteralPath (Join-Path $TrialRoot $_) -PathType Leaf }) })
             if (-not $StagePassed -and -not $ObservationOnly) {
@@ -354,11 +360,14 @@ if ($MyInvocation.InvocationName -ne '.') {
                         $ContinueArgs[[array]::IndexOf($ContinueArgs, '-p') + 1] = $Prompts[$Stage] + ' This is a continuation of this same stage after verified context compaction, not a new run. Resume only the interrupted Scribe handoff first; inspect existing history and do not duplicate it or rerun completed specialist roles. After the handoff verifies, finish only the pending stage work. Preserve run identity, artifacts and safety gates. If still blocked, record the remaining blocker and stop; no further recovery is allowed.'
                         $ContinueArgs[[array]::IndexOf($ContinueArgs, '--max-ai-credits') + 1] = $SessionCreditCeiling.ToString('R', [Globalization.CultureInfo]::InvariantCulture)
                         $ContinueArgs[[array]::IndexOf($ContinueArgs, '--usage-output-file') + 1] = Join-Path $Out "$Stage-continuation-usage.json"
-                        $Result = Invoke-EfficiencyProcess -FilePath $Executable -Arguments $ContinueArgs -WorkingDirectory $Workspace -OutputPath (Join-Path $Out "$Stage-continuation-stdout.jsonl") -TimeoutSeconds ([int][Math]::Floor($RemainingSeconds)) -EventsPath $SessionEvents -StartLine $StageStartLine -MaxRequests $StageRequestCeiling -MaxCredits $SessionCreditCeiling -EnvironmentVariables @{ GITHUB_COPILOT_PROMPT_MODE_REPO_HOOKS = 'true' }
+                        $Result = Invoke-EfficiencyProcess -FilePath $Executable -Arguments $ContinueArgs -WorkingDirectory $Workspace -OutputPath (Join-Path $Out "$Stage-continuation-stdout.jsonl") -TimeoutSeconds ([int][Math]::Floor($RemainingSeconds)) -EventsPath $SessionEvents -StartLine $StageStartLine -MaxRequests $StageRequestCeiling -MaxCredits $SessionCreditCeiling -StopAtLimitNotice -EnvironmentVariables @{ GITHUB_COPILOT_PROMPT_MODE_REPO_HOOKS = 'true' }
+                        $StageSuspended += [double]$Result.suspendedSeconds; $WorkflowSeconds += [double]$Result.suspendedSeconds
                         $Saved = Save-EfficiencyAttemptEvidence -EventsPath $SessionEvents -Out $Out -Prefix "$Stage-continuation"
                         $Metrics = $Saved.metrics; $StartLine = $Saved.lineCount
                         $StagePassed = ($Result.exitCode -eq 0 -and $Result.stopCause -eq 'none' -and $Metrics -and $Metrics.complete -and $null -ne $Metrics.modelRequests -and $Metrics.modelRequests -le $WorkflowRequestCeiling -and $Metrics.counts.questions -eq 0 -and $Watch.Elapsed.TotalSeconds -le $WorkflowSeconds)
-                        $Readiness = if ($StagePassed) { Test-EfficiencyWorkflow -Workspace $Workspace -Metrics $Metrics -Stage $Stage } else { [pscustomobject]@{ passed = $false; checks = @{ processEvidence = $false }; reviewPath = $null } }
+                        $Readiness = if ($StagePassed) {
+                            Test-EfficiencyWorkflow -Workspace $Workspace -Metrics $Metrics -Stage $Stage -EventsPath (Join-Path $Out "$Stage-continuation-events.jsonl") -SourceRoot $SourceRoot -InstallRoot $InstallRoot -ExpectedSessionId $Session -EvidenceRoot $Out
+                        } else { [pscustomobject]@{ passed = $false; checks = @{ processEvidence = $false }; reviewPath = $null } }
                         $StagePassed = $StagePassed -and $Readiness.passed -and $Watch.Elapsed.TotalSeconds -le $WorkflowSeconds
                         $Attempts.Add(@{ kind = 'continuation'; process = $Result; readiness = $Readiness; passed = $StagePassed; sessionCreditCeiling = $SessionCreditCeiling; evidence = @(@("out/$Stage-continuation-stdout.jsonl", "out/$Stage-continuation-events.jsonl", "out/$Stage-continuation-metrics.json") | Where-Object { Test-Path -LiteralPath (Join-Path $TrialRoot $_) -PathType Leaf }) })
                         $Recovery.status = if ($StagePassed) { 'recovered' } else { 'failed' }
@@ -374,7 +383,7 @@ if ($MyInvocation.InvocationName -ne '.') {
                     $Delta[$Field] = if ($null -ne $Metrics.totals[$Field] -and $null -ne $Prior) { $Metrics.totals[$Field] - $Prior } else { $null }
                 }
             }
-            $StageProcess = @{ exitCode = $Result.exitCode; stopCause = $Result.stopCause; seconds = [Math]::Round($StageWatch.Elapsed.TotalSeconds, 3); observedRequests = if ($Metrics -and $null -ne $Metrics.modelRequests) { $Metrics.modelRequests - $PriorRequests } else { $null } }
+            $StageProcess = @{ exitCode = $Result.exitCode; stopCause = $Result.stopCause; seconds = [Math]::Round($StageWatch.Elapsed.TotalSeconds - $StageSuspended, 3); suspendedSeconds = [Math]::Round($StageSuspended, 3); observedRequests = if ($Metrics -and $null -ne $Metrics.modelRequests) { $Metrics.modelRequests - $PriorRequests } else { $null } }
             $Stages.Add(@{ name = $Stage; process = $StageProcess; readiness = $Readiness; attempts = @($Attempts); recovery = $Recovery; metrics = $Metrics; metricScope = 'cumulative-session'; stageTokenDelta = $Delta; passed = $StagePassed })
             Write-EfficiencyProgress -Step $ProgressStep -Label $ProgressLabel -Status finished -Path $ProgressPath
             if (-not $StagePassed) {
@@ -389,14 +398,15 @@ if ($MyInvocation.InvocationName -ne '.') {
         $ProgressStep = 5; $ProgressLabel = 'Checking acceptance and workflow'
         Write-EfficiencyProgress -Step $ProgressStep -Label $ProgressLabel -Path $ProgressPath
         $Acceptance = & (Join-Path $PSScriptRoot 'Test-EfficiencyTask.ps1') -Workspace $Workspace | ConvertFrom-Json -AsHashtable
-        $Workflow = if ($Stages[-1].name -eq 'build') { $Stages[-1].readiness } else { Test-EfficiencyWorkflow -Workspace $Workspace -Metrics $Metrics }
+        $Workflow = if ($Stages[-1].name -eq 'build') { $Stages[-1].readiness } else { Test-EfficiencyWorkflow -Workspace $Workspace -Metrics $Metrics -SourceRoot $SourceRoot -InstallRoot $InstallRoot -ExpectedSessionId $Session -EvidenceRoot $Out }
+        if ($AllPassed -and $Workflow.passed) { Remove-EfficiencyStagePayloadEvidence -Workspace $Workspace }
         Write-EfficiencyProgress -Step $ProgressStep -Label $ProgressLabel -Status finished -Path $ProgressPath
         $ProgressStep = 6; $ProgressLabel = 'Judging documents'
         $Judge = $null
         if (($ObservationOnly -or ($AllPassed -and $Acceptance.passed -and $Workflow.passed)) -and $Watch.Elapsed.TotalSeconds -lt $WorkflowSeconds) {
             Write-EfficiencyProgress -Step $ProgressStep -Label $ProgressLabel -Path $ProgressPath
             $Judge = Invoke-EfficiencyJudge -Workspace $Workspace -Out $Out -CliPath $CliPath -Model $Model -MaxCredits $RecoveryPolicy.judgeCredits -ReviewPath ([string]$Workflow.reviewPath) -TimeoutSeconds ([Math]::Max(1, [Math]::Min(300, $WorkflowSeconds - $Watch.Elapsed.TotalSeconds))) -ObservationOnly:$ObservationOnly
-            Write-EfficiencyProgress -Step $ProgressStep -Label $ProgressLabel -Status finished -Path $ProgressPath
+            Write-EfficiencyProgress -Step $ProgressStep -Label $ProgressLabel -Status $(if ($Judge.valid) { 'finished' } else { 'failed' }) -Path $ProgressPath
         }
         else { Write-EfficiencyProgress -Step $ProgressStep -Label $ProgressLabel -Status skipped -Path $ProgressPath }
         $ProgressStep = 7; $ProgressLabel = 'Saving run evidence'
