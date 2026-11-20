@@ -164,11 +164,28 @@ Show the proposed configuration and wait for my confirmation.</code></pre></div>
         En autopilote non assisté, réglez ce choix à l'inscription : gardez exactement un défaut
         applicable différent de <code>ask</code>. Si un rôle a plusieurs membres, confirmez lequel est ciblé.
       </p>
+      <p data-release-change="20261118-deterministic-connector-registration">
+        Prévisualisez l'inscription recherche confirmée avec le script squad installé :
+      </p>
+      <div class="code-block"><div class="code-heading">Prévisualiser l'inscription déterministe</div>
+      <pre><code class="language-powershell">pwsh -NoProfile -File "&lt;skill-root&gt;/scripts/Register-SquadConnector.ps1" `
+  -RepoRoot "&lt;repository-root&gt;" `
+  -ManifestPath "connectors/research-agent.json" `
+  -BindingId "research-org" `
+  -RoleMode replace `
+  -TargetRole researcher `
+  -MemberName "Org Researcher" `
+  -DefaultExecution connector `
+  -RunId "research-connector-registration"</code></pre></div>
       <p>
-        Confirmez la proposition. Le Scribe écrit les liaisons dans le <code>team.md</code> de la
-        squad propriétaire en conservant les membres internes et leurs racines de livrables.
-        Les routes recherche/développeur restent en place. N'écrasez pas le roster avec un exemple
-        et ne remplacez pas sa valeur Primary par le nom de votre agent externe.
+        Inspectez le reçu <code>planned</code>, puis relancez la même commande avec
+        <code>-Confirmed</code>. La transaction déterministe écrit la liaison dans le
+        <code>team.md</code> de la squad propriétaire sans lancer de modèle ni de Scribe.
+        Les routes recherche/développement et les racines de livrables internes restent en place.
+        Répétez le couple prévisualisation/application pour la liaison de livraison. N'écrasez
+        pas le roster avec un exemple et ne remplacez pas sa valeur Primary par le nom de votre
+        agent externe. Les nouveaux identifiants utilisent ce script ; les changements
+        d'identité ou suppressions gardent le chemin de preuve de retraite confirmé du Scribe.
       </p>
       <table><thead><tr><th>Binding ID</th><th>Role Mode</th><th>Cible</th><th>Default Execution</th></tr></thead><tbody>
         <tr><td><code>research-org</code></td><td><code>replace</code></td><td>Membre chercheur</td><td><code>connector</code></td></tr>
@@ -212,7 +229,7 @@ Keep the existing tester, Coordinator, Scribe, and council unchanged.
 Show the proposed member, binding, route, and root before writing.</code></pre></div>
       <p>
         Choisissez cette fois <code>add</code>. Confirmez le membre, l'alignement, la racine, la route
-        et le défaut. Le Scribe crée un membre distinct dont le Primary est <code>Squad Connector</code> ;
+        et le défaut. <code>Register-SquadConnector.ps1</code> crée un membre distinct dont le Primary est <code>Squad Connector</code> ;
         il ne remplace pas <code>tester</code> et n'ajoute aucune lentille de council. Pour GCP, utilisez :
       </p>
       <table><thead><tr><th>Champ</th><th>Exemple .NET</th><th>Exemple GCP</th></tr></thead><tbody>
@@ -403,8 +420,9 @@ Show the proposed member, binding, route, and root before writing.</code></pre><
       <p>
         Demandez au Squad Coordinator d'inscrire ou de rafraîchir un connecteur en donnant le
         chemin du manifeste. Il pose les questions manquantes une à une, valide une configuration
-        manuelle complète sans répéter les décisions déjà fournies, puis demande confirmation
-        avant toute écriture du Scribe. Choisissez <code>replace</code> avec le défaut
+        manuelle complète sans répéter les décisions déjà fournies, puis utilise après confirmation
+        l'écrivain d'inscription déterministe pour une nouvelle liaison. Les changements d'identité
+        ou suppressions gardent le chemin d'audit du Scribe. Choisissez <code>replace</code> avec le défaut
         <code>connector</code> pour utiliser votre endpoint par défaut, ou <code>ask</code>
         pour en faire une alternative choisie à chaque demande. Choisissez <code>add</code>
         pour un membre supplémentaire. Ne placez pas les identifiants de connecteur dans

@@ -286,6 +286,7 @@ Describe 'Deterministic coordinator transactions ship with the runtime' {
         @{ Name = 'Initialize-SquadFederation.ps1' }
         @{ Name = 'Get-SquadRosterExpansionPlan.ps1' }
         @{ Name = 'Expand-SquadRoster.ps1' }
+        @{ Name = 'Register-SquadConnector.ps1' }
         @{ Name = 'New-SquadGovernanceReport.ps1' }
         @{ Name = 'SquadGovernanceReport.psm1' }
         @{ Name = 'SquadGovernanceReport.Markdown.ps1' }

@@ -17,6 +17,7 @@ BeforeAll {
     Import-Module (Join-Path $PSScriptRoot 'SquadState.psm1') -Force
 
     $script:FixtureRoot = Join-Path $PSScriptRoot 'fixtures/model-routing'
+    $script:RoutingCatalogPath = Join-Path $script:FixtureRoot 'model-catalog.md'
     $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '../..')).Path
     $script:ReferencesRoot = Join-Path $repoRoot 'squad-src/.github/skills/squad/references'
     $script:RosterPath = Join-Path $repoRoot 'squad-src/.github/instructions/squad/squad-roster.instructions.md'
@@ -595,12 +596,16 @@ Describe 'Resolve-SquadModelRoute.ps1 ranks by fit, not by name (case l)' {
             param([Parameter(Mandatory)][string]$Root, [hashtable]$Extra = @{})
             $benchmarkRaw = Get-Content -LiteralPath (Join-Path $script:ReferencesRoot 'model-benchmarks.md') -Raw
             $benchmarkDate = Get-SnapshotEvaluationDate -Content $benchmarkRaw
-            $parameters = @{ SquadRoot = $Root; AsOf = [datetime]$benchmarkDate }
+            $parameters = @{
+                SquadRoot = $Root
+                AsOf = [datetime]$benchmarkDate
+                CatalogPath = $script:RoutingCatalogPath
+            }
             foreach ($key in $Extra.Keys) { $parameters[$key] = $Extra[$key] }
             & $script:Resolver @parameters | ConvertFrom-Json
         }
 
-        $catalogRaw = Get-Content -LiteralPath (Join-Path $script:ReferencesRoot 'model-catalog.md') -Raw
+        $catalogRaw = Get-Content -LiteralPath $script:RoutingCatalogPath -Raw
         $script:CapabilityOf = @{}
         foreach ($row in @(Get-MarkdownTable -Content $catalogRaw | Where-Object { 'Capability class' -in $_.Header } | ForEach-Object { $_.Rows })) {
             if ($row['Catalog ID']) { $script:CapabilityOf[$row['Catalog ID']] = $row['Capability class'] }
@@ -761,6 +766,7 @@ Describe 'Resolve-SquadModelRoute.ps1 economy mode (case n)' {
                 AsOf           = [datetime]'2026-10-15'
                 AvailableModels = $script:CliEnum
                 BenchmarksPath = $script:EconomyBenchmarks
+                CatalogPath    = $script:RoutingCatalogPath
             }
             foreach ($key in $Extra.Keys) { $parameters[$key] = $Extra[$key] }
             & $Script @parameters | ConvertFrom-Json
@@ -768,7 +774,12 @@ Describe 'Resolve-SquadModelRoute.ps1 economy mode (case n)' {
 
         function Invoke-EconomyResolverRaw {
             param([Parameter(Mandatory)][string]$Root, [hashtable]$Extra = @{}, [string]$Script = $script:Resolver)
-            $parameters = @{ SquadRoot = $Root; AsOf = $script:LiveBenchmarkDate; AvailableModels = $script:CliEnum }
+            $parameters = @{
+                SquadRoot = $Root
+                AsOf = $script:LiveBenchmarkDate
+                AvailableModels = $script:CliEnum
+                CatalogPath = $script:RoutingCatalogPath
+            }
             foreach ($key in $Extra.Keys) { $parameters[$key] = $Extra[$key] }
             try {
                 $output = (& $Script @parameters 2>&1 | Out-String)
@@ -780,7 +791,7 @@ Describe 'Resolve-SquadModelRoute.ps1 economy mode (case n)' {
         }
 
         # Expected economy pick computed straight from the catalog, independent of the resolver.
-        $catalogRaw = Get-Content -LiteralPath (Join-Path $script:ReferencesRoot 'model-catalog.md') -Raw
+        $catalogRaw = Get-Content -LiteralPath $script:RoutingCatalogPath -Raw
         $tables = @(Get-MarkdownTable -Content $catalogRaw)
         $script:CapabilityOf = @{}
         foreach ($row in @($tables | Where-Object { 'Capability class' -in $_.Header } | ForEach-Object { $_.Rows })) { if ($row['Catalog ID']) { $script:CapabilityOf[$row['Catalog ID']] = $row['Capability class'] } }
@@ -1120,10 +1131,10 @@ Describe 'Resolve-SquadModelRoute.ps1 economy mode (case n)' {
 
         It 'prints the consent line in the table output' {
             $root = New-EconomyRoot -Content $script:ConsentTeam
-            $missing = @(& $script:Resolver -SquadRoot $root -AsOf $script:LiveBenchmarkDate -AvailableModels $script:CliEnum -Format markdown)
+            $missing = @(& $script:Resolver -SquadRoot $root -AsOf $script:LiveBenchmarkDate -AvailableModels $script:CliEnum -CatalogPath $script:RoutingCatalogPath -Format markdown)
             $missing | Should -Contain 'consent: missing'
             Set-Content -LiteralPath (Join-Path $root 'decisions.md') -Value $script:Accepted -Encoding utf8NoBOM
-            $recorded = @(& $script:Resolver -SquadRoot $root -AsOf $script:LiveBenchmarkDate -AvailableModels $script:CliEnum -Format markdown)
+            $recorded = @(& $script:Resolver -SquadRoot $root -AsOf $script:LiveBenchmarkDate -AvailableModels $script:CliEnum -CatalogPath $script:RoutingCatalogPath -Format markdown)
             $recorded | Should -Contain 'consent: recorded'
         }
 
@@ -1131,7 +1142,7 @@ Describe 'Resolve-SquadModelRoute.ps1 economy mode (case n)' {
             foreach ($mode in 'ranked', 'manual') {
                 $run = Invoke-EconomyResolver -Root $script:SeedRoot -Extra @{ Mode = $mode }
                 $run.PSObject.Properties.Name | Should -Not -Contain 'consent'
-                @(& $script:Resolver -SquadRoot $script:SeedRoot -AsOf $script:LiveBenchmarkDate -AvailableModels $script:CliEnum -Mode $mode -Format markdown) -join "`n" | Should -Not -Match 'consent'
+                @(& $script:Resolver -SquadRoot $script:SeedRoot -AsOf $script:LiveBenchmarkDate -AvailableModels $script:CliEnum -Mode $mode -CatalogPath $script:RoutingCatalogPath -Format markdown) -join "`n" | Should -Not -Match 'consent'
             }
             (Invoke-EconomyResolver -Root $script:SeedRoot).PSObject.Properties.Name | Should -Not -Contain 'consent'
         }
@@ -1167,7 +1178,7 @@ Describe 'model-benchmarks.md knowledge base and provenance contract (#166, case
             $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '../..')).Path
             $script:SyncScript = Join-Path $repoRoot 'scripts/Sync-ModelBenchmarks.ps1'
             $script:Resolver = Join-Path $repoRoot 'squad-src/.github/skills/squad/scripts/Resolve-SquadModelRoute.ps1'
-            $script:CatalogPath = Join-Path $repoRoot 'squad-src/.github/skills/squad/references/model-catalog.md'
+            $script:CatalogPath = $script:RoutingCatalogPath
             $script:WorkflowPath = Join-Path $repoRoot '.github/workflows/sync-model-benchmarks.yml'
 
             function New-SyncArchiveLocal {
@@ -1217,7 +1228,7 @@ Describe 'model-benchmarks.md knowledge base and provenance contract (#166, case
             $result.Retrieved | Should -Be 'unknown'
             $result.Generated | Should -Be '2026-10-19'
             $checks = New-FixtureVerificationFile -Snapshot $output
-            & $script:SyncScript -SnapshotPath $output -VerificationPath $checks -OutputPath $output -AsOf ([datetime]'2026-10-19') | Out-Null
+            & $script:SyncScript -SnapshotPath $output -VerificationPath $checks -OutputPath $output -CatalogPath $script:CatalogPath -AsOf ([datetime]'2026-10-19') | Out-Null
 
             $tables = @(Get-MarkdownTable -Content (Get-Content -LiteralPath $output -Raw))
             $fit = @($tables | Where-Object { 'Composite' -in $_.Header -and 'implementation' -in $_.Header })[0]
@@ -1226,7 +1237,7 @@ Describe 'model-benchmarks.md knowledge base and provenance contract (#166, case
             [int]$byId['gpt-5.6-terra']['implementation'] | Should -Be 0
             [int]$byId['gpt-5.6-sol']['implementation'] | Should -Be 3
 
-            $route = & $script:Resolver -SquadRoot (New-RoutingRootLocal) -AvailableModels @('gpt-5.6-terra', 'gpt-5.6-sol') -Mode ranked -Role @('developer') -AsOf ([datetime]'2026-10-19') -BenchmarksPath $output | ConvertFrom-Json
+            $route = & $script:Resolver -SquadRoot (New-RoutingRootLocal) -AvailableModels @('gpt-5.6-terra', 'gpt-5.6-sol') -Mode ranked -Role @('developer') -AsOf ([datetime]'2026-10-19') -BenchmarksPath $output -CatalogPath $script:CatalogPath | ConvertFrom-Json
             $route.roles[0].suggested | Should -Be 'gpt-5.6-sol'
             $route.roles[0].capability | Should -Be 1
             $route.roles[0].rationale | Should -Match 'SciCode, Terminal-Bench'
@@ -1549,7 +1560,7 @@ Describe 'model-benchmarks.md knowledge base and provenance contract (#166, case
             $output = Join-Path $TestDrive 'aggregation-consistency.md'
             & $script:SyncScript -ArchivePath $archive -OutputPath $output -CatalogPath $script:CatalogPath -AsOf ([datetime]'2026-10-19') -EpochVersion 'fixture-v1' | Out-Null
             $checks = New-FixtureVerificationFile -Snapshot $output
-            & $script:SyncScript -SnapshotPath $output -VerificationPath $checks -OutputPath $output -AsOf ([datetime]'2026-10-19') | Out-Null
+            & $script:SyncScript -SnapshotPath $output -VerificationPath $checks -OutputPath $output -CatalogPath $script:CatalogPath -AsOf ([datetime]'2026-10-19') | Out-Null
 
             $tables = @(Get-MarkdownTable -Content (Get-Content -LiteralPath $output -Raw))
             $fit = @($tables | Where-Object { 'Composite' -in $_.Header -and 'implementation' -in $_.Header })[0]
@@ -1558,7 +1569,7 @@ Describe 'model-benchmarks.md knowledge base and provenance contract (#166, case
             $fitById['gpt-5.6-terra'] | Should -Be 2
             $fitById['gpt-5.6-sol'] | Should -Be 2
 
-            $route = & $script:Resolver -SquadRoot (New-RoutingRootLocal) -AvailableModels @('gpt-5.6-terra', 'gpt-5.6-sol') -Mode ranked -Role @('developer') -AsOf ([datetime]'2026-10-19') -BenchmarksPath $output | ConvertFrom-Json
+            $route = & $script:Resolver -SquadRoot (New-RoutingRootLocal) -AvailableModels @('gpt-5.6-terra', 'gpt-5.6-sol') -Mode ranked -Role @('developer') -AsOf ([datetime]'2026-10-19') -BenchmarksPath $output -CatalogPath $script:CatalogPath | ConvertFrom-Json
             foreach ($candidate in $route.roles[0].candidates) {
                 if ($fitById.ContainsKey($candidate.id)) {
                     $candidate.fit | Should -Be $fitById[$candidate.id]
@@ -1817,7 +1828,7 @@ Describe 'model-benchmarks.md knowledge base and provenance contract (#166, case
 
         # gpt-5.6-terra is cheaper (Blended 1.000 vs 1.920) and has a 0.999 self-reported score,
         # but only gpt-5.6-sol has independent benchmark evidence, so gpt-5.6-sol wins.
-        $res = & $script:Resolver -SquadRoot $root -AvailableModels @('gpt-5.6-terra', 'gpt-5.6-sol') -Mode ranked -Role @('lead') -AsOf ([datetime]'2026-10-18') -BenchmarksPath $selfReportBench | ConvertFrom-Json
+        $res = & $script:Resolver -SquadRoot $root -AvailableModels @('gpt-5.6-terra', 'gpt-5.6-sol') -Mode ranked -Role @('lead') -AsOf ([datetime]'2026-10-18') -BenchmarksPath $selfReportBench -CatalogPath $script:RoutingCatalogPath | ConvertFrom-Json
         $res.roles[0].suggested | Should -Be 'gpt-5.6-sol'
         $res.roles[0].rationale | Should -Match 'epoch-ai@2026-10-18@.* \[FrontierMath-Tiers-1-3-v2, GPQA diamond\]'
 
@@ -1885,7 +1896,7 @@ Describe 'model-benchmarks.md knowledge base and provenance contract (#166, case
                     $case.Score
                 ) -join "`n") -Encoding utf8NoBOM
 
-            $run = & $script:Resolver -SquadRoot $root -AvailableModels @('gpt-5.6-terra') -Mode ranked -Role @('lead') -AsOf ([datetime]'2026-10-18') -BenchmarksPath $path | ConvertFrom-Json
+            $run = & $script:Resolver -SquadRoot $root -AvailableModels @('gpt-5.6-terra') -Mode ranked -Role @('lead') -AsOf ([datetime]'2026-10-18') -BenchmarksPath $path -CatalogPath $script:RoutingCatalogPath | ConvertFrom-Json
             $run.roles[0].suggested | Should -Be 'gpt-5.6-terra'
             $run.roles[0].rationale | Should -Match '\(declared-fit fallback\)'
             $run.warnings.Count | Should -Be 1
@@ -1979,7 +1990,13 @@ Describe 'Capability-first Ranked and qualified cost-first Economy (SQ-33b..d, S
             $path = Join-Path $root 'benchmarks.md'
             if ($Scores) { New-PolicyBenchmarkFile -Path $path -Scores $Scores | Out-Null }
             else { New-PolicyBenchmarkFile -Path $path | Out-Null }
-            [pscustomobject]@{ Root = $root; Benchmarks = $path; Available = $Available; Resolver = $script:Resolver }
+            [pscustomobject]@{
+                Root = $root
+                Benchmarks = $path
+                CatalogPath = $script:RoutingCatalogPath
+                Available = $Available
+                Resolver = $script:Resolver
+            }
         }
 
         function Set-PolicyRow {
@@ -2009,15 +2026,17 @@ Describe 'Capability-first Ranked and qualified cost-first Economy (SQ-33b..d, S
         }
 
         function Invoke-PolicyRoute {
-            param($Fixture, [string]$Mode = 'ranked', [datetime]$AsOf = [datetime]'2026-10-19', [string[]]$Available, [switch]$Unattended)
+            param($Fixture, [string]$Mode = 'ranked', [datetime]$AsOf = [datetime]'2026-10-19', [string[]]$Available, [string[]]$RejectedModels = @(), [switch]$Unattended)
             $parameters = @{
                 SquadRoot = $Fixture.Root
-                AvailableModels = if ($Available) { $Available } else { $Fixture.Available }
+                AvailableModels = @(if ($Available) { $Available } else { $Fixture.Available })
                 BenchmarksPath = $Fixture.Benchmarks
+                CatalogPath = $Fixture.CatalogPath
                 AsOf = $AsOf
                 SessionModel = 'gpt-6.1-sol'
             }
             if ($Mode -ne 'off') { $parameters.Mode = $Mode }
+            if ($RejectedModels.Count) { $parameters.RejectedModels = $RejectedModels }
             if ($Unattended) { $parameters.Unattended = $true }
             & $Fixture.Resolver @parameters | ConvertFrom-Json
         }
@@ -2027,8 +2046,11 @@ Describe 'Capability-first Ranked and qualified cost-first Economy (SQ-33b..d, S
             $destination = Join-Path $Fixture.Root 'plugin/skills/squad'
             New-Item -ItemType Directory -Path $destination -Force | Out-Null
             Copy-Item -LiteralPath $script:ReferencesRoot, (Join-Path $script:ReferencesRoot '../scripts') -Destination $destination -Recurse
+            $catalogPath = Join-Path $destination 'references/model-catalog.md'
+            Copy-Item -LiteralPath $Fixture.CatalogPath -Destination $catalogPath -Force
             $Fixture.Resolver = Join-Path $destination 'scripts/Resolve-SquadModelRoute.ps1'
-            Join-Path $destination 'references/model-catalog.md'
+            $Fixture.CatalogPath = $catalogPath
+            $catalogPath
         }
     }
 
@@ -2054,6 +2076,87 @@ Describe 'Capability-first Ranked and qualified cost-first Economy (SQ-33b..d, S
         @($economy.candidates | Where-Object economyQualified).Count | Should -Be 2
         $economy.escalation | Should -Be $ranked.suggested
         $economy.escalationReason | Should -Match 'persist Model cell.*Cost Preflight'
+    }
+
+    It 'replans <Role> cost-first after a native Economy model rejection without using the Ranked escalation' -ForEach @(
+        @{ Role = 'lead'; Tier = 'default' }
+        @{ Role = 'tester'; Tier = 'fast' }
+    ) {
+        $fixture = New-PolicyRoster -Role $Role -Tier $Tier -Mode economy `
+            -Available @('gpt-6.1-sol', 'gpt-5.6-terra', 'gpt-5.6-sol') `
+            -Scores ([ordered]@{
+                'gpt-6.1-sol' = '0.600'
+                'gpt-5.6-terra' = '0.600'
+                'gpt-5.6-sol' = '0.700'
+                'gpt-5.3-codex' = '0.100'
+            })
+        $initial = (Invoke-PolicyRoute $fixture -Mode economy).roles[0]
+        $initial.suggested | Should -Be 'gpt-6.1-sol'
+        $initial.candidates[0].id | Should -Be 'gpt-6.1-sol'
+        $initial.escalation | Should -Be 'gpt-5.6-sol'
+
+        $retry = Invoke-PolicyRoute $fixture -Mode economy -RejectedModels @('gpt-6.1-sol')
+        $retry.rejectedModels | Should -Be @('gpt-6.1-sol')
+        $retry.roles[0].suggested | Should -Be 'gpt-5.6-terra'
+        $retry.roles[0].candidates[0].id | Should -Be 'gpt-5.6-terra'
+        $retry.roles[0].selectionObjective | Should -Be 'cost-first'
+        $retry.roles[0].suggested | Should -Not -Be $retry.roles[0].escalation
+        $retry.roles[0].escalationReason | Should -Match 'post-quality-failure only'
+        $retry.warnings -join "`n" | Should -Match 'Host-rejected model ids excluded'
+    }
+
+    It 'replans every non-exception assignment class after a native rejection' -ForEach @(
+        @{ Role = 'researcher'; Class = 'research' }
+        @{ Role = 'lead'; Class = 'planning' }
+        @{ Role = 'developer'; Class = 'implementation' }
+        @{ Role = 'tester'; Class = 'review' }
+        @{ Role = 'architect'; Class = 'council' }
+        @{ Role = 'intake-validator'; Class = 'intake' }
+    ) {
+        $fixture = New-PolicyRoster -Role $Role -Tier default -Mode economy `
+            -Available @('gpt-5.6-terra', 'gpt-5.6-sol') `
+            -Scores ([ordered]@{
+                'gpt-5.6-terra' = '0.600'
+                'gpt-5.6-sol' = '0.700'
+            })
+        $initial = (Invoke-PolicyRoute $fixture -Mode economy).roles[0]
+        $initial.class | Should -Be $Class
+        $initial.suggested | Should -Not -BeNullOrEmpty
+
+        $retry = (Invoke-PolicyRoute $fixture -Mode economy -RejectedModels @($initial.suggested)).roles[0]
+        $retry.suggested | Should -Not -BeNullOrEmpty
+        $retry.suggested | Should -Not -Be $initial.suggested
+        $retry.class | Should -Be $Class
+        $retry.selectionObjective | Should -Be 'cost-first'
+    }
+
+    It 'keeps Ranked capability-first and Manual explicit after a native rejection' {
+        $rankedFixture = New-PolicyRoster -Available @('gpt-5.6-terra', 'gpt-5.6-sol')
+        $ranked = (Invoke-PolicyRoute $rankedFixture -RejectedModels @('gpt-5.6-sol')).roles[0]
+        $ranked.suggested | Should -Be 'gpt-5.6-terra'
+        $ranked.selectionObjective | Should -Be 'capability-first'
+        $ranked.rationale | Should -Match 'Ranked: selected gpt-5.6-terra'
+
+        $manualFixture = New-PolicyRoster -Mode manual -Cell gpt-5.6-sol -Available @('gpt-5.6-terra', 'gpt-5.6-sol')
+        $manual = (Invoke-PolicyRoute $manualFixture -Mode manual -RejectedModels @('gpt-5.6-sol')).roles[0]
+        $manual.cellStatus | Should -Be 'refused: not available on this host'
+        $manual.resolved | Should -BeNullOrEmpty
+        $manual.suggested | Should -Be 'gpt-5.6-terra'
+    }
+
+    It 'stops <Mode> retries without a confirmed host list but allows initial session-based routing' -ForEach @(
+        @{ Mode = 'economy' }, @{ Mode = 'ranked' }, @{ Mode = 'manual' }
+    ) {
+        $fixture = New-PolicyRoster -Mode $Mode -Cell gpt-5.6-sol -Available @()
+        $initial = Invoke-PolicyRoute $fixture -Mode $Mode
+        $initial.availabilityResolved | Should -BeTrue
+        $initial.roles[0].resolved | Should -Not -BeNullOrEmpty
+
+        $retry = Invoke-PolicyRoute $fixture -Mode $Mode -RejectedModels @('GPT 5.6 Sol (Copilot)')
+        $retry.availabilityResolved | Should -BeFalse
+        $retry.roles[0].suggested | Should -BeNullOrEmpty
+        $retry.roles[0].requestedDispatchModel | Should -BeNullOrEmpty
+        if ($Mode -eq 'manual') { $retry.roles[0].cellStatus | Should -Be 'refused: not available on this host' }
     }
 
     It 'excludes a cheap model that fails even one primary minimum' {
@@ -2203,7 +2306,8 @@ Describe 'Capability-first Ranked and qualified cost-first Economy (SQ-33b..d, S
         Set-Content -LiteralPath $catalog -Value $raw -Encoding utf8NoBOM
         $role = (Invoke-PolicyRoute $fixture -Mode economy).roles[0]
         $role.suggested | Should -Be 'gpt-5.6-sol'
-        $unpriced = @($role.candidates | Where-Object id -eq 'gpt-5.6-terra')[0]
+        $unpriced = $role.candidates[-1]
+        $unpriced.id | Should -Be 'gpt-5.6-terra'
         $unpriced.blended | Should -BeNullOrEmpty
         $unpriced.economyQualified | Should -BeFalse
     }
@@ -2284,7 +2388,7 @@ Describe 'Capability-first Ranked and qualified cost-first Economy (SQ-33b..d, S
         $fixture = New-PolicyRoster
         $output = Join-Path $fixture.Root 'regenerated.md'
         $original = Get-Content -LiteralPath $fixture.Benchmarks -Raw
-        $generated = & $script:SyncScript -SnapshotPath $fixture.Benchmarks -OutputPath $output -AsOf ([datetime]'2026-10-19')
+        $generated = & $script:SyncScript -SnapshotPath $fixture.Benchmarks -OutputPath $output -CatalogPath $fixture.CatalogPath -AsOf ([datetime]'2026-10-19')
         $generated.ScoringPolicy | Should -Be 'squad-capability-v3'
         $view = Get-Content -LiteralPath $output -Raw
         $view | Should -Match $script:LegalNoticePattern
@@ -2296,7 +2400,7 @@ Describe 'Capability-first Ranked and qualified cost-first Economy (SQ-33b..d, S
         $capability = @($tables | Where-Object { 'Capability' -in $_.Header -and 'Evidence status' -in $_.Header })[0]
         $generatedRow = @($capability.Rows | Where-Object { $_['Catalog ID'] -eq $role.suggested -and $_['Assignment class'] -eq 'implementation' })[0]
         $generatedRow['Capability'] | Should -Be ([decimal]$role.capability).ToString('0.000000')
-        $again = & $script:SyncScript -SnapshotPath $output -OutputPath $output -AsOf ([datetime]'2026-10-19') -DryRun
+        $again = & $script:SyncScript -SnapshotPath $output -OutputPath $output -CatalogPath $fixture.CatalogPath -AsOf ([datetime]'2026-10-19') -DryRun
         $again.Updated | Should -BeFalse
         $again.Digest | Should -Be $generated.Digest
     }
@@ -2333,7 +2437,7 @@ Describe 'Capability-first Ranked and qualified cost-first Economy (SQ-33b..d, S
         $less = New-FixtureEvidenceRow -Id gpt-5.6-terra -Evaluation SciCode -Score '0.60000000000000000'
         $more = New-FixtureEvidenceRow -Id gpt-5.6-terra -Evaluation SciCode -Score '0.60000000000000001'
         (Get-SquadBenchmarkRecordDigest -Row $less) | Should -Not -Be (Get-SquadBenchmarkRecordDigest -Row $more)
-        { Get-SquadBenchmarkScore -Rows @($less, $more) -AsOf ([datetime]'2026-10-19') } |
+        { Get-SquadBenchmarkScore -Rows @($less, $more) -AsOf ([datetime]'2026-10-19') -CatalogPath $script:RoutingCatalogPath } |
             Should -Throw '*Conflicting duplicate benchmark score rows*'
         $fixture = New-PolicyRoster
         foreach ($evaluation in 'SciCode', 'Terminal-Bench') {
@@ -2409,7 +2513,7 @@ Describe 'Capability-first Ranked and qualified cost-first Economy (SQ-33b..d, S
         $legacyRoute.legacyEvidence | Should -BeTrue
         $legacyRoute.roles[0].rationale | Should -Match 'legacy v2 metadata is unverified'
         $output = Join-Path $fixture.Root 'copied-today.md'
-        $generated = & $script:SyncScript -SnapshotPath $fixture.Benchmarks -OutputPath $output -AsOf ([datetime]'2026-10-19')
+        $generated = & $script:SyncScript -SnapshotPath $fixture.Benchmarks -OutputPath $output -CatalogPath $fixture.CatalogPath -AsOf ([datetime]'2026-10-19')
         $generated.VerifiedModelsCovered | Should -Be 0
         $fixture.Benchmarks = $output
         $role = (Invoke-PolicyRoute $fixture).roles[0]
@@ -2535,10 +2639,10 @@ Describe 'Capability-first Ranked and qualified cost-first Economy (SQ-33b..d, S
     It 'includes genuine verification renewal in the digest even when every numerical score is unchanged (SQ-33h)' {
         $fixture = New-PolicyRoster
         $beforeRaw = Get-Content -LiteralPath $fixture.Benchmarks -Raw
-        $before = Get-SquadBenchmarkDigest -Content $beforeRaw
+        $before = Get-SquadBenchmarkDigest -Content $beforeRaw -CatalogPath $script:RoutingCatalogPath
         Set-PolicyRow $fixture -Id gpt-5.6-sol -Evaluation SciCode -Score 0.700 -VerifiedDate '2026-10-20'
         $afterRaw = Get-Content -LiteralPath $fixture.Benchmarks -Raw
-        (Get-SquadBenchmarkDigest -Content $afterRaw) | Should -Not -Be $before
+        (Get-SquadBenchmarkDigest -Content $afterRaw -CatalogPath $script:RoutingCatalogPath) | Should -Not -Be $before
         @((Get-SquadBenchmarkRowsFromMarkdown -Content $afterRaw).NumericScore) | Sort-Object |
             Should -Be (@((Get-SquadBenchmarkRowsFromMarkdown -Content $beforeRaw).NumericScore) | Sort-Object)
         (Invoke-PolicyRoute $fixture -AsOf ([datetime]'2026-10-20')).roles[0].evidenceStatus | Should -Be 'sufficient'
@@ -2548,7 +2652,8 @@ Describe 'Capability-first Ranked and qualified cost-first Economy (SQ-33b..d, S
         $fixture = New-PolicyRoster
         $before = Get-Content -LiteralPath $fixture.Benchmarks -Raw
         $after = $before.Replace('**Generated: 2026-10-19**', '**Generated: 2026-10-20**')
-        (Get-SquadBenchmarkDigest -Content $after) | Should -Be (Get-SquadBenchmarkDigest -Content $before)
+        (Get-SquadBenchmarkDigest -Content $after -CatalogPath $script:RoutingCatalogPath) |
+            Should -Be (Get-SquadBenchmarkDigest -Content $before -CatalogPath $script:RoutingCatalogPath)
         Set-Content -LiteralPath $fixture.Benchmarks -Value $after -Encoding utf8NoBOM
         $role = (Invoke-PolicyRoute $fixture -AsOf ([datetime]'2026-10-20')).roles[0]
         $role.coverage.primary[0].verified | Should -Be '2026-10-19'
@@ -2560,11 +2665,12 @@ Describe 'Capability-first Ranked and qualified cost-first Economy (SQ-33b..d, S
         $rows = @(Get-SquadBenchmarkRowsFromMarkdown -Content $raw)
         foreach ($row in @($rows | Where-Object CatalogId -eq 'gpt-5.6-terra')) { $row.Retrieved = 'unknown' }
         $missing = "## Benchmark Scores`n`n" + (@(Get-SquadBenchmarkScoreLine -Rows $rows) -join "`n")
-        (Get-SquadBenchmarkScore -Rows $rows -AsOf ([datetime]'2026-10-19')).Models['gpt-5.6-terra'].implementation.status | Should -Be 'unverified'
+        (Get-SquadBenchmarkScore -Rows $rows -AsOf ([datetime]'2026-10-19') -CatalogPath $script:RoutingCatalogPath).Models['gpt-5.6-terra'].implementation.status | Should -Be 'unverified'
         foreach ($row in @($rows | Where-Object CatalogId -eq 'gpt-5.6-terra')) { $row.Retrieved = '2026-10-19' }
         $known = "## Benchmark Scores`n`n" + (@(Get-SquadBenchmarkScoreLine -Rows $rows) -join "`n")
-        (Get-SquadBenchmarkScore -Rows $rows -AsOf ([datetime]'2026-10-19')).Models['gpt-5.6-terra'].implementation.status | Should -Be 'sufficient'
-        (Get-SquadBenchmarkDigest -Content $known) | Should -Not -Be (Get-SquadBenchmarkDigest -Content $missing)
+        (Get-SquadBenchmarkScore -Rows $rows -AsOf ([datetime]'2026-10-19') -CatalogPath $script:RoutingCatalogPath).Models['gpt-5.6-terra'].implementation.status | Should -Be 'sufficient'
+        (Get-SquadBenchmarkDigest -Content $known -CatalogPath $script:RoutingCatalogPath) |
+            Should -Not -Be (Get-SquadBenchmarkDigest -Content $missing -CatalogPath $script:RoutingCatalogPath)
     }
 
     It 'allows a later acquisition without renewing an expired genuine verification' {
@@ -2588,7 +2694,7 @@ Describe 'Capability-first Ranked and qualified cost-first Economy (SQ-33b..d, S
         $output = Join-Path $fixture.Root 'last-good.md'
         Set-Content -LiteralPath $output -Value 'last good' -Encoding utf8NoBOM
         $before = (Get-FileHash -LiteralPath $output).Hash
-        { & $script:SyncScript -SnapshotPath $fixture.Benchmarks -VerificationPath $checks -OutputPath $output -AsOf ([datetime]'2026-10-19') } |
+        { & $script:SyncScript -SnapshotPath $fixture.Benchmarks -VerificationPath $checks -OutputPath $output -CatalogPath $fixture.CatalogPath -AsOf ([datetime]'2026-10-19') } |
             Should -Throw '*unmatched record digest*'
         (Get-FileHash -LiteralPath $output).Hash | Should -Be $before
     }
@@ -2598,7 +2704,7 @@ Describe 'Capability-first Ranked and qualified cost-first Economy (SQ-33b..d, S
             New-FixtureEvidenceRow -Id gpt-5.6-terra -Evaluation SciCode -Score 0.600
             New-FixtureEvidenceRow -Id gpt-5.6-terra -Evaluation scicode -Score 0.900
         )
-        $score = Get-SquadBenchmarkScore -Rows $rows -AsOf ([datetime]'2026-10-19')
+        $score = Get-SquadBenchmarkScore -Rows $rows -AsOf ([datetime]'2026-10-19') -CatalogPath $script:RoutingCatalogPath
         $result = $score.Models['gpt-5.6-terra'].implementation
         $result.capability | Should -BeNullOrEmpty
         @($result.evaluations | Where-Object evaluation -CEQ SciCode)[0].referenceCount | Should -Be 1

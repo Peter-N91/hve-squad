@@ -5,7 +5,7 @@ license: MIT
 metadata:
   authors: "Peter-N91/hve-squad"
   spec_version: "1.1"
-  last_updated: "2026-10-21"
+  last_updated: "2026-11-18"
 ---
 <!--
 Copyright (c) Microsoft Corporation.
@@ -52,6 +52,11 @@ No silent upgrade is allowed. A 1.0 envelope using 1.1-only features is rejected
 
 * Replacement is an execution overlay applied **after** ordinary role/member classification.
 * The original internal roster row is retained for explicit `execution=original` and audit.
+* Under Ranked, Economy, or Manual routing, the targeted Members row owns the model
+  for both original execution and the native `Squad Connector` agent. The plan
+  records that row as `endpoint.rosterMemberName` while keeping the connector's
+  own `endpoint.memberName` for dispatch and audit. The model override does not
+  set the external endpoint's model or change the file-drop contract.
 * Target form: `targetKind=role` with `role:<role>` or
   `role:<role>/<member-name>`.
 
@@ -295,10 +300,22 @@ Complete manually supplied decisions need validation and confirmation, not a
 repeat interview. On the next matching request, an `ask` binding is resolved
 interactively; a fully specified execution choice needs no extra question.
 
-Hand confirmed `roster`, `connectorBindings`, and `customRoutingRows` to the
-Scribe using the initialization/roster-refresh payload. `register-only` keeps
-the consumer's manifest and records the decision, but creates no binding,
-member, or route: it cannot receive work until the consumer confirms a binding.
+For a new `replace` or `add` binding on an initialized squad, run
+`scripts/Register-SquadConnector.ps1` with the confirmed manifest, binding,
+target, member, default, and— for `add`— alignment, root, and route inputs.
+First accept its read-only `planned` receipt, then rerun with `-Confirmed`.
+The local transaction validates the final binding, writes `team.md`, writes the
+additive member/route when needed, appends one registration decision, preserves
+history/accounting, and launches no model. Exact replay returns `unchanged`.
+
+This deterministic registration is for new binding IDs only. Rebind, removal,
+route/root/identity refresh, and any other edit to an existing binding retain
+the Scribe's confirmed retirement-evidence path below; never use the new
+registration script to bypass historical authorization. For initialization,
+create the ordinary base squad deterministically, then register its confirmed
+new connectors with the same script. `register-only` keeps the consumer's
+manifest and records the decision, but creates no binding, member, or route:
+it cannot receive work until the consumer confirms a binding.
 
 Refresh preserves consumer-edited bindings/routes/models/roots unless explicitly changed or removed.
 An omitted refresh field preserves existing data. An explicit empty bindings

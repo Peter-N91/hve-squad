@@ -677,6 +677,7 @@ function Get-BenchmarkSnapshotContentLocal {
         [Parameter(Mandatory)][object[]]$Rows,
         [Parameter(Mandatory)]$Scoring,
         [Parameter(Mandatory)][string]$SourceTerms,
+        [Parameter(Mandatory)][string]$CatalogPath,
         [string]$LegacyStamp
     )
 
@@ -739,7 +740,7 @@ function Get-BenchmarkSnapshotContentLocal {
         ''
     )
     $content = $lines -join "`n"
-    $digest = Get-SquadBenchmarkDigest -Content $content
+    $digest = Get-SquadBenchmarkDigest -Content $content -CatalogPath $CatalogPath
     $content.Replace('DIGEST_PLACEHOLDER', $digest)
 }
 
@@ -757,13 +758,13 @@ if ($SnapshotPath) {
     if (-not $PSBoundParameters.ContainsKey('AsOf')) { $AsOf = $snapshotDate }
     if ($snapshotDate.Date -gt $AsOf.Date) { throw 'The pinned snapshot is dated after the evaluation date.' }
     $rows = @(Get-ExplicitVerificationRowsLocal -Rows @(Get-SquadBenchmarkRowsFromMarkdown -Content $original) -Path $VerificationPath)
-    $scoring = Get-SquadBenchmarkScore -Rows $rows -AsOf $AsOf -ModelIds @($catalogFit.Keys)
+    $scoring = Get-SquadBenchmarkScore -Rows $rows -AsOf $AsOf -ModelIds @($catalogFit.Keys) -CatalogPath $CatalogPath
     $terms = [regex]::Match($original, '(?ms)^## Source Terms and Licensing\s*\r?\n.*?(?=^## |\z)').Value.Trim()
     if (-not $terms) { $terms = '## Source Terms and Licensing' + "`n`nExplicit synthetic/local evidence; source terms must accompany publication." }
     $legacyStamp = [regex]::Match($original, '\*\*Legacy snapshot stamp:\s*(?<date>\d{4}-\d{2}-\d{2})\*\*').Groups['date'].Value
     if (-not $legacyStamp -and $original -notmatch '\*\*Generated:') { $legacyStamp = $dateMatch.Groups['date'].Value }
-    $content = Get-BenchmarkSnapshotContentLocal -Rows $rows -Scoring $scoring -SourceTerms $terms -LegacyStamp $legacyStamp
-    $digest = Get-SquadBenchmarkDigest -Content $content
+    $content = Get-BenchmarkSnapshotContentLocal -Rows $rows -Scoring $scoring -SourceTerms $terms -CatalogPath $CatalogPath -LegacyStamp $legacyStamp
+    $digest = Get-SquadBenchmarkDigest -Content $content -CatalogPath $CatalogPath
     $reportedAcquisition = [regex]::Match($content, '\*\*Retrieved:\s*(?<date>[^*]+)\*\*').Groups['date'].Value.Trim()
     $existing = if (Test-Path -LiteralPath $OutputPath -PathType Leaf) { Get-Content -LiteralPath $OutputPath -Raw } else { '' }
     $needsUpdate = $content -cne $existing
@@ -1411,7 +1412,7 @@ try {
             }
         }
     }
-    $scoring = Get-SquadBenchmarkScore -Rows $evidenceRows -AsOf $AsOf -ModelIds @($catalogFit.Keys)
+    $scoring = Get-SquadBenchmarkScore -Rows $evidenceRows -AsOf $AsOf -ModelIds @($catalogFit.Keys) -CatalogPath $CatalogPath
     $modelsCovered = $scoring.IndependentModels.Count
 
     $independentScoreCount = @($scoreRows | Where-Object { $_.Provenance -eq 'independent' }).Count
@@ -1454,7 +1455,7 @@ try {
     }
 
     if ($scoring.FreshIndependentModels.Count -eq 0 -and (Test-Path -LiteralPath $OutputPath -PathType Leaf)) {
-        $priorScoring = Get-SquadBenchmarkScore -Rows @(Get-SquadBenchmarkRowsFromMarkdown -Content (Get-Content -LiteralPath $OutputPath -Raw)) -AsOf $AsOf
+        $priorScoring = Get-SquadBenchmarkScore -Rows @(Get-SquadBenchmarkRowsFromMarkdown -Content (Get-Content -LiteralPath $OutputPath -Raw)) -AsOf $AsOf -CatalogPath $CatalogPath
         if ($priorScoring.FreshIndependentModels.Count -gt 0 -and -not $AllowCoverageReduction) {
             throw 'Refresh lost all verified evidence; preserving the last-good snapshot. Local archives need explicit record-bound verification.'
         }
@@ -1499,8 +1500,8 @@ try {
         '* **LLM Stats (`llm-stats`, excluded from snapshot)**: ZeroEval / `llm-stats.com` developer terms state that redistributing the dataset requires a commercial contract license and that the aggregator blends vendor self-reported figures with verified ones. No `llm-stats.com` data is copied into this repository.'
         '* **Arena (`lmarena`, excluded from snapshot)**: Crowd-sourced chat preference votes measure general conversational preference rather than task-specific coding, mathematical, or long-document capability, and are never used to rank squad roles.'
     )
-    $content = Get-BenchmarkSnapshotContentLocal -Rows $evidenceRows -Scoring $scoring -SourceTerms ($sourceTerms -join "`n")
-    $digest = Get-SquadBenchmarkDigest -Content $content
+    $content = Get-BenchmarkSnapshotContentLocal -Rows $evidenceRows -Scoring $scoring -SourceTerms ($sourceTerms -join "`n") -CatalogPath $CatalogPath
+    $digest = Get-SquadBenchmarkDigest -Content $content -CatalogPath $CatalogPath
     $reportedAcquisition = [regex]::Match($content, '\*\*Retrieved:\s*(?<date>[^*]+)\*\*').Groups['date'].Value.Trim()
     $needsUpdate = $true
     if (-not $Force -and (Test-Path -LiteralPath $OutputPath -PathType Leaf)) {

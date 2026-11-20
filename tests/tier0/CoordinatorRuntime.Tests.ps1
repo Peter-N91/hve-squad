@@ -1097,6 +1097,66 @@ Describe 'Universal compact metadata and deterministic scheduling (COORD-04..06)
         $plan.routingRefresh.changes[0].to | Should -BeExactly 'gpt-5.6-sol'
     }
 
+    It 'replans Lead and Tester in Economy only when the retry has confirmed host inventory' {
+        $repo = New-FixtureRepo
+        $fixture = Initialize-Fixture $repo -ModelRouting economy
+        $path = Join-Path $repo 'economy-rejection-plan.json'
+        $planInput = @{
+            squadRoot = $fixture.Root
+            sessionModel = 'gpt-6.1-sol'
+            rejectedModels = @('Copilot Fusion High')
+            economyConsent = @{
+                user = 'fixture-user'
+                tradeAccepted = 'Every routed role uses the cheapest known-price model inside its floor.'
+                neverWeakened = 'Floors and gates remain unchanged.'
+            }
+            units = @(
+                @{ id = 'plan'; role = 'lead'; readOnly = $true }
+                @{ id = 'review'; role = 'tester'; readOnly = $true }
+            )
+        }
+        $before = Get-FixtureHash $fixture.Root
+        Write-FixtureJson $path $planInput
+        $refusal = Invoke-Local 'New-SquadDispatchPlan.ps1' $repo @('-RepoRoot', $repo, '-InputPath', $path, '-ApplyModelRouting')
+        $refusal.ExitCode | Should -Be 1
+        $refusal.Output | Should -Match 'native rejection without host model inventory'
+        Get-FixtureHash $fixture.Root | Should -BeExactly $before
+
+        $planInput['availableModels'] = @('hydrafusion', 'gpt-6.1-terra', 'gemini-4-argon')
+        Write-FixtureJson $path $planInput
+        $result = Invoke-Local 'New-SquadDispatchPlan.ps1' $repo @('-RepoRoot', $repo, '-InputPath', $path, '-ApplyModelRouting')
+        $result.ExitCode | Should -Be 0 -Because $result.Output
+        $plan = $result.Output | ConvertFrom-Json
+        $plan.modelRejections | Should -Be @('hydrafusion')
+        @($plan.units.endpoint.model) | Should -Be @('gpt-6.1-terra', 'gpt-6.1-terra')
+        $plan.units[0].endpoint.modelRouting | Should -Be 'economy'
+        $plan.units[1].endpoint.modelRouting | Should -Be 'economy'
+        $roster = Get-SquadRoster $fixture.Root
+        @($roster | Where-Object Role -in @('lead', 'tester') | ForEach-Object Model) |
+            Should -Be @('gpt-6.1-terra', 'gpt-6.1-terra')
+    }
+
+    It 'refuses a rejected Manual cell instead of silently substituting a model' {
+        $repo = New-FixtureRepo
+        $fixture = Initialize-Fixture $repo -ModelRouting manual
+        $path = Join-Path $repo 'manual-rejection-plan.json'
+        Write-FixtureJson $path @{
+            squadRoot = $fixture.Root
+            sessionModel = 'gpt-6.1-sol'
+            availableModels = @('gpt-6.1-sol', 'gpt-6.1-terra')
+            rejectedModels = @('gpt-6.1-sol')
+            manualModels = @{ lead = 'gpt-6.1-sol' }
+            units = @(@{ id = 'plan'; role = 'lead'; readOnly = $true })
+        }
+        $before = Get-FixtureHash $fixture.Root
+        $result = Invoke-Local 'New-SquadDispatchPlan.ps1' $repo @('-RepoRoot', $repo, '-InputPath', $path, '-ApplyModelRouting')
+        $result.ExitCode | Should -Be 1
+        $result.Output | Should -Match "Role 'lead' has no admissible manual model"
+        $result.Output | Should -Match 'refused: not available on this host'
+        $result.Output | Should -Not -Match '"routingReady":true'
+        Get-FixtureHash $fixture.Root | Should -BeExactly $before
+    }
+
     It 'requires the planned model to control the native dispatch rather than agent frontmatter' {
         $runtime = Get-Content -LiteralPath (Join-Path $script:References 'coordinator-runtime.md') -Raw
         $coordinator = Get-Content -LiteralPath (Join-Path $SourceRoot 'squad-src/.github/agents/squad/squad-coordinator.agent.md') -Raw
@@ -1648,6 +1708,134 @@ Describe 'Universal compact metadata and deterministic scheduling (COORD-04..06)
             }
         }
         finally { [IO.File]::WriteAllText($routingPath, $original) }
+    }
+}
+
+Describe 'Replacement connector model routing (CONN-14, SQ-26, SQ-31)' {
+    BeforeAll {
+        function New-ConnectorRoutingFixture {
+            param([string]$Mode = 'off', [string]$TargetMember = '', [string]$Cell = '')
+            $repo = New-FixtureRepo
+            $root = Join-Path $repo '.copilot-tracking/squad'
+            $modeLine = if ($Mode -ne 'off') { "Model routing: $Mode" }
+            $modelHeader = if ($Mode -ne 'off') { ' Model |' } else { '' }
+            $modelDivider = if ($Mode -ne 'off') { ' --- |' } else { '' }
+            $modelCell = if ($Mode -ne 'off') { " $Cell |" } else { '' }
+            $target = if ($TargetMember) { "role:developer/$TargetMember" } else { 'role:developer' }
+            $otherRow = if ($TargetMember) {
+                "| developer | Other Developer | Squad Implementor | default | ``gpt-6.1-sol`` | .copilot-tracking/other/ |"
+            } else { '' }
+            $team = @"
+# Squad Roster
+$modeLine
+
+| Role | Member Name | Agent Name (Primary) | Model Tier |$modelHeader Deliverable Root |
+| --- | --- | --- | --- |$modelDivider --- |
+| developer | $TargetMember | Squad Implementor | default |$modelCell .copilot-tracking/changes/ |
+$otherRow
+
+## Connector Bindings
+
+| Binding ID | Connector ID | Manifest | Endpoint Kind | Role Mode | Target Kind | Target | Member Name | Added Role | Aligned Role | Default Execution |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| fixture-developer | fixture | connectors/fixture.json | agent | replace | role | $target | External Developer | | | connector |
+"@
+            Write-FixtureText (Join-Path $root 'team.md') $team
+            Write-FixtureText (Join-Path $root 'routing.md') @'
+| Pattern / Keyword | Role(s) | Autonomy Tier | Parallel-Eligible |
+| --- | --- | --- | --- |
+| implement | developer | confirm | no |
+'@
+            Write-FixtureText (Join-Path $root 'decisions.md') "# Decisions`n"
+            Write-FixtureJson (Join-Path $root 'state.json') @{ mode = 'autopilot' }
+            Write-FixtureText (Join-Path $repo '.github\agents\squad-connector.agent.md') "---`nname: Squad Connector`n---`n"
+            Write-FixtureJson (Join-Path $repo 'connectors\fixture.json') @{
+                schemaVersion = '1.1'; connectorId = 'fixture'; endpointKind = 'agent'; transport = 'file'
+                capabilities = @('Performs approved local implementation'); roles = @('developer')
+                dropPath = '.connector-drops/fixture'; deadlineMinutesDefault = 60; retryCapDefault = 2
+                contact = 'fixture@example.invalid'; version = '1.0.0'
+            }
+            [pscustomobject]@{ Repo = $repo; Root = $root; TeamPath = (Join-Path $root 'team.md'); InputPath = (Join-Path $repo 'plan.json') }
+        }
+
+        function Invoke-ConnectorRoutingFixture {
+            param($Fixture, [hashtable]$InputData)
+            $InputData.squadRoot = $Fixture.Root
+            Write-FixtureJson $Fixture.InputPath $InputData
+            Invoke-Local 'New-SquadDispatchPlan.ps1' $Fixture.Repo @('-RepoRoot', $Fixture.Repo, '-InputPath', $Fixture.InputPath, '-ApplyModelRouting')
+        }
+    }
+
+    It 'routes and persists the default replacement under <Mode> while keeping its external identity' -ForEach @(
+        @{ Mode = 'economy' }, @{ Mode = 'ranked' }, @{ Mode = 'manual' }
+    ) {
+        $fixture = New-ConnectorRoutingFixture
+        $inputData = @{
+            units = @(@{ id = 'work'; role = 'developer' }); availableModels = @('gpt-5.6-sol')
+            requestedModelRouting = $Mode
+        }
+        if ($Mode -ceq 'manual') { $inputData.manualModels = @{ developer = 'gpt-5.6-sol' } }
+        if ($Mode -ceq 'economy') {
+            $inputData.economyConsent = @{
+                user = 'fixture-operator'; tradeAccepted = 'Cost-first qualified routing.'; neverWeakened = 'Floors and gates.'
+            }
+        }
+        $result = Invoke-ConnectorRoutingFixture $fixture $inputData
+        $result.ExitCode | Should -Be 0 -Because $result.Output
+        $plan = $result.Output | ConvertFrom-Json
+        $plan.routingReady | Should -BeTrue
+        $plan.units[0].endpoint.memberName | Should -BeExactly 'External Developer'
+        $plan.units[0].endpoint.agent | Should -BeExactly 'Squad Connector'
+        $plan.units[0].endpoint.execution | Should -BeExactly 'connector:fixture-developer'
+        $plan.units[0].endpoint.model | Should -BeExactly 'gpt-5.6-sol'
+        $plan.routingRefresh.changes.Count | Should -Be 1
+        $plan.routingRefresh.changes[0].memberName | Should -BeExactly ''
+        [IO.File]::ReadAllText($fixture.TeamPath) | Should -Match '\| developer \|  \| Squad Implementor \| default \| `gpt-5\.6-sol` \|'
+
+        $inputData.Remove('requestedModelRouting')
+        $inputData.Remove('manualModels')
+        $inputData.Remove('economyConsent')
+        $inputData.units += @{ id = 'original'; role = 'developer'; execution = 'original' }
+        $before = Get-FixtureHash $fixture.Root
+        $next = Invoke-ConnectorRoutingFixture $fixture $inputData
+        $next.ExitCode | Should -Be 0 -Because $next.Output
+        $nextPlan = $next.Output | ConvertFrom-Json
+        $nextPlan.routingReady | Should -BeTrue
+        $nextPlan.units[1].endpoint.agent | Should -BeExactly 'Squad Implementor'
+        $nextPlan.units[1].endpoint.memberName | Should -BeExactly ''
+        $nextPlan.units[0].endpoint.model | Should -BeExactly $nextPlan.units[1].endpoint.model
+        (Get-FixtureHash $fixture.Root) | Should -BeExactly $before
+    }
+
+    It 'keeps an explicitly re-selected manual model on the targeted member even when it equals the previous Ranked value' {
+        $fixture = New-ConnectorRoutingFixture -Mode ranked -TargetMember 'Internal Developer' -Cell '`gpt-5.6-sol`'
+        $result = Invoke-ConnectorRoutingFixture $fixture @{
+            units = @(@{ id = 'work'; role = 'developer'; execution = 'connector:fixture-developer' })
+            availableModels = @('gpt-5.6-sol'); requestedModelRouting = 'manual'
+            manualModels = @{ developer = 'gpt-5.6-sol' }
+        }
+        $result.ExitCode | Should -Be 0 -Because $result.Output
+        $plan = $result.Output | ConvertFrom-Json
+        $plan.routingReady | Should -BeTrue
+        $plan.units[0].endpoint.memberName | Should -BeExactly 'External Developer'
+        $plan.units[0].endpoint.model | Should -BeExactly 'gpt-5.6-sol'
+        $plan.routingRefresh.changes.memberName | Should -BeExactly 'Internal Developer'
+        $team = [IO.File]::ReadAllText($fixture.TeamPath)
+        $team | Should -Match '\| developer \| Internal Developer \| Squad Implementor \| default \| `gpt-5\.6-sol` \|'
+        $team | Should -Match '\| developer \| Other Developer \| Squad Implementor \| default \|  \|'
+    }
+
+    It 'refuses a Manual replacement model not advertised by the host without writing state' {
+        $fixture = New-ConnectorRoutingFixture -Mode manual
+        $before = Get-FixtureHash $fixture.Root
+        $result = Invoke-ConnectorRoutingFixture $fixture @{
+            units = @(@{ id = 'work'; role = 'developer' }); availableModels = @('gpt-5.6-sol')
+            manualModels = @{ developer = 'gpt-6.1-sol' }
+        }
+        $result.ExitCode | Should -Be 1
+        $result.Output | Should -Match "Role 'developer' has no admissible manual model"
+        $result.Output | Should -Match 'not available on this host'
+        (Get-FixtureHash $fixture.Root) | Should -BeExactly $before
     }
 }
 

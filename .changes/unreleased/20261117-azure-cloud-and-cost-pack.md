@@ -1,7 +1,0 @@
----
-bump: patch
-type: Added
----
-
-- **Opt-in `azure-cloud` pack (`pack=azure-cloud`) for official Azure FinOps, diagnostics, compliance, reliability, Azure Local, and migration skills (`#237`, `#231`).** Reuses existing local charters (`cost-manager`, `azure-diagnose`, `asbuilt-author`, `azure-architect`, `modernizer`, plus read-only cross-reads on `developer` and `deployer`) with fourteen SHA-pinned official directory skills from `microsoft/azure-skills@65922d293cba61a40d5edf61a9eb4b6b0e799788` (`cost-estimation`, `cost-optimization`, `cost-analysis`, `cost-governance`, `azure-diagnostics`, `azure-compliance`, `azure-resource-lookup`, `azure-resource-visualizer`, `azure-reliability`, `azure-quotas`, `azure-local`, separately approved preview `azure-local-multi-rack`, `azure-cloud-migrate`, and `azure-upgrade`) through the shared approval, selected-subset installation, reload, host-availability, and Watch Mode lifecycle while keeping bundled `azure-pricing` unchanged.
-- **Verification-gate blocklist dispositions and bilingual setup guides.** Supersedes and blocklists community `az-cost-optimize`, blocklists `microsoft/finops-toolkit` (`finops-toolkit` and its five agents), `.github/plugins/azure-advisor` (`azure-advisor*`), and the coupled/multi-role `azure-prepare`, `azure-validate`, `azure-deploy`, and `azure-enterprise-infra-planner` pipeline skills while preserving `azure-deployment-preflight` on `deployer` for unpacked squads, and adds English and French `#azure-cloud-setup` guides.

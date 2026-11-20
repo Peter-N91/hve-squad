@@ -5,7 +5,7 @@ license: MIT
 metadata:
   authors: "Peter-N91/hve-squad"
   spec_version: "1.1"
-  last_updated: "2026-11-16"
+  last_updated: "2026-11-19"
 ---
 <!--
 Copyright (c) Microsoft Corporation.
@@ -16,8 +16,8 @@ Licensed under the MIT license.
 
 **This catalog is declared, not live-discovered.** No chat or interactive Copilot host exposes a callable model-list API to the agent at dispatch time (research finding F7); the CLI's dispatch tool advertises an enum, which this catalog intersects. Every row below was retrieved by fetching GitHub's own documentation pages on the date stamped below (`scripts/Sync-ModelCatalog.ps1`), not by querying a runtime discovery endpoint. A routing procedure that reads this file is reading a curated, dated snapshot — never an assertion that the catalog was assembled live for the current session.
 
-* **Retrieved: 2026-11-16**
-* Sources (fetched directly for this snapshot; all retrieved 2026-11-16):
+* **Retrieved: 2026-11-19**
+* Sources (fetched directly for this snapshot; all retrieved 2026-11-19):
   * Supported AI models in GitHub Copilot — <https://docs.github.com/en/copilot/reference/ai-models/supported-models>
   * Models and pricing for GitHub Copilot — <https://docs.github.com/en/copilot/reference/copilot-billing/models-and-pricing>
   * AI model comparison — <https://docs.github.com/en/copilot/reference/ai-models/model-comparison>
@@ -37,7 +37,7 @@ This file is CODEOWNERS-level content refreshed by `scripts/Sync-ModelCatalog.ps
 
 The retrieval date above is this catalog's freshness signal. **A catalog older than 90 days from its `Retrieved:` date, or a catalog that fails to parse, is stale**: the routing procedure that would otherwise rank against it must fall back to `consumption.md`'s static `fast`/`default`/`extended` tiers and log a warning, rather than blocking the run or guessing at a value this file no longer confirms.
 
-`consumption-rates.md`'s `Observed-on:` date **must equal** this file's `Retrieved:` date exactly, not merely "close" — both are `2026-11-16` as of this snapshot. A future re-verification that updates one must update the other in the same change.
+`consumption-rates.md`'s `Observed-on:` date **must equal** this file's `Retrieved:` date exactly, not merely "close" — both are `2026-11-19` as of this snapshot. A future re-verification that updates one must update the other in the same change.
 
 ## How This Catalog Is Consumed
 
@@ -75,12 +75,13 @@ Catalog IDs use the same lowercase, hyphenated form as this CLI host's advertise
 | `gpt-5.4-nano` | constructed | GPT-5.4 nano | GA (documented, not advertised) | fast-lightweight | undocumented | undocumented | intake, bookkeeping | Lightweight category on the pricing page |
 | `gpt-5.6-luna` | advertised | GPT-5.6 Luna | GA | fast-lightweight | 1M | configurable | intake, bookkeeping | "Fast help with simple or repetitive tasks — Quick, cost-efficient responses for smaller, faster coding tasks" |
 | `gpt-5.6-sol` | advertised | GPT-5.6 Sol | GA | frontier-reasoning | 1M | configurable | research, planning, review, council | "Deep reasoning and debugging — Complex reasoning over large codebases and long-running agentic work" |
-| `gpt-5.6-terra` | advertised | GPT-5.6 Terra | GA | balanced | 1M | configurable | planning, implementation, review | "General-purpose coding and agent tasks — Balanced everyday interactive and agentic coding" |
 | `gpt-6-astra` | advertised | GPT-6 Astra | GA | frontier-reasoning | 1M | configurable | research, planning, review, council | "Long-horizon, autonomous coding and agentic tasks — Long-horizon coding tasks with continuous planning, batched diagnosis and verification, and independent result confirmation" |
 | `gpt-6-luna` | advertised | GPT-6 Luna | GA | fast-lightweight | 1M | configurable | intake, bookkeeping | "Fast help with simple or repetitive tasks — Quick, cost-efficient responses for smaller, faster tasks" |
 | `gpt-6-sol` | advertised | GPT-6 Sol | GA | balanced | 1M | configurable | planning, implementation, review | "Interactive and agentic coding — All-round development tasks that benefit from careful, multistep validation" |
 | `gpt-6.1-sol` | advertised | GPT-6.1 Sol | GA | frontier-reasoning | 1M | configurable | implementation, review, planning | "Complex coding tasks — Advanced, efficient reasoning for complex coding tasks" |
 | `gpt-6.1-terra` | advertised | GPT-6.1 Terra | GA | balanced | 1M | configurable | planning, implementation, review, intake | "General-purpose coding and agent tasks — Everyday agentic coding and terminal work" |
+| `gpt-6.2-astra` | advertised | GPT-6.2 Astra | GA | frontier-reasoning | 1M | configurable | research, planning, implementation, review, council | "Long-horizon, autonomous coding and agentic tasks — Long-horizon coding tasks with continuous planning, batched diagnosis and verification, and independent result confirmation" |
+| `gpt-6.2-sol` | advertised | GPT-6.2 Sol | GA | frontier-reasoning | 1M | configurable | research, planning, implementation, review, council | "Complex coding tasks — Advanced, efficient reasoning for complex coding tasks" |
 
 ### Anthropic
 
@@ -93,7 +94,6 @@ Catalog IDs use the same lowercase, hyphenated form as this CLI host's advertise
 | `claude-haiku-5.5` | advertised | Claude Haiku 5.5 | GA | fast-lightweight | 1M | configurable | intake, bookkeeping | "Fast help with simple or repetitive tasks — Fast, reliable answers to lightweight coding questions" |
 | `claude-opus-4.8` | advertised | Claude Opus 4.8 | GA | frontier-reasoning | 1M | configurable | research, planning, review, council | "Deep reasoning and debugging — Complex problem-solving challenges, sophisticated reasoning" |
 | `claude-opus-4.8-fast` | constructed | Claude Opus 4.8 (fast mode) (preview) | GA (documented, not advertised) | frontier-reasoning | undocumented | configurable | research, planning, review, council | "Deep reasoning and debugging — Complex problem-solving challenges, sophisticated reasoning" |
-| `claude-opus-5` | advertised | Claude Opus 5 | GA | frontier-reasoning | 1M | configurable | research, planning, review, council | "Deep reasoning and debugging — Complex problem-solving challenges, sophisticated reasoning" |
 | `claude-opus-5.5` | advertised | Claude Opus 5.5 | GA | frontier-reasoning | 1M | configurable | research, council, review | "Long-running agentic coding and knowledge work — Efficient multistep tasks, error recovery, and collaboration" |
 | `claude-sonnet-4` | constructed | Claude Sonnet 4 | **priced, not in current supported list** — see Contradictions below | balanced | undocumented | undocumented | planning, implementation | Not in "Supported AI models" at retrieval; carried because the pricing table still lists it |
 | `claude-sonnet-4.6` | constructed | Claude Sonnet 4.6 | GA (documented, not advertised) | balanced | 1M | configurable | planning, implementation, review | "General-purpose coding and agent tasks — Complex problem-solving challenges, sophisticated reasoning" |
@@ -108,6 +108,7 @@ Catalog IDs use the same lowercase, hyphenated form as this CLI host's advertise
 | `gemini-4-argon` | advertised | Gemini 4 Argon | GA | frontier-reasoning | undocumented | undocumented | planning, implementation, review, council | "Complex coding, agentic, and reasoning tasks — Thorough work that tests edge cases before finishing" |
 | `gemini-4-carbon` | advertised | Gemini 4 Carbon | GA | frontier-reasoning | undocumented | undocumented | implementation, review, council | "Complex coding, agentic, and reasoning tasks — Secure code generation and security-focused work" |
 | `gemini-4-hydrogen` | advertised | Gemini 4 Hydrogen | GA | balanced | undocumented | undocumented | planning, implementation, review | "Fast, efficient agentic coding and multistep workflows — Fast tool use with improved instruction following" |
+| `gemini-4-neon` | advertised | Gemini 4 Neon | GA | balanced | undocumented | undocumented | planning, implementation, review | "Agentic coding, multistep tool use, and knowledge work — Near Gemini 4 Carbon quality at a lower token cost per task" |
 
 ### xAI
 
@@ -122,6 +123,8 @@ Catalog IDs use the same lowercase, hyphenated form as this CLI host's advertise
 | Catalog ID | ID source | Display name | Status | Capability class | Context window | Reasoning effort | Best-fit assignment classes | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | `mai-code-1.1-flash` | advertised | MAI-Code-1.1-Flash | GA | fast-lightweight | undocumented | undocumented | intake, bookkeeping | "General-purpose coding and writing, image understanding — Fast code completions and explanations, instruction following, tool use"; continuously improving checkpoint |
+| `mai-code-2` | advertised | MAI Code 2 | GA | code-specialized | 1M | configurable | implementation | "Deep reasoning and complex coding — Complex, multi-step coding tasks that require high reasoning" |
+| `mai-code-2-flash` | advertised | MAI Code 2 Flash | GA | code-specialized | 1M | configurable | implementation | "General-purpose coding and writing, image understanding — Fast code completions and explanations, instruction following, tool use" |
 
 ### Moonshot AI
 
@@ -139,7 +142,7 @@ Catalog IDs use the same lowercase, hyphenated form as this CLI host's advertise
 
 ## Catalog: Pricing (USD per 1M tokens)
 
-Every single-model price below is transcribed verbatim from the "Models and pricing" page retrieved 2026-11-16; **`unpriced` never means `0`**. Copilot Fusion rows record representative blended solver rates for Cost Preflight and fallback estimation (live native billing charges each underlying model invoked). The `Rate-row alias` column names the exact `consumption-rates.md` "Model (as routed)" row this ID prices as.
+Every single-model price below is transcribed verbatim from the "Models and pricing" page retrieved 2026-11-19; **`unpriced` never means `0`**. Copilot Fusion rows record representative blended solver rates for Cost Preflight and fallback estimation (live native billing charges each underlying model invoked). The `Rate-row alias` column names the exact `consumption-rates.md` "Model (as routed)" row this ID prices as.
 
 ### OpenAI (has a documented long-context tier)
 
@@ -149,12 +152,13 @@ Every single-model price below is transcribed verbatim from the "Models and pric
 | `gpt-5.4-nano` | GPT-5.4 nano | none (flat rate) | 0.20 | 0.02 | n/a | 1.25 | n/a | n/a | n/a | n/a |
 | `gpt-5.6-luna` | GPT-5.6 Luna | ≤200K / >200K | 0.20 | 0.02 | 0.25 | 1.20 | 0.40 | 0.04 | 0.50 | 1.80 |
 | `gpt-5.6-sol` | GPT-5.6 Sol | ≤272K / >272K | 4.00 | 0.40 | 5.00 | 20.00 | 8.00 | 0.80 | 10.00 | 30.00 |
-| `gpt-5.6-terra` | GPT-5.6 Terra | ≤272K / >272K | 2.00 | 0.20 | 2.50 | 12.00 | 4.00 | 0.40 | 5.00 | 18.00 |
 | `gpt-6-astra` | GPT-6 Astra | ≤272K / >272K | 10.00 | 1.00 | 12.50 | 50.00 | 20.00 | 2.00 | 25.00 | 75.00 |
 | `gpt-6-luna` | GPT-6 Luna | ≤272K / >272K | 0.10 | 0.01 | 0.125 | 0.50 | 0.20 | 0.02 | 0.25 | 0.75 |
 | `gpt-6-sol` | GPT-6 Sol | ≤272K / >272K | 2.00 | 0.20 | 2.50 | 10.00 | 4.00 | 0.40 | 5.00 | 15.00 |
 | `gpt-6.1-sol` | GPT-6.1 Sol | ≤272K / >272K | 2.00 | 0.10 | 2.50 | 10.00 | 4.00 | 0.20 | 5.00 | 15.00 |
 | `gpt-6.1-terra` | GPT-6.1 Terra | ≤272K / >272K | 1.00 | 0.05 | 1.25 | 5.00 | 2.00 | 0.10 | 2.50 | 7.50 |
+| `gpt-6.2-astra` | GPT-6.2 Astra | ≤272K / >272K | 8.00 | 0.40 | 10.00 | 40.00 | 16.00 | 0.80 | 20.00 | 60.00 |
+| `gpt-6.2-sol` | GPT-6.2 Sol | ≤272K / >272K | 2.00 | 0.10 | 2.50 | 10.00 | 4.00 | 0.20 | 5.00 | 15.00 |
 
 ### Anthropic (Claude Haiku 5.5 has a documented long-context tier)
 
@@ -167,7 +171,6 @@ Every single-model price below is transcribed verbatim from the "Models and pric
 | `claude-haiku-5.5` | Claude Haiku 5.5 | ≤100K / >100K | 0.10 | 0.01 | 0.125 | 0.50 | 0.50 | 0.05 | 0.625 | 2.50 |
 | `claude-opus-4.8` | Claude Opus 4.8 | none (flat rate) | 5.00 | 0.50 | 6.25 | 25.00 | n/a | n/a | n/a | n/a |
 | `claude-opus-4.8-fast` | Claude Opus 4.8 (fast mode) | none (flat rate) | 10.00 | 1.00 | 12.50 | 50.00 | n/a | n/a | n/a | n/a |
-| `claude-opus-5` | Claude Opus 5 | none (flat rate) | 5.00 | 0.50 | 6.25 | 25.00 | n/a | n/a | n/a | n/a |
 | `claude-opus-5.5` | Claude Opus 5.5 | none (flat rate) | 4.00 | 0.20 | 5.00 | 20.00 | n/a | n/a | n/a | n/a |
 | `claude-sonnet-4` | Claude Sonnet 4 | none (flat rate) | 3.00 | 0.30 | 3.75 | 15.00 | n/a | n/a | n/a | n/a |
 | `claude-sonnet-4.6` | Claude Sonnet 4.6 | none (flat rate) | 3.00 | 0.30 | 3.75 | 15.00 | n/a | n/a | n/a | n/a |
@@ -182,6 +185,7 @@ Every single-model price below is transcribed verbatim from the "Models and pric
 | `gemini-4-argon` | Gemini 4 Argon | none (flat rate) | 2.00 | 0.10 | 0 | 10.00 |
 | `gemini-4-carbon` | Gemini 4 Carbon | none (flat rate) | 2.00 | 0.10 | 0 | 10.00 |
 | `gemini-4-hydrogen` | Gemini 4 Hydrogen | none (flat rate) | 1.50 | 0.075 | 0 | 7.50 |
+| `gemini-4-neon` | Gemini 4 Neon | none (flat rate) | 3.00 | 0.15 | 0 | 15.00 |
 
 ### xAI (has a documented long-context tier)
 
@@ -196,6 +200,8 @@ Every single-model price below is transcribed verbatim from the "Models and pric
 | Catalog ID | Rate-row alias | LC threshold | Input | Cached | Cache write | Output |
 | --- | --- | --- | ---: | ---: | ---: | ---: |
 | `mai-code-1.1-flash` | MAI-Code-1.1-Flash | none (flat rate) | 0.20 | 0.02 | 0 | 1.20 |
+| `mai-code-2` | MAI Code 2 | none (flat rate) | 0.50 | 0.025 | 0 | 2.50 |
+| `mai-code-2-flash` | MAI Code 2 Flash | none (flat rate) | 0.05 | 0.005 | 0 | 0.25 |
 | `kimi-k3` | Kimi K3 | none (flat rate) | 3.00 | 0.30 | 0 | 15.00 |
 
 ### Copilot Fusion (has a documented long-context tier)
@@ -219,18 +225,18 @@ This table is Ranked's operational fallback when the pinned independent evidence
 
 | Catalog ID | Family | Generation | research | planning | implementation | review | council | intake | bookkeeping | Blended |
 | --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| `gpt-6.2-sol` | gpt-sol | 6.2 | 3 | 3 | 3 | 2 | 2 | 1 | 0 | 0.880 |
 | `gpt-6.1-sol` | gpt-sol | 6.1 | 2 | 2 | 3 | 2 | 2 | 2 | 0 | 0.880 |
 | `gpt-6-sol` | gpt-sol | 6 | 1 | 2 | 3 | 3 | 2 | 2 | 0 | 0.960 |
 | `gpt-5.6-sol` | gpt-sol | 5.6 | 3 | 3 | 2 | 3 | 2 | 2 | 0 | 1.920 |
+| `gpt-6.2-astra` | gpt-astra | 6.2 | 3 | 3 | 3 | 2 | 2 | 1 | 0 | 3.520 |
 | `gpt-6-astra` | gpt-astra | 6 | 3 | 3 | 2 | 2 | 3 | 1 | 0 | 4.800 |
 | `gpt-6.1-terra` | gpt-terra | 6.1 | 1 | 2 | 3 | 2 | 1 | 3 | 0 | 0.440 |
-| `gpt-5.6-terra` | gpt-terra | 5.6 | 1 | 2 | 2 | 2 | 1 | 3 | 0 | 1.000 |
 | `gpt-5.3-codex` | gpt-codex | 5.3 | 1 | 1 | 3 | 2 | 0 | 1 | 0 | 0.770 |
 | `gpt-5.4-nano` | gpt-nano | 5.4 | 0 | 0 | 0 | 0 | 0 | 1 | 2 | 0.081 |
 | `gpt-6-luna` | gpt-luna | 6 | 0 | 0 | 1 | 0 | 0 | 1 | 2 | 0.048 |
 | `gpt-5.6-luna` | gpt-luna | 5.6 | 0 | 0 | 1 | 0 | 0 | 1 | 2 | 0.100 |
 | `claude-opus-5.5` | claude-opus | 5.5 | 3 | 2 | 2 | 2 | 2 | 1 | 0 | 1.760 |
-| `claude-opus-5` | claude-opus | 5 | 3 | 3 | 2 | 3 | 3 | 2 | 0 | 2.400 |
 | `claude-opus-4.8` | claude-opus | 4.8 | 2 | 3 | 2 | 3 | 3 | 2 | 0 | 2.400 |
 | `claude-opus-4.8-fast` | claude-opus-fast | 4.8 | 2 | 2 | 2 | 2 | 2 | 1 | 0 | 4.800 |
 | `claude-fable-5.2` | claude-fable | 5.2 | 3 | 3 | 3 | 2 | 2 | 1 | 0 | 3.360 |
@@ -249,11 +255,14 @@ This table is Ranked's operational fallback when the pinned independent evidence
 | `grok-4.6` | grok | 4.6 | 1 | 1 | 2 | 1 | 1 | 1 | 0 | 0.920 |
 | `grok-4.5` | grok | 4.5 | 1 | 1 | 2 | 1 | 1 | 1 | 0 | 0.920 |
 | `kimi-k3` | kimi | 3 | 1 | 1 | 2 | 1 | 0 | 1 | 0 | 1.140 |
+| `mai-code-2-flash` | mai-code-flash | 2 | 1 | 1 | 3 | 2 | 0 | 1 | 0 | 0.019 |
 | `mai-code-1.1-flash` | mai-code-flash | 1.1 | 0 | 0 | 1 | 0 | 0 | 1 | 2 | 0.080 |
 | `hydrafusion-max` | copilot-fusion | 3 | 2 | 2 | 2 | 2 | 2 | 2 | 1 | 0.360 |
 | `hydrafusion` | copilot-fusion | 2 | 2 | 2 | 2 | 2 | 1 | 2 | 1 | 0.272 |
 | `fusion-standard` | copilot-fusion | 1 | 1 | 2 | 2 | 1 | 1 | 2 | 2 | 0.180 |
 | `gemini-4-hydrogen` | gemini-hydrogen | 4 | 1 | 2 | 2 | 2 | 1 | 2 | 0 | 0.510 |
+| `gemini-4-neon` | gemini-neon | 4 | 1 | 2 | 2 | 2 | 1 | 2 | 0 | 1.020 |
+| `mai-code-2` | mai-code | 2 | 1 | 1 | 3 | 2 | 0 | 1 | 0 | 0.170 |
 
 ## Advertised but Unevaluated
 
@@ -290,7 +299,7 @@ These models are named by the official sources but are not in the default static
 
 * **Claude Sonnet 4 is priced but not currently in Supported AI models.** The "Models and pricing" Anthropic table lists Claude Sonnet 4 ($3.00 / $0.30 / $3.75 / $15.00), while "Supported AI models" omits it. Retained cautiously so historical/legacy dispatches remain priceable and auditable.
 * **Copilot Fusion effort levels (`fusion-standard`, `hydrafusion`, `hydrafusion-max`).** Copilot Fusion dynamically selects models and execution patterns (`Single`, `Cascade`, `Critique`) across three user-selectable effort levels (`Standard`, `High`, `Max`) and bills each underlying model at its standard rate. The catalog records all three effort levels distinctly instead of collapsing `hydrafusion` (High) into `hydrafusion-max` (Max).
-* **Retired models pruned from active selection.** Models listed in GitHub's retirement history and absent from current supported/pricing tables — including Claude Sonnet 3.7 Thinking (2025-10-23), GPT-5.4 mini (2026-10-19), Gemini 2.0 Flash (2025-10-23), Claude Opus 4.6 (2026-09-01), Claude Opus 4.6 (fast mode) (preview) (2026-06-29), GPT-5.1-Codex (2026-04-01), Gemini 3.6 Flash (2026-10-02), Gemini 3.5 Flash (2026-10-02), GPT-5.1-Codex-Mini (2026-04-01), GPT-5.1 (2026-04-15) — are excluded from active catalog ranking and benchmark coverage gates.
+* **Retired models pruned from active selection.** Models listed in GitHub's retirement history and absent from current supported/pricing tables — including GPT-5.5 (2026-10-19), GPT-5 mini (2026-10-19), Claude Sonnet 4 (2026-05-01), Gemini 3.7 Flash (2026-10-19), Gemini 2.5 Pro (2026-07-31), Kimi K2.7 Code (2026-10-02), GPT-5.6 Terra (2026-11-16), Claude Opus 5 (2026-11-16), Claude Sonnet 3.7 (2025-10-23), Gemini 3.6 Flash (2026-10-02) — are excluded from active catalog ranking and benchmark coverage gates.
 
 ## Squad Assignment Classes Referenced Above
 

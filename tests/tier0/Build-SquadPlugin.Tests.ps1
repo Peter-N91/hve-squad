@@ -511,6 +511,12 @@ Describe 'PKG-14 Plugin host discovery and hook commands' -Tag 'Unit' {
                     [string]$Cell = 'gpt-5.6-sol',
                     [string]$Shape = 'camel',
                     [switch]$Member,
+                    [switch]$Replacement,
+                    [string[]]$IntakeVerdict = @(),
+                    [string]$TaskName = '',
+                    [int]$RemediationCycles = 0,
+                    [switch]$Federated,
+                    [switch]$Unscoped,
                     [string]$Prompt = 'Quick planning'
                 )
                 $repo = Join-Path $TestDrive ("guard-" + [guid]::NewGuid().ToString('N'))
@@ -523,11 +529,57 @@ Describe 'PKG-14 Plugin host discovery and hook commands' -Tag 'Unit' {
                     $policy
                     '| Role | Member Name | Agent Name (Primary) | Alternate Agents | Model |'
                     '| ---- | ----------- | -------------------- | ---------------- | ----- |'
-                    "| lead | Beta | Squad Lead | Squad Challenger | $Cell |"
+                    if ($Replacement) {
+                        "| developer | Internal Developer | Squad Implementor | - | $Cell |"
+                        '| developer | Other Developer | Squad Implementor | - | claude-sonnet-5.5 |'
+                        ''
+                        '## Connector Bindings'
+                        ''
+                        '| Binding ID | Connector ID | Manifest | Endpoint Kind | Role Mode | Target Kind | Target | Member Name | Added Role | Aligned Role | Default Execution |'
+                        '| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |'
+                        '| fixture-developer | fixture | connector.json | agent | replace | role | role:developer/Internal Developer | External Developer | | | connector |'
+                    }
+                    else { "| lead | Beta | Squad Lead | Squad Challenger | $Cell |" }
+                    if ($IntakeVerdict.Count) {
+                        '| intake-validator | Delta | PRD Quality Reviewer | BRD Quality Reviewer | gpt-5.6-sol |'
+                        '| analyst | Alpha | PRD Builder | - | gpt-5.6-sol |'
+                        '| product-owner | Gamma | Functional Planner | - | gpt-5.6-sol |'
+                        '| researcher | Rho | Squad Researcher | - | gpt-5.6-sol |'
+                        '| scribe | Sigma | Squad Scribe | - | - |'
+                    }
                 ) -join "`n"
                 [IO.File]::WriteAllText((Join-Path $root 'team.md'), $teamText)
+                if ($IntakeVerdict.Count) {
+                    $sections = for ($i = 0; $i -lt $IntakeVerdict.Count; $i++) {
+                        "## Intake Readiness Verdict 2026-11-18T12:00:0${i}Z sample`n`n* Verdict: $($IntakeVerdict[$i])`n* Remediation Cycles: $RemediationCycles`n"
+                    }
+                    [IO.File]::WriteAllText((Join-Path $root 'decisions.md'), ($sections -join "`n"))
+                    $agentsPath = Join-Path $repo '.github\agents'
+                    $null = [IO.Directory]::CreateDirectory($agentsPath)
+                    foreach ($fixture in @('prd-quality-reviewer:PRD Quality Reviewer', 'brd-quality-reviewer:BRD Quality Reviewer',
+                            'prd-builder:PRD Builder', 'functional-planner:Functional Planner')) {
+                        $stem, $displayName = $fixture -split ':', 2
+                        [IO.File]::WriteAllText((Join-Path $agentsPath "$stem.agent.md"), "---`nname: $displayName`n---`n")
+                    }
+                }
+                if ($Federated) {
+                    $meta = Join-Path $repo '.copilot-tracking\squad'
+                    $registry = @('# Federation', '', '| Sub-squad | Location | Kind |', '| --- | --- | --- |', '| product | members/product | in-repo |')
+                    [IO.File]::WriteAllText((Join-Path $meta 'federation.md'), ($registry -join "`n"))
+                    if (-not $Unscoped) { $Prompt = "Squad root: .copilot-tracking\squad\members\product`n$Prompt" }
+                }
+                if ($Replacement) {
+                    $manifest = @{
+                        schemaVersion = '1.1'; connectorId = 'fixture'; endpointKind = 'agent'; transport = 'file'
+                        capabilities = @('Performs approved local implementation'); roles = @('developer')
+                        dropPath = '.connector-drops/fixture'; deadlineMinutesDefault = 60; retryCapDefault = 2
+                        contact = 'fixture@example.invalid'; version = '1.0.0'
+                    }
+                    [IO.File]::WriteAllText((Join-Path $repo 'connector.json'), ($manifest | ConvertTo-Json -Depth 3))
+                }
                 $dispatch = @{ agent_type = $Agent; prompt = "$Prompt at $root" }
                 if ($Model) { $dispatch.model = $Model }
+                if ($TaskName) { $dispatch.name = $TaskName }
                 $inputData = switch ($Shape) {
                     'camel' { @{ cwd = $repo; toolName = 'task'; toolArgs = $dispatch } }
                     'encoded' { @{ cwd = $repo; toolName = 'task'; toolArgs = ($dispatch | ConvertTo-Json -Compress) } }
@@ -556,6 +608,18 @@ Describe 'PKG-14 Plugin host discovery and hook commands' -Tag 'Unit' {
             $wrong.ExitCode | Should -Be 0 -Because $wrong.Output
             ($wrong.Output | ConvertFrom-Json).permissionDecision | Should -Be 'deny'
             $correct = Invoke-DispatchGuard -Mode $Mode -Model 'gpt-5.6-sol'
+            $correct.ExitCode | Should -Be 0 -Because $correct.Output
+            ($correct.Output | ConvertFrom-Json).permissionDecision | Should -Be 'allow'
+        }
+
+        It 'enforces the target Model cell for the native replacement Connector under <Mode>' -ForEach @(
+            @{ Mode = 'ranked' }, @{ Mode = 'manual' }, @{ Mode = 'economy' }
+        ) {
+            $options = @{ Agent = 'hve-squad:squad-connector'; Replacement = $true; Mode = $Mode }
+            $wrong = Invoke-DispatchGuard @options -Model 'claude-sonnet-5.5'
+            $wrong.ExitCode | Should -Be 0 -Because $wrong.Output
+            ($wrong.Output | ConvertFrom-Json).permissionDecision | Should -Be 'deny'
+            $correct = Invoke-DispatchGuard @options -Model 'gpt-5.6-sol'
             $correct.ExitCode | Should -Be 0 -Because $correct.Output
             ($correct.Output | ConvertFrom-Json).permissionDecision | Should -Be 'allow'
         }
@@ -589,6 +653,78 @@ Describe 'PKG-14 Plugin host discovery and hook commands' -Tag 'Unit' {
             $result.ExitCode | Should -Be 0 -Because $result.Output
             ($result.Output | ConvertFrom-Json).permissionDecision | Should -Be 'deny'
             ($result.Output | ConvertFrom-Json).permissionDecisionReason | Should -Match 'Tracker-Write Gate'
+        }
+
+        It 'allows the roster intake reviewer <Agent> to revalidate despite planning words in the prompt' -ForEach @(
+            @{ Agent = 'hve-squad:prd-quality-reviewer'; Shape = 'camel' }
+            @{ Agent = 'hve-squad:brd-quality-reviewer'; Shape = 'batch' }
+        ) {
+            $result = Invoke-DispatchGuard -Agent $Agent -Shape $Shape -IntakeVerdict 'Not-Ready' -Model 'gpt-5.6-sol' `
+                -Prompt 'Revalidate the extracted source against the intake findings; do not plan, research, or implement.'
+            $result.ExitCode | Should -Be 0 -Because $result.Output
+            ($result.Output | ConvertFrom-Json).permissionDecision | Should -BeExactly 'allow'
+        }
+
+        It 'allows <Agent> only for the current intake remediation or bookkeeping task' -ForEach @(
+            @{ Agent = 'hve-squad:prd-builder'; TaskName = 'intake-remediation-sample' }
+            @{ Agent = 'hve-squad:functional-planner'; TaskName = 'intake-remediation-sample' }
+            @{ Agent = 'hve-squad:squad-scribe'; TaskName = 'intake-handoff-sample' }
+        ) {
+            $params = @{ Agent = $Agent; Mode = ''; IntakeVerdict = 'Not-Ready'; Prompt = 'Resolve the current intake findings without downstream planning.' }
+            $approved = Invoke-DispatchGuard @params -TaskName $TaskName
+            $approved.ExitCode | Should -Be 0 -Because $approved.Output
+            ($approved.Output | ConvertFrom-Json).permissionDecision | Should -BeExactly 'allow'
+            $unmarked = Invoke-DispatchGuard @params
+            $unmarked.ExitCode | Should -Be 0 -Because $unmarked.Output
+            ($unmarked.Output | ConvertFrom-Json).permissionDecision | Should -BeExactly 'deny'
+        }
+
+        It 'fails closed for <Agent> while Not-Ready even without planning keywords' -ForEach @(
+            @{ Agent = 'hve-squad:squad-researcher' }, @{ Agent = 'hve-squad:squad-reviewer' }
+            @{ Agent = 'hve-squad:squad-lead' }, @{ Agent = 'hve-squad:squad-implementor' }
+            @{ Agent = 'hve-squad:squad-doctor' }, @{ Agent = 'hve-squad:squad-connector' }
+            @{ Agent = 'general-purpose' }, @{ Agent = 'unknown-worker' }
+        ) {
+            $result = Invoke-DispatchGuard -Agent $Agent -Mode '' -IntakeVerdict 'Not-Ready' -TaskName 'intake-remediation-sample' -Prompt 'Continue.'
+            $result.ExitCode | Should -Be 0 -Because $result.Output
+            $receipt = $result.Output | ConvertFrom-Json
+            $receipt.permissionDecision | Should -BeExactly 'deny'
+            $receipt.permissionDecisionReason | Should -Match 'Intake Gate:'
+        }
+
+        It 'rejects remediation for a different topic, after the cycle cap, or when claimed only in prompt text' {
+            $params = @{ Agent = 'hve-squad:prd-builder'; Mode = ''; IntakeVerdict = 'Not-Ready'; Prompt = 'Continue intake-remediation-sample.' }
+            $wrong = Invoke-DispatchGuard @params -TaskName 'intake-remediation-old'
+            $capped = Invoke-DispatchGuard @params -TaskName 'intake-remediation-sample' -RemediationCycles 2
+            $promptOnly = Invoke-DispatchGuard @params
+            foreach ($result in $wrong, $capped, $promptOnly) {
+                $result.ExitCode | Should -Be 0 -Because $result.Output
+                ($result.Output | ConvertFrom-Json).permissionDecision | Should -BeExactly 'deny'
+            }
+        }
+
+        It 'still checks the reviewer model and resumes downstream dispatch only after a new <Label> verdict' -ForEach @(
+            @{ Label = 'Ready' }, @{ Label = 'Ready-With-Gaps' }
+        ) {
+            $review = Invoke-DispatchGuard -Agent 'hve-squad:prd-quality-reviewer' -IntakeVerdict 'Not-Ready' -Model 'bad-model' -Prompt 'Revalidate.'
+            $review.ExitCode | Should -Be 0 -Because $review.Output
+            ($review.Output | ConvertFrom-Json).permissionDecisionReason | Should -Match 'Routed-model guard'
+            $downstream = Invoke-DispatchGuard -IntakeVerdict @('Not-Ready', $Label) -Model 'gpt-5.6-sol' -Prompt 'Plan the next stage.'
+            $downstream.ExitCode | Should -Be 0 -Because $downstream.Output
+            ($downstream.Output | ConvertFrom-Json).permissionDecision | Should -BeExactly 'allow'
+        }
+
+        It 'keeps a federation member gate active for scoped work and requires explicit scope when a member is blocked' {
+            $params = @{ Member = $true; Federated = $true; IntakeVerdict = 'Not-Ready'; Model = 'gpt-5.6-sol' }
+            $review = Invoke-DispatchGuard @params -Agent 'hve-squad:prd-quality-reviewer' -Prompt 'Revalidate. Do not plan.'
+            $review.ExitCode | Should -Be 0 -Because $review.Output
+            ($review.Output | ConvertFrom-Json).permissionDecision | Should -BeExactly 'allow'
+            $work = Invoke-DispatchGuard @params -Prompt 'Continue.'
+            $work.ExitCode | Should -Be 0 -Because $work.Output
+            ($work.Output | ConvertFrom-Json).permissionDecisionReason | Should -Match 'Intake Gate:'
+            $unscoped = Invoke-DispatchGuard @params -Unscoped -Prompt 'Continue.'
+            $unscoped.ExitCode | Should -Be 0 -Because $unscoped.Output
+            ($unscoped.Output | ConvertFrom-Json).permissionDecisionReason | Should -Match 'Intake Gate:.*Squad root'
         }
 
         It 'runs an exported guard with its declared runtime dependencies and no plugin directory' {

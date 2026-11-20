@@ -68,6 +68,7 @@ function Get-Tier0TestPlan {
                 'PromoteSquadFederation.Tests.ps1'
                 'InitializeSquadFederation.Tests.ps1'
                 'ExpandSquadRoster.Tests.ps1'
+                'RegisterSquadConnector.Tests.ps1'
             )
         }
         @{

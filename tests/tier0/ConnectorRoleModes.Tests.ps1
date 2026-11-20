@@ -28,6 +28,7 @@ BeforeAll {
     $script:Catalog = Get-Content -LiteralPath (Join-Path $script:Model.SquadSkillRoot 'references/roster-catalog.md') -Raw
     $script:OperatingProcedure = Get-Content -LiteralPath (Join-Path $script:Model.SquadSkillRoot 'references/operating-procedure.md') -Raw
     $script:PayloadTemplate = Get-Content -LiteralPath (Join-Path $script:Model.SquadSkillRoot 'references/scribe-payload-template.md') -Raw
+    $script:ConnectorRegistration = Get-Content -LiteralPath (Join-Path $script:Model.SquadSkillRoot 'scripts/Register-SquadConnector.ps1') -Raw
 
     function Split-TableLineLocal {
         param([Parameter(Mandatory)][string]$Line)
@@ -201,11 +202,19 @@ Describe 'CONN-22 and Consumption shape: trusted provenance extends history with
         }
 
         It 'passes bindings, routes, and connector identity through the Scribe payload' {
-            $script:CoordinatorInit | Should -Match '(?s)pass confirmed `connectorBindings`/`customRoutingRows` through cold'
             $script:PayloadTemplate | Should -Match '(?m)^connectorBindings:'
             $script:PayloadTemplate | Should -Match '(?m)^customRoutingRows:'
             $script:PayloadTemplate | Should -Match '(?m)^    memberName:'
             $script:PayloadTemplate | Should -Match '(?m)^    externalProvenance:'
+        }
+
+        It 'routes only new connector registrations through the deterministic writer' {
+            $script:RoleModes | Should -Match 'Register-SquadConnector\.ps1'
+            $script:CoordinatorInit | Should -Match 'New connector `replace` or\s+`add` registrations use `Register-SquadConnector\.ps1`'
+            $script:ConnectorRegistration | Should -Match '\[switch\]\$Confirmed'
+            $script:ConnectorRegistration | Should -Match "AI cost: none"
+            $script:ConnectorRegistration | Should -Match "Exact reruns are no-ops"
+            $script:ConnectorRegistration | Should -Match 'identity changes retain the cold Scribe retirement-evidence path'
         }
 
         It 'allows consumer-defined additive roles and no longer claims a connector council lens' {

@@ -109,7 +109,7 @@ Configure your adapter's trusted endpoint mapping:
 1. **Manifests (`connectors/*.json`) declare capability and mailbox paths only.**
    The `roles` array in a manifest is an **allowlist** of squad roles that connector is permitted to serve—it does **not** automatically replace every listed role. For security, manifests never contain shell commands, scripts, or `.agent.md` file paths.
 2. **`team.md` (`## Connector Bindings`) chooses the actual role binding.**
-   During `init` or roster refresh, each binding row links one squad role (for example `researcher`) to one `connectorId` and `Manifest`, and sets `Default Execution=connector`.
+   New bindings are previewed/applied with `Register-SquadConnector.ps1`; each row links one squad role (for example `researcher`) to one `connectorId` and `Manifest`, and sets `Default Execution=connector`.
 3. **Your consumer `.agent.md` files and skills can live anywhere.**
    They can stay in `.github/agents/` inside the repository or in a separate central folder or repository on your machine—HVE Squad never dispatches consumer `.agent.md` files directly because `Squad Coordinator` only dispatches its built-in `Squad Connector` shim.
 4. **Your adapter script bridges `.connector-drops/<connectorId>/` to your `.agent.md` or workflow.**
@@ -178,9 +178,25 @@ autopilot cannot guess that choice. Use `connector` for the automatic behavior
 in this example. For a role with several members, confirm which member is
 targeted. Keep only one applicable non-`ask` default.
 
-Confirm the proposal. The Scribe persists the bindings in the owning squad's
-`team.md`; it preserves the original internal Members rows and their roots.
-The existing research/developer routes do not need to be replaced.
+Preview the confirmed research registration with the installed squad script:
+
+```powershell
+pwsh -NoProfile -File "<skill-root>/scripts/Register-SquadConnector.ps1" `
+  -RepoRoot "<repository-root>" `
+  -ManifestPath "connectors/research-agent.json" `
+  -BindingId "research-org" `
+  -RoleMode replace `
+  -TargetRole researcher `
+  -MemberName "Org Researcher" `
+  -DefaultExecution connector `
+  -RunId "research-connector-registration"
+```
+
+Inspect the `planned` receipt, then rerun the same command with `-Confirmed`.
+The deterministic transaction persists the binding in the owning squad's
+`team.md` without dispatching a model or Scribe. It preserves the original
+internal Members rows and roots; the existing research route does not change.
+Repeat the preview/apply pair for the delivery binding.
 
 | Binding ID | Role Mode | Target | Default Execution |
 |---|---|---|---|
@@ -188,7 +204,9 @@ The existing research/developer routes do not need to be replaced.
 | developer-delivery-orchestrator | replace | developer member | connector |
 
 Do not overwrite `team.md` with a sample roster or manually change the Primary
-agent to your endpoint's name. Connector execution uses the Squad Connector shim.
+agent to your endpoint's name. Connector execution uses the Squad Connector
+shim. The script is intentionally for new binding IDs; changing or removing an
+existing identity retains the confirmed Scribe retirement-evidence path.
 
 ## Step 4: Run the squad
 
@@ -270,8 +288,8 @@ Show the proposed member, binding, route, and root before writing.
 ```
 
 The coordinator confirms the additive member, alignment, root, route, and
-default. The Scribe creates a separate member with `Primary=Squad Connector`,
-not a replacement for `tester`.
+default. `Register-SquadConnector.ps1` creates a separate member with
+`Primary=Squad Connector`, not a replacement for `tester`.
 
 For GCP, use the same manifest and configured assessor, or your own separate
 manifest/endpoint. Choose:
@@ -309,7 +327,8 @@ every request.
 | Implementation/validation reports | At the workflow request's declared output-slot roots |
 | .NET/GCP assessments | At the additive member's confirmed root |
 | Source code/tests | In the authorized shared or synchronized worktree |
-| History, provenance, decisions, state, ledger | Internal Scribe under the owning `squadRoot` |
+| Connector registration decision, team, and routing | `Register-SquadConnector.ps1` under the owning `squadRoot` |
+| Dispatch history, provenance, state, and ledger | Internal Scribe under the owning `squadRoot` |
 
 Only Markdown, JSON, and text reports travel in the envelope. Your agents must
 honor the passed roots instead of their own defaults. All connector dispatches

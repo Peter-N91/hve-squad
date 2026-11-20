@@ -5,7 +5,7 @@ license: MIT
 metadata:
   authors: "Peter-N91/hve-squad"
   spec_version: "1.0"
-  last_updated: "2026-11-16"
+  last_updated: "2026-11-19"
 ---
 <!--
 Copyright (c) Microsoft Corporation.
@@ -26,10 +26,10 @@ description: "Per-model token rates, dispatch-size estimator, and calibration fa
 # Consumption Rates (verify against the current GitHub Copilot "Models and pricing" docs)
 
 * Billing model: usage-based billing (UBB), token-metered, effective 2026-06-01.
-* Observed-on: 2026-11-16. Source: <https://docs.github.com/en/copilot/reference/copilot-billing/models-and-pricing>
+* Observed-on: 2026-11-19. Source: <https://docs.github.com/en/copilot/reference/copilot-billing/models-and-pricing>
 * Credit conversion: 1 AI credit = $0.01 USD (fixed).
 * All rates are USD per 1M tokens. Anthropic and GPT-5.6+/GPT-6+ models bill a separate cache-write rate on top of cached input; models without one leave the column at 0.
-* `Observed-on:` above must equal `model-catalog.md`'s `Retrieved:` date exactly, not merely "close" — both are `2026-11-16` as of this snapshot; a future re-verification that updates one must update the other in the same change.
+* `Observed-on:` above must equal `model-catalog.md`'s `Retrieved:` date exactly, not merely "close" — both are `2026-11-19` as of this snapshot; a future re-verification that updates one must update the other in the same change.
 
 ## Per-model token rates in USD per 1M tokens (volatile, verify before commit)
 
@@ -45,7 +45,6 @@ description: "Per-model token rates, dispatch-size estimator, and calibration fa
 | Claude Haiku 5.5 | `claude-haiku-5.5` | fast | 0.10 | 0.01 | 0.125 | 0.50 | \<=100K / >100K | 0.50 | 0.05 | 0.625 | 2.50 | lightweight |
 | Claude Opus 4.8 | `claude-opus-4.8` | extended | 5.00 | 0.50 | 6.25 | 25.00 | none (flat rate) | n/a | n/a | n/a | n/a | high-capability reasoning |
 | Claude Opus 4.8 (fast mode) | `claude-opus-4.8-fast` | extended | 10.00 | 1.00 | 12.50 | 50.00 | none (flat rate) | n/a | n/a | n/a | n/a | frontier reasoning; fast mode |
-| Claude Opus 5 | `claude-opus-5` | extended | 5.00 | 0.50 | 6.25 | 25.00 | none (flat rate) | n/a | n/a | n/a | n/a | high-capability reasoning |
 | Claude Opus 5.5 | `claude-opus-5.5` | extended | 4.00 | 0.20 | 5.00 | 20.00 | none (flat rate) | n/a | n/a | n/a | n/a | high-capability reasoning |
 | Claude Sonnet 4 | `claude-sonnet-4` | default | 3.00 | 0.30 | 3.75 | 15.00 | none (flat rate) | n/a | n/a | n/a | n/a | priced in billing docs; prefer Sonnet 5.5 |
 | Claude Sonnet 4.6 | `claude-sonnet-4.6` | default | 3.00 | 0.30 | 3.75 | 15.00 | none (flat rate) | n/a | n/a | n/a | n/a | versatile |
@@ -55,18 +54,22 @@ description: "Per-model token rates, dispatch-size estimator, and calibration fa
 | Gemini 4 Argon | `gemini-4-argon` | default | 2.00 | 0.10 | 0 | 10.00 | none (flat rate) | n/a | n/a | n/a | n/a | frontier reasoning; promo rate to 2026-12-01 |
 | Gemini 4 Carbon | `gemini-4-carbon` | default | 2.00 | 0.10 | 0 | 10.00 | none (flat rate) | n/a | n/a | n/a | n/a | frontier reasoning; promo rate to 2026-12-01 |
 | Gemini 4 Hydrogen | `gemini-4-hydrogen` | default | 1.50 | 0.075 | 0 | 7.50 | none (flat rate) | n/a | n/a | n/a | n/a | frontier reasoning; promo rate to 2026-12-01 |
+| Gemini 4 Neon | `gemini-4-neon` | default | 3.00 | 0.15 | 0 | 15.00 | none (flat rate) | n/a | n/a | n/a | n/a | frontier reasoning; promo rate to 2026-12-01 |
 | MAI-Code-1.1-Flash | `mai-code-1.1-flash` | fast | 0.20 | 0.02 | 0 | 1.20 | none (flat rate) | n/a | n/a | n/a | n/a | lightweight; continuously improving |
+| MAI Code 2 | `mai-code-2` | fast | 0.50 | 0.025 | 0 | 2.50 | none (flat rate) | n/a | n/a | n/a | n/a | lightweight; continuously improving |
+| MAI Code 2 Flash | `mai-code-2-flash` | fast | 0.05 | 0.005 | 0 | 0.25 | none (flat rate) | n/a | n/a | n/a | n/a | lightweight; continuously improving |
 | Kimi K3 | `kimi-k3` | default | 3.00 | 0.30 | 0 | 15.00 | none (flat rate) | n/a | n/a | n/a | n/a | long-context agentic; safeguards noted |
 | GPT-5.3-Codex | `gpt-5.3-codex` | fast | 1.75 | 0.175 | 0 | 14.00 | none (flat rate) | n/a | n/a | n/a | n/a | code-specialized; Auto LTS fallback |
 | GPT-5.4 nano | `gpt-5.4-nano` | fast | 0.20 | 0.02 | 0 | 1.25 | none (flat rate) | n/a | n/a | n/a | n/a | lightweight |
 | GPT-5.6 Luna | `gpt-5.6-luna` | fast | 0.20 | 0.02 | 0.25 | 1.20 | \<=200K / >200K | 0.40 | 0.04 | 0.50 | 1.80 | lightweight |
 | GPT-5.6 Sol | `gpt-5.6-sol` | extended | 4.00 | 0.40 | 5.00 | 20.00 | \<=272K / >272K | 8.00 | 0.80 | 10.00 | 30.00 | high-capability reasoning |
-| GPT-5.6 Terra | `gpt-5.6-terra` | default | 2.00 | 0.20 | 2.50 | 12.00 | \<=272K / >272K | 4.00 | 0.40 | 5.00 | 18.00 | versatile |
 | GPT-6 Astra | `gpt-6-astra` | extended | 10.00 | 1.00 | 12.50 | 50.00 | \<=272K / >272K | 20.00 | 2.00 | 25.00 | 75.00 | high-capability reasoning |
 | GPT-6 Luna | `gpt-6-luna` | fast | 0.10 | 0.01 | 0.125 | 0.50 | \<=272K / >272K | 0.20 | 0.02 | 0.25 | 0.75 | lightweight |
 | GPT-6 Sol | `gpt-6-sol` | default | 2.00 | 0.20 | 2.50 | 10.00 | \<=272K / >272K | 4.00 | 0.40 | 5.00 | 15.00 | versatile |
 | GPT-6.1 Sol | `gpt-6.1-sol` | default | 2.00 | 0.10 | 2.50 | 10.00 | \<=272K / >272K | 4.00 | 0.20 | 5.00 | 15.00 | high-capability reasoning |
 | GPT-6.1 Terra | `gpt-6.1-terra` | default | 1.00 | 0.05 | 1.25 | 5.00 | \<=272K / >272K | 2.00 | 0.10 | 2.50 | 7.50 | versatile |
+| GPT-6.2 Astra | `gpt-6.2-astra` | extended | 8.00 | 0.40 | 10.00 | 40.00 | \<=272K / >272K | 16.00 | 0.80 | 20.00 | 60.00 | high-capability reasoning |
+| GPT-6.2 Sol | `gpt-6.2-sol` | default | 2.00 | 0.10 | 2.50 | 10.00 | \<=272K / >272K | 4.00 | 0.20 | 5.00 | 15.00 | high-capability reasoning |
 | Grok 4.5 | `grok-4.5` | default | 2.00 | 0.50 | 0 | 6.00 | \<=200K / >200K | 4.00 | 1.00 | 0 | 12.00 | versatile |
 | Grok 4.6 | `grok-4.6` | default | 2.00 | 0.50 | 0 | 6.00 | \<=200K / >200K | 4.00 | 1.00 | 0 | 12.00 | versatile |
 | Grok 4.7 | `grok-4.7` | default | 2.00 | 0.50 | 0 | 6.00 | \<=200K / >200K | 4.00 | 1.00 | 0 | 12.00 | versatile |

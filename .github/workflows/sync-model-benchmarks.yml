@@ -22,9 +22,9 @@ name: Sync Model Catalog, Rates, and Benchmarks
 #      remain younger than the 60-day renewal window before 90-day expiration),
 #      the run exits cleanly without opening a noisy pull request.
 #   4. When models, rates, or benchmark scores change (or the 60-day refresh
-#      window is reached, or force=true), validates hot-file budgets and the
-#      routing/provenance contract (`HotFileBudget.Tests.ps1` and
-#      `ModelRouting.Tests.ps1`) before proposing any change.
+#      window is reached, or force=true), validates hot-file budgets plus the
+#      routing, provenance, dispatch, and Init consumption contracts before
+#      proposing any change.
 #   5. Records a patch change fragment under .changes/unreleased/, pushes the
 #      branch `chore/sync-model-benchmarks`, and opens or updates a reviewed
 #      pull request against `main` (satisfying the reviewed-snapshot contract
@@ -140,7 +140,7 @@ jobs:
         shell: pwsh
         run: Install-Module Pester -RequiredVersion 5.7.1 -Force -Scope CurrentUser -SkipPublisherCheck
 
-      - name: Validate hot-file budget, catalog, rates, and routing contract
+      - name: Validate hot-file budget, catalog, rates, Init, and routing contract
         if: steps.catalog.outputs.updated == 'true' || steps.sync.outputs.updated == 'true'
         shell: pwsh
         run: |
@@ -153,12 +153,16 @@ jobs:
             $skillDest = Join-Path $stageRoot '.agents/skills/squad'
             New-Item -ItemType Directory -Path (Split-Path -Parent $skillDest) -Force | Out-Null
             Copy-Item -LiteralPath (Join-Path $repoRoot 'squad-src/.github/skills/squad') -Destination $skillDest -Recurse -Force
+            $githubDest = Join-Path $stageRoot '.github'
+            New-Item -ItemType Directory -Path $githubDest -Force | Out-Null
+            Copy-Item -LiteralPath (Join-Path $repoRoot 'squad-src/.github/agents') -Destination $githubDest -Recurse -Force
 
             $tier0Config = New-PesterConfiguration
             $tier0Config.Run.Container = @(
               New-PesterContainer -Path './tests/tier0/HotFileBudget.Tests.ps1' -Data @{ SourceRoot = $repoRoot }
               New-PesterContainer -Path './tests/tier0/Performance.Tests.ps1' -Data @{ SourceRoot = $repoRoot }
               New-PesterContainer -Path './tests/tier0/GetSquadDispatchBrief.Tests.ps1' -Data @{ PackageRoot = $stageRoot }
+              New-PesterContainer -Path './tests/tier0/ScribeInitConvergence.Tests.ps1' -Data @{ PackageRoot = $stageRoot }
             )
             $tier0Config.Run.PassThru = $true
             $tier0Config.Output.Verbosity = 'Normal'
@@ -260,7 +264,7 @@ jobs:
             ''
             '## Validation'
             ''
-            '- `Invoke-Pester` (`HotFileBudget.Tests.ps1` + `ModelRouting.Tests.ps1`): **passed**'
+            '- `Invoke-Pester` (`HotFileBudget.Tests.ps1` + `Performance.Tests.ps1` + `GetSquadDispatchBrief.Tests.ps1` + `ScribeInitConvergence.Tests.ps1` + `ModelRouting.Tests.ps1`): **passed**'
           ) -join "`n"
 
           $existingPr = gh pr list --repo $env:REPO --head $branch --state open --json number --jq '.[0].number'
