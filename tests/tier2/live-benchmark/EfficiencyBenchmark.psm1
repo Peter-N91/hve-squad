@@ -749,16 +749,16 @@ function Invoke-EfficiencyProcess {
             $CompletedQuickly = $false
             try { $CompletedQuickly = $InputCopy.Wait(50) } catch { $CompletedQuickly = $true }
             if ($CompletedQuickly) {
-                try { $null = $InputCopy.GetAwaiter().GetResult() } catch { }
-                try { $Process.StandardInput.Close() } catch { }
+                try { $null = $InputCopy.GetAwaiter().GetResult() } catch { Write-Debug "Ignoring a faulted standard-input write: $($_.Exception.Message)" }
+                try { $Process.StandardInput.Close() } catch { Write-Debug "Ignoring a standard-input close failure: $($_.Exception.Message)" }
                 $InputClosed = $true
             }
         }
         $Suspend.last = $Watch.Elapsed.TotalSeconds
         while (-not $Process.WaitForExit(250)) {
             if ($null -ne $InputCopy -and -not $InputClosed -and $InputCopy.IsCompleted) {
-                try { $null = $InputCopy.GetAwaiter().GetResult() } catch { }
-                try { $Process.StandardInput.Close() } catch { }
+                try { $null = $InputCopy.GetAwaiter().GetResult() } catch { Write-Debug "Ignoring a faulted standard-input write: $($_.Exception.Message)" }
+                try { $Process.StandardInput.Close() } catch { Write-Debug "Ignoring a standard-input close failure: $($_.Exception.Message)" }
                 $InputClosed = $true
             }
             $Elapsed = $Watch.Elapsed.TotalSeconds
@@ -780,8 +780,8 @@ function Invoke-EfficiencyProcess {
             try {
                 if ($InputCopy.Wait(2000)) { $null = $InputCopy.GetAwaiter().GetResult() }
             }
-            catch { }
-            try { $Process.StandardInput.Close() } catch { }
+            catch { Write-Debug "Ignoring an unfinished or faulted standard-input write: $($_.Exception.Message)" }
+            try { $Process.StandardInput.Close() } catch { Write-Debug "Ignoring a standard-input close failure: $($_.Exception.Message)" }
         }
         $null = $OutputCopy.GetAwaiter().GetResult(); $null = $ErrorCopy.GetAwaiter().GetResult()
         if ($ProgressPath) { Update-EfficiencyProgress -Context $Progress -Path $ProgressPath -ElapsedSeconds ($Watch.Elapsed.TotalSeconds - $Suspend.seconds) -IntervalSeconds $ProgressIntervalSeconds -Final }
@@ -1580,7 +1580,7 @@ function Get-EfficiencyBookkeepingEvidence {
                         $ReceiptLineIndices.Add($LineIdx)
                     }
                 }
-                catch { }
+                catch { Write-Debug "Skipped a non-JSON output line: $($_.Exception.Message)" }
             }
             if ($Receipts.Count -ne 1) {
                 $WriterAttempts.Add([pscustomobject]$WriterAttempt)
